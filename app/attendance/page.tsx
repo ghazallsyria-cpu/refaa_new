@@ -10,6 +10,7 @@ export default function AttendancePage() {
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSection, setSelectedSection] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [period, setPeriod] = useState<number>(1);
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
   const [stats, setStats] = useState<any>(null);
@@ -90,16 +91,17 @@ export default function AttendancePage() {
       if (studentsError) throw studentsError;
       setStudents(studentsData || []);
 
-      // Fetch existing attendance for this date and section
+      // Fetch existing attendance for this date, section, and period
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('attendance')
-        .select('student_id, status, date')
+        .select('student_id, status, date, period_number')
         .eq('section_id', selectedSection)
-        .gte('date', new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+        .eq('period_number', period)
+        .eq('date', date);
 
       if (attendanceError) throw attendanceError;
 
-      // Initialize attendance state for the selected date
+      // Initialize attendance state for the selected date and period
       const newAttendance: Record<string, AttendanceStatus> = {};
       
       // Default all to present
@@ -107,20 +109,44 @@ export default function AttendancePage() {
         newAttendance[s.id] = 'present';
       });
 
-      // Override with saved data for the selected date
-      attendanceData?.filter(a => a.date === date).forEach(a => {
+      // Override with saved data for the selected date and period
+      attendanceData?.forEach(a => {
         newAttendance[a.student_id] = a.status as AttendanceStatus;
       });
 
       setAttendance(newAttendance);
       
-      calculateStats(attendanceData || [], studentsData || []);
+      // Fetch daily stats from the view for the selected date
+      const { data: dailyStats, error: statsError } = await supabase
+        .from('attendance_daily_summary')
+        .select('*')
+        .eq('date', date);
+
+      if (!statsError && dailyStats) {
+        const stats = {
+          daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
+          students: {} as Record<string, any>
+        };
+
+        dailyStats.forEach(s => {
+          if (s.daily_status === 'present') stats.daily.present++;
+          else if (s.daily_status === 'full_absent') stats.daily.absent++;
+          else if (s.daily_status === 'partial_absent') stats.daily.partial++;
+          else if (s.daily_status === 'incomplete') stats.daily.incomplete++;
+          stats.daily.total++;
+        });
+
+        if (stats.daily.total > 0) {
+          stats.daily.rate = Math.round((stats.daily.present / stats.daily.total) * 100);
+        }
+        setStats(stats);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
-  }, [selectedSection, date]);
+  }, [selectedSection, date, period]);
 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [studentStats, setStudentStats] = useState<any>(null);
@@ -143,23 +169,23 @@ export default function AttendancePage() {
       console.log('User Role:', role);
 
       if (role === 'student') {
-        // Fetch student's own attendance
-        const { data: attendanceData, error: attendanceError } = await supabase
-          .from('attendance')
-          .select('status, date')
+        // Fetch student's own daily summary
+        const { data: summaryData, error: summaryError } = await supabase
+          .from('attendance_daily_summary')
+          .select('*')
           .eq('student_id', user.id)
           .order('date', { ascending: false });
 
-        if (attendanceError) throw attendanceError;
+        if (summaryError) throw summaryError;
         
-        setStudentAttendance(attendanceData?.filter(a => a.status === 'absent') || []);
+        setStudentAttendance(summaryData || []);
         
-        const stats = { present: 0, absent: 0, late: 0, excused: 0 };
-        attendanceData?.forEach(a => {
-          const status = a.status as AttendanceStatus;
-          if (stats[status] !== undefined) {
-            stats[status]++;
-          }
+        const stats = { present: 0, absent: 0, partial: 0, incomplete: 0 };
+        summaryData?.forEach(s => {
+          if (s.daily_status === 'present') stats.present++;
+          else if (s.daily_status === 'full_absent') stats.absent++;
+          else if (s.daily_status === 'partial_absent') stats.partial++;
+          else if (s.daily_status === 'incomplete') stats.incomplete++;
         });
         setStudentStats(stats);
         return;
@@ -224,6 +250,7 @@ export default function AttendancePage() {
         student_id: studentId,
         section_id: selectedSection,
         date: date,
+        period_number: period,
         status: status,
         recorded_by: user?.id || null
       }));
@@ -231,7 +258,7 @@ export default function AttendancePage() {
       // Upsert attendance records
       const { error } = await supabase
         .from('attendance')
-        .upsert(records, { onConflict: 'student_id,date' });
+        .upsert(records, { onConflict: 'student_id,date,period_number' });
 
       if (error) throw error;
       
@@ -297,16 +324,9 @@ export default function AttendancePage() {
               <CheckCircle2 className="h-8 w-8" />
             </div>
             <div className="relative">
-              <p className="text-[10px] font-black text-emerald-600/70 uppercase tracking-widest mb-1">حاضر</p>
+              <p className="text-[10px] font-black text-emerald-600/70 uppercase tracking-widest mb-1">حاضر (يوم كامل)</p>
               <div className="flex items-baseline justify-center gap-1">
                 <p className="text-4xl font-black text-emerald-600">{studentStats?.present || 0}</p>
-                <span className="text-xs font-bold text-emerald-400">/ {studentAttendance.length}</span>
-              </div>
-              <div className="mt-4 h-1.5 w-24 bg-emerald-100 rounded-full overflow-hidden mx-auto">
-                <div 
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-                  style={{ width: `${studentAttendance.length > 0 ? ((studentStats?.present || 0) / studentAttendance.length) * 100 : 0}%` }}
-                />
               </div>
             </div>
           </div>
@@ -317,11 +337,8 @@ export default function AttendancePage() {
               <XCircle className="h-8 w-8" />
             </div>
             <div className="relative">
-              <p className="text-[10px] font-black text-red-600/70 uppercase tracking-widest mb-1">غائب</p>
+              <p className="text-[10px] font-black text-red-600/70 uppercase tracking-widest mb-1">غائب (يوم كامل)</p>
               <p className="text-4xl font-black text-red-600">{studentStats?.absent || 0}</p>
-              <span className="text-[10px] font-black text-red-400 bg-white px-2 py-0.5 rounded-lg mt-2 inline-block">
-                {studentAttendance.length > 0 ? Math.round(((studentStats?.absent || 0) / studentAttendance.length) * 100) : 0}% من الإجمالي
-              </span>
             </div>
           </div>
 
@@ -331,11 +348,8 @@ export default function AttendancePage() {
               <Clock className="h-8 w-8" />
             </div>
             <div className="relative">
-              <p className="text-[10px] font-black text-amber-600/70 uppercase tracking-widest mb-1">متأخر</p>
-              <p className="text-4xl font-black text-amber-600">{studentStats?.late || 0}</p>
-              <span className="text-[10px] font-black text-amber-400 bg-white px-2 py-0.5 rounded-lg mt-2 inline-block">
-                {studentAttendance.length > 0 ? Math.round(((studentStats?.late || 0) / studentAttendance.length) * 100) : 0}% من الإجمالي
-              </span>
+              <p className="text-[10px] font-black text-amber-600/70 uppercase tracking-widest mb-1">غائب جزئي</p>
+              <p className="text-4xl font-black text-amber-600">{studentStats?.partial || 0}</p>
             </div>
           </div>
 
@@ -345,11 +359,8 @@ export default function AttendancePage() {
               <AlertCircle className="h-8 w-8" />
             </div>
             <div className="relative">
-              <p className="text-[10px] font-black text-blue-600/70 uppercase tracking-widest mb-1">بعذر</p>
-              <p className="text-4xl font-black text-blue-600">{studentStats?.excused || 0}</p>
-              <span className="text-[10px] font-black text-blue-400 bg-white px-2 py-0.5 rounded-lg mt-2 inline-block">
-                {studentAttendance.length > 0 ? Math.round(((studentStats?.excused || 0) / studentAttendance.length) * 100) : 0}% من الإجمالي
-              </span>
+              <p className="text-[10px] font-black text-blue-600/70 uppercase tracking-widest mb-1">غير مكتمل</p>
+              <p className="text-4xl font-black text-blue-600">{studentStats?.incomplete || 0}</p>
             </div>
           </div>
         </div>
@@ -372,14 +383,14 @@ export default function AttendancePage() {
                       {new Date(record.date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                     </span>
                     <span className={`px-3 py-1 rounded-xl text-xs font-black ${
-                      record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
-                      record.status === 'absent' ? 'bg-red-100 text-red-700' :
-                      record.status === 'late' ? 'bg-amber-100 text-amber-700' :
+                      record.daily_status === 'present' ? 'bg-emerald-100 text-emerald-700' :
+                      record.daily_status === 'full_absent' ? 'bg-red-100 text-red-700' :
+                      record.daily_status === 'partial_absent' ? 'bg-amber-100 text-amber-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
-                      {record.status === 'present' ? 'حاضر' :
-                       record.status === 'absent' ? 'غائب' :
-                       record.status === 'late' ? 'متأخر' : 'بعذر'}
+                      {record.daily_status === 'present' ? 'حاضر' :
+                       record.daily_status === 'full_absent' ? 'غائب كلي' :
+                       record.daily_status === 'partial_absent' ? 'غائب جزئي' : 'غير مكتمل'}
                     </span>
                   </div>
                 ))}
@@ -437,6 +448,18 @@ export default function AttendancePage() {
             </select>
           </div>
           <div className="space-y-2">
+            <label className="text-sm font-black text-slate-700 mr-1">الحصة</label>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(parseInt(e.target.value))}
+              className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
+            >
+              {[1, 2, 3, 4, 5].map(p => (
+                <option key={p} value={p}>الحصة {p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
             <label className="text-sm font-black text-slate-700 mr-1">التاريخ</label>
             <div className="relative group">
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
@@ -465,20 +488,20 @@ export default function AttendancePage() {
                 </div>
                 <div className="grid grid-cols-2 gap-y-4 gap-x-6">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">حاضر</span>
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">حاضر (يوم كامل)</span>
                     <span className="text-xl font-black text-emerald-600">{stats.daily.present}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">غائب</span>
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">غائب (يوم كامل)</span>
                     <span className="text-xl font-black text-red-600">{stats.daily.absent}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">متأخر</span>
-                    <span className="text-xl font-black text-amber-600">{stats.daily.late}</span>
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">غائب جزئي</span>
+                    <span className="text-xl font-black text-amber-600">{stats.daily.partial}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">مستأذن</span>
-                    <span className="text-xl font-black text-blue-600">{stats.daily.excused}</span>
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">غير مكتمل</span>
+                    <span className="text-xl font-black text-blue-600">{stats.daily.incomplete}</span>
                   </div>
                 </div>
                 <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">

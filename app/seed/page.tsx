@@ -164,13 +164,42 @@ CREATE TABLE IF NOT EXISTS public.attendance (
     academic_year_id UUID REFERENCES public.academic_years(id) ON DELETE SET NULL,
     semester_id UUID REFERENCES public.semesters(id) ON DELETE SET NULL,
     date DATE NOT NULL,
+    period_number INTEGER NOT NULL CHECK (period_number BETWEEN 1 AND 5),
     status attendance_status NOT NULL,
     notes TEXT,
     recorded_by UUID REFERENCES public.users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    UNIQUE(student_id, date, section_id)
+    UNIQUE(student_id, date, period_number)
 );
+
+-- Attendance Daily Summary View
+CREATE OR REPLACE VIEW public.attendance_daily_summary AS
+WITH period_counts AS (
+    SELECT 
+        student_id,
+        date,
+        COUNT(*) FILTER (WHERE status = 'absent') as absent_periods,
+        COUNT(*) as recorded_periods
+    FROM public.attendance
+    GROUP BY student_id, date
+)
+SELECT 
+    student_id,
+    date,
+    recorded_periods,
+    absent_periods,
+    CASE 
+        WHEN recorded_periods < 5 THEN 'incomplete'
+        WHEN absent_periods = 5 THEN 'full_absent'
+        WHEN absent_periods > 0 THEN 'partial_absent'
+        ELSE 'present'
+    END as daily_status
+FROM period_counts;
+
+-- Enable RLS on the view (if needed, but views usually inherit or need explicit grants)
+-- Note: Views in Supabase/Postgres don't have RLS themselves, but they respect RLS of underlying tables if defined with security_invoker.
+-- For now, we'll assume the underlying table RLS is sufficient.
 
 -- Exams Table
 CREATE TABLE IF NOT EXISTS public.exams (

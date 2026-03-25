@@ -59,14 +59,14 @@ export default function ReportsPage() {
         supabase.from('students').select('id', { count: 'exact', head: true }),
         supabase.from('teachers').select('id', { count: 'exact', head: true }),
         supabase.from('classes').select('id', { count: 'exact', head: true }),
-        supabase.from('attendance').select('status, date').gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+        supabase.from('attendance_daily_summary').select('daily_status, date').gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
         supabase.from('classes').select('level, sections(students(id))')
       ]);
 
       // Calculate average attendance
       let avgAttendance = 0;
       if (attendanceRes.data && attendanceRes.data.length > 0) {
-        const presentCount = attendanceRes.data.filter(a => a.status === 'present').length;
+        const presentCount = attendanceRes.data.filter(a => a.daily_status === 'present').length;
         avgAttendance = Math.round((presentCount / attendanceRes.data.length) * 100);
       }
 
@@ -86,11 +86,12 @@ export default function ReportsPage() {
 
       const chartData = last7Days.map(date => {
         const dayData = attendanceRes.data?.filter(a => a.date === date) || [];
-        const present = dayData.filter(a => a.status === 'present').length;
-        const absent = dayData.filter(a => a.status === 'absent').length;
+        const present = dayData.filter(a => a.daily_status === 'present').length;
+        const absent = dayData.filter(a => a.daily_status === 'full_absent').length;
+        const partial = dayData.filter(a => a.daily_status === 'partial_absent').length;
         const dayName = new Date(date).toLocaleDateString('ar-SA', { weekday: 'short' });
-        return { name: dayName, present, absent };
-      }).filter(d => d.present > 0 || d.absent > 0);
+        return { name: dayName, present, absent, partial };
+      }).filter(d => d.present > 0 || d.absent > 0 || d.partial > 0);
 
       setAttendanceData(chartData);
 
@@ -257,10 +258,19 @@ export default function ReportsPage() {
                     <Line 
                       type="monotone" 
                       dataKey="absent" 
-                      name="غياب" 
+                      name="غياب كامل" 
                       stroke="#f43f5e" 
                       strokeWidth={4} 
                       dot={{ r: 6, fill: '#f43f5e', strokeWidth: 2, stroke: '#fff' }} 
+                      activeDot={{ r: 8, strokeWidth: 0 }} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="partial" 
+                      name="غياب جزئي" 
+                      stroke="#f59e0b" 
+                      strokeWidth={4} 
+                      dot={{ r: 6, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} 
                       activeDot={{ r: 8, strokeWidth: 0 }} 
                     />
                   </LineChart>

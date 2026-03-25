@@ -38,22 +38,22 @@ export default function StudentProfilePage() {
       if (student) {
         // Fetch attendance stats
         const { data: attendance } = await supabase
-          .from('attendance')
-          .select('status, date')
+          .from('attendance_daily_summary')
+          .select('daily_status, date')
           .eq('student_id', student.id);
         
         if (attendance) {
           const total = attendance.length;
-          const present = attendance.filter(a => a.status === 'present').length;
-          const late = attendance.filter(a => a.status === 'late').length;
-          const absent = attendance.filter(a => a.status === 'absent');
+          const present = attendance.filter(a => a.daily_status === 'present').length;
+          const partial = attendance.filter(a => a.daily_status === 'partial_absent').length;
+          const absent = attendance.filter(a => a.daily_status === 'full_absent');
           
           setAttendanceStats({
             total,
             present,
-            late,
+            partial,
             absent: absent.length,
-            rate: total > 0 ? Math.round((present / total) * 100) : 100
+            rate: total > 0 ? Math.round(((present + partial * 0.5) / total) * 100) : 100
           });
           setAbsentDates(absent.map(a => a.date));
         }
@@ -116,7 +116,11 @@ export default function StudentProfilePage() {
                 <span className="font-bold text-emerald-600">{attendanceStats.present}</span>
               </div>
               <div className="flex justify-between">
-                <span>غائب:</span>
+                <span>غائب جزئي:</span>
+                <span className="font-bold text-amber-600">{attendanceStats.partial}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>غائب كامل:</span>
                 <span className="font-bold text-red-600">{attendanceStats.absent}</span>
               </div>
             </div>
