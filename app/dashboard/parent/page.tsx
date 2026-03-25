@@ -25,24 +25,23 @@ export default function ParentDashboard() {
       const user = session?.user;
       if (!user) return;
 
-      // Fetch parent profile
-      const { data: parent } = await supabase
-        .from('parents')
-        .select('*, users(*)')
-        .eq('id', user.id)
-        .single();
-      
-      setParentData(parent);
-
-      if (parent) {
-        // Fetch children linked to this parent
-        const { data: childrenData } = await supabase
+      // Fetch parent profile and children in parallel
+      const [parentRes, childrenRes] = await Promise.all([
+        supabase
+          .from('parents')
+          .select('id, users(full_name)')
+          .eq('id', user.id)
+          .single(),
+        supabase
           .from('students')
-          .select('*, users(*), sections(*, classes(*))')
-          .eq('parent_id', user.id);
-        
-        setChildren(childrenData || []);
+          .select('id, section_id, users(full_name), sections(name, classes(name))')
+          .eq('parent_id', user.id)
+      ]);
+      
+      setParentData(parentRes.data);
+      setChildren(childrenRes.data || []);
 
+      if (parentRes.data) {
         // Mock notifications for now
         setNotifications([
           { id: 1, title: 'غياب بدون عذر', student: 'محمد', date: 'اليوم', type: 'warning' },

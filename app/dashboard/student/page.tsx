@@ -48,16 +48,17 @@ export default function StudentDashboard() {
           supabase
             .from('attendance')
             .select('status')
-            .eq('student_id', student.id),
+            .eq('student_id', student.id)
+            .gte('date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
           supabase
             .from('exam_attempts')
-            .select('*, exam:exams(title, subject:subjects(name))')
+            .select('id, score, completed_at, exam:exams(title, subject:subjects(name))')
             .eq('student_id', student.id)
             .order('completed_at', { ascending: false })
             .limit(5),
           supabase
             .from('exams')
-            .select('*, subject:subjects(name)')
+            .select('id, title, start_time, subject:subjects(name)')
             .eq('section_id', student.section_id)
             .eq('status', 'published')
             .gte('start_time', new Date().toISOString())
@@ -65,7 +66,7 @@ export default function StudentDashboard() {
             .limit(3),
           supabase
             .from('assignments')
-            .select('*, subject:subjects(name)')
+            .select('id, title, due_date, subject:subjects(name)')
             .eq('section_id', student.section_id)
             .gte('due_date', new Date().toISOString())
             .order('due_date', { ascending: true })

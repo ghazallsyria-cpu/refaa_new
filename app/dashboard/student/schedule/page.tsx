@@ -44,7 +44,7 @@ export default function StudentSchedulePage() {
       if (student?.section_id) {
         const { data, error } = await supabase
           .from('schedules')
-          .select('*, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
           .eq('section_id', student.section_id)
           .order('day_of_week')
           .order('period');

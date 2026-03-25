@@ -31,7 +31,7 @@ export default function TeacherSchedulePage() {
 
       const { data, error } = await supabase
         .from('schedules')
-        .select('*, subjects(name), sections(name, classes(name))')
+        .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
         .eq('teacher_id', user.id)
         .order('day_of_week')
         .order('period');

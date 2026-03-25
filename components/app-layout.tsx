@@ -140,7 +140,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, []); // Only run on mount
+  }, [isLoginPage, isPublicPage, router]);
 
   // Handle Role-based routing on pathname change
   useEffect(() => {

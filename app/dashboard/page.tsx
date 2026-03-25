@@ -48,18 +48,19 @@ export default function AdminDashboard() {
           { count: studentsCount },
           { count: teachersCount },
           { count: sectionsCount },
-          { count: totalAttendanceCount },
-          { count: presentAttendanceCount }
+          attendanceRes
         ] = await Promise.all([
-          supabase.from('students').select('*', { count: 'exact', head: true }),
-          supabase.from('teachers').select('*', { count: 'exact', head: true }),
-          supabase.from('sections').select('*', { count: 'exact', head: true }),
-          supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('date', today),
-          supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('date', today).in('status', ['present', 'late'])
+          supabase.from('students').select('id', { count: 'exact', head: true }),
+          supabase.from('teachers').select('id', { count: 'exact', head: true }),
+          supabase.from('sections').select('id', { count: 'exact', head: true }),
+          supabase.from('attendance').select('status').eq('date', today)
         ]);
 
-        const attendanceRate = totalAttendanceCount && totalAttendanceCount > 0
-          ? Math.round(((presentAttendanceCount || 0) / totalAttendanceCount) * 100)
+        const totalAttendanceCount = attendanceRes.data?.length || 0;
+        const presentAttendanceCount = attendanceRes.data?.filter(a => ['present', 'late'].includes(a.status)).length || 0;
+
+        const attendanceRate = totalAttendanceCount > 0
+          ? Math.round((presentAttendanceCount / totalAttendanceCount) * 100)
           : 0;
 
         setStats([

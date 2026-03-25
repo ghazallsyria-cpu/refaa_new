@@ -51,7 +51,7 @@ export default function TeacherDashboard() {
         // Fetch teacher's sections assigned to this teacher
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
-          .select('section_id, section:sections(*, classes(*), students(count))')
+          .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
           .eq('teacher_id', user.id);
         
         const sectionsData = (teacherSections?.map(ts => ts.section) || []) as any[];
@@ -60,49 +60,54 @@ export default function TeacherDashboard() {
         // Fetch exams for the teacher's sections
         const sectionIds = sectionsData.map((s: any) => s.id);
         
+        if (sectionIds.length === 0) {
+          setLoading(false);
+          return;
+        }
+
         // Fetch all assignments first to use for stats and submissions query
-        const allAssignments = sectionIds.length > 0 ? await supabase
+        const allAssignments = await supabase
           .from('assignments')
           .select('id, title, section_id, due_date, subjects(name), sections(name, classes(name))')
           .in('section_id', sectionIds)
           .order('created_at', { ascending: false })
-          .limit(5) : { data: [] };
+          .limit(5);
           
         const assignmentIds = allAssignments.data?.map(a => a.id) || [];
-        const recentAssignmentsData = allAssignments.data?.slice(0, 5) || [];
+        const recentAssignmentsData = allAssignments.data || [];
         
         const [examsRes, scheduleRes, messagesRes, attendanceRes, examsCountRes, assignmentsCountRes, submissionsRes] = await Promise.all([
-          sectionIds.length > 0 ? supabase
+          supabase
             .from('exams')
-            .select('*, subject:subjects(name), section:sections(name)')
+            .select('id, title, created_at, start_time, subject:subjects(name), section:sections(name)')
             .in('section_id', sectionIds)
             .order('created_at', { ascending: false })
-            .limit(5) : Promise.resolve({ data: [] }),
+            .limit(5),
           supabase
             .from('schedules')
-            .select('*, subjects(name), sections(name, classes(name))')
+            .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(name, classes(name))')
             .eq('teacher_id', user.id)
             .order('day_of_week')
             .order('period'),
           supabase
             .from('messages')
-            .select('*, sender:sender_id(full_name)')
+            .select('id, subject, content, created_at, sender:sender_id(full_name)')
             .eq('receiver_id', user.id)
             .order('created_at', { ascending: false })
             .limit(5),
-          sectionIds.length > 0 ? supabase
+          supabase
             .from('attendance')
             .select('status')
             .in('section_id', sectionIds)
-            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) : Promise.resolve({ data: [] }),
-          sectionIds.length > 0 ? supabase
+            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+          supabase
             .from('exams')
             .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
-          sectionIds.length > 0 ? supabase
+            .in('section_id', sectionIds),
+          supabase
             .from('assignments')
             .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
+            .in('section_id', sectionIds),
           assignmentIds.length > 0 ? supabase
             .from('assignment_submissions')
             .select('assignment_id')
