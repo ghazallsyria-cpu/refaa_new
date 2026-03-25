@@ -96,7 +96,12 @@ export default function AssignmentsPage() {
           .single();
         
         if (studentData?.section_id) {
-          query = query.eq('section_id', studentData.section_id);
+          const { data: assignmentIds } = await supabase
+            .from('assignment_sections')
+            .select('assignment_id')
+            .eq('section_id', studentData.section_id);
+          
+          query = query.in('id', assignmentIds?.map(a => a.assignment_id) || []);
         } else {
           // If student has no section, return empty
           setAssignments([]);
@@ -111,7 +116,12 @@ export default function AssignmentsPage() {
         
         const sectionIds = childrenData?.map(c => c.section_id).filter(Boolean) || [];
         if (sectionIds.length > 0) {
-          query = query.in('section_id', sectionIds);
+          const { data: assignmentIds } = await supabase
+            .from('assignment_sections')
+            .select('assignment_id')
+            .in('section_id', sectionIds);
+          
+          query = query.in('id', assignmentIds?.map(a => a.assignment_id) || []);
         } else {
           setAssignments([]);
           return;
@@ -259,16 +269,19 @@ export default function AssignmentsPage() {
 
     setIsSubmitting(true);
     try {
+      const { section_ids, ...assignmentPayload } = { ...currentAssignment };
+      
       const payload = {
-        title: currentAssignment.title,
-        description: currentAssignment.description || null,
-        subject_id: currentAssignment.subject_id,
-        section_id: currentAssignment.section_id,
-        teacher_id: currentAssignment.teacher_id,
-        due_date: new Date(currentAssignment.due_date).toISOString(),
-        file_url: currentAssignment.file_url || null,
+        title: assignmentPayload.title,
+        description: assignmentPayload.description || null,
+        subject_id: assignmentPayload.subject_id,
+        teacher_id: assignmentPayload.teacher_id,
+        due_date: new Date(assignmentPayload.due_date).toISOString(),
+        file_url: assignmentPayload.file_url || null,
         total_marks: questions.reduce((sum, q) => sum + (q.points || 0), 0),
       };
+
+      let assignmentId = currentAssignment.id;
 
       if (currentAssignment.id) {
         // Check if file_url changed to delete old one from Cloudinary
@@ -309,6 +322,7 @@ export default function AssignmentsPage() {
           .single();
         if (error) throw error;
         if (!newAssignment) throw new Error('فشل في إنشاء الواجب');
+        assignmentId = newAssignment.id;
 
         // Save Questions
         if (questions.length > 0) {
@@ -325,12 +339,12 @@ export default function AssignmentsPage() {
           if (qError) throw qError;
         }
 
-        // Send Notifications to students in the section
+        // Send Notifications to students in the sections
         try {
           const { data: students } = await supabase
             .from('students')
             .select('id')
-            .eq('section_id', payload.section_id);
+            .in('section_id', section_ids || []);
 
           if (students && students.length > 0) {
             const subjectName = subjects.find(s => s.id === payload.subject_id)?.name || 'المادة';
@@ -346,6 +360,17 @@ export default function AssignmentsPage() {
         } catch (notifErr) {
           console.error('Error sending assignment notifications:', notifErr);
         }
+      }
+
+      // Save Assignment Sections
+      await supabase.from('assignment_sections').delete().eq('assignment_id', assignmentId);
+      if (section_ids && section_ids.length > 0) {
+        const sectionsToInsert = section_ids.map((sId: string) => ({
+          assignment_id: assignmentId,
+          section_id: sId
+        }));
+        const { error: sectionsError } = await supabase.from('assignment_sections').insert(sectionsToInsert);
+        if (sectionsError) throw sectionsError;
       }
 
       await fetchAssignments();
