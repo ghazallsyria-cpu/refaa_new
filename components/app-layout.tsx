@@ -101,7 +101,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         router.push('/');
       }
     }
-  }, [pathname, userRole, isChecking, isPublicPage, router, isAdminByEmail, user]);
+  }, [pathname, userRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (

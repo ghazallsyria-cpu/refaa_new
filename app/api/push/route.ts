@@ -6,11 +6,16 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-webpush.setVapidDetails(
-  'mailto:ghazallsyria@gmail.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+
+if (vapidPublicKey && vapidPrivateKey) {
+  webpush.setVapidDetails(
+    'mailto:ghazallsyria@gmail.com',
+    vapidPublicKey,
+    vapidPrivateKey
+  );
+}
 
 export async function POST(req: Request) {
   try {
