@@ -13,10 +13,9 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-const PERIODS = [1, 2, 3, 4, 5];
-
 export default function StudentSchedulePage() {
   const [schedule, setSchedule] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState<any>(null);
 
@@ -42,15 +41,24 @@ export default function StudentSchedulePage() {
       setStudentInfo(student);
 
       if (student?.section_id) {
-        const { data, error } = await supabase
-          .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
-          .eq('section_id', student.section_id)
-          .order('day_of_week')
-          .order('period');
+        const [scheduleRes, periodsRes] = await Promise.all([
+          supabase
+            .from('schedules')
+            .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
+            .eq('section_id', student.section_id)
+            .order('day_of_week')
+            .order('period'),
+          supabase
+            .from('class_periods')
+            .select('*')
+            .order('period_number')
+        ]);
 
-        if (error) throw error;
-        setSchedule(data || []);
+        if (scheduleRes.error) throw scheduleRes.error;
+        if (periodsRes.error) throw periodsRes.error;
+
+        setSchedule(scheduleRes.data || []);
+        setPeriods(periodsRes.data || []);
       }
     } catch (error) {
       console.error('Error fetching student schedule:', error);
@@ -97,11 +105,14 @@ export default function StudentSchedulePage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50">اليوم / الحصة</th>
-                {PERIODS.map(period => (
-                  <th key={period} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200">
+                {periods.map(period => (
+                  <th key={period.id} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200">
                     <div className="flex flex-col items-center gap-1">
                       <Clock className="h-4 w-4 text-indigo-500" />
-                      <span>الحصة {period}</span>
+                      <span>الحصة {period.period_number}</span>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
+                        {period.start_time.substring(0, 5)} - {period.end_time.substring(0, 5)}
+                      </span>
                     </div>
                   </th>
                 ))}
@@ -111,8 +122,8 @@ export default function StudentSchedulePage() {
               {DAYS.map((day) => (
                 <tr key={day.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80">{day.name}</td>
-                  {PERIODS.map(period => {
-                    const cellData = getCellData(day.id, period);
+                  {periods.map(period => {
+                    const cellData = getCellData(day.id, period.period_number);
                     return (
                       <td key={`${day.id}-${period}`} className="p-3 border-l border-slate-200 h-32 align-top min-w-[140px]">
                         {cellData ? (

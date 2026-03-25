@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, BookOpen, Users, Zap } from 'lucide-react';
+import { motion } from 'motion/react';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -12,14 +13,16 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-const PERIODS = [1, 2, 3, 4, 5];
-
 export default function TeacherSchedulePage() {
   const [schedule, setSchedule] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchTeacherSchedule();
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
   }, []);
 
   const fetchTeacherSchedule = async () => {
@@ -29,15 +32,24 @@ export default function TeacherSchedulePage() {
       const user = session?.user;
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('schedules')
-        .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
-        .eq('teacher_id', user.id)
-        .order('day_of_week')
-        .order('period');
+      const [scheduleRes, periodsRes] = await Promise.all([
+        supabase
+          .from('schedules')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
+          .eq('teacher_id', user.id)
+          .order('day_of_week')
+          .order('period'),
+        supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number')
+      ]);
 
-      if (error) throw error;
-      setSchedule(data || []);
+      if (scheduleRes.error) throw scheduleRes.error;
+      if (periodsRes.error) throw periodsRes.error;
+
+      setSchedule(scheduleRes.data || []);
+      setPeriods(periodsRes.data || []);
     } catch (error) {
       console.error('Error fetching teacher schedule:', error);
     } finally {
@@ -49,82 +61,158 @@ export default function TeacherSchedulePage() {
     return schedule.find(s => s.day_of_week === day && s.period === period);
   };
 
+  const isCurrentClass = (day: number, period: any) => {
+    const now = currentTime;
+    const currentDay = now.getDay() + 1; // 1 is Sunday
+    if (day !== currentDay) return false;
+
+    const [startH, startM] = period.start_time.split(':').map(Number);
+    const [endH, endM] = period.end_time.split(':').map(Number);
+    
+    const startTime = new Date(now);
+    startTime.setHours(startH, startM, 0);
+    
+    const endTime = new Date(now);
+    endTime.setHours(endH, endM, 0);
+
+    return now >= startTime && now <= endTime;
+  };
+
+  const isNextClass = (day: number, period: any) => {
+    const now = currentTime;
+    const currentDay = now.getDay() + 1;
+    if (day !== currentDay) return false;
+
+    const [startH, startM] = period.start_time.split(':').map(Number);
+    const startTime = new Date(now);
+    startTime.setHours(startH, startM, 0);
+
+    // Next class is the one starting after now, but within the next 2 hours
+    return startTime > now && (startTime.getTime() - now.getTime()) < 120 * 60000;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 pb-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-8 pb-8 max-w-7xl mx-auto"
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">جدولي الدراسي</h1>
+          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+            <div className="p-2 bg-indigo-50 rounded-xl">
+              <Calendar className="h-8 w-8 text-indigo-600" />
+            </div>
+            جدولي الدراسي الأسبوعي
+          </h1>
           <p className="text-slate-500 mt-2 font-medium">عرض كامل للحصص الدراسية المسندة إليك خلال الأسبوع</p>
         </div>
-        <div className="flex items-center gap-3 bg-white/50 backdrop-blur-md p-2 rounded-2xl border border-white/20 shadow-sm">
-          <div className="h-10 w-10 rounded-xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-            <Calendar className="h-5 w-5" />
+        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+          <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+            <Clock className="h-5 w-5" />
           </div>
-          <div className="pr-2 pl-4">
-            <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">العام الدراسي</div>
-            <div className="text-sm font-bold text-slate-700">2025 - 2026</div>
+          <div>
+            <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">الوقت الحالي</div>
+            <div className="text-sm font-bold text-slate-700">{format(currentTime, 'hh:mm a')}</div>
           </div>
         </div>
       </div>
 
-      <div className="glass-card rounded-[2.5rem] shadow-2xl border-white/40 overflow-hidden">
-        {loading ? (
-          <div className="flex flex-col justify-center items-center py-32 gap-4">
-            <div className="relative h-16 w-16">
-              <div className="absolute inset-0 border-4 border-indigo-600/10 rounded-full"></div>
-              <div className="absolute inset-0 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-            <p className="text-slate-400 font-bold animate-pulse">جاري تحميل جدولك الدراسي...</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse table-fixed">
-              <thead>
-                <tr className="bg-slate-50/50 backdrop-blur-md">
-                  <th className="py-6 px-6 text-center text-xs font-black text-slate-400 uppercase tracking-[0.2em] border-b border-l border-slate-100/50 w-32 bg-slate-100/30">اليوم / الحصة</th>
-                  {PERIODS.map(period => (
-                    <th key={period} className="py-6 px-4 text-center text-xs font-black text-slate-400 uppercase tracking-[0.2em] border-b border-l border-slate-100/50">الحصة {period}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white/30 backdrop-blur-sm">
-                {DAYS.map((day) => (
-                  <tr key={day.id} className="group hover:bg-white/50 transition-colors duration-300">
-                    <td className="py-8 px-6 text-base font-black text-slate-700 border-l border-b border-slate-100/50 text-center bg-slate-50/30 group-hover:text-indigo-600 transition-colors">{day.name}</td>
-                    {PERIODS.map(period => {
-                      const cellData = getCellData(day.id, period);
-                      return (
-                        <td key={`${day.id}-${period}`} className="p-3 border-l border-b border-slate-100/50 h-32 min-w-[160px] align-top">
-                          {cellData ? (
-                            <div className="h-full flex flex-col justify-between bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-5 shadow-xl shadow-indigo-200/50 transform group-hover:scale-[1.02] transition-all duration-300 border border-white/20 relative overflow-hidden">
-                              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 blur-2xl" />
-                              <div className="relative z-10">
-                                <div className="font-black text-white text-base leading-tight mb-1">{cellData.subjects?.name}</div>
-                                <div className="text-[11px] text-indigo-100 font-bold uppercase tracking-widest opacity-90">{cellData.sections?.classes?.name}</div>
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 border-collapse table-fixed">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50">اليوم / الحصة</th>
+                {periods.map(period => (
+                  <th key={period.id} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-indigo-600">الحصة {period.period_number}</span>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
+                        {period.start_time.substring(0, 5)} - {period.end_time.substring(0, 5)}
+                      </span>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {DAYS.map((day) => (
+                <tr key={day.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80">{day.name}</td>
+                  {periods.map(period => {
+                    const cellData = getCellData(day.id, period.period_number);
+                    const isCurrent = isCurrentClass(day.id, period);
+                    const isNext = isNextClass(day.id, period);
+
+                    return (
+                      <td key={`${day.id}-${period.id}`} className="p-3 border-l border-slate-200 h-36 align-top min-w-[160px]">
+                        {cellData ? (
+                          <motion.div 
+                            whileHover={{ scale: 1.02 }}
+                            className={`h-full flex flex-col justify-between rounded-2xl p-4 border shadow-sm relative overflow-hidden ${
+                              isCurrent 
+                                ? 'bg-gradient-to-br from-indigo-600 to-violet-700 text-white border-transparent ring-4 ring-indigo-100' 
+                                : isNext
+                                  ? 'bg-indigo-50 border-indigo-200 text-indigo-900'
+                                  : 'bg-white border-slate-200 text-slate-900'
+                            }`}
+                          >
+                            {isCurrent && (
+                              <div className="absolute top-0 right-0 p-1 bg-white/20 rounded-bl-xl">
+                                <Zap className="h-3 w-3 text-white animate-pulse" />
                               </div>
-                              <div className="relative z-10 flex items-center justify-between mt-2 pt-3 border-t border-white/20">
-                                <span className="text-[11px] font-black text-white bg-white/20 px-3 py-1 rounded-xl backdrop-blur-sm">{cellData.sections?.name}</span>
-                                <div className="flex items-center gap-1 text-white/60">
-                                  <Clock className="h-3.5 w-3.5" />
-                                  <span className="text-[10px] font-bold">الحصة {period}</span>
+                            )}
+                            <div className="space-y-1">
+                              <div className={`flex items-center gap-1.5 mb-1 ${isCurrent ? 'text-indigo-100' : 'text-indigo-600'}`}>
+                                <BookOpen className="h-3.5 w-3.5" />
+                                <span className="text-[10px] font-black uppercase tracking-wider">المادة</span>
+                              </div>
+                              <div className={`font-black text-sm leading-tight ${isCurrent ? 'text-white' : 'text-slate-900'}`}>
+                                {cellData.subjects?.name}
+                              </div>
+                            </div>
+                            <div className={`mt-3 pt-2 border-t flex flex-col gap-1 ${isCurrent ? 'border-white/20' : 'border-slate-100'}`}>
+                              <div className={`flex items-center gap-1.5 ${isCurrent ? 'text-indigo-100' : 'text-slate-500'}`}>
+                                <Users className="h-3 w-3" />
+                                <div className="text-[11px] font-bold truncate">
+                                  {cellData.sections?.classes?.name} - {cellData.sections?.name}
                                 </div>
                               </div>
+                              {isCurrent && (
+                                <div className="mt-1 inline-flex items-center justify-center py-1 px-2 bg-white/20 rounded-lg text-[9px] font-bold text-white backdrop-blur-sm animate-pulse">
+                                  جارية الآن
+                                </div>
+                              )}
+                              {isNext && !isCurrent && (
+                                <div className="mt-1 inline-flex items-center justify-center py-1 px-2 bg-indigo-100 rounded-lg text-[9px] font-bold text-indigo-600">
+                                  الحصة القادمة
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <div className="h-full w-full flex items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-100/30 group-hover:bg-slate-100/50 transition-all duration-300">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">فارغ</span>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                          </motion.div>
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-slate-200">
+                            <div className="h-1 w-4 bg-slate-100 rounded-full" />
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -24,6 +24,8 @@ export default function StudentDashboard() {
   const [recentGrades, setRecentGrades] = useState<any[]>([]);
   const [upcomingExams, setUpcomingExams] = useState<any[]>([]);
   const [upcomingAssignments, setUpcomingAssignments] = useState<any[]>([]);
+  const [todaysSchedule, setTodaysSchedule] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -44,7 +46,7 @@ export default function StudentDashboard() {
 
       if (student) {
         // Fetch all student data concurrently
-        const [attendanceRes, gradesRes, examsRes, assignmentsRes] = await Promise.all([
+        const [attendanceRes, gradesRes, examsRes, assignmentsRes, scheduleRes, periodsRes] = await Promise.all([
           supabase
             .from('attendance')
             .select('status')
@@ -70,7 +72,17 @@ export default function StudentDashboard() {
             .eq('section_id', student.section_id)
             .gte('due_date', new Date().toISOString())
             .order('due_date', { ascending: true })
-            .limit(3)
+            .limit(3),
+          supabase
+            .from('schedules')
+            .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))')
+            .eq('section_id', student.section_id)
+            .eq('day_of_week', new Date().getDay() + 1)
+            .order('period'),
+          supabase
+            .from('class_periods')
+            .select('*')
+            .order('period_number')
         ]);
 
         if (attendanceRes.data) {
@@ -92,6 +104,8 @@ export default function StudentDashboard() {
         setRecentGrades(gradesRes.data || []);
         setUpcomingExams(examsRes.data || []);
         setUpcomingAssignments(assignmentsRes.data || []);
+        setTodaysSchedule(scheduleRes.data || []);
+        setPeriods(periodsRes.data || []);
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
@@ -299,6 +313,58 @@ export default function StudentDashboard() {
         {/* Sidebar Content - Right 1 Column */}
         <div className="space-y-8">
           
+          {/* Today's Schedule Widget */}
+          <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 rounded-xl">
+                  <Clock className="h-5 w-5 text-indigo-600" />
+                </div>
+                جدول اليوم
+              </h2>
+              <Link href="/dashboard/student/schedule" className="text-xs font-bold text-indigo-600 hover:underline">عرض الكل</Link>
+            </div>
+            <div className="space-y-3">
+              {todaysSchedule.length > 0 ? (
+                todaysSchedule.map((item, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
+                    <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sm font-black text-slate-900 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">
+                      {item.period}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 line-clamp-1">{item.subjects?.name}</p>
+                      <div className="flex flex-col gap-0.5 mt-0.5">
+                        <p className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
+                          <GraduationCap className="h-3 w-3" />
+                          {item.teachers?.users?.full_name}
+                        </p>
+                        {(() => {
+                          const periodInfo = periods.find(p => p.period_number === item.period);
+                          const startTime = item.start_time || periodInfo?.start_time;
+                          const endTime = item.end_time || periodInfo?.end_time;
+                          
+                          if (startTime && endTime) {
+                            return (
+                              <p className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
+                                <Clock className="h-2.5 w-2.5" />
+                                {startTime.substring(0, 5)} - {endTime.substring(0, 5)}
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-500 text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  لا توجد حصص اليوم
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Announcements Widget */}
           <AnnouncementsWidget role="student" />
 

@@ -663,6 +663,31 @@ CREATE POLICY "Users can manage their own documents" ON public.documents FOR ALL
       });
       generatedSql += `\n`;
 
+      generatedSql += `-- 2.1 إضافة السنة الأكاديمية والفصول\n`;
+      const academicYearId = generateUUID();
+      generatedSql += `INSERT INTO public.academic_years (id, name, start_date, end_date, is_active) VALUES ('${academicYearId}', '2023-2024', '2023-09-01', '2024-06-30', TRUE);\n`;
+      
+      const semester1Id = generateUUID();
+      const semester2Id = generateUUID();
+      generatedSql += `INSERT INTO public.semesters (id, academic_year_id, name, start_date, end_date, is_active) VALUES ('${semester1Id}', '${academicYearId}', 'الفصل الدراسي الأول', '2023-09-01', '2024-01-15', FALSE);\n`;
+      generatedSql += `INSERT INTO public.semesters (id, academic_year_id, name, start_date, end_date, is_active) VALUES ('${semester2Id}', '${academicYearId}', 'الفصل الدراسي الثاني', '2024-01-20', '2024-06-30', TRUE);\n`;
+      generatedSql += `\n`;
+
+      generatedSql += `-- 2.2 إضافة توقيت الحصص\n`;
+      const periodTimes = [
+        { start: '07:30:00', end: '08:15:00' },
+        { start: '08:20:00', end: '09:05:00' },
+        { start: '09:10:00', end: '09:55:00' },
+        { start: '10:15:00', end: '11:00:00' },
+        { start: '11:05:00', end: '11:50:00' },
+        { start: '11:55:00', end: '12:40:00' },
+        { start: '12:45:00', end: '13:30:00' },
+      ];
+      periodTimes.forEach((time, i) => {
+        generatedSql += `INSERT INTO public.class_periods (period_number, start_time, end_time) VALUES (${i + 1}, '${time.start}', '${time.end}');\n`;
+      });
+      generatedSql += `\n`;
+
       generatedSql += `-- 3. إضافة الشعب\n`;
       const uniqueSections = new Set<string>();
       schoolData.forEach(t => t.classes.forEach(c => uniqueSections.add(c)));
@@ -694,6 +719,9 @@ CREATE POLICY "Users can manage their own documents" ON public.documents FOR ALL
 
       // 3. Teachers
       generatedSql += `-- 4. إضافة المعلمين وربطهم بالمواد والفصول\n`;
+      const sectionScheduleMap: { [key: string]: boolean } = {};
+      const teacherScheduleMap: { [key: string]: boolean } = {};
+
       schoolData.forEach((t, i) => {
         const userId = generateUUID();
         const email = `teacher${i+1}@alrefaa.edu`;
@@ -717,6 +745,31 @@ VALUES ('${userId}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'a
         t.classes.forEach(cls => {
           t.subjects.forEach(sub => {
             generatedSql += `INSERT INTO public.teacher_sections (teacher_id, section_id, subject_id) VALUES ('${userId}', '${sectionMap[cls]}', '${subjectMap[sub]}');\n`;
+          });
+        });
+
+        // 5. إضافة الجدول الدراسي (Schedules)
+        generatedSql += `-- Reset schedules before seeding\nTRUNCATE public.schedules CASCADE;\n\n`;
+        t.classes.forEach(cls => {
+          t.subjects.forEach(sub => {
+            const sectionId = sectionMap[cls];
+            const subjectId = subjectMap[sub];
+            
+            let assigned = false;
+            // محاولة التوزيع على مدار الأسبوع (الأحد إلى الخميس: 1-5) والحصص (1-7)
+            for (let d = 1; d <= 5 && !assigned; d++) {
+              for (let p = 1; p <= 7 && !assigned; p++) {
+                const sectionKey = `${sectionId}-${d}-${p}`;
+                const teacherKey = `${userId}-${d}-${p}`;
+                
+                if (!sectionScheduleMap[sectionKey] && !teacherScheduleMap[teacherKey]) {
+                  generatedSql += `INSERT INTO public.schedules (section_id, teacher_id, subject_id, day_of_week, period) VALUES ('${sectionId}', '${userId}', '${subjectId}', ${d}, ${p});\n`;
+                  sectionScheduleMap[sectionKey] = true;
+                  teacherScheduleMap[teacherKey] = true;
+                  assigned = true;
+                }
+              }
+            }
           });
         });
         

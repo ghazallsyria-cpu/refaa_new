@@ -20,6 +20,7 @@ export default function TeacherDashboard() {
   const [recentExams, setRecentExams] = useState<any[]>([]);
   const [recentAssignments, setRecentAssignments] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -30,6 +31,44 @@ export default function TeacherDashboard() {
   });
   const [assignmentStats, setAssignmentStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isCurrentClass = (period: number) => {
+    const periodInfo = periods.find(p => p.period_number === period);
+    if (!periodInfo) return false;
+
+    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+    const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+    
+    const now = currentTime;
+    const start = new Date(now);
+    start.setHours(startH, startM, 0);
+    
+    const end = new Date(now);
+    end.setHours(endH, endM, 0);
+    
+    return now >= start && now <= end;
+  };
+
+  const isNextClass = (period: number) => {
+    const periodInfo = periods.find(p => p.period_number === period);
+    if (!periodInfo) return false;
+
+    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+    
+    const now = currentTime;
+    const start = new Date(now);
+    start.setHours(startH, startM, 0);
+    
+    // Check if it's the next class (starts within the next 60 minutes and is after now)
+    const diff = (start.getTime() - now.getTime()) / (1000 * 60);
+    return diff > 0 && diff <= 60;
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -60,11 +99,6 @@ export default function TeacherDashboard() {
         // Fetch exams for the teacher's sections
         const sectionIds = sectionsData.map((s: any) => s.id);
         
-        if (sectionIds.length === 0) {
-          setLoading(false);
-          return;
-        }
-
         // Fetch all assignments first to use for stats and submissions query
         const allAssignments = await supabase
           .from('assignments')
@@ -76,13 +110,13 @@ export default function TeacherDashboard() {
         const assignmentIds = allAssignments.data?.map(a => a.id) || [];
         const recentAssignmentsData = allAssignments.data || [];
         
-        const [examsRes, scheduleRes, messagesRes, attendanceRes, examsCountRes, assignmentsCountRes, submissionsRes] = await Promise.all([
-          supabase
+        const [examsRes, scheduleRes, periodsRes, messagesRes, attendanceRes, examsCountRes, assignmentsCountRes, submissionsRes] = await Promise.all([
+          sectionIds.length > 0 ? supabase
             .from('exams')
             .select('id, title, created_at, start_time, subject:subjects(name), section:sections(name)')
             .in('section_id', sectionIds)
             .order('created_at', { ascending: false })
-            .limit(5),
+            .limit(5) : Promise.resolve({ data: [] }),
           supabase
             .from('schedules')
             .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(name, classes(name))')
@@ -90,24 +124,28 @@ export default function TeacherDashboard() {
             .order('day_of_week')
             .order('period'),
           supabase
+            .from('class_periods')
+            .select('*')
+            .order('period_number'),
+          supabase
             .from('messages')
             .select('id, subject, content, created_at, sender:sender_id(full_name)')
             .eq('receiver_id', user.id)
             .order('created_at', { ascending: false })
             .limit(5),
-          supabase
+          sectionIds.length > 0 ? supabase
             .from('attendance')
             .select('status')
             .in('section_id', sectionIds)
-            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-          supabase
+            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) : Promise.resolve({ data: [] }),
+          sectionIds.length > 0 ? supabase
             .from('exams')
             .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds),
-          supabase
+            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
+          sectionIds.length > 0 ? supabase
             .from('assignments')
             .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds),
+            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
           assignmentIds.length > 0 ? supabase
             .from('assignment_submissions')
             .select('assignment_id')
@@ -117,6 +155,7 @@ export default function TeacherDashboard() {
         setRecentExams(examsRes.data || []);
         setRecentAssignments(recentAssignmentsData);
         setSchedule(scheduleRes.data || []);
+        setPeriods(periodsRes.data || []);
         setMessages(messagesRes.data || []);
 
         // Calculate assignment stats by class
@@ -153,8 +192,8 @@ export default function TeacherDashboard() {
         const totalStudents = sectionsData?.reduce((acc, s) => acc + (s.students?.[0]?.count || 0), 0) || 0;
         setStats({
           totalStudents,
-          totalExams: examsCountRes.count || 0,
-          totalAssignments: assignmentsCountRes.count || 0,
+          totalExams: (examsCountRes as any).count || 0,
+          totalAssignments: (assignmentsCountRes as any).count || 0,
           avgAttendance,
           absenceRate
         });
@@ -181,7 +220,7 @@ export default function TeacherDashboard() {
     );
   }
 
-  const today = new Date().getDay(); // 0 is Sunday
+  const today = new Date().getDay() + 1; // 1 is Sunday
   const todaysSchedule = schedule.filter(s => s.day_of_week === today);
 
   return (
@@ -268,25 +307,89 @@ export default function TeacherDashboard() {
             <div className="p-6">
               {todaysSchedule.length > 0 ? (
                 <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
-                  {todaysSchedule.map((item, i) => (
-                    <div key={i} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-indigo-100 text-indigo-600 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
-                        <span className="text-sm font-bold">{item.period}</span>
-                      </div>
-                      <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition-shadow group-hover:border-indigo-200">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-bold text-slate-900">{item.subjects?.name}</h3>
-                          <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                            الحصة {item.period}
-                          </span>
+                  {todaysSchedule.map((item, i) => {
+                    const current = isCurrentClass(item.period);
+                    const next = isNextClass(item.period);
+                    
+                    return (
+                      <div key={i} className={cn(
+                        "relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group",
+                        current ? "is-active" : ""
+                      )}>
+                        <div className={cn(
+                          "flex items-center justify-center w-10 h-10 rounded-full border-4 border-white shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500",
+                          current ? "bg-indigo-600 text-white scale-125 ring-4 ring-indigo-100" : 
+                          next ? "bg-amber-100 text-amber-600" : "bg-indigo-100 text-indigo-600"
+                        )}>
+                          {current ? (
+                            <Clock className="h-5 w-5 animate-pulse" />
+                          ) : (
+                            <span className="text-sm font-bold">{item.period}</span>
+                          )}
                         </div>
-                        <p className="text-sm text-slate-500 flex items-center gap-1.5">
-                          <Users className="h-4 w-4" />
-                          {item.sections?.classes?.name} - {item.sections?.name}
-                        </p>
+                        <div className={cn(
+                          "w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border transition-all duration-500",
+                          current 
+                            ? "bg-gradient-to-br from-indigo-50 to-white border-indigo-200 shadow-lg shadow-indigo-100/50 scale-[1.02]" 
+                            : next 
+                              ? "bg-amber-50/50 border-amber-100 shadow-sm" 
+                              : "bg-white border-slate-100 shadow-sm hover:shadow-md group-hover:border-indigo-200"
+                        )}>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className={cn(
+                              "font-bold transition-colors",
+                              current ? "text-indigo-900" : "text-slate-900"
+                            )}>
+                              {item.subjects?.name}
+                            </h3>
+                            <div className="flex flex-col items-end gap-1">
+                              {current && (
+                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-600 text-[10px] font-bold text-white animate-bounce">
+                                  <div className="w-1 h-1 rounded-full bg-white animate-ping" />
+                                  الآن
+                                </span>
+                              )}
+                              {next && !current && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
+                                  الحصة القادمة
+                                </span>
+                              )}
+                              <span className={cn(
+                                "text-xs font-medium px-2.5 py-1 rounded-full",
+                                current ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-600"
+                              )}>
+                                الحصة {item.period}
+                              </span>
+                              {(() => {
+                                const periodInfo = periods.find(p => p.period_number === item.period);
+                                const startTime = item.start_time || periodInfo?.start_time;
+                                const endTime = item.end_time || periodInfo?.end_time;
+                                
+                                if (startTime && endTime) {
+                                  return (
+                                    <span className={cn(
+                                      "text-[10px] font-bold mt-1",
+                                      current ? "text-indigo-400" : "text-slate-400"
+                                    )}>
+                                      {startTime.substring(0, 5)} - {endTime.substring(0, 5)}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                          </div>
+                          <p className={cn(
+                            "text-sm flex items-center gap-1.5",
+                            current ? "text-indigo-600/80" : "text-slate-500"
+                          )}>
+                            <Users className="h-4 w-4" />
+                            {item.sections?.classes?.name} - {item.sections?.name}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12">
