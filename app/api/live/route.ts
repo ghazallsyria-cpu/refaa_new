@@ -26,26 +26,45 @@ export async function GET() {
       });
     }
 
-    // Get all class periods to find the current one
-    const { data: periods, error: periodsError } = await adminSupabase
-      .from('class_periods')
-      .select('*')
-      .order('period_number');
+    // Fixed schedule logic
+    const currentTimeStr = now.getHours().toString().padStart(2, '0') + ':' + 
+                          now.getMinutes().toString().padStart(2, '0');
 
-    if (periodsError) throw periodsError;
+    const FIXED_SCHEDULE = [
+      { period: 1, start: '09:00', end: '09:35', type: 'class' },
+      { period: 1.5, start: '09:35', end: '09:40', type: 'break', name: 'استراحة قصيرة' },
+      { period: 2, start: '09:40', end: '10:15', type: 'class' },
+      { period: 2.5, start: '10:15', end: '10:30', type: 'break', name: 'استراحة طويلة' },
+      { period: 3, start: '10:30', end: '11:05', type: 'class' },
+      { period: 3.5, start: '11:05', end: '11:10', type: 'break', name: 'استراحة قصيرة' },
+      { period: 4, start: '11:10', end: '11:45', type: 'class' },
+      { period: 4.5, start: '11:45', end: '12:00', type: 'break', name: 'استراحة طويلة' },
+      { period: 5, start: '12:00', end: '12:35', type: 'class' },
+    ];
 
-    const currentTime = now.getHours().toString().padStart(2, '0') + ':' + 
-                        now.getMinutes().toString().padStart(2, '0') + ':00';
-
-    const currentPeriod = periods.find(p => 
-      currentTime >= p.start_time && currentTime <= p.end_time
+    const currentItem = FIXED_SCHEDULE.find(item => 
+      currentTimeStr >= item.start && currentTimeStr < item.end
     );
 
-    if (!currentPeriod) {
+    if (!currentItem) {
       return NextResponse.json({ 
         classes: [], 
         currentPeriod: null,
         message: 'لا توجد حصص حالياً' 
+      });
+    }
+
+    if (currentItem.type === 'break') {
+      return NextResponse.json({
+        classes: [],
+        currentPeriod: {
+          period_number: currentItem.period,
+          start_time: currentItem.start,
+          end_time: currentItem.end,
+          isBreak: true,
+          breakName: currentItem.name
+        },
+        message: currentItem.name
       });
     }
 
@@ -78,14 +97,19 @@ export async function GET() {
         )
       `)
       .eq('day_of_week', dbDay)
-      .eq('period', currentPeriod.period_number);
+      .eq('period', currentItem.period);
 
     if (schedulesError) throw schedulesError;
 
     return NextResponse.json({
       classes: schedules,
-      currentPeriod,
-      currentTime
+      currentPeriod: {
+        period_number: currentItem.period,
+        start_time: currentItem.start,
+        end_time: currentItem.end,
+        isBreak: false
+      },
+      currentTime: currentTimeStr
     });
   } catch (error: any) {
     console.error('Live API Error:', error);
