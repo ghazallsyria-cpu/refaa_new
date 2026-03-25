@@ -12,6 +12,7 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 
 export default function TeacherDashboard() {
