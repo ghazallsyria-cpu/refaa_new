@@ -21,7 +21,7 @@ import autoTable from 'jspdf-autotable';
 
 type Attempt = {
   id: string;
-  student: { full_name: string, email: string, section_name: string };
+  student: { id: string; full_name: string, email: string, section_name: string };
   started_at: string;
   completed_at: string;
   score: number;
