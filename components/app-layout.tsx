@@ -17,6 +17,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [platformClosed, setPlatformClosed] = useState(false);
   const [closeMessage, setCloseMessage] = useState('');
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>('');
+  const [user, setUser] = useState<any>(null);
   const [isAdminByEmail, setIsAdminByEmail] = useState(false);
   
   const isLoginPage = pathname === '/login';
@@ -45,16 +47,37 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         }
 
         let role = null;
+        let isSuperAdmin = false;
+        let settings = null;
+        let settingsError = null;
+
         if (session?.user) {
-          const isSuperAdmin = session.user.email === 'ghazallsyria@gmail.com';
+          setUser(session.user);
+          isSuperAdmin = session.user.email === 'ghazallsyria@gmail.com';
           setIsAdminByEmail(isSuperAdmin);
-          const { data: userData } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
           
-          role = userData?.role;
+          // Fetch user data and platform settings concurrently
+          const [userRes, settingsRes] = await Promise.all([
+            supabase
+              .from('users')
+              .select('role, full_name')
+              .eq('id', session.user.id)
+              .single(),
+            !isPublicPage ? supabase
+              .from('platform_settings')
+              .select('*')
+              .limit(1)
+              .maybeSingle() : Promise.resolve({ data: null, error: null })
+          ]);
+          
+          role = userRes.data?.role;
+          settings = settingsRes.data;
+          settingsError = settingsRes.error;
+          
+          if (userRes.data) {
+            setUserName(userRes.data.full_name || session.user.email?.split('@')[0] || '');
+            setUserRole(role);
+          }
           
           // تأكيد دور المدير في قاعدة البيانات إذا كان البريد الإلكتروني يطابق المدير الرئيسي
           if (isSuperAdmin && role !== 'admin') {
@@ -68,72 +91,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   role: 'admin' 
                 });
               role = 'admin';
+              setUserRole('admin');
             } catch (err) {
               console.error('Error auto-updating admin role:', err);
             }
           }
-          
-          setUserRole(role);
         }
-
-        // Role-based routing
-        let authorized = true;
-        if (session && !isPublicPage) {
-          const isRoot = pathname === '/';
-          const isDashboardRoute = pathname.startsWith('/dashboard');
-          const isEmailAdmin = session?.user?.email === 'ghazallsyria@gmail.com';
-
-          if (role === 'student') {
-            if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
-              router.push('/dashboard/student');
-              authorized = false;
-            }
-          } else if (role === 'teacher') {
-            if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
-              router.push('/dashboard/teacher');
-              authorized = false;
-            }
-          } else if (role === 'parent') {
-            if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
-              router.push('/dashboard/parent');
-              authorized = false;
-            }
-          } else if (role === 'admin' || role === 'management' || isEmailAdmin) {
-            if (isRoot) {
-              router.push('/dashboard');
-              authorized = false;
-            }
-          }
-        }
-        setIsAuthorized(authorized);
 
         // Check platform settings
-        try {
-          const { data: settings, error: settingsError } = await supabase
-            .from('platform_settings')
-            .select('*')
-            .limit(1)
-            .maybeSingle();
+        if (session && !isPublicPage) {
+          try {
+            if (!settingsError && settings) {
+              let isOpen = settings.is_open;
+              const now = new Date();
+              
+              if (settings.open_date && new Date(settings.open_date) > now) {
+                isOpen = false;
+              }
+              if (settings.close_date && new Date(settings.close_date) < now) {
+                isOpen = false;
+              }
 
-          if (!settingsError && settings) {
-            let isOpen = settings.is_open;
-            const now = new Date();
-            
-            if (settings.open_date && new Date(settings.open_date) > now) {
-              isOpen = false;
+              if (!isOpen && role !== 'admin' && role !== 'management' && !isSuperAdmin) {
+                setPlatformClosed(true);
+                setCloseMessage(settings.message || 'المنصة مغلقة حاليا للصيانة');
+              }
             }
-            if (settings.close_date && new Date(settings.close_date) < now) {
-              isOpen = false;
-            }
-
-            if (!isOpen && role !== 'admin' && role !== 'management' && !isAdminByEmail) {
-              setPlatformClosed(true);
-              setCloseMessage(settings.message || 'المنصة مغلقة حاليا للصيانة');
-            }
+          } catch (settingsErr) {
+            console.warn('Platform settings table might be missing:', settingsErr);
+            // If table is missing, assume platform is open
           }
-        } catch (settingsErr) {
-          console.warn('Platform settings table might be missing:', settingsErr);
-          // If table is missing, assume platform is open
         }
       } catch (error) {
         console.error('Auth check error:', error);
@@ -153,7 +140,50 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [pathname, router, isPublicPage, isLoginPage, isAdminByEmail]);
+  }, []); // Only run on mount
+
+  // Handle Role-based routing on pathname change
+  useEffect(() => {
+    if (isChecking || isPublicPage || !user) return;
+
+    let authorized = true;
+    const isRoot = pathname === '/';
+    const isDashboardRoute = pathname.startsWith('/dashboard');
+
+    if (userRole === 'student') {
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
+        router.push('/dashboard/student');
+        authorized = false;
+      }
+    } else if (userRole === 'teacher') {
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
+        router.push('/dashboard/teacher');
+        authorized = false;
+      }
+    } else if (userRole === 'parent') {
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
+        router.push('/dashboard/parent');
+        authorized = false;
+      }
+    } else if (userRole === 'admin' || userRole === 'management' || isAdminByEmail) {
+      if (isRoot) {
+        router.push('/dashboard');
+        authorized = false;
+      }
+    } else if (userRole === null) {
+      // If user has no role, they shouldn't be stuck loading.
+      // We'll let them see the page but they might not have access to data.
+      // Or we could redirect them to a "no access" page.
+      // For now, we'll just authorize them to see whatever they are on, 
+      // or redirect to root if they are on a specific dashboard.
+      if (isDashboardRoute) {
+         router.push('/');
+         authorized = false;
+      }
+    }
+    
+    setIsAuthorized(authorized);
+  }, [pathname, userRole, isChecking, isPublicPage, router, isAdminByEmail, user]);
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
@@ -225,7 +255,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       
       <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full">
         <div className="print:hidden">
-          <Header onMenuClick={() => setIsSidebarOpen(true)} showMenuButton={showSidebar} />
+          <Header onMenuClick={() => setIsSidebarOpen(true)} showMenuButton={showSidebar} user={user} userRole={userRole || ''} userName={userName} />
         </div>
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 print:p-0 print:overflow-visible flex flex-col">
           <div className="flex-1">

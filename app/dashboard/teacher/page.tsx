@@ -34,7 +34,8 @@ export default function TeacherDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
 
       // Fetch teacher profile
@@ -59,19 +60,24 @@ export default function TeacherDashboard() {
         // Fetch exams for the teacher's sections
         const sectionIds = sectionsData.map((s: any) => s.id);
         
-        const [examsRes, assignmentsRes, scheduleRes, messagesRes, attendanceRes, examsCountRes, assignmentsCountRes, submissionsRes] = await Promise.all([
-          supabase
+        // Fetch all assignments first to use for stats and submissions query
+        const allAssignments = sectionIds.length > 0 ? await supabase
+          .from('assignments')
+          .select('id, title, section_id, due_date, subjects(name), sections(name, classes(name))')
+          .in('section_id', sectionIds)
+          .order('created_at', { ascending: false })
+          .limit(5) : { data: [] };
+          
+        const assignmentIds = allAssignments.data?.map(a => a.id) || [];
+        const recentAssignmentsData = allAssignments.data?.slice(0, 5) || [];
+        
+        const [examsRes, scheduleRes, messagesRes, attendanceRes, examsCountRes, assignmentsCountRes, submissionsRes] = await Promise.all([
+          sectionIds.length > 0 ? supabase
             .from('exams')
             .select('*, subject:subjects(name), section:sections(name)')
             .in('section_id', sectionIds)
             .order('created_at', { ascending: false })
-            .limit(5),
-          supabase
-            .from('assignments')
-            .select('*, subjects(name), sections(name, classes(name))')
-            .in('section_id', sectionIds)
-            .order('due_date', { ascending: true })
-            .limit(5),
+            .limit(5) : Promise.resolve({ data: [] }),
           supabase
             .from('schedules')
             .select('*, subjects(name), sections(name, classes(name))')
@@ -84,36 +90,31 @@ export default function TeacherDashboard() {
             .eq('receiver_id', user.id)
             .order('created_at', { ascending: false })
             .limit(5),
-          supabase
+          sectionIds.length > 0 ? supabase
             .from('attendance')
             .select('status')
             .in('section_id', sectionIds)
-            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-          supabase
+            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) : Promise.resolve({ data: [] }),
+          sectionIds.length > 0 ? supabase
             .from('exams')
             .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds),
-          supabase
+            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
+          sectionIds.length > 0 ? supabase
             .from('assignments')
             .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds),
-          supabase
+            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
+          assignmentIds.length > 0 ? supabase
             .from('assignment_submissions')
             .select('assignment_id')
-            .in('assignment_id', (await supabase.from('assignments').select('id').in('section_id', sectionIds)).data?.map(a => a.id) || [])
+            .in('assignment_id', assignmentIds) : Promise.resolve({ data: [] })
         ]);
         
         setRecentExams(examsRes.data || []);
-        setRecentAssignments(assignmentsRes.data || []);
+        setRecentAssignments(recentAssignmentsData);
         setSchedule(scheduleRes.data || []);
         setMessages(messagesRes.data || []);
 
         // Calculate assignment stats by class
-        const allAssignments = await supabase
-          .from('assignments')
-          .select('id, title, section_id, sections(name, classes(name))')
-          .in('section_id', sectionIds);
-        
         if (allAssignments.data) {
           const statsByAssignment = allAssignments.data.map(assignment => {
             const submissionCount = submissionsRes.data?.filter(s => s.assignment_id === assignment.id).length || 0;

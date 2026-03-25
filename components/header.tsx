@@ -9,70 +9,36 @@ import { NotificationsBell } from '@/components/notifications-bell';
 import { PushNotificationToggle } from '@/components/push-notification-toggle';
 import Link from 'next/link';
 
-export function Header({ onMenuClick, showMenuButton = true }: { onMenuClick?: () => void, showMenuButton?: boolean }) {
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string>('');
-  const [rawUserRole, setRawUserRole] = useState<string>('');
-  const [userName, setUserName] = useState<string>('');
+export function Header({ 
+  onMenuClick, 
+  showMenuButton = true,
+  user,
+  userRole,
+  userName
+}: { 
+  onMenuClick?: () => void, 
+  showMenuButton?: boolean,
+  user?: any,
+  userRole?: string,
+  userName?: string
+}) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const router = useRouter();
-
-  useEffect(() => {
-    const fetchUserAndRole = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        
-        // Fetch user role and name
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role, full_name')
-          .eq('id', session.user.id)
-          .single();
-          
-        if (userData) {
-          setUserName(userData.full_name || session.user.email?.split('@')[0] || '');
-          setRawUserRole(userData.role);
-          
-          // Map role to Arabic display name
-          const roleMap: Record<string, string> = {
-            'admin': 'المدير العام',
-            'management': 'الإدارة',
-            'teacher': 'معلم',
-            'student': 'طالب',
-            'parent': 'ولي أمر'
-          };
-          
-          setUserRole(roleMap[userData.role] || userData.role);
-        }
-      } else {
-        setUser(null);
-        setUserRole('');
-        setRawUserRole('');
-        setUserName('');
-      }
-    };
-
-    fetchUserAndRole();
-
-    // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        fetchUserAndRole();
-      } else {
-        setUser(null);
-        setUserRole('');
-        setUserName('');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
   };
+
+  const roleMap: Record<string, string> = {
+    'admin': 'المدير العام',
+    'management': 'الإدارة',
+    'teacher': 'معلم',
+    'student': 'طالب',
+    'parent': 'ولي أمر'
+  };
+  
+  const displayRole = userRole ? (roleMap[userRole] || userRole) : '';
 
   return (
     <header className="flex h-24 shrink-0 items-center justify-between bg-white/70 backdrop-blur-xl border-b border-slate-200/50 px-8 sticky top-0 z-30">
@@ -134,7 +100,7 @@ export function Header({ onMenuClick, showMenuButton = true }: { onMenuClick?: (
               <span className="text-sm font-black text-slate-900 truncate max-w-[150px] group-hover:text-indigo-600 transition-colors">
                 {userName || (user ? user.email.split('@')[0] : 'تسجيل الدخول')}
               </span>
-              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest">{userRole || 'مستخدم'}</span>
+              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest">{displayRole || 'مستخدم'}</span>
             </div>
             <div className="relative">
               <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center overflow-hidden shadow-lg shadow-indigo-500/20 ring-2 ring-white">

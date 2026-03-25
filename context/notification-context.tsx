@@ -54,38 +54,65 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        fetchNotifications(user.id);
+    let channel: any = null;
+    let currentUserId: string | null = null;
+
+    const setupNotifications = async (user: any) => {
+      const newUserId = user?.id || null;
+      
+      if (newUserId === currentUserId) {
+        return; // Already set up for this user
+      }
+      
+      currentUserId = newUserId;
+
+      if (channel) {
+        supabase.removeChannel(channel);
+        channel = null;
+      }
+
+      if (newUserId) {
+        setUserId(newUserId);
+        fetchNotifications(newUserId);
 
         // Real-time subscription
-        const channel = supabase
-          .channel(`notifications:${user.id}`)
+        channel = supabase
+          .channel(`notifications:${newUserId}`)
           .on(
             'postgres_changes',
             {
               event: 'INSERT',
               schema: 'public',
               table: 'notifications',
-              filter: `user_id=eq.${user.id}`,
+              filter: `user_id=eq.${newUserId}`,
             },
             (payload) => {
               const newNotification = payload.new as Notification;
               setNotifications((prev) => [newNotification, ...prev]);
-              // Optional: Show toast or play sound
             }
           )
           .subscribe();
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
+      } else {
+        setUserId(null);
+        setNotifications([]);
       }
     };
 
-    checkUser();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setupNotifications(session?.user);
+    });
+
+    // Initial check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setupNotifications(session?.user);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [fetchNotifications]);
 
   const markAsRead = async (id: string) => {

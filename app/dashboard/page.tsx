@@ -38,33 +38,28 @@ export default function AdminDashboard() {
   ]);
   const [loading, setLoading] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchDashboardData() {
+    async function fetchDashboardStats() {
       try {
         const today = new Date().toISOString().split('T')[0];
         const [
           { count: studentsCount },
           { count: teachersCount },
           { count: sectionsCount },
-          { data: attendanceToday },
-          { data: recentStudents },
-          { data: recentDocs },
-          { data: recentExams },
-          { data: recentNotifs }
+          { count: totalAttendanceCount },
+          { count: presentAttendanceCount }
         ] = await Promise.all([
           supabase.from('students').select('*', { count: 'exact', head: true }),
           supabase.from('teachers').select('*', { count: 'exact', head: true }),
           supabase.from('sections').select('*', { count: 'exact', head: true }),
-          supabase.from('attendance').select('status').eq('date', today),
-          supabase.from('students').select('full_name, created_at').order('created_at', { ascending: false }).limit(2),
-          supabase.from('documents').select('title, created_at').order('created_at', { ascending: false }).limit(2),
-          supabase.from('exams').select('title, created_at').order('created_at', { ascending: false }).limit(2),
-          supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
+          supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('date', today),
+          supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('date', today).in('status', ['present', 'late'])
         ]);
 
-        const attendanceRate = attendanceToday && attendanceToday.length > 0
-          ? Math.round((attendanceToday.filter(a => a.status === 'present' || a.status === 'late').length / attendanceToday.length) * 100)
+        const attendanceRate = totalAttendanceCount && totalAttendanceCount > 0
+          ? Math.round(((presentAttendanceCount || 0) / totalAttendanceCount) * 100)
           : 0;
 
         setStats([
@@ -72,6 +67,26 @@ export default function AdminDashboard() {
           { name: 'إجمالي المعلمين', value: (teachersCount || 0).toString(), icon: GraduationCap, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+3' },
           { name: 'إجمالي الفصول', value: (sectionsCount || 0).toString(), icon: BookOpen, color: 'text-amber-600', bg: 'bg-amber-50', trend: '0' },
           { name: 'حضور اليوم', value: `${attendanceRate}%`, icon: CalendarDays, color: 'text-sky-600', bg: 'bg-sky-50', trend: `${attendanceRate}%` },
+        ]);
+      } catch (error) {
+        console.error('Error fetching admin dashboard stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function fetchRecentActivities() {
+      try {
+        const [
+          { data: recentStudents },
+          { data: recentDocs },
+          { data: recentExams },
+          { data: recentNotifs }
+        ] = await Promise.all([
+          supabase.from('students').select('full_name, created_at').order('created_at', { ascending: false }).limit(2),
+          supabase.from('documents').select('title, created_at').order('created_at', { ascending: false }).limit(2),
+          supabase.from('exams').select('title, created_at').order('created_at', { ascending: false }).limit(2),
+          supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
         ]);
 
         // Combine and sort activities
@@ -84,13 +99,14 @@ export default function AdminDashboard() {
 
         setRecentActivities(activities);
       } catch (error) {
-        console.error('Error fetching admin dashboard data:', error);
+        console.error('Error fetching admin dashboard activities:', error);
       } finally {
-        setLoading(false);
+        setActivitiesLoading(false);
       }
     }
 
-    fetchDashboardData();
+    fetchDashboardStats();
+    fetchRecentActivities();
   }, []);
 
   const formatTime = (timeStr: string) => {
@@ -225,7 +241,19 @@ export default function AdminDashboard() {
             <button className="text-sm font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-4 py-2 rounded-xl transition-colors">عرض الكل</button>
           </div>
           <div className="space-y-4">
-            {recentActivities.length === 0 ? (
+            {activitiesLoading ? (
+              <div className="space-y-4 animate-pulse">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center gap-5 p-4 rounded-3xl border border-slate-100">
+                    <div className="h-12 w-12 rounded-2xl bg-slate-100 shrink-0"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-slate-100 rounded w-3/4"></div>
+                      <div className="h-3 bg-slate-100 rounded w-1/4"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : recentActivities.length === 0 ? (
               <div className="text-center py-10 text-slate-400">لا توجد نشاطات حديثة</div>
             ) : (
               recentActivities.map((activity, i) => (

@@ -29,7 +29,8 @@ export default function StudentDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
       if (!user) return;
 
       // Fetch student profile
@@ -42,13 +43,37 @@ export default function StudentDashboard() {
       setStudentData(student);
 
       if (student) {
-        // Fetch attendance stats
-        const { data: attendance } = await supabase
-          .from('attendance')
-          .select('status')
-          .eq('student_id', student.id);
-        
-        if (attendance) {
+        // Fetch all student data concurrently
+        const [attendanceRes, gradesRes, examsRes, assignmentsRes] = await Promise.all([
+          supabase
+            .from('attendance')
+            .select('status')
+            .eq('student_id', student.id),
+          supabase
+            .from('exam_attempts')
+            .select('*, exam:exams(title, subject:subjects(name))')
+            .eq('student_id', student.id)
+            .order('completed_at', { ascending: false })
+            .limit(5),
+          supabase
+            .from('exams')
+            .select('*, subject:subjects(name)')
+            .eq('section_id', student.section_id)
+            .eq('status', 'published')
+            .gte('start_time', new Date().toISOString())
+            .order('start_time', { ascending: true })
+            .limit(3),
+          supabase
+            .from('assignments')
+            .select('*, subject:subjects(name)')
+            .eq('section_id', student.section_id)
+            .gte('due_date', new Date().toISOString())
+            .order('due_date', { ascending: true })
+            .limit(3)
+        ]);
+
+        if (attendanceRes.data) {
+          const attendance = attendanceRes.data;
           const total = attendance.length;
           const present = attendance.filter(a => a.status === 'present').length;
           const late = attendance.filter(a => a.status === 'late').length;
@@ -63,38 +88,9 @@ export default function StudentDashboard() {
           });
         }
 
-        // Fetch recent grades
-        const { data: grades } = await supabase
-          .from('exam_attempts')
-          .select('*, exam:exams(title, subject:subjects(name))')
-          .eq('student_id', student.id)
-          .order('completed_at', { ascending: false })
-          .limit(5);
-        
-        setRecentGrades(grades || []);
-
-        // Fetch upcoming exams for the student's section
-        const { data: exams } = await supabase
-          .from('exams')
-          .select('*, subject:subjects(name)')
-          .eq('section_id', student.section_id)
-          .eq('status', 'published')
-          .gte('start_time', new Date().toISOString())
-          .order('start_time', { ascending: true })
-          .limit(3);
-        
-        setUpcomingExams(exams || []);
-
-        // Fetch upcoming assignments
-        const { data: assignments } = await supabase
-          .from('assignments')
-          .select('*, subject:subjects(name)')
-          .eq('section_id', student.section_id)
-          .gte('due_date', new Date().toISOString())
-          .order('due_date', { ascending: true })
-          .limit(3);
-        
-        setUpcomingAssignments(assignments || []);
+        setRecentGrades(gradesRes.data || []);
+        setUpcomingExams(examsRes.data || []);
+        setUpcomingAssignments(assignmentsRes.data || []);
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
