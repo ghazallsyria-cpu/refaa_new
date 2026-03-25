@@ -18,6 +18,24 @@ export default function StudentExamResult() {
     try {
       setLoading(true);
       
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      // Check role and permissions
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      if (userData?.role === 'student' && user.id !== studentId) {
+        router.push('/dashboard');
+        return;
+      }
+
       // Fetch Exam
       const { data: examData } = await supabase
         .from('exams')
@@ -60,7 +78,7 @@ export default function StudentExamResult() {
     } finally {
       setLoading(false);
     }
-  }, [examId, studentId]);
+  }, [examId, studentId, router]);
 
   useEffect(() => {
     fetchData();
@@ -88,7 +106,24 @@ export default function StudentExamResult() {
           <div key={answer.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
             <h3 className="font-bold text-lg mb-4">سؤال {index + 1}: {answer.question.content}</h3>
             <p className={answer.is_correct ? "text-emerald-600 font-bold" : "text-red-600 font-bold"}>
-              إجابة الطالب: {answer.text_answer || answer.selected_option_id || 'لم يتم الإجابة'}
+              إجابة الطالب: {
+                (() => {
+                  if (answer.question.type === 'multi_select') {
+                    try {
+                      const selectedIds = JSON.parse(answer.text_answer || '[]');
+                      const selectedOptions = answer.question.options
+                        .filter((o: any) => selectedIds.includes(o.id))
+                        .map((o: any) => o.content);
+                      return selectedOptions.length > 0 ? selectedOptions.join('، ') : 'لم يتم الإجابة';
+                    } catch (e) {
+                      return 'لم يتم الإجابة';
+                    }
+                  }
+                  return answer.text_answer || 
+                    (answer.selected_option_id ? answer.question.options.find((o: any) => o.id === answer.selected_option_id)?.content : null) || 
+                    'لم يتم الإجابة';
+                })()
+              }
             </p>
             {!answer.is_correct && (
               <p className="text-slate-600 mt-2">الإجابة الصحيحة: {answer.question.options.find((o: any) => o.is_correct)?.content}</p>

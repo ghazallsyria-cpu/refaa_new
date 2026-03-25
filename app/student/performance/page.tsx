@@ -19,6 +19,7 @@ import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function StudentPerformancePage() {
   const router = useRouter();
@@ -278,15 +279,28 @@ export default function StudentPerformancePage() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-left">
-                      <div className="text-lg font-black text-indigo-600">
-                        {attempt.score !== null ? `${attempt.score} / ${attempt.exams?.total_marks || attempt.exams?.max_score || 100}` : 'قيد التصحيح'}
+                    <div className="flex items-center gap-4">
+                      <div className="text-left">
+                        <div className="text-lg font-black text-indigo-600">
+                          {attempt.score !== null ? `${attempt.score} / ${attempt.exams?.total_marks || attempt.exams?.max_score || 100}` : 'قيد التصحيح'}
+                        </div>
+                        <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${
+                          attempt.status === 'graded' ? 'text-emerald-500' : 'text-amber-500'
+                        }`}>
+                          {attempt.status === 'graded' ? 'تم التصحيح' : 'مكتمل'}
+                        </div>
                       </div>
-                      <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${
-                        attempt.status === 'graded' ? 'text-emerald-500' : 'text-amber-500'
-                      }`}>
-                        {attempt.status === 'graded' ? 'تم التصحيح' : 'مكتمل'}
-                      </div>
+                      {(attempt.status === 'graded' || attempt.status === 'completed') && (
+                        <Link href={`/exams/results/${attempt.exams.id}/student/${studentData?.id}`}>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
+                          >
+                            <ChevronRight className="h-5 w-5" />
+                          </motion.button>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </motion.div>

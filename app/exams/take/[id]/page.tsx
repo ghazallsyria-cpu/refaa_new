@@ -233,7 +233,11 @@ export default function TakeQuiz() {
           attempt_id: attemptId,
           question_id: q.id,
           selected_option_id: (q.type === 'multiple_choice' || q.type === 'true_false') ? studentAnswer : null,
-          text_answer: q.type === 'essay' || q.type === 'fill_in_blank' ? studentAnswer : null,
+          text_answer: (q.type === 'essay' || q.type === 'fill_in_blank') 
+            ? studentAnswer 
+            : q.type === 'multi_select' 
+              ? JSON.stringify(studentAnswer) 
+              : null,
           is_correct: isCorrect,
           points_earned: pointsEarned
         });
