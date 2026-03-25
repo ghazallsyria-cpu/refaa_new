@@ -8,6 +8,7 @@ interface AuthContextType {
   user: any;
   userRole: string | null;
   userName: string;
+  mustResetPassword: boolean;
   isChecking: boolean;
   isAdminByEmail: boolean;
   platformClosed: boolean;
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
+  const [mustResetPassword, setMustResetPassword] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [isAdminByEmail, setIsAdminByEmail] = useState(false);
   const [platformClosed, setPlatformClosed] = useState(false);
@@ -90,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const [userRes, settingsRes] = await Promise.all([
           supabase
             .from('users')
-            .select('role, full_name')
+            .select('role, full_name, must_reset_password')
             .eq('id', user.id)
             .single(),
           !isPublicPage ? supabase
@@ -107,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userRes.data) {
           setUserName(userRes.data.full_name || user.email?.split('@')[0] || '');
           setUserRole(role);
+          setMustResetPassword(userRes.data.must_reset_password || false);
         }
 
         if (isAdminByEmail && role !== 'admin') {
@@ -170,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, 
       userRole, 
       userName, 
+      mustResetPassword,
       isChecking, 
       isAdminByEmail, 
       platformClosed, 

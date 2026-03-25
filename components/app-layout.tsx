@@ -16,6 +16,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     user, 
     userRole, 
     userName, 
+    mustResetPassword,
     isChecking, 
     isAdminByEmail, 
     platformClosed, 
@@ -32,6 +33,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Derive authorization state
   const getAuthorization = () => {
     if (isChecking || isPublicPage || !user || !userRole) return true;
+
+    // Force password reset
+    if (mustResetPassword && !isResetPasswordPage) return false;
 
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
@@ -64,7 +68,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Handle Role-based routing on pathname change
   useEffect(() => {
-    if (isChecking || isPublicPage || !user || !userRole) return;
+    if (isChecking || isPublicPage || !user) return;
+
+    if (mustResetPassword && !isResetPasswordPage) {
+      router.push('/reset-password');
+      return;
+    }
+
+    if (!userRole) return;
 
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
