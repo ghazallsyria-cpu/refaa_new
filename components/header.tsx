@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { NotificationsBell } from '@/components/notifications-bell';
+import { PushNotificationToggle } from '@/components/push-notification-toggle';
 import Link from 'next/link';
 
 export function Header({ onMenuClick, showMenuButton = true }: { onMenuClick?: () => void, showMenuButton?: boolean }) {
@@ -117,7 +118,8 @@ export function Header({ onMenuClick, showMenuButton = true }: { onMenuClick?: (
         </div>
       </div>
         <div className="flex items-center gap-4 sm:gap-8">
-          <div className="hidden sm:block">
+          <div className="hidden sm:flex items-center gap-4">
+            <PushNotificationToggle />
             <NotificationsBell />
           </div>
 

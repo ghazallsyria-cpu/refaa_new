@@ -52,6 +52,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Check if national_id already exists in students table
+    if (role === 'student') {
+      const { data: existingStudent } = await supabaseAdmin
+        .from('students')
+        .select('id')
+        .eq('national_id', national_id)
+        .maybeSingle();
+
+      if (existingStudent) {
+        return NextResponse.json({ error: 'الرقم المدني مسجل مسبقاً لطالب آخر' }, { status: 400 });
+      }
+    }
+
     // 1. Create user in auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: generatedEmail,
