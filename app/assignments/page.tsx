@@ -23,6 +23,7 @@ type Assignment = {
   subjects?: { name: string };
   sections?: { name: string; classes?: { name: string } };
   teachers?: { users?: { full_name: string } };
+  section_ids?: string[];
 };
 
 export default function AssignmentsPage() {
@@ -38,7 +39,7 @@ export default function AssignmentsPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentAssignment, setCurrentAssignment] = useState<Partial<Assignment>>({});
+  const [currentAssignment, setCurrentAssignment] = useState<Partial<Assignment> & { section_ids?: string[] }>({});
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, boolean>>({});
@@ -269,7 +270,7 @@ export default function AssignmentsPage() {
 
     setIsSubmitting(true);
     try {
-      const { section_ids, ...assignmentPayload } = { ...currentAssignment };
+      const { section_ids, ...assignmentPayload } = { ...currentAssignment } as any;
       
       const payload = {
         title: assignmentPayload.title,
