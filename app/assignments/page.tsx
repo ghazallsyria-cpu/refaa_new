@@ -75,13 +75,12 @@ export default function AssignmentsPage() {
           title,
           description,
           subject_id,
-          section_id,
           teacher_id,
           due_date,
           created_at,
           file_url,
           subjects (name),
-          sections (name, classes (name)),
+          assignment_sections (sections (name, classes (name))),
           teachers (users (full_name))
         `)
         .order('due_date', { ascending: true });
@@ -694,7 +693,9 @@ export default function AssignmentsPage() {
                   <div className="space-y-3 mt-auto">
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <Users className="h-5 w-5 text-indigo-500" />
-                      <span>{assignment.sections?.classes?.name} - {assignment.sections?.name}</span>
+                      <span>
+                        {assignment.assignment_sections?.map((as: any) => `${as.sections?.classes?.name} - ${as.sections?.name}`).join(', ') || 'لا يوجد فصول'}
+                      </span>
                     </div>
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <User className="h-5 w-5 text-emerald-500" />
