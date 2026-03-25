@@ -476,6 +476,24 @@ export default function AssignmentsPage() {
       due_date: formattedDate
     });
 
+    // Fetch assignment sections
+    try {
+      const { data: sData } = await supabase
+        .from('assignment_sections')
+        .select('section_id')
+        .eq('assignment_id', assignment.id);
+        
+      if (sData) {
+        setCurrentAssignment(prev => ({
+          ...prev,
+          due_date: formattedDate,
+          section_ids: sData.map(s => s.section_id)
+        }));
+      }
+    } catch (err) {
+      console.error('Error fetching sections:', err);
+    }
+
     // Fetch questions
     try {
       const { data: qData } = await supabase
