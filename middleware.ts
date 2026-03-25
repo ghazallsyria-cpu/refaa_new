@@ -37,9 +37,19 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
+  // Helper to create a redirect response that preserves cookies
+  const redirect = (url: string) => {
+    const redirectResponse = NextResponse.redirect(new URL(url, request.url));
+    // Copy cookies from the current response object to the redirect response
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value);
+    });
+    return redirectResponse;
+  };
+
   // Public routes
   if (!user && !path.startsWith('/login') && !path.startsWith('/reset-password')) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return redirect('/login');
   }
 
   if (user) {
@@ -52,21 +62,21 @@ export async function middleware(request: NextRequest) {
     // Redirect to login if user not found
     if (!userData) {
       await supabase.auth.signOut();
-      return NextResponse.redirect(new URL('/login', request.url));
+      return redirect('/login');
     }
 
     // Force password reset
     if (userData.must_reset_password && !path.startsWith('/reset-password')) {
-      return NextResponse.redirect(new URL('/reset-password', request.url));
+      return redirect('/reset-password');
     }
 
     // Redirect authenticated users away from login/reset-password
     if (path.startsWith('/login') || (path.startsWith('/reset-password') && !userData.must_reset_password)) {
-      if (userData.role === 'admin') return NextResponse.redirect(new URL('/dashboard', request.url));
-      if (userData.role === 'management') return NextResponse.redirect(new URL('/dashboard/management', request.url));
-      if (userData.role === 'teacher') return NextResponse.redirect(new URL('/dashboard/teacher', request.url));
-      if (userData.role === 'student') return NextResponse.redirect(new URL('/dashboard/student', request.url));
-      if (userData.role === 'parent') return NextResponse.redirect(new URL('/dashboard/parent', request.url));
+      if (userData.role === 'admin') return redirect('/dashboard');
+      if (userData.role === 'management') return redirect('/dashboard/management');
+      if (userData.role === 'teacher') return redirect('/dashboard/teacher');
+      if (userData.role === 'student') return redirect('/dashboard/student');
+      if (userData.role === 'parent') return redirect('/dashboard/parent');
     }
 
     // Role-based access control
@@ -78,11 +88,11 @@ export async function middleware(request: NextRequest) {
       if (userData.role === 'parent' && path.startsWith('/dashboard/parent')) return response;
       
       // Redirect unauthorized dashboard access
-      if (userData.role === 'admin') return NextResponse.redirect(new URL('/dashboard', request.url));
-      if (userData.role === 'management') return NextResponse.redirect(new URL('/dashboard/management', request.url));
-      if (userData.role === 'teacher') return NextResponse.redirect(new URL('/dashboard/teacher', request.url));
-      if (userData.role === 'student') return NextResponse.redirect(new URL('/dashboard/student', request.url));
-      if (userData.role === 'parent') return NextResponse.redirect(new URL('/dashboard/parent', request.url));
+      if (userData.role === 'admin') return redirect('/dashboard');
+      if (userData.role === 'management') return redirect('/dashboard/management');
+      if (userData.role === 'teacher') return redirect('/dashboard/teacher');
+      if (userData.role === 'student') return redirect('/dashboard/student');
+      if (userData.role === 'parent') return redirect('/dashboard/parent');
     }
   }
 

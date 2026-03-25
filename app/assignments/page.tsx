@@ -97,12 +97,17 @@ export default function AssignmentsPage() {
           .single();
         
         if (studentData?.section_id) {
-          const { data: assignmentIds } = await supabase
+          // Fetch assignments linked to this section via assignment_sections table
+          const { data: assignmentSections } = await supabase
             .from('assignment_sections')
             .select('assignment_id')
             .eq('section_id', studentData.section_id);
           
-          query = query.in('id', assignmentIds?.map(a => a.assignment_id) || []);
+          const sectionAssignmentIds = assignmentSections?.map(as => as.assignment_id) || [];
+          
+          // Also include assignments where this section is the primary section_id
+          // This handles legacy data or cases where assignment_sections might be missing
+          query = query.or(`id.in.(${sectionAssignmentIds.join(',') || '00000000-0000-0000-0000-000000000000'}),section_id.eq.${studentData.section_id}`);
         } else {
           // If student has no section, return empty
           setAssignments([]);
@@ -300,17 +305,6 @@ export default function AssignmentsPage() {
           .eq('id', currentAssignment.id);
         if (error) throw error;
 
-        // Update Sections
-        await supabase.from('assignment_sections').delete().eq('assignment_id', currentAssignment.id);
-        if (section_ids && section_ids.length > 0) {
-          const sectionsPayload = section_ids.map((sId: string) => ({
-            assignment_id: currentAssignment.id,
-            section_id: sId
-          }));
-          const { error: sError } = await supabase.from('assignment_sections').insert(sectionsPayload);
-          if (sError) throw sError;
-        }
-
         // Update Questions
         await supabase.from('assignment_questions').delete().eq('assignment_id', currentAssignment.id);
         
@@ -337,16 +331,6 @@ export default function AssignmentsPage() {
         if (error) throw error;
         if (!newAssignment) throw new Error('فشل في إنشاء الواجب');
         assignmentId = newAssignment.id;
-
-        // Save Sections
-        if (section_ids && section_ids.length > 0) {
-          const sectionsPayload = section_ids.map((sId: string) => ({
-            assignment_id: assignmentId,
-            section_id: sId
-          }));
-          const { error: sError } = await supabase.from('assignment_sections').insert(sectionsPayload);
-          if (sError) throw sError;
-        }
 
         // Save Questions
         if (questions.length > 0) {
@@ -386,7 +370,7 @@ export default function AssignmentsPage() {
         }
       }
 
-      // Save Assignment Sections
+      // Save Assignment Sections (Unified for both create and update)
       await supabase.from('assignment_sections').delete().eq('assignment_id', assignmentId);
       if (section_ids && section_ids.length > 0) {
         const sectionsToInsert = section_ids.map((sId: string) => ({

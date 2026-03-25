@@ -45,6 +45,14 @@ export default function StudentDashboard() {
       setStudentData(student);
 
       if (student) {
+        // Fetch assignments linked to this section via assignment_sections table
+        const { data: assignmentSections } = await supabase
+          .from('assignment_sections')
+          .select('assignment_id')
+          .eq('section_id', student.section_id);
+        
+        const sectionAssignmentIds = assignmentSections?.map(as => as.assignment_id) || [];
+
         // Fetch all student data concurrently
         const [attendanceRes, gradesRes, examsRes, assignmentsRes, scheduleRes, periodsRes] = await Promise.all([
           supabase
@@ -69,7 +77,7 @@ export default function StudentDashboard() {
           supabase
             .from('assignments')
             .select('id, title, due_date, subject:subjects(name)')
-            .eq('section_id', student.section_id)
+            .or(`id.in.(${sectionAssignmentIds.join(',') || '00000000-0000-0000-0000-000000000000'}),section_id.eq.${student.section_id}`)
             .gte('due_date', new Date().toISOString())
             .order('due_date', { ascending: true })
             .limit(3),
