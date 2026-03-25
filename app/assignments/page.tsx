@@ -262,9 +262,8 @@ export default function AssignmentsPage() {
   }, [fetchAssignments, fetchFormData]);
 
   const handleSaveAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentAssignment.title || !currentAssignment.subject_id || !currentAssignment.section_id || !currentAssignment.teacher_id || !currentAssignment.due_date) {
-      showNotification('error', 'يرجى تعبئة جميع الحقول المطلوبة');
+      if (!currentAssignment.title || !currentAssignment.subject_id || !currentAssignment.section_ids?.length || !currentAssignment.teacher_id || !currentAssignment.due_date) {
+      showNotification('error', 'يرجى تعبئة جميع الحقول المطلوبة (بما في ذلك اختيار فصل واحد على الأقل)');
       return;
     }
 
@@ -297,8 +296,18 @@ export default function AssignmentsPage() {
           .eq('id', currentAssignment.id);
         if (error) throw error;
 
+        // Update Sections
+        await supabase.from('assignment_sections').delete().eq('assignment_id', currentAssignment.id);
+        if (section_ids && section_ids.length > 0) {
+          const sectionsPayload = section_ids.map((sId: string) => ({
+            assignment_id: currentAssignment.id,
+            section_id: sId
+          }));
+          const { error: sError } = await supabase.from('assignment_sections').insert(sectionsPayload);
+          if (sError) throw sError;
+        }
+
         // Update Questions
-        // First delete old ones (simple approach)
         await supabase.from('assignment_questions').delete().eq('assignment_id', currentAssignment.id);
         
         if (questions.length > 0) {
@@ -324,6 +333,16 @@ export default function AssignmentsPage() {
         if (error) throw error;
         if (!newAssignment) throw new Error('فشل في إنشاء الواجب');
         assignmentId = newAssignment.id;
+
+        // Save Sections
+        if (section_ids && section_ids.length > 0) {
+          const sectionsPayload = section_ids.map((sId: string) => ({
+            assignment_id: assignmentId,
+            section_id: sId
+          }));
+          const { error: sError } = await supabase.from('assignment_sections').insert(sectionsPayload);
+          if (sError) throw sError;
+        }
 
         // Save Questions
         if (questions.length > 0) {
@@ -440,7 +459,7 @@ export default function AssignmentsPage() {
 
     const { data: { user } } = await supabase.auth.getUser();
     
-    setCurrentAssignment({ due_date: formattedDate, teacher_id: user?.id });
+    setCurrentAssignment({ due_date: formattedDate, teacher_id: user?.id, section_ids: [] });
     setQuestions([]);
     setIsModalOpen(true);
   };
@@ -805,17 +824,24 @@ export default function AssignmentsPage() {
                       <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">
                         <Users className="h-5 w-5" />
                       </div>
-                      <select 
-                        required
-                        className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
-                        value={currentAssignment.section_id || ''}
-                        onChange={(e) => setCurrentAssignment({...currentAssignment, section_id: e.target.value})}
-                      >
-                        <option value="">اختر الشعبة</option>
+                      <div className="space-y-2 max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-2xl bg-slate-50">
                         {sections.map(s => (
-                          <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>
+                          <label key={s.id} className="flex items-center space-x-2 space-x-reverse cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                              checked={currentAssignment.section_ids?.includes(s.id)}
+                              onChange={(e) => {
+                                const newSectionIds = e.target.checked
+                                  ? [...(currentAssignment.section_ids || []), s.id]
+                                  : (currentAssignment.section_ids || []).filter(id => id !== s.id);
+                                setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
+                              }}
+                            />
+                            <span className="text-sm font-bold text-slate-700">{s.classes?.name} - {s.name}</span>
+                          </label>
                         ))}
-                      </select>
+                      </div>
                     </div>
                   </div>
                   <div>
