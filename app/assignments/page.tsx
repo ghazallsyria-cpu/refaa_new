@@ -23,6 +23,7 @@ type Assignment = {
   subjects?: { name: string };
   sections?: { name: string; classes?: { name: string } };
   teachers?: { users?: { full_name: string } };
+  assignment_sections?: { sections?: { name: string; classes?: { name: string } } }[];
   section_ids?: string[];
 };
 
@@ -276,6 +277,7 @@ export default function AssignmentsPage() {
         title: assignmentPayload.title,
         description: assignmentPayload.description || null,
         subject_id: assignmentPayload.subject_id,
+        section_id: section_ids[0], // Set the first section as primary
         teacher_id: assignmentPayload.teacher_id,
         due_date: new Date(assignmentPayload.due_date).toISOString(),
         file_url: assignmentPayload.file_url || null,
