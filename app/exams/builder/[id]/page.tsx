@@ -210,7 +210,10 @@ export default function QuizBuilder() {
           .single();
 
         if (examError) throw examError;
-        setExam(examData);
+        setExam({
+          ...examData,
+          section_ids: examData.section_id ? [examData.section_id] : []
+        });
 
         const { data: questionsData, error: questionsError } = await supabase
           .from('questions')

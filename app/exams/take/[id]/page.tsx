@@ -129,7 +129,7 @@ export default function TakeQuiz() {
         // Check for existing attempt
         const { data: attempts, error: existingError } = await supabase
           .from('exam_attempts')
-          .select('id, status, score')
+          .select('id, status, score, created_at')
           .eq('exam_id', params.id)
           .eq('student_id', user.user.id);
 
@@ -152,6 +152,12 @@ export default function TakeQuiz() {
           if (ongoingAttempt) {
             // Resume ongoing attempt
             setAttemptId(ongoingAttempt.id);
+            // Calculate remaining time
+            const startedAt = new Date(ongoingAttempt.created_at);
+            const durationSeconds = examData.duration * 60;
+            const elapsedSeconds = Math.floor((new Date().getTime() - startedAt.getTime()) / 1000);
+            const remainingTime = durationSeconds - elapsedSeconds;
+            setTimeLeft(remainingTime > 0 ? remainingTime : 0);
           } else {
             // Create new attempt
             const { data: newAttempt, error: attemptError } = await supabase

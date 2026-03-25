@@ -642,8 +642,8 @@ export default function ExamResults() {
                               style={{ width: `${attempt.score}%` }}
                             />
                           </div>
-                          <span className={`text-base font-black tracking-tighter ${attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {attempt.score}%
+                          <span className={`text-base font-black tracking-tighter ${attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= (exam?.max_score || 100) / 2 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {attempt.score} / {exam?.max_score || 100}
                           </span>
                         </div>
                       </td>
@@ -651,17 +651,35 @@ export default function ExamResults() {
                         <span className={`inline-flex px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest border ${
                           attempt.status === 'not_attempted'
                             ? 'bg-slate-50 text-slate-500 border-slate-100'
-                            : attempt.score >= 50 
+                            : attempt.score >= (exam?.max_score || 100) / 2 
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                               : 'bg-red-50 text-red-700 border-red-100'
                         }`}>
-                          {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= 50 ? 'ناجح' : 'راسب'}
+                          {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= (exam?.max_score || 100) / 2 ? 'ناجح' : 'راسب'}
                         </span>
                       </td>
                       <td className="px-8 py-6 text-left">
-                        <button className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:shadow-md transition-all active:scale-95">
-                          <ChevronRight className="h-5 w-5 rotate-180" />
-                        </button>
+                        <div className="flex items-center gap-2 justify-end">
+                          <button 
+                            onClick={() => router.push(`/exams/results/${params.id}/student/${attempt.student.id}`)}
+                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:shadow-md transition-all active:scale-95"
+                            title="عرض الاختبار"
+                          >
+                            <FileText className="h-5 w-5" />
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              if (confirm('هل أنت متأكد من حذف هذه المحاولة؟')) {
+                                await supabase.from('exam_attempts').delete().eq('id', attempt.id);
+                                fetchData();
+                              }
+                            }}
+                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95"
+                            title="حذف المحاولة"
+                          >
+                            <XCircle className="h-5 w-5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
