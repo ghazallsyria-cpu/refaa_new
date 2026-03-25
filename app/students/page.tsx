@@ -120,6 +120,28 @@ export default function StudentsPage() {
 
   const handleEditSubmit = async () => {
     try {
+      const nationalIdChanged = editForm.national_id !== (editingStudent.national_id || '');
+
+      // If national_id changed, update Auth email via server API (requires service role key)
+      if (nationalIdChanged) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch('/api/users/update-national-id', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({
+            userId: editingStudent.id,
+            newNationalId: editForm.national_id,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني في المصادقة');
+        // Sync the email in editForm to the new derived email
+        editForm.email = result.newEmail;
+      }
+
       // Update users table
       const { error: userError } = await supabase
         .from('users')
