@@ -262,7 +262,9 @@ export default function AssignmentsPage() {
   }, [fetchAssignments, fetchFormData]);
 
   const handleSaveAssignment = async (e: React.FormEvent) => {
-      if (!currentAssignment.title || !currentAssignment.subject_id || !currentAssignment.section_ids?.length || !currentAssignment.teacher_id || !currentAssignment.due_date) {
+    e.preventDefault();
+    console.log('Saving assignment:', currentAssignment);
+    if (!currentAssignment.title || !currentAssignment.subject_id || !currentAssignment.section_ids?.length || !currentAssignment.teacher_id || !currentAssignment.due_date) {
       showNotification('error', 'يرجى تعبئة جميع الحقول المطلوبة (بما في ذلك اختيار فصل واحد على الأقل)');
       return;
     }
@@ -282,6 +284,7 @@ export default function AssignmentsPage() {
       };
 
       let assignmentId = currentAssignment.id;
+      console.log('assignmentId:', assignmentId, 'section_ids:', section_ids);
 
       if (currentAssignment.id) {
         // Check if file_url changed to delete old one from Cloudinary
