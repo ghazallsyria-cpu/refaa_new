@@ -35,12 +35,15 @@ export default function StudentExamResult() {
       setStudent(studentData);
 
       // Fetch Attempt
-      const { data: attemptData } = await supabase
+      console.log('Fetching attempt for exam:', examId, 'and student:', studentId);
+      const { data: attemptData, error: attemptError } = await supabase
         .from('exam_attempts')
         .select('*')
         .eq('exam_id', examId)
         .eq('student_id', studentId)
         .single();
+      
+      console.log('Attempt data:', attemptData, 'Error:', attemptError);
 
       if (attemptData) {
         // Fetch Answers

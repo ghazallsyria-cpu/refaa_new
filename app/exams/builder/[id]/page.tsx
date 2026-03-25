@@ -210,9 +210,17 @@ export default function QuizBuilder() {
           .single();
 
         if (examError) throw examError;
+
+        const { data: examSectionsData, error: examSectionsError } = await supabase
+          .from('exam_sections')
+          .select('section_id')
+          .eq('exam_id', params.id);
+        
+        if (examSectionsError) throw examSectionsError;
+        
         setExam({
           ...examData,
-          section_ids: examData.section_id ? [examData.section_id] : []
+          section_ids: examSectionsData ? examSectionsData.map(es => es.section_id) : []
         });
 
         const { data: questionsData, error: questionsError } = await supabase
@@ -348,15 +356,7 @@ export default function QuizBuilder() {
 
       const { section_ids, ...examPayload } = exam;
       
-      // تعيين section_id لأول قسم تم اختياره (للتوافق مع قاعدة البيانات الحالية)
-      if (section_ids && section_ids.length > 0) {
-        examPayload.section_id = section_ids[0];
-      } else {
-        examPayload.section_id = undefined;
-      }
-
       if (isNew) {
-        console.log('Inserting exam:', { ...examPayload, max_score: exam.max_score || 100, teacher_id: finalTeacherId, status: exam.status });
         const { data: newExam, error } = await supabase
           .from('exams')
           .insert([{ 
@@ -373,7 +373,6 @@ export default function QuizBuilder() {
         if (error) throw error;
         examId = newExam.id;
       } else {
-        console.log('Updating exam:', { ...examPayload, max_score: exam.max_score || 100, teacher_id: finalTeacherId, status: exam.status });
         const { error } = await supabase
           .from('exams')
           .update({ 
@@ -387,6 +386,17 @@ export default function QuizBuilder() {
           })
           .eq('id', examId);
         if (error) throw error;
+      }
+
+      // 2. Save Exam Sections
+      await supabase.from('exam_sections').delete().eq('exam_id', examId);
+      if (section_ids && section_ids.length > 0) {
+        const sectionsToInsert = section_ids.map((sId: string) => ({
+          exam_id: examId,
+          section_id: sId
+        }));
+        const { error: sectionsError } = await supabase.from('exam_sections').insert(sectionsToInsert);
+        if (sectionsError) throw sectionsError;
       }
 
       // 2. Save Questions (Delete old ones and insert new ones for simplicity in this demo)
