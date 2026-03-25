@@ -1,11 +1,44 @@
-<div align="center">
+# نظام إدارة مدرسة الرفعة النموذجية (Digital School Platform)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+نظام متكامل لإدارة المدارس مبني باستخدام تقنيات حديثة لضمان السرعة، الأمان، وسهولة الاستخدام.
 
-  <h1>Built with AI Studio</h2>
+## 🚀 التقنيات المستخدمة
+- **Frontend:** Next.js 15, React, TailwindCSS
+- **Backend/Database:** Supabase (PostgreSQL)
+- **Authentication:** Supabase Auth
+- **Real-time:** PostgreSQL Filters & Triggers
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## 🛠 إعداد قاعدة البيانات (Supabase)
+لإعداد النظام بالكامل، يرجى اتباع الخطوات التالية داخل **SQL Editor** في Supabase بالترتيب:
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+1. **إنشاء الهيكل (Schema):**
+   نفذ محتوى ملف `complete_system_schema.sql`. هذا الملف ينشئ الجداول، الصلاحيات (RLS)، والوظائف التلقائية.
 
-</div>
+2. **إضافة المعلمين والمواد:**
+   نفذ محتوى ملف `seed_teachers.sql`. يحتوي على قائمة المواد و72 معلماً مع تخصصاتهم وروابط زوم الخاصة بهم.
+
+3. **إضافة الطلاب والصفوف:**
+   نفذ محتوى ملف `seed_students.sql`. يحتوي على الصفوف (العاشر، الحادي عشر، الثاني عشر) وتوزيع الطلاب على الشعب.
+
+## 🔑 صلاحيات الوصول (RLS)
+النظام محمي بالكامل باستخدام **Row Level Security**:
+- **المدير (Admin):** صلاحيات كاملة لإدارة المستخدمين، الجداول، والبيانات.
+- **المعلم (Teacher):** إدارة الاختبارات، الحضور، والجداول الخاصة بفصوله فقط.
+- **الطالب (Student):** عرض الجدول الدراسي، الاختبارات، والنتائج الخاصة به.
+- **ولي الأمر (Parent):** متابعة أبنائه فقط (الحضور والنتائج).
+
+## 💻 التشغيل المحلي
+```bash
+# تثبيت المكتبات
+npm install
+
+# تشغيل مشروع التطوير
+npm run dev
+```
+
+## 📝 ملاحظات هامة
+- تأكد من إعداد متغيرات البيئة في ملف `.env.local` (SUPABASE_URL, SUPABASE_ANON_KEY).
+- جميع كلمات المرور الافتراضية للحسابات التجريبية هي `123456` أو كما هو محدد في ملفات الـ Seed.
+
+---
+تم التطوير بواسطة فريق مدرسة الرفعة النموذجية.

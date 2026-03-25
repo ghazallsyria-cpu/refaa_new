@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Assignment": {
+      "title": "Assignment",
+      "description": "A school assignment created by a teacher for a specific section and subject.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "subject_id": { "type": "string", "format": "uuid" },
+        "section_id": { "type": "string", "format": "uuid" },
+        "teacher_id": { "type": "string", "format": "uuid" },
+        "due_date": { "type": "string", "format": "date-time" },
+        "file_url": { "type": "string", "format": "uri" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "subject_id", "section_id", "teacher_id", "due_date"]
+    },
+    "AssignmentQuestion": {
+      "title": "Assignment Question",
+      "description": "A question within an assignment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "assignment_id": { "type": "string", "format": "uuid" },
+        "question_text": { "type": "string" },
+        "question_type": { "type": "string", "enum": ["text", "paragraph", "multiple_choice", "checkbox"] },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "points": { "type": "number" },
+        "is_required": { "type": "boolean" },
+        "order": { "type": "integer" }
+      },
+      "required": ["assignment_id", "question_text", "question_type"]
+    },
+    "AssignmentSubmission": {
+      "title": "Assignment Submission",
+      "description": "A student's submission for an assignment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "assignment_id": { "type": "string", "format": "uuid" },
+        "student_id": { "type": "string", "format": "uuid" },
+        "content": { "type": "string" },
+        "file_url": { "type": "string", "format": "uri" },
+        "status": { "type": "string", "enum": ["submitted", "graded"] },
+        "grade": { "type": "number" },
+        "feedback": { "type": "string" },
+        "submitted_at": { "type": "string", "format": "date-time" },
+        "graded_at": { "type": "string", "format": "date-time" },
+        "graded_by": { "type": "string", "format": "uuid" }
+      },
+      "required": ["assignment_id", "student_id"]
+    },
+    "AssignmentAnswer": {
+      "title": "Assignment Answer",
+      "description": "A student's answer to a specific question in an assignment.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "submission_id": { "type": "string", "format": "uuid" },
+        "question_id": { "type": "string", "format": "uuid" },
+        "answer_text": { "type": "string" },
+        "selected_options": { "type": "array", "items": { "type": "string" } },
+        "is_correct": { "type": "boolean" },
+        "points_earned": { "type": "number" },
+        "feedback": { "type": "string" }
+      },
+      "required": ["submission_id", "question_id"]
+    }
+  },
+  "firestore": {
+    "/assignments/{assignmentId}": {
+      "schema": "Assignment",
+      "description": "Collection of assignments."
+    },
+    "/assignments/{assignmentId}/questions/{questionId}": {
+      "schema": "AssignmentQuestion",
+      "description": "Questions for a specific assignment."
+    },
+    "/assignment_submissions/{submissionId}": {
+      "schema": "AssignmentSubmission",
+      "description": "Student submissions for assignments."
+    },
+    "/assignment_submissions/{submissionId}/answers/{answerId}": {
+      "schema": "AssignmentAnswer",
+      "description": "Answers for a specific submission."
+    }
+  }
+}
