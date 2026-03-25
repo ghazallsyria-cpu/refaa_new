@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Calendar, Clock, BookOpen, Users, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
+import { format } from 'date-fns';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
