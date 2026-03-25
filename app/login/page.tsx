@@ -83,7 +83,6 @@ export default function LoginPage() {
       }
       
       router.push('/');
-      router.refresh();
     } catch (err: any) {
       setError(err.message || 'حدث خطأ أثناء تسجيل الدخول. تأكد من البيانات وحاول مرة أخرى.');
     } finally {

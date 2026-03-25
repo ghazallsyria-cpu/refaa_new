@@ -7,182 +7,89 @@ import { Footer } from '@/components/footer';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { School, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@/context/auth-context';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const { 
+    user, 
+    userRole, 
+    userName, 
+    isChecking, 
+    isAdminByEmail, 
+    platformClosed, 
+    closeMessage,
+    signOut
+  } = useAuth();
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [platformClosed, setPlatformClosed] = useState(false);
-  const [closeMessage, setCloseMessage] = useState('');
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string>('');
-  const [user, setUser] = useState<any>(null);
-  const [isAdminByEmail, setIsAdminByEmail] = useState(false);
   
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
   const isPublicPage = isLoginPage || isResetPasswordPage;
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      
-      if (!url || !key || url === 'YOUR_SUPABASE_URL' || key === 'YOUR_SUPABASE_ANON_KEY') {
-        setIsChecking(false);
-        return;
+  // Derive authorization state
+  const getAuthorization = () => {
+    if (isChecking || isPublicPage || !user || !userRole) return true;
+
+    const isRoot = pathname === '/';
+    const isDashboardRoute = pathname.startsWith('/dashboard');
+
+    if (userRole === 'student') {
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
+        return false;
       }
-
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session && !isPublicPage) {
-          router.push('/login');
-          return;
-        } else if (session && isLoginPage) {
-          router.push('/');
-          return;
-        }
-
-        let role = null;
-        let isSuperAdmin = false;
-        let settings = null;
-        let settingsError = null;
-
-        if (session?.user) {
-          setUser(session.user);
-          isSuperAdmin = session.user.email === 'ghazallsyria@gmail.com';
-          setIsAdminByEmail(isSuperAdmin);
-          
-          // Fetch user data and platform settings concurrently
-          const [userRes, settingsRes] = await Promise.all([
-            supabase
-              .from('users')
-              .select('role, full_name')
-              .eq('id', session.user.id)
-              .single(),
-            !isPublicPage ? supabase
-              .from('platform_settings')
-              .select('*')
-              .limit(1)
-              .maybeSingle() : Promise.resolve({ data: null, error: null })
-          ]);
-          
-          role = userRes.data?.role;
-          settings = settingsRes.data;
-          settingsError = settingsRes.error;
-          
-          if (userRes.data) {
-            setUserName(userRes.data.full_name || session.user.email?.split('@')[0] || '');
-            setUserRole(role);
-          }
-          
-          // تأكيد دور المدير في قاعدة البيانات إذا كان البريد الإلكتروني يطابق المدير الرئيسي
-          if (isSuperAdmin && role !== 'admin') {
-            try {
-              await supabase
-                .from('users')
-                .upsert({ 
-                  id: session.user.id, 
-                  email: session.user.email, 
-                  full_name: 'المدير العام',
-                  role: 'admin' 
-                });
-              role = 'admin';
-              setUserRole('admin');
-            } catch (err) {
-              console.error('Error auto-updating admin role:', err);
-            }
-          }
-        }
-
-        // Check platform settings
-        if (session && !isPublicPage) {
-          try {
-            if (!settingsError && settings) {
-              let isOpen = settings.is_open;
-              const now = new Date();
-              
-              if (settings.open_date && new Date(settings.open_date) > now) {
-                isOpen = false;
-              }
-              if (settings.close_date && new Date(settings.close_date) < now) {
-                isOpen = false;
-              }
-
-              if (!isOpen && role !== 'admin' && role !== 'management' && !isSuperAdmin) {
-                setPlatformClosed(true);
-                setCloseMessage(settings.message || 'المنصة مغلقة حاليا للصيانة');
-              }
-            }
-          } catch (settingsErr) {
-            console.warn('Platform settings table might be missing:', settingsErr);
-            // If table is missing, assume platform is open
-          }
-        }
-      } catch (error) {
-        console.error('Auth check error:', error);
-      } finally {
-        setIsChecking(false);
+    } else if (userRole === 'teacher') {
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
+        return false;
       }
-    };
-
-    checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' && !isPublicPage) {
-        router.push('/login');
-      } else if (event === 'SIGNED_IN' && isLoginPage) {
-        router.push('/');
+    } else if (userRole === 'parent') {
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
+        return false;
       }
-    });
+    } else if (userRole === 'admin' || userRole === 'management' || isAdminByEmail) {
+      if (isRoot) {
+        return false;
+      }
+    } else {
+      if (isDashboardRoute) {
+        return false;
+      }
+    }
+    return true;
+  };
 
-    return () => subscription.unsubscribe();
-  }, [isLoginPage, isPublicPage, router]);
+  const isAuthorized = getAuthorization();
 
   // Handle Role-based routing on pathname change
   useEffect(() => {
-    if (isChecking || isPublicPage || !user) return;
+    if (isChecking || isPublicPage || !user || !userRole) return;
 
-    let authorized = true;
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
     if (userRole === 'student') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
         router.push('/dashboard/student');
-        authorized = false;
       }
     } else if (userRole === 'teacher') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
         router.push('/dashboard/teacher');
-        authorized = false;
       }
     } else if (userRole === 'parent') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
         router.push('/dashboard/parent');
-        authorized = false;
       }
     } else if (userRole === 'admin' || userRole === 'management' || isAdminByEmail) {
       if (isRoot) {
         router.push('/dashboard');
-        authorized = false;
       }
-    } else if (userRole === null) {
-      // If user has no role, they shouldn't be stuck loading.
-      // We'll let them see the page but they might not have access to data.
-      // Or we could redirect them to a "no access" page.
-      // For now, we'll just authorize them to see whatever they are on, 
-      // or redirect to root if they are on a specific dashboard.
+    } else {
       if (isDashboardRoute) {
-         router.push('/');
-         authorized = false;
+        router.push('/');
       }
     }
-    
-    setIsAuthorized(authorized);
   }, [pathname, userRole, isChecking, isPublicPage, router, isAdminByEmail, user]);
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
@@ -210,10 +117,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {closeMessage}
           </p>
           <button
-            onClick={() => {
-              supabase.auth.signOut();
-              router.push('/login');
-            }}
+            onClick={signOut}
             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
           >
             العودة لتسجيل الدخول
