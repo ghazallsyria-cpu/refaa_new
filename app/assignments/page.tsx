@@ -17,9 +17,10 @@ export default function AssignmentsPage() {
   const { data, isLoading: contentLoading, error: contentError, refetch: refresh } = useAssignments();
   const assignments = data?.data || [];
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [sections, setSections] = useState<Section[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const { data: formData, isLoading: formLoading } = useAssignmentsFormData();
+  const subjects = formData?.subjects || [];
+  const sections = formData?.sections || [];
+  const teachers = formData?.teachers || [];
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
@@ -113,12 +114,6 @@ export default function AssignmentsPage() {
       console.error('Error fetching form data:', error);
     }
   }, [user, userRole]);
-
-  useEffect(() => {
-    if (user && userRole) {
-      fetchFormData();
-    }
-  }, [user, userRole, fetchFormData]);
 
   useEffect(() => {
     const fetchSubmissions = async () => {
