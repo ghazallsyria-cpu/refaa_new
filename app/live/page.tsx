@@ -18,15 +18,19 @@ import {
 import Image from 'next/image';
 
 const FIXED_SCHEDULE = [
-  { period: 1, start: '09:00', end: '09:35', type: 'class', name: 'الحصة الأولى' },
-  { period: 1.5, start: '09:35', end: '09:40', type: 'break', name: 'استراحة قصيرة' },
-  { period: 2, start: '09:40', end: '10:15', type: 'class', name: 'الحصة الثانية' },
-  { period: 2.5, start: '10:15', end: '10:30', type: 'break', name: 'استراحة طويلة' },
-  { period: 3, start: '10:30', end: '11:05', type: 'class', name: 'الحصة الثالثة' },
-  { period: 3.5, start: '11:05', end: '11:10', type: 'break', name: 'استراحة قصيرة' },
-  { period: 4, start: '11:10', end: '11:45', type: 'class', name: 'الحصة الرابعة' },
-  { period: 4.5, start: '11:45', end: '12:00', type: 'break', name: 'استراحة طويلة' },
-  { period: 5, start: '12:00', end: '12:35', type: 'class', name: 'الحصة الخامسة' },
+  { period: 1, start: '07:30', end: '08:15', type: 'class', name: 'الحصة الأولى' },
+  { period: 1.5, start: '08:15', end: '08:20', type: 'break', name: 'استراحة' },
+  { period: 2, start: '08:20', end: '09:05', type: 'class', name: 'الحصة الثانية' },
+  { period: 2.5, start: '09:05', end: '09:10', type: 'break', name: 'استراحة' },
+  { period: 3, start: '09:10', end: '09:55', type: 'class', name: 'الحصة الثالثة' },
+  { period: 3.5, start: '09:55', end: '10:15', type: 'break', name: 'استراحة الصلاة والافطار' },
+  { period: 4, start: '10:15', end: '11:00', type: 'class', name: 'الحصة الرابعة' },
+  { period: 4.5, start: '11:00', end: '11:05', type: 'break', name: 'استراحة' },
+  { period: 5, start: '11:05', end: '11:50', type: 'class', name: 'الحصة الخامسة' },
+  { period: 5.5, start: '11:50', end: '11:55', type: 'break', name: 'استراحة' },
+  { period: 6, start: '11:55', end: '12:40', type: 'class', name: 'الحصة السادسة' },
+  { period: 6.5, start: '12:40', end: '12:45', type: 'break', name: 'استراحة' },
+  { period: 7, start: '12:45', end: '13:30', type: 'class', name: 'الحصة السابعة' },
 ];
 
 export default function LiveMonitor() {

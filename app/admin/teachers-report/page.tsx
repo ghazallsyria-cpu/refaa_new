@@ -17,6 +17,7 @@ interface TeacherReport {
   percent: number;
   lastRecorded: string | null;
   status: "ممتاز" | "جيد" | "تحذير" | "حرج";
+  notes?: string;
   selected: boolean;
 }
 
@@ -109,16 +110,24 @@ export default function TeachersReportPage() {
           ).length || 0;
 
           const missed = total - recorded;
-          const percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
+          let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
 
           const lastRecorded = attendanceData && attendanceData.length > 0
             ? [...attendanceData].sort((a, b) => b.date.localeCompare(a.date))[0].date
             : null;
 
           let status: TeacherReport["status"] = "ممتاز";
-          if (percent < 60 || (missed > 0 && reportType === "day")) status = "حرج";
-          else if (percent < 85) status = "تحذير";
-          else if (percent < 95) status = "جيد";
+          let notes = "";
+
+          if (total === 0) {
+            notes = "لا يوجد حصص مجدولة";
+            status = "ممتاز"; // No classes scheduled is not a failure
+            percent = 100;
+          } else {
+            if (percent < 60 || (missed > 0 && reportType === "day")) status = "حرج";
+            else if (percent < 85) status = "تحذير";
+            else if (percent < 95) status = "جيد";
+          }
 
           const teacherName = teacher.users 
             ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
@@ -129,7 +138,7 @@ export default function TeachersReportPage() {
             name: teacherName || "غير محدد",
             specialization: teacher.specialization || "غير محدد",
             recorded, missed, total, percent,
-            lastRecorded, status,
+            lastRecorded, status, notes,
             selected: true,
           };
         })
@@ -275,18 +284,19 @@ export default function TeachersReportPage() {
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">الحصص المسجّلة</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">الحصص الفائتة</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">نسبة الالتزام</th>
+                  <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">ملاحظات</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">آخر تسجيل</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">الحالة</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={7} className="py-20 text-center">
+                  <tr><td colSpan={8} className="py-20 text-center">
                     <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                     <p className="text-slate-400 font-bold text-sm">جاري تجميع البيانات...</p>
                   </td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={7} className="py-20 text-center">
+                  <tr><td colSpan={8} className="py-20 text-center">
                     <p className="text-slate-400 font-bold text-sm">لا توجد نتائج</p>
                   </td></tr>
                 ) : filtered.map((teacher, idx) => (
@@ -351,6 +361,13 @@ export default function TeachersReportPage() {
                       </div>
                     </td>
 
+                    {/* ملاحظات */}
+                    <td className="px-4 py-4 text-center">
+                      <span className={`text-xs font-black ${teacher.notes ? "text-amber-600" : "text-slate-300"}`}>
+                        {teacher.notes || "—"}
+                      </span>
+                    </td>
+
                     {/* آخر تسجيل */}
                     <td className="px-4 py-4 text-center">
                       {teacher.lastRecorded ? (
@@ -406,6 +423,7 @@ export default function TeachersReportPage() {
               <th className="border border-slate-300 p-3 text-center">الحصص المسجلة</th>
               <th className="border border-slate-300 p-3 text-center">الحصص الفائتة</th>
               <th className="border border-slate-300 p-3 text-center">نسبة الالتزام</th>
+              <th className="border border-slate-300 p-3 text-center">ملاحظات</th>
               <th className="border border-slate-300 p-3 text-center">آخر تسجيل</th>
               <th className="border border-slate-300 p-3 text-center">الحالة</th>
             </tr>
@@ -419,6 +437,9 @@ export default function TeachersReportPage() {
                 <td className="border border-slate-300 p-3 text-center" dir="ltr">{t.recorded} / {t.total}</td>
                 <td className={`border border-slate-300 p-3 text-center font-bold ${t.missed > 0 ? "text-red-600" : ""}`}>{t.missed}</td>
                 <td className="border border-slate-300 p-3 text-center font-bold" dir="ltr">{t.percent}%</td>
+                <td className="border border-slate-300 p-3 text-center text-xs font-bold text-amber-700">
+                  {t.notes || "—"}
+                </td>
                 <td className="border border-slate-300 p-3 text-center text-xs">
                   {t.lastRecorded ? new Date(t.lastRecorded).toLocaleDateString("ar-EG") : "لم يسجل"}
                 </td>

@@ -28,7 +28,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
-  const isPublicPage = isLoginPage || isResetPasswordPage;
+  const isLivePage = pathname === '/live';
+  const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
   // Derive authorization state
   const getAuthorization = () => {
