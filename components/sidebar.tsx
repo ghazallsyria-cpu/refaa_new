@@ -22,6 +22,8 @@ import {
   Settings,
   Database,
   Award,
+  ChevronRight,
+  ChevronLeft,
   X
 } from 'lucide-react';
 
@@ -51,7 +53,17 @@ const navigation = [
   { name: 'الإعدادات', href: '/settings', icon: Settings },
 ];
 
-export function Sidebar({ onClose, userRole = 'admin' }: { onClose?: () => void, userRole?: string }) {
+export function Sidebar({ 
+  onClose, 
+  userRole = 'admin', 
+  isCollapsed = false, 
+  onToggleCollapse 
+}: { 
+  onClose?: () => void, 
+  userRole?: string,
+  isCollapsed?: boolean,
+  onToggleCollapse?: () => void
+}) {
   const pathname = usePathname();
 
   // Filter navigation based on user role
@@ -84,33 +96,58 @@ export function Sidebar({ onClose, userRole = 'admin' }: { onClose?: () => void,
   const roleDisplayName = roleDisplayNames[userRole] || 'مستخدم';
 
   return (
-    <div className="flex h-full w-72 flex-col bg-slate-900 text-slate-300 border-l border-slate-800/50 shadow-2xl relative overflow-hidden">
+    <div className={cn(
+      "flex h-full flex-col bg-slate-900 text-slate-300 border-l border-slate-800/50 shadow-2xl relative overflow-hidden transition-all duration-500 ease-in-out",
+      isCollapsed ? "w-20" : "w-72"
+    )}>
       {/* Decorative background elements */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2" />
       <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full translate-y-1/2 -translate-x-1/2" />
+      <div className="absolute top-1/2 left-0 w-32 h-32 bg-indigo-600/5 blur-3xl rounded-full -translate-x-1/2" />
 
-      <div className="flex h-24 shrink-0 items-center justify-between px-8 border-b border-slate-800/50 relative z-10">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20">
-            <School className="h-7 w-7 text-white" />
+      <div className={cn(
+        "flex h-24 shrink-0 items-center border-b border-slate-800/50 relative z-10 transition-all duration-500",
+        isCollapsed ? "justify-center px-0" : "justify-between px-6"
+      )}>
+        <div className={cn("flex items-center gap-3 transition-all duration-500", isCollapsed ? "scale-0 w-0 opacity-0" : "scale-100 w-auto opacity-100")}>
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20">
+            <School className="h-6 w-6 text-white" />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-black text-white tracking-tight leading-none">مدرسة الرفعة</span>
-            <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-[0.2em] mt-1">المنصة الرقمية</span>
+            <span className="text-base font-black text-white tracking-tight leading-none">مدرسة الرفعة</span>
+            <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-[0.15em] mt-1">المنصة الرقمية</span>
           </div>
         </div>
-        {onClose && (
-          <button 
-            onClick={onClose}
-            className="lg:hidden p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all"
-          >
-            <X className="h-5 w-5" />
-          </button>
+        
+        {isCollapsed && (
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20">
+            <School className="h-6 w-6 text-white" />
+          </div>
         )}
+
+        <div className="flex items-center gap-1">
+          {onToggleCollapse && (
+            <button 
+              onClick={onToggleCollapse}
+              className="hidden lg:flex p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all"
+              title={isCollapsed ? "توسيع القائمة" : "طي القائمة"}
+            >
+              {isCollapsed ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+            </button>
+          )}
+          {onClose && (
+            <button 
+              onClick={onClose}
+              className="lg:hidden p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-y-auto py-8 px-4 custom-scrollbar relative z-10">
-        <nav className="space-y-1.5">
+      <div className="flex flex-1 flex-col overflow-y-auto py-6 px-3 custom-scrollbar relative z-10">
+        <nav className="space-y-1">
           {filteredNavigation.map((item) => {
             // Special handling for dashboard route based on role
             let itemHref = item.href;
@@ -127,11 +164,13 @@ export function Sidebar({ onClose, userRole = 'admin' }: { onClose?: () => void,
                 key={item.name}
                 href={itemHref}
                 onClick={onClose}
+                title={isCollapsed ? item.name : undefined}
                 className={cn(
-                  "flex items-center px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-200 group relative overflow-hidden",
+                  "flex items-center rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden",
+                  isCollapsed ? "justify-center p-3" : "px-4 py-3",
                   isActive 
                     ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" 
-                    : "hover:bg-white/5 hover:text-white"
+                    : "hover:bg-white/5 hover:text-white text-slate-400"
                 )}
               >
                 {isActive && (
@@ -142,14 +181,23 @@ export function Sidebar({ onClose, userRole = 'admin' }: { onClose?: () => void,
                 )}
                 <item.icon
                   className={cn(
-                    "h-5 w-5 shrink-0 ml-3.5 transition-all duration-300",
+                    "h-5 w-5 shrink-0 transition-all duration-300",
+                    !isCollapsed && "ml-3.5",
                     isActive ? "text-white scale-110" : "text-slate-500 group-hover:text-indigo-400 group-hover:scale-110"
                   )}
                   aria-hidden="true"
                 />
-                <span className="relative z-10">{item.name}</span>
-                {isActive && (
+                <span className={cn(
+                  "relative z-10 transition-all duration-500 whitespace-nowrap",
+                  isCollapsed ? "w-0 opacity-0 scale-0 overflow-hidden" : "w-auto opacity-100 scale-100"
+                )}>
+                  {item.name}
+                </span>
+                {isActive && !isCollapsed && (
                   <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-l-full" />
+                )}
+                {isActive && isCollapsed && (
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-l-full" />
                 )}
               </Link>
             );
@@ -157,17 +205,23 @@ export function Sidebar({ onClose, userRole = 'admin' }: { onClose?: () => void,
         </nav>
       </div>
       
-      <div className="p-6 border-t border-slate-800/50 relative z-10">
-        <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-4 flex items-center gap-4 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
-          <div className="relative">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-sm shadow-lg ring-2 ring-white/10">
+      <div className={cn("p-4 border-t border-slate-800/50 relative z-10 transition-all duration-500", isCollapsed ? "items-center" : "")}>
+        <div className={cn(
+          "bg-white/5 backdrop-blur-sm rounded-xl flex items-center border border-white/5 hover:bg-white/10 transition-all duration-500 cursor-pointer group overflow-hidden",
+          isCollapsed ? "justify-center p-2" : "gap-3 p-3"
+        )}>
+          <div className="relative shrink-0">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-xs shadow-lg ring-2 ring-white/10">
               {roleDisplayName.substring(0, 2)}
             </div>
-            <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-sm" />
+            <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-sm" />
           </div>
-          <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-bold text-white truncate group-hover:text-indigo-400 transition-colors">{roleDisplayName}</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">لوحة التحكم</span>
+          <div className={cn(
+            "flex flex-col overflow-hidden transition-all duration-500",
+            isCollapsed ? "w-0 opacity-0 scale-0" : "w-auto opacity-100 scale-100"
+          )}>
+            <span className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">{roleDisplayName}</span>
+            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">لوحة التحكم</span>
           </div>
         </div>
       </div>

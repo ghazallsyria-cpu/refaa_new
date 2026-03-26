@@ -14,13 +14,15 @@ export function Header({
   showMenuButton = true,
   user,
   userRole,
-  userName
+  userName,
+  isSidebarCollapsed = false
 }: { 
   onMenuClick?: () => void, 
   showMenuButton?: boolean,
   user?: any,
   userRole?: string,
-  userName?: string
+  userName?: string,
+  isSidebarCollapsed?: boolean
 }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const router = useRouter();
@@ -46,8 +48,9 @@ export function Header({
         {onMenuClick && showMenuButton && (
           <button
             type="button"
-            className="lg:hidden p-3 text-slate-500 hover:text-indigo-600 rounded-2xl hover:bg-indigo-50 transition-all"
+            className="p-3 text-slate-500 hover:text-indigo-600 rounded-2xl hover:bg-indigo-50 transition-all flex items-center justify-center"
             onClick={onMenuClick}
+            title={isSidebarCollapsed ? "توسيع القائمة" : "طي القائمة"}
           >
             <span className="sr-only">فتح القائمة</span>
             <Menu className="h-6 w-6" aria-hidden="true" />

@@ -25,6 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   } = useAuth();
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
@@ -154,27 +155,52 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !isPublicPage;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full overflow-hidden bg-slate-50" dir="rtl">
       {/* Mobile sidebar backdrop */}
       {isSidebarOpen && showSidebar && (
         <div 
-          className="fixed inset-0 z-40 bg-slate-900/80 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/80 lg:hidden backdrop-blur-sm transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
       
       {showSidebar && (
-        <div className={`fixed inset-y-0 right-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 print:hidden ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <Sidebar onClose={() => setIsSidebarOpen(false)} userRole={userRole || 'student'} />
+        <div 
+          className={cn(
+            "fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-in-out lg:static lg:translate-x-0 print:hidden shadow-2xl lg:shadow-none",
+            isSidebarCollapsed ? "w-20" : "w-72",
+            isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
+            isSidebarCollapsed && "lg:w-20"
+          )}
+        >
+          <Sidebar 
+            onClose={() => setIsSidebarOpen(false)} 
+            userRole={userRole || 'student'} 
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          />
         </div>
       )}
       
-      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full">
-        <div className="print:hidden">
-          <Header onMenuClick={() => setIsSidebarOpen(true)} showMenuButton={showSidebar} user={user} userRole={userRole || ''} userName={userName} />
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full relative">
+        <div className="print:hidden sticky top-0 z-30">
+          <Header 
+            onMenuClick={() => {
+              if (window.innerWidth >= 1024) {
+                setIsSidebarCollapsed(!isSidebarCollapsed);
+              } else {
+                setIsSidebarOpen(true);
+              }
+            }} 
+            showMenuButton={showSidebar} 
+            user={user} 
+            userRole={userRole || ''} 
+            userName={userName} 
+            isSidebarCollapsed={isSidebarCollapsed}
+          />
         </div>
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 print:p-0 print:overflow-visible flex flex-col">
-          <div className="flex-1">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:p-0 print:overflow-visible flex flex-col scroll-smooth">
+          <div className="flex-1 max-w-[1600px] mx-auto w-full">
             {children}
           </div>
           <Footer />
