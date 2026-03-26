@@ -31,7 +31,7 @@ export default function AttendancePage() {
   const fetchDaySchedule = useCallback(async (targetDate: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) return [];
 
       const jsDay = new Date(targetDate).getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
@@ -44,17 +44,28 @@ export default function AttendancePage() {
         .eq('day_of_week', dbDay)
         .order('period');
       
-      setDaySchedule(data || []);
+      const schedule = data || [];
+      setDaySchedule(schedule);
+      return schedule;
     } catch (error) {
       console.error('Error fetching day schedule:', error);
+      return [];
     }
   }, []);
 
   useEffect(() => {
     if (date && userRole === 'teacher') {
-      fetchDaySchedule(date);
+      fetchDaySchedule(date).then((schedule) => {
+        if (schedule && schedule.length > 0) {
+          // إذا كانت الحصة الحالية غير موجودة في الجدول الجديد، اختر أول حصة متاحة
+          const isCurrentPeriodScheduled = schedule.some(s => s.period === period);
+          if (!isCurrentPeriodScheduled) {
+            setPeriod(schedule[0].period);
+          }
+        }
+      });
     }
-  }, [date, userRole, fetchDaySchedule]);
+  }, [date, userRole, fetchDaySchedule, period]);
 
   const fetchStudentsAndAttendance = useCallback(async () => {
     if (!selectedSection) return;
@@ -520,15 +531,21 @@ export default function AttendancePage() {
               onChange={(e) => setPeriod(parseInt(e.target.value))}
               className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
             >
-              {[1, 2, 3, 4, 5, 6, 7].map(p => {
-                const scheduled = daySchedule.find(s => s.period === p);
-                const isTeacher = userRole === 'teacher' || (typeof userRole === 'string' && userRole.includes('teacher'));
-                return (
-                  <option key={p} value={p}>
-                    الحصة {p} {isTeacher ? (scheduled ? `(${scheduled.section.classes.name} - ${scheduled.section.name})` : '(فارغة)') : ''}
-                  </option>
-                );
-              })}
+              {userRole === 'teacher' ? (
+                daySchedule.length > 0 ? (
+                  daySchedule.map(s => (
+                    <option key={s.period} value={s.period}>
+                      الحصة {s.period} ({s.section.classes.name} - {s.section.name})
+                    </option>
+                  ))
+                ) : (
+                  <option value={1}>لا توجد حصص مجدولة</option>
+                )
+              ) : (
+                [1, 2, 3, 4, 5, 6, 7].map(p => (
+                  <option key={p} value={p}>الحصة {p}</option>
+                ))
+              )}
             </select>
           </div>
           <div className="space-y-2">
