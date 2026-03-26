@@ -10,15 +10,16 @@ import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignments } from '@/hooks/use-assignments';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
+import { Teacher, Subject, Section } from '@/types';
 
 export default function AssignmentsPage() {
   const { user, userRole, isChecking: authLoading } = useAuth();
   const { data, isLoading: contentLoading, error: contentError, refetch: refresh } = useAssignments();
   const assignments = data?.data || [];
 
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
@@ -44,9 +45,9 @@ export default function AssignmentsPage() {
   const fetchFormData = useCallback(async () => {
     if (!user || !userRole) return;
     try {
-      let subjectsData = [];
-      let sectionsData = [];
-      let teachersData = [];
+      let subjectsData: Subject[] = [];
+      let sectionsData: Section[] = [];
+      let teachersData: Teacher[] = [];
 
       if (userRole === 'admin' || userRole === 'management') {
         const [subjectsRes, sectionsRes, teachersRes] = await Promise.all([
