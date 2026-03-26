@@ -17,9 +17,12 @@ export interface EducationalContent {
   teacher_name?: string;
   start_time?: string; // For exams
   end_time?: string;   // For exams
+  exam_date?: string;  // For exams
+  duration?: number;   // For exams
   due_date?: string;   // For assignments
   status: 'draft' | 'published' | 'archived';
   section_id?: string;
+  section_name?: string; // For exams
   created_at: string;
   file_url?: string;
   // Student specific
@@ -29,6 +32,8 @@ export interface EducationalContent {
   // Teacher/Admin specific
   submission_count?: number;
   graded_count?: number;
+  avg_score?: number; // For exams
+  question_count?: number; // For exams
   assignment_sections?: any[];
 }
 
