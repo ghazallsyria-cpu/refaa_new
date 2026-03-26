@@ -86,7 +86,7 @@ export default function AssignmentsPage() {
             return subject?.id === id;
           });
           return Array.isArray(ts?.subject) ? ts?.subject[0] : ts?.subject;
-        }).filter(Boolean);
+        }).filter((s): s is Subject => !!s);
 
         const uniqueSections = Array.from(new Set((teacherSectionsData || []).map(ts => {
           const section = Array.isArray(ts.section) ? ts.section[0] : ts.section;
@@ -102,7 +102,7 @@ export default function AssignmentsPage() {
             ...section,
             classes: Array.isArray(section.classes) ? section.classes[0] : section.classes
           };
-        }).filter(Boolean);
+        }).filter((s): s is Section => !!s);
 
         subjectsData = uniqueSubjects;
         sectionsData = uniqueSections;
