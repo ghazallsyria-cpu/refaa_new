@@ -8,6 +8,7 @@ import Link from 'next/link';
 import AssignmentBuilder, { Question } from '@/components/assignment-builder';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignments } from '@/hooks/use-assignments';
+import { useSchoolFormData } from '@/hooks/use-school-form-data';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { Teacher, Subject, Section } from '@/types';
@@ -17,7 +18,7 @@ export default function AssignmentsPage() {
   const { data, isLoading: contentLoading, error: contentError, refetch: refresh } = useAssignments();
   const assignments = data?.data || [];
 
-  const { data: formData, isLoading: formLoading } = useAssignmentsFormData();
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
   const teachers = formData?.teachers || [];
