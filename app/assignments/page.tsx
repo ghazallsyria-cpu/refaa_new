@@ -62,7 +62,10 @@ export default function AssignmentsPage() {
           ...s,
           classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
         }));
-        teachersData = teachersRes.data || [];
+        teachersData = (teachersRes.data || []).map((t: any) => ({
+          id: t.id,
+          users: Array.isArray(t.users) ? t.users[0] : t.users
+        }));
       } else if (userRole === 'teacher') {
         const { data: teacherSectionsData, error: tsError } = await supabase
           .from('teacher_sections')
