@@ -37,16 +37,23 @@ export default function TeachersReportPage() {
   const [reportType, setReportType] = useState<"day" | "week">("day");
   const [search, setSearch] = useState("");
 
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
-  const todayName = DAY_MAP[now.getDay()];
-  const dateLabel = `${now.getDate()} ${MONTH_MAP[now.getMonth()]} ${now.getFullYear()}`;
+  const [todayStr, setTodayStr] = useState("");
+  const [todayName, setTodayName] = useState("");
+  const [dateLabel, setDateLabel] = useState("");
+
+  useEffect(() => {
+    const now = new Date();
+    setTodayStr(now.toISOString().split("T")[0]);
+    setTodayName(DAY_MAP[now.getDay()]);
+    setDateLabel(`${now.getDate()} ${MONTH_MAP[now.getMonth()]} ${now.getFullYear()}`);
+  }, []);
 
   const fetchData = useCallback(async () => {
+    if (!todayStr) return;
     setLoading(true);
     try {
       const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
+      const todayStrLocal = now.toISOString().split("T")[0];
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
@@ -134,9 +141,13 @@ export default function TeachersReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [reportType]);
+  }, [reportType, todayStr]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    if (todayStr) {
+      fetchData();
+    }
+  }, [fetchData, todayStr]);
 
   const toggleSelect = (id: string) => {
     setTeachers(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));

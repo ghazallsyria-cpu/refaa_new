@@ -10,7 +10,11 @@ export default function AttendancePage() {
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSection, setSelectedSection] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>('');
+
+  useEffect(() => {
+    setDate(new Date().toISOString().split('T')[0]);
+  }, []);
   const [period, setPeriod] = useState<number>(1);
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});

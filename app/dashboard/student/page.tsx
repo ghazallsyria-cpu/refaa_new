@@ -27,6 +27,11 @@ export default function StudentDashboard() {
   const [todaysSchedule, setTodaysSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -306,7 +311,7 @@ export default function StudentDashboard() {
                         {grade.score}%
                       </p>
                       <p className="text-xs text-slate-400 font-medium mt-1">
-                        {format(new Date(grade.completed_at), 'd MMMM', { locale: arSA })}
+                        {mounted ? format(new Date(grade.completed_at), 'd MMMM', { locale: arSA }) : '...'}
                       </p>
                     </div>
                   </div>
@@ -424,7 +429,7 @@ export default function StudentDashboard() {
                       <div className="flex items-start justify-between mb-2">
                         <p className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">{assignment.title}</p>
                         <span className="text-xs font-bold px-2 py-1 bg-amber-50 text-amber-700 rounded-md whitespace-nowrap ml-2">
-                          {format(new Date(assignment.due_date), 'd MMM', { locale: arSA })}
+                          {mounted ? format(new Date(assignment.due_date), 'd MMM', { locale: arSA }) : '...'}
                         </span>
                       </div>
                       <p className="text-sm text-slate-500">{assignment.subject?.name}</p>
@@ -463,7 +468,7 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500 mb-3">{exam.subject?.name}</p>
                       <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 p-2 rounded-lg">
                         <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                        <span>{format(new Date(exam.start_time), 'EEEE، d MMMM - h:mm a', { locale: arSA })}</span>
+                        <span>{mounted ? format(new Date(exam.start_time), 'EEEE، d MMMM - h:mm a', { locale: arSA }) : '...'}</span>
                       </div>
                     </div>
                   </Link>

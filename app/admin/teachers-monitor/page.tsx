@@ -39,29 +39,34 @@ export default function TeachersMonitorPage() {
   const [search, setSearch] = useState("");
   const [sendingWarning, setSendingWarning] = useState<string | null>(null);
 
+  const [schoolTime, setSchoolTime] = useState<Date | null>(null);
+  const [todayStr, setTodayStr] = useState("");
+  const [todayName, setTodayName] = useState("");
+  const [dateLabel, setDateLabel] = useState("");
+
   const getSchoolTime = () => {
     const d = new Date();
     const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
     return new Date(utc + (3 * 3600000));
   };
 
-  const schoolTime = getSchoolTime();
-  const todayStr = schoolTime.toISOString().split("T")[0];
-  const todayName = DAY_MAP[schoolTime.getDay()];
-  const dateLabel = `${schoolTime.getDate()} ${MONTH_MAP[schoolTime.getMonth()]} ${schoolTime.getFullYear()}`;
+  useEffect(() => {
+    const st = getSchoolTime();
+    setSchoolTime(st);
+    setTodayStr(st.toISOString().split("T")[0]);
+    setTodayName(DAY_MAP[st.getDay()]);
+    setDateLabel(`${st.getDate()} ${MONTH_MAP[st.getMonth()]} ${st.getFullYear()}`);
+  }, []);
 
   const fetchData = useCallback(async () => {
+    if (!todayStr) return;
     setLoading(true);
     try {
-      const now = new Date();
-      const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const schoolTime = new Date(utcTime + (3 * 3600000)); // UTC+3
-      const todayStr = schoolTime.toISOString().split("T")[0];
-      const weekAgo = new Date(schoolTime);
+      const weekAgo = new Date(schoolTime!);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
-      const jsDay = schoolTime.getDay();
+      const jsDay = schoolTime!.getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
@@ -151,9 +156,13 @@ export default function TeachersMonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [schoolTime, todayStr]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    if (todayStr) {
+      fetchData();
+    }
+  }, [fetchData, todayStr]);
 
   const sendWarning = async (teacherId: string) => {
     setSendingWarning(teacherId);

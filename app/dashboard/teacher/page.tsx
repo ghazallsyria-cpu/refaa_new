@@ -32,14 +32,18 @@ export default function TeacherDashboard() {
   });
   const [assignmentStats, setAssignmentStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
   const isCurrentClass = (period: number) => {
+    if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
     if (!periodInfo) return false;
 
@@ -57,6 +61,7 @@ export default function TeacherDashboard() {
   };
 
   const isNextClass = (period: number) => {
+    if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
     if (!periodInfo) return false;
 
@@ -313,7 +318,7 @@ export default function TeacherDashboard() {
                 جدول اليوم
               </h2>
               <span className="text-sm font-medium text-slate-500">
-                {format(new Date(), 'EEEE، d MMMM', { locale: arSA })}
+                {mounted ? format(new Date(), 'EEEE، d MMMM', { locale: arSA }) : '...'}
               </span>
             </div>
             <div className="p-6">
@@ -537,7 +542,7 @@ export default function TeacherDashboard() {
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-bold text-slate-900 line-clamp-1">{assignment.title}</h3>
                       <span className="text-xs font-medium px-2 py-1 bg-amber-50 text-amber-700 rounded-md whitespace-nowrap ml-2">
-                        {format(new Date(assignment.due_date), 'd MMM', { locale: arSA })}
+                        {mounted ? format(new Date(assignment.due_date), 'd MMM', { locale: arSA }) : '...'}
                       </span>
                     </div>
                     <p className="text-sm text-slate-500 mb-3">
@@ -594,7 +599,7 @@ export default function TeacherDashboard() {
                           {msg.sender?.full_name}
                         </p>
                         <p className="text-[10px] text-slate-400 whitespace-nowrap mr-2">
-                          {format(new Date(msg.created_at), 'd MMM', { locale: arSA })}
+                          {mounted ? format(new Date(msg.created_at), 'd MMM', { locale: arSA }) : '...'}
                         </p>
                       </div>
                       <p className="text-xs text-slate-600 truncate font-medium">{msg.subject}</p>

@@ -38,11 +38,13 @@ export default function ReportsPage() {
     avgAttendance: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
   const [distributionData, setDistributionData] = useState<any[]>([]);
   const [gradesData, setGradesData] = useState<any[]>([]);
 
   useEffect(() => {
+    setMounted(true);
     fetchBasicStats();
   }, []);
 

@@ -21,6 +21,11 @@ export default function AnnouncementsWidget({ limit = 3, role }: { limit?: numbe
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     async function fetchAnnouncements() {
@@ -97,7 +102,7 @@ export default function AnnouncementsWidget({ limit = 3, role }: { limit?: numbe
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {new Date(announcement.created_at).toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' })}
+                  {mounted ? new Date(announcement.created_at).toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' }) : '...'}
                 </p>
                 <p className="text-sm text-slate-600 mt-2 line-clamp-2 leading-relaxed">
                   {announcement.content}

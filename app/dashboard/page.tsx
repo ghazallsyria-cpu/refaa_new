@@ -39,6 +39,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     async function fetchDashboardStats() {
@@ -111,7 +116,9 @@ export default function AdminDashboard() {
   }, []);
 
   const formatTime = (timeStr: string) => {
+    if (!timeStr) return '...';
     const date = new Date(timeStr);
+    if (isNaN(date.getTime())) return '...';
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -270,7 +277,7 @@ export default function AdminDashboard() {
                     <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{activity.title}</p>
                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                       <CalendarDays className="h-3 w-3" />
-                      {formatTime(activity.time)}
+                      {mounted ? formatTime(activity.time) : '...'}
                     </p>
                   </div>
                   <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 opacity-0 group-hover:opacity-100 transition-all">
