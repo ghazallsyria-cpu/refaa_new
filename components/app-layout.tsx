@@ -167,17 +167,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {showSidebar && (
         <div 
           className={cn(
-            "fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-in-out lg:static lg:translate-x-0 print:hidden shadow-2xl lg:shadow-none",
+            "fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-in-out print:hidden shadow-2xl lg:shadow-none",
             isSidebarCollapsed ? "w-20" : "w-72",
             isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
-            isSidebarCollapsed && "lg:w-20"
+            // On desktop, if collapsed is true, we might want it to be hidden instead of mini
+            // But the user said "folds to the right", so maybe they want it to disappear
+            !isSidebarOpen && "lg:translate-x-full lg:w-0",
+            isSidebarOpen && "lg:translate-x-0 lg:static"
           )}
         >
           <Sidebar 
             onClose={() => setIsSidebarOpen(false)} 
             userRole={userRole || 'student'} 
             isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            onToggleCollapse={() => {
+              setIsSidebarCollapsed(!isSidebarCollapsed);
+              // If we are toggling collapse on desktop, we might actually want to close it
+              if (window.innerWidth >= 1024) {
+                setIsSidebarOpen(false);
+              }
+            }}
           />
         </div>
       )}
@@ -186,17 +195,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="print:hidden sticky top-0 z-30">
           <Header 
             onMenuClick={() => {
-              if (window.innerWidth >= 1024) {
-                setIsSidebarCollapsed(!isSidebarCollapsed);
-              } else {
-                setIsSidebarOpen(true);
-              }
+              setIsSidebarOpen(!isSidebarOpen);
             }} 
             showMenuButton={showSidebar} 
             user={user} 
             userRole={userRole || ''} 
             userName={userName} 
-            isSidebarCollapsed={isSidebarCollapsed}
+            isSidebarCollapsed={!isSidebarOpen}
           />
         </div>
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:p-0 print:overflow-visible flex flex-col scroll-smooth">

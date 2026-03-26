@@ -1,171 +1,42 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Plus, Search, Filter, BookOpen, Users, 
   BarChart2, Clock, MoreVertical, Edit2, 
   Trash2, Eye, Play, FileText, CheckCircle,
-  TrendingUp, Calendar, ArrowRight
+  TrendingUp, ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
-
-type Exam = {
-  id: string;
-  title: string;
-  description: string;
-  status: 'draft' | 'published' | 'archived';
-  created_at: string;
-  duration: number;
-  exam_date: string;
-  start_time?: string;
-  end_time?: string;
-  subject: { name: string };
-  section: { name: string } | null;
-  _count?: {
-    questions: number;
-    attempts: number;
-  };
-  stats?: {
-    avg_score: number;
-    total_students: number;
-  };
-  studentAttempt?: any;
-};
+import { useEducationalContent } from '@/hooks/use-educational-content';
+import { useAuth } from '@/context/auth-context';
 
 export default function ExamsDashboard() {
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user, userRole, loading: authLoading } = useAuth();
+  const { content: exams, loading: contentLoading, error: contentError, refresh } = useEducationalContent('exam');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [userRole, setUserRole] = useState<string | null>(null);
-
-  const fetchExams = useCallback(async () => {
-    try {
-      setLoading(true);
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-        
-      const role = userData?.role || null;
-      setUserRole(role);
-
-      let query = supabase
-        .from('exams')
-        .select(`
-          *,
-          subject:subjects(name),
-          section:sections(name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (role === 'teacher') {
-        query = query.eq('teacher_id', session.user.id);
-      } else if (role === 'student') {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('section_id')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (studentData?.section_id) {
-          query = query.eq('section_id', studentData.section_id).eq('status', 'published');
-        } else {
-          setExams([]);
-          return;
-        }
-      } else if (role === 'parent') {
-        const { data: childrenData } = await supabase
-          .from('students')
-          .select('section_id')
-          .eq('parent_id', session.user.id);
-          
-        if (childrenData && childrenData.length > 0) {
-          const sectionIds = childrenData.map(c => c.section_id).filter(Boolean);
-          if (sectionIds.length > 0) {
-            query = query.in('section_id', sectionIds).eq('status', 'published');
-          } else {
-            setExams([]);
-            return;
-          }
-        } else {
-          setExams([]);
-          return;
-        }
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Fetch real stats for each exam and student attempts if role is student
-      const examsWithStats = await Promise.all((data || []).map(async (exam) => {
-        const [questionsRes, attemptsRes] = await Promise.all([
-          supabase.from('questions').select('id', { count: 'exact', head: true }).eq('exam_id', exam.id),
-          supabase.from('exam_attempts').select('score', { count: 'exact' }).eq('exam_id', exam.id)
-        ]);
-
-        let studentAttempt = null;
-        if (role === 'student' && session?.user?.id) {
-          const { data: attemptsData } = await supabase
-            .from('exam_attempts')
-            .select('id, status, score')
-            .eq('exam_id', exam.id)
-            .eq('student_id', session.user.id);
-          
-          // Prioritize completed/graded attempts
-          studentAttempt = attemptsData?.find(a => a.status === 'completed' || a.status === 'graded') || 
-                          attemptsData?.find(a => a.status === 'ongoing') || 
-                          null;
-        }
-
-        const attempts = attemptsRes.data || [];
-        const avgScore = attempts.length > 0 
-          ? Math.round(attempts.reduce((acc, curr) => acc + curr.score, 0) / attempts.length) 
-          : 0;
-
-        return {
-          ...exam,
-          _count: {
-            questions: questionsRes.count || 0,
-            attempts: attemptsRes.count || 0
-          },
-          stats: {
-            avg_score: avgScore,
-            total_students: attemptsRes.count || 0
-          },
-          studentAttempt
-        };
-      }));
-
-      setExams(examsWithStats);
-    } catch (err) {
-      console.error('Error fetching exams:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    fetchExams();
-  }, [fetchExams]);
+    setMounted(true);
+  }, []);
 
   const filteredExams = exams.filter(exam => {
-    const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const handleDelete = async (examId: string) => {
+    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) return;
+    
     try {
       // 1. Fetch all questions for this exam to get their media_urls
       const { data: questions, error: qError } = await supabase
@@ -186,7 +57,7 @@ export default function ExamsDashboard() {
 
       const { error } = await supabase.from('exams').delete().eq('id', examId);
       if (error) throw error;
-      setExams(exams.filter(e => e.id !== examId));
+      refresh();
     } catch (err) {
       console.error('Error deleting exam:', err);
     }
@@ -212,7 +83,7 @@ export default function ExamsDashboard() {
 
   const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin' || userRole === 'management';
   
-  const getExamStatus = (exam: Exam) => {
+  const getExamStatus = (exam: any) => {
     if (exam.status !== 'published') return null;
     
     const now = new Date();
@@ -231,6 +102,14 @@ export default function ExamsDashboard() {
     if (now > endDateTime) return 'expired';
     return 'available';
   };
+
+  if (!mounted || authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24">
@@ -275,15 +154,14 @@ export default function ExamsDashboard() {
             {[
               { label: 'إجمالي الاختبارات', value: exams.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', shadow: 'shadow-blue-100' },
               { label: 'اختبارات منشورة', value: exams.filter(e => e.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
-              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e._count?.attempts || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
+              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
               { 
                 label: 'متوسط النجاح', 
                 value: (() => {
-                  const totalAttempts = exams.reduce((acc, e) => acc + (e._count?.attempts || 0), 0);
+                  const totalAttempts = exams.reduce((acc, e) => acc + (e.submission_count || 0), 0);
                   if (totalAttempts === 0) return '0%';
                   const totalScore = exams.reduce((acc, e) => {
-                    // Assuming score is out of 100 for simplicity in average calculation
-                    return acc + (e.stats?.avg_score || 0) * (e._count?.attempts || 0);
+                    return acc + (e.avg_score || 0) * (e.submission_count || 0);
                   }, 0);
                   return `${Math.round(totalScore / totalAttempts)}%`;
                 })(), 
@@ -354,7 +232,7 @@ export default function ExamsDashboard() {
 
         {/* Exams List */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          {loading ? (
+          {contentLoading ? (
             Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="glass-card rounded-[3rem] border border-white/60 h-[450px] animate-pulse bg-slate-50/50"></div>
             ))
@@ -399,31 +277,35 @@ export default function ExamsDashboard() {
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Portal>
                             <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
-                              <DropdownMenu.Item asChild>
-                                <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                  <Edit2 className="h-5 w-5" />
-                                  <span>تعديل الاختبار</span>
-                                </Link>
-                              </DropdownMenu.Item>
+                              {(userRole === 'admin' || userRole === 'management' || exam.teacher_id === user?.id) && (
+                                <>
+                                  <DropdownMenu.Item asChild>
+                                    <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                      <Edit2 className="h-5 w-5" />
+                                      <span>تعديل الاختبار</span>
+                                    </Link>
+                                  </DropdownMenu.Item>
+                                  <DropdownMenu.Item asChild>
+                                    <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                      <BarChart2 className="h-5 w-5" />
+                                      <span>النتائج والتحليلات</span>
+                                    </Link>
+                                  </DropdownMenu.Item>
+                                  <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
+                                  <DropdownMenu.Item 
+                                    className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
+                                    onClick={() => handleDelete(exam.id)}
+                                  >
+                                    <Trash2 className="h-5 w-5" />
+                                    <span>حذف الاختبار</span>
+                                  </DropdownMenu.Item>
+                                </>
+                              )}
                               <DropdownMenu.Item asChild>
                                 <Link href={`/exams/take/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
                                   <Eye className="h-5 w-5" />
                                   <span>معاينة الاختبار</span>
                                 </Link>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item asChild>
-                                <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                  <BarChart2 className="h-5 w-5" />
-                                  <span>النتائج والتحليلات</span>
-                                </Link>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
-                              <DropdownMenu.Item 
-                                className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
-                                onClick={() => handleDelete(exam.id)}
-                              >
-                                <Trash2 className="h-5 w-5" />
-                                <span>حذف الاختبار</span>
                               </DropdownMenu.Item>
                             </DropdownMenu.Content>
                           </DropdownMenu.Portal>
@@ -443,7 +325,7 @@ export default function ExamsDashboard() {
                         <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center">
                           <BookOpen className="h-5 w-5 text-indigo-500" />
                         </div>
-                        <span className="truncate">{exam.subject?.name}</span>
+                        <span className="truncate">{exam.subject_name}</span>
                       </div>
                       <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
                         <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center">
@@ -457,13 +339,13 @@ export default function ExamsDashboard() {
                             <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
                               <FileText className="h-5 w-5 text-blue-500" />
                             </div>
-                            <span>{exam._count?.questions} سؤال</span>
+                            <span>{exam.question_count} سؤال</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
                             <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
                               <Users className="h-5 w-5 text-emerald-500" />
                             </div>
-                            <span>{exam._count?.attempts} محاولة</span>
+                            <span>{exam.submission_count} محاولة</span>
                           </div>
                         </>
                       )}
@@ -479,7 +361,7 @@ export default function ExamsDashboard() {
                           </div>
                           <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">متوسط الأداء</p>
-                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.stats?.avg_score}%</p>
+                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score}%</p>
                           </div>
                         </div>
                         <Link href={`/exams/results/${exam.id}`}>
@@ -493,14 +375,14 @@ export default function ExamsDashboard() {
                         </Link>
                       </>
                     ) : (
-                      (exam.studentAttempt?.status === 'completed' || exam.studentAttempt?.status === 'graded') ? (
+                      (exam.submission_status === 'submitted' || exam.submission_status === 'graded') ? (
                         <div className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 rounded-2xl border border-emerald-100">
                           <div className="flex items-center gap-3">
                             <CheckCircle className="h-5 w-5 text-emerald-600" />
                             <span className="text-sm font-black text-emerald-700">مكتمل</span>
                           </div>
                           <span className="text-lg font-black text-emerald-600">
-                            {exam.studentAttempt.score !== null ? `${exam.studentAttempt.score}%` : 'قيد التقييم'}
+                            {exam.score !== null && exam.score !== undefined ? `${exam.score}%` : 'قيد التقييم'}
                           </span>
                         </div>
                       ) : (
@@ -519,7 +401,7 @@ export default function ExamsDashboard() {
                             <span>
                               {getExamStatus(exam) === 'not_started' ? 'لم يبدأ بعد' :
                                getExamStatus(exam) === 'expired' ? 'انتهى الوقت' :
-                               exam.studentAttempt?.status === 'ongoing' ? 'متابعة الاختبار' : 'بدء الاختبار'}
+                               'بدء الاختبار'}
                             </span>
                           </motion.button>
                         </Link>
