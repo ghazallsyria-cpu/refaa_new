@@ -3,11 +3,11 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { Subject, Section, Teacher } from '@/types';
 
-export function useAssignmentsFormData() {
+export function useSchoolFormData() {
   const { user, userRole } = useAuth();
 
   return useQuery({
-    queryKey: ['assignments-form-data', user?.id, userRole],
+    queryKey: ['school-form-data', user?.id, userRole],
     queryFn: async () => {
       if (!user || !userRole) return { subjects: [], sections: [], teachers: [] };
 

@@ -59,11 +59,15 @@ type ExamData = {
   };
 };
 
+import { useAuth } from '@/context/auth-context';
+import { useSchoolFormData } from '@/hooks/use-school-form-data';
+import { Teacher, Subject, Section } from '@/types';
 import ImageUpload from '@/components/ImageUpload';
 
 export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
+  const { user, userRole } = useAuth();
   const isNew = params.id === 'new';
   
   const [exam, setExam] = useState<ExamData>({
@@ -87,15 +91,23 @@ export default function QuizBuilder() {
     }
   });
 
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [subjects, setSubjects] = useState<{id: string, name: string}[]>([]);
-  const [sections, setSections] = useState<{id: string, name: string}[]>([]);
-  const [teachers, setTeachers] = useState<{id: string, full_name: string}[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('questions');
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+
+  const subjects = formData?.subjects || [];
+  const sections = (formData?.sections || []).map(s => ({
+    id: s.id,
+    name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name
+  }));
+  const teachers = (formData?.teachers || []).map(t => ({
+    id: t.id,
+    full_name: t.users?.full_name || ''
+  }));
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -123,85 +135,12 @@ export default function QuizBuilder() {
     setQuestions(prev => [...prev, newQuestion]);
   }, []);
 
+  useEffect(() => {
+    setIsAdmin(userRole === 'admin' || userRole === 'management');
+  }, [userRole]);
+
   const fetchInitialData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      let userIsAdmin = false;
-      if (user) {
-        const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-        if (userData?.role === 'admin' || userData?.role === 'management') {
-          userIsAdmin = true;
-          setIsAdmin(true);
-          const { data: teachersData } = await supabase.from('users').select('id, full_name').eq('role', 'teacher');
-          setTeachers(teachersData || []);
-        }
-      }
-
-      let subjectsData: any[] = [];
-      let sectionsData: any[] = [];
-
-      if (!user) return;
-
-      if (userIsAdmin) {
-        const [subjectsRes, sectionsRes] = await Promise.all([
-          supabase.from('subjects').select('id, name'),
-          supabase.from('sections').select('id, name, classes(name)')
-        ]);
-        subjectsData = subjectsRes.data || [];
-        sectionsData = (sectionsRes.data || []).map((s: any) => ({
-          id: s.id,
-          name: `${Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name} - ${s.name}`
-        }));
-      } else {
-        // Fetch teacher's assigned subjects and sections from teacher_sections
-        const { data: teacherSectionsData, error: tsError } = await supabase
-          .from('teacher_sections')
-          .select(`
-            section:sections(id, name, classes(name)),
-            subject:subjects(id, name)
-          `)
-          .eq('teacher_id', user.id);
-        
-        if (tsError) throw tsError;
-
-        // Extract unique subjects
-        const uniqueSubjects = Array.from(new Set((teacherSectionsData || []).map(ts => {
-          const subject = Array.isArray(ts.subject) ? ts.subject[0] : ts.subject;
-          return subject?.id;
-        }))).map(id => {
-          const ts = teacherSectionsData?.find(item => {
-            const subject = Array.isArray(item.subject) ? item.subject[0] : item.subject;
-            return subject?.id === id;
-          });
-          return Array.isArray(ts?.subject) ? ts?.subject[0] : ts?.subject;
-        }).filter(Boolean);
-
-        // Extract unique sections
-        const uniqueSections = Array.from(new Set((teacherSectionsData || []).map(ts => {
-          const section = Array.isArray(ts.section) ? ts.section[0] : ts.section;
-          return section?.id;
-        }))).map(id => {
-          const ts = teacherSectionsData?.find(item => {
-            const section = Array.isArray(item.section) ? item.section[0] : item.section;
-            return section?.id === id;
-          });
-          const section = Array.isArray(ts?.section) ? ts?.section[0] : ts?.section;
-          if (!section) return null;
-          const sectionAny = section as any;
-          const className = Array.isArray(sectionAny.classes) ? sectionAny.classes[0]?.name : sectionAny.classes?.name;
-          return {
-            id: section.id,
-            name: className ? `${className} - ${section.name}` : section.name
-          };
-        }).filter(Boolean);
-
-        subjectsData = uniqueSubjects;
-        sectionsData = uniqueSections;
-      }
-      
-      setSubjects(subjectsData);
-      setSections(sectionsData);
-
       if (!isNew) {
         const { data: examData, error: examError } = await supabase
           .from('exams')
@@ -238,7 +177,6 @@ export default function QuizBuilder() {
         // Default first question
         addQuestion('multiple_choice');
         // Set teacher_id for new exam
-        const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           setExam(prev => ({ ...prev, teacher_id: user.id }));
         }
@@ -248,7 +186,7 @@ export default function QuizBuilder() {
     } finally {
       setLoading(false);
     }
-  }, [isNew, params.id, addQuestion]);
+  }, [isNew, params.id, addQuestion, user]);
 
   useEffect(() => {
     fetchInitialData();
