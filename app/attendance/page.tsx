@@ -91,12 +91,11 @@ export default function AttendancePage() {
       if (studentsError) throw studentsError;
       setStudents(studentsData || []);
 
-      // Fetch existing attendance for this date, section, and period
+      // Fetch existing attendance for this date and section
       const { data: attendanceData, error: attendanceError } = await supabase
         .from('attendance')
         .select('student_id, status, date, period_number')
         .eq('section_id', selectedSection)
-        .eq('period_number', period)
         .eq('date', date);
 
       if (attendanceError) throw attendanceError;
@@ -110,9 +109,12 @@ export default function AttendancePage() {
       });
 
       // Override with saved data for the selected date and period
-      attendanceData?.forEach(a => {
-        newAttendance[a.student_id] = a.status as AttendanceStatus;
-      });
+      if (attendanceData && attendanceData.length > 0) {
+        setPeriod(attendanceData[0].period_number);
+        attendanceData.forEach(a => {
+          newAttendance[a.student_id] = a.status as AttendanceStatus;
+        });
+      }
 
       setAttendance(newAttendance);
       
@@ -146,7 +148,7 @@ export default function AttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSection, date, period]);
+  }, [selectedSection, date]);
 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [studentStats, setStudentStats] = useState<any>(null);
@@ -258,7 +260,7 @@ export default function AttendancePage() {
       // Upsert attendance records
       const { error } = await supabase
         .from('attendance')
-        .upsert(records, { onConflict: 'student_id,date,period_number' });
+        .upsert(records, { onConflict: 'student_id,date,section_id' });
 
       if (error) throw error;
       

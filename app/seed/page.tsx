@@ -539,6 +539,12 @@ CREATE POLICY "Teachers manage own sections attendance" ON public.attendance FOR
     SELECT section_id FROM public.teacher_sections
     WHERE teacher_id = auth.uid()
   )
+) WITH CHECK (
+  public.get_user_role() IN ('admin','management')
+  OR section_id IN (
+    SELECT section_id FROM public.teacher_sections
+    WHERE teacher_id = auth.uid()
+  )
 );
 CREATE POLICY "Parent views child attendance" ON public.attendance FOR SELECT USING (
   student_id IN (
