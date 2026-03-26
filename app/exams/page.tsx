@@ -16,7 +16,7 @@ import { useEducationalContent } from '@/hooks/use-educational-content';
 import { useAuth } from '@/context/auth-context';
 
 export default function ExamsDashboard() {
-  const { user, userRole, loading: authLoading } = useAuth();
+  const { user, userRole, isChecking: authLoading } = useAuth();
   const { content: exams, loading: contentLoading, error: contentError, refresh } = useEducationalContent('exam');
   
   const [searchTerm, setSearchTerm] = useState('');

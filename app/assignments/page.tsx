@@ -12,7 +12,7 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 
 export default function AssignmentsPage() {
-  const { user, userRole, loading: authLoading } = useAuth();
+  const { user, userRole, isChecking: authLoading } = useAuth();
   const { content: assignments, loading: contentLoading, error: contentError, refresh } = useEducationalContent('assignment');
 
   const [subjects, setSubjects] = useState<any[]>([]);
