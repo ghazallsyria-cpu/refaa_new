@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, School, ArrowUpRight, Activity } from 'lucide-react';
+import { Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, School, ArrowUpRight, Activity, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
@@ -285,6 +285,46 @@ export default function AdminDashboard() {
         {/* Quick Actions & Notifications */}
         <div className="space-y-8">
           
+          {/* Live Classes Card */}
+          <motion.div 
+            variants={itemVariants}
+            className="bg-gradient-to-br from-red-500 to-rose-600 rounded-[2.5rem] p-8 text-white shadow-xl shadow-red-200 relative overflow-hidden"
+          >
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-12 w-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-lg">
+                  <Activity className="h-6 w-6 text-white animate-pulse" />
+                </div>
+                <h2 className="text-xl font-black">الحصص الحية</h2>
+              </div>
+              <p className="text-red-100 text-sm mb-6 font-medium leading-relaxed">
+                رابط المراقبة الحية للمشرفين التربويين (لا يحتاج تسجيل دخول)
+              </p>
+              <div className="bg-black/20 rounded-xl p-3 mb-6 font-mono text-sm text-center select-all border border-white/10">
+                {typeof window !== 'undefined' ? `${window.location.origin}/live` : '.../live'}
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(typeof window !== 'undefined' ? `${window.location.origin}/live` : '');
+                    alert('تم نسخ الرابط بنجاح!');
+                  }}
+                  className="flex-1 bg-white/20 hover:bg-white/30 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm backdrop-blur-md"
+                >
+                  نسخ الرابط
+                </button>
+                <Link 
+                  href="/live"
+                  target="_blank"
+                  className="flex-1 bg-white text-red-600 py-3 rounded-xl font-black hover:bg-red-50 transition-all shadow-lg flex items-center justify-center gap-2 text-sm"
+                >
+                  فتح اللوحة
+                </Link>
+              </div>
+            </div>
+            <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
+          </motion.div>
+
           {/* Announcements Widget */}
           <AnnouncementsWidget role="admin" />
 
@@ -295,10 +335,10 @@ export default function AdminDashboard() {
             <h2 className="text-xl font-bold text-slate-900 mb-6">إجراءات سريعة</h2>
             <div className="grid grid-cols-2 gap-4">
               {[
+                { name: 'متابعة المعلمين', icon: Activity, href: '/admin/teachers-monitor', color: 'text-rose-600', bg: 'bg-rose-50' },
+                { name: 'تقرير المعلمين', icon: FileText, href: '/admin/teachers-report', color: 'text-violet-600', bg: 'bg-violet-50' },
                 { name: 'إضافة طالب', icon: Users, href: '/students', color: 'text-indigo-600', bg: 'bg-indigo-50' },
                 { name: 'إضافة معلم', icon: GraduationCap, href: '/teachers', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                { name: 'رفع ملف', icon: BookOpen, href: '/documents', color: 'text-amber-600', bg: 'bg-amber-50' },
-                { name: 'إرسال تنبيه', icon: Bell, href: '/announcements', color: 'text-sky-600', bg: 'bg-sky-50' },
               ].map((action) => (
                 <Link 
                   key={action.name} 
@@ -308,7 +348,7 @@ export default function AdminDashboard() {
                   <div className={`p-3 rounded-2xl ${action.bg} ${action.color} mb-3 group-hover:scale-110 transition-transform`}>
                     <action.icon className="h-6 w-6" />
                   </div>
-                  <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{action.name}</span>
+                  <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors text-center">{action.name}</span>
                 </Link>
               ))}
             </div>

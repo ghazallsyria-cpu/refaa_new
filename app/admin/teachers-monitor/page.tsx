@@ -55,32 +55,40 @@ export default function TeachersMonitorPage() {
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
-      const { data: teachersData } = await supabase
+      const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select("id, specialization, users(full_name)");
 
+      if (teachersError) {
+        console.error("Error fetching teachers:", teachersError);
+        return;
+      }
       if (!teachersData) return;
 
       const results: TeacherMonitor[] = await Promise.all(
         teachersData.map(async (teacher: any) => {
           // جدول المعلم لليوم
-          const { data: scheduleData } = await supabase
+          const { data: scheduleData, error: scheduleError } = await supabase
             .from("schedules")
-            .select("section_id, day_of_week")
+            .select("section_id, day_of_week, period")
             .eq("teacher_id", teacher.id)
             .eq("day_of_week", dbDay);
+
+          if (scheduleError) console.error("Error fetching schedule:", scheduleError);
 
           const total = scheduleData?.length || 0;
 
           // سجلات الحضور لليوم
-          const { data: attendanceData } = await supabase
+          const { data: attendanceData, error: attendanceError } = await supabase
             .from("attendance")
-            .select("date, section_id")
+            .select("date, section_id, period_number")
             .eq("recorded_by", teacher.id)
             .eq("date", todayStr);
 
+          if (attendanceError) console.error("Error fetching attendance:", attendanceError);
+
           const recorded = scheduleData?.filter((slot: any) =>
-            attendanceData?.some(a => a.section_id === slot.section_id)
+            attendanceData?.some(a => a.section_id === slot.section_id && a.period_number === slot.period)
           ).length || 0;
 
           const missed = total - recorded;
@@ -109,9 +117,13 @@ export default function TeachersMonitorPage() {
             .eq("teacher_id", teacher.id)
             .gte("created_at", weekAgoStr);
 
+          const teacherName = teacher.users 
+            ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
+            : "غير محدد";
+
           return {
             id: teacher.id,
-            name: teacher.users?.full_name || "غير محدد",
+            name: teacherName || "غير محدد",
             specialization: teacher.specialization || "غير محدد",
             recorded, missed, total, percent,
             lastRecorded, status,
@@ -236,6 +248,10 @@ export default function TeachersMonitorPage() {
                 <tr><td colSpan={6} className="py-20 text-center">
                   <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                   <p className="text-slate-400 font-bold text-sm">جاري تحميل بيانات المراقبة...</p>
+                </td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={6} className="py-20 text-center">
+                  <p className="text-slate-400 font-bold text-sm">لا توجد نتائج</p>
                 </td></tr>
               ) : filtered.map((teacher, idx) => (
                 <motion.tr

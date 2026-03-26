@@ -41,10 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUser(session.user);
-          setIsAdminByEmail(session.user.email === 'ghazallsyria@gmail.com');
+          // Check cached role
+          const cachedRole = sessionStorage.getItem('userRole');
+          const cachedName = sessionStorage.getItem('userName');
+          if (cachedRole) setUserRole(cachedRole);
+          if (cachedName) setUserName(cachedName);
         } else {
           setUser(null);
-          setIsAdminByEmail(false);
+          sessionStorage.removeItem('userRole');
+          sessionStorage.removeItem('userName');
           if (!isPublicPage) {
             router.push('/login');
           }
@@ -62,16 +67,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserRole(null);
-        setIsAdminByEmail(false);
+        sessionStorage.removeItem('userRole');
+        sessionStorage.removeItem('userName');
         if (!isPublicPage) {
           router.push('/login');
         }
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         if (session?.user) {
           setUser(session.user);
-          setIsAdminByEmail(session.user.email === 'ghazallsyria@gmail.com');
         }
-        if (isLoginPage) {
+        if (event === 'SIGNED_IN' && isLoginPage) {
           router.push('/');
         }
       }
@@ -83,6 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) {
       setUserRole(null);
+      return;
+    }
+
+    // Skip fetching if we already have the role from cache and it's not a fresh login
+    if (userRole && userName && !isLoginPage) {
       return;
     }
 
@@ -107,26 +117,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const settingsError = settingsRes.error;
 
         if (userRes.data) {
-          setUserName(userRes.data.full_name || user.email?.split('@')[0] || '');
+          const name = userRes.data.full_name || user.email?.split('@')[0] || '';
+          setUserName(name);
           setUserRole(role);
           setMustResetPassword(userRes.data.must_reset_password || false);
-        }
-
-        if (isAdminByEmail && role !== 'admin') {
-          try {
-            await supabase
-              .from('users')
-              .upsert({ 
-                id: user.id, 
-                email: user.email, 
-                full_name: 'المدير العام',
-                role: 'admin' 
-              });
-            role = 'admin';
-            setUserRole('admin');
-          } catch (err) {
-            console.error('Error auto-updating admin role:', err);
-          }
+          
+          // Cache the data
+          sessionStorage.setItem('userRole', role || '');
+          sessionStorage.setItem('userName', name);
         }
 
         if (!isPublicPage) {
@@ -142,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 isOpen = false;
               }
 
-              if (!isOpen && role !== 'admin' && role !== 'management' && !isAdminByEmail) {
+              if (!isOpen && role !== 'admin' && role !== 'management') {
                 setPlatformClosed(true);
                 setCloseMessage(settings.message || 'المنصة مغلقة حاليا للصيانة');
               }
@@ -159,12 +157,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchUserData();
-  }, [user, isPublicPage, isAdminByEmail]);
+  }, [user, isPublicPage, isLoginPage]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setUserRole(null);
+    sessionStorage.removeItem('userRole');
+    sessionStorage.removeItem('userName');
     router.push('/login');
   };
 

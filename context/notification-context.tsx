@@ -54,7 +54,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    let channel: any = null;
+    let intervalId: NodeJS.Timeout | null = null;
     let currentUserId: string | null = null;
 
     const setupNotifications = async (user: any) => {
@@ -66,32 +66,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       
       currentUserId = newUserId;
 
-      if (channel) {
-        supabase.removeChannel(channel);
-        channel = null;
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
       }
 
       if (newUserId) {
         setUserId(newUserId);
         fetchNotifications(newUserId);
 
-        // Real-time subscription
-        channel = supabase
-          .channel(`notifications:${newUserId}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'notifications',
-              filter: `user_id=eq.${newUserId}`,
-            },
-            (payload) => {
-              const newNotification = payload.new as Notification;
-              setNotifications((prev) => [newNotification, ...prev]);
-            }
-          )
-          .subscribe();
+        // Polling every 30 seconds instead of Realtime
+        intervalId = setInterval(() => {
+          fetchNotifications(newUserId);
+        }, 30000);
       } else {
         setUserId(null);
         setNotifications([]);
@@ -109,8 +96,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     return () => {
       subscription.unsubscribe();
-      if (channel) {
-        supabase.removeChannel(channel);
+      if (intervalId) {
+        clearInterval(intervalId);
       }
     };
   }, [fetchNotifications]);

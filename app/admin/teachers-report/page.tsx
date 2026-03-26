@@ -54,10 +54,14 @@ export default function TeachersReportPage() {
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
-      const { data: teachersData } = await supabase
+      const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select("id, specialization, users(full_name)");
 
+      if (teachersError) {
+        console.error("Error fetching teachers:", teachersError);
+        return;
+      }
       if (!teachersData) return;
 
       const results: TeacherReport[] = await Promise.all(
@@ -67,23 +71,32 @@ export default function TeachersReportPage() {
             ? [dbDay]
             : [1, 2, 3, 4, 5];
 
-          const { data: scheduleData } = await supabase
+          const { data: scheduleData, error: scheduleError } = await supabase
             .from("schedules")
-            .select("section_id, day_of_week")
+            .select("section_id, day_of_week, period")
             .eq("teacher_id", teacher.id)
             .in("day_of_week", daysFilter);
+
+          if (scheduleError) console.error("Error fetching schedule:", scheduleError);
 
           const total = scheduleData?.length || 0;
 
           // سجلات الحضور
-          const { data: attendanceData } = await supabase
+          const { data: attendanceData, error: attendanceError } = await supabase
             .from("attendance")
-            .select("date, section_id")
+            .select("date, section_id, period_number")
             .eq("recorded_by", teacher.id)
             .gte("date", fromDate);
 
+          if (attendanceError) console.error("Error fetching attendance:", attendanceError);
+
           const recorded = scheduleData?.filter((slot: any) =>
-            attendanceData?.some(a => a.section_id === slot.section_id)
+            attendanceData?.some(a => {
+              const aDate = new Date(a.date);
+              const aDay = aDate.getDay();
+              const aDbDay = aDay === 0 ? 1 : aDay === 1 ? 2 : aDay === 2 ? 3 : aDay === 3 ? 4 : aDay === 4 ? 5 : 0;
+              return a.section_id === slot.section_id && a.period_number === slot.period && aDbDay === slot.day_of_week;
+            })
           ).length || 0;
 
           const missed = total - recorded;
@@ -98,9 +111,13 @@ export default function TeachersReportPage() {
           else if (percent < 85) status = "تحذير";
           else if (percent < 95) status = "جيد";
 
+          const teacherName = teacher.users 
+            ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
+            : "غير محدد";
+
           return {
             id: teacher.id,
-            name: teacher.users?.full_name || "غير محدد",
+            name: teacherName || "غير محدد",
             specialization: teacher.specialization || "غير محدد",
             recorded, missed, total, percent,
             lastRecorded, status,
@@ -254,6 +271,10 @@ export default function TeachersReportPage() {
                   <tr><td colSpan={7} className="py-20 text-center">
                     <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
                     <p className="text-slate-400 font-bold text-sm">جاري تجميع البيانات...</p>
+                  </td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-20 text-center">
+                    <p className="text-slate-400 font-bold text-sm">لا توجد نتائج</p>
                   </td></tr>
                 ) : filtered.map((teacher, idx) => (
                   <motion.tr
