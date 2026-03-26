@@ -9,6 +9,7 @@ type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 export default function AttendancePage() {
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSection, setSelectedSection] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [period, setPeriod] = useState<number>(1);
   const [students, setStudents] = useState<any[]>([]);
@@ -19,6 +20,7 @@ export default function AttendancePage() {
   const [message, setMessage] = useState({ text: '', type: '' });
 
   const fetchStudentsAndAttendance = useCallback(async () => {
+    if (!selectedSection) return;
     setLoading(true);
     setMessage({ text: '', type: '' });
 
@@ -91,12 +93,20 @@ export default function AttendancePage() {
       if (studentsError) throw studentsError;
       setStudents(studentsData || []);
 
-      // Fetch existing attendance for this date and section
-      const { data: attendanceData, error: attendanceError } = await supabase
+      // Fetch existing attendance for this date, section, and subject
+      const query = supabase
         .from('attendance')
-        .select('student_id, status, date, period_number')
+        .select('student_id, status, date, period_number, subject_id')
         .eq('section_id', selectedSection)
         .eq('date', date);
+      
+      if (selectedSubject) {
+        query.eq('subject_id', selectedSubject);
+      } else {
+        query.is('subject_id', null);
+      }
+
+      const { data: attendanceData, error: attendanceError } = await query;
 
       if (attendanceError) throw attendanceError;
 
@@ -148,7 +158,7 @@ export default function AttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSection, date]);
+  }, [selectedSection, date, selectedSubject]);
 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [studentStats, setStudentStats] = useState<any>(null);
@@ -198,14 +208,18 @@ export default function AttendancePage() {
       const isAdmin = role === 'admin' || (typeof role === 'string' && role.includes('admin'));
 
       if (isTeacher) {
-        // المعلم يرى فصوله فقط
+        // المعلم يرى فصوله ومواده فقط
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
-          .select('section_id, section:sections(id, name, classes(name))')
+          .select('section_id, subject_id, section:sections(id, name, classes(name)), subject:subjects(id, name)')
           .eq('teacher_id', user.id);
         
-        sectionsData = (teacherSections?.map(ts => ts.section) || []) as any[];
-        console.log('Teacher sections:', sectionsData);
+        sectionsData = (teacherSections?.map(ts => ({
+          ...ts.section,
+          subject_id: ts.subject_id,
+          subject_name: (ts as any).subject?.name
+        })) || []) as any[];
+        console.log('Teacher sections with subjects:', sectionsData);
       } else if (isAdmin) {
         // المدير يرى كل الفصول
         const { data: allSections } = await supabase
@@ -222,6 +236,9 @@ export default function AttendancePage() {
       setSections(sectionsData);
       if (sectionsData.length > 0) {
         setSelectedSection(sectionsData[0].id);
+        if (sectionsData[0].subject_id) {
+          setSelectedSubject(sectionsData[0].subject_id);
+        }
       }
     } catch (error) {
       console.error('Error fetching sections:', error);
@@ -236,7 +253,7 @@ export default function AttendancePage() {
     if (selectedSection && date) {
       fetchStudentsAndAttendance();
     }
-  }, [selectedSection, date, fetchStudentsAndAttendance]);
+  }, [selectedSection, date, selectedSubject, fetchStudentsAndAttendance]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -251,6 +268,7 @@ export default function AttendancePage() {
       const records = Object.entries(attendance).map(([studentId, status]) => ({
         student_id: studentId,
         section_id: selectedSection,
+        subject_id: selectedSubject || null,
         date: date,
         period_number: period,
         status: status,
@@ -260,7 +278,7 @@ export default function AttendancePage() {
       // Upsert attendance records
       const { error } = await supabase
         .from('attendance')
-        .upsert(records, { onConflict: 'student_id,date,period_number' });
+        .upsert(records, { onConflict: 'student_id,date,period_number,subject_id' });
 
       if (error) throw error;
       
@@ -297,7 +315,7 @@ export default function AttendancePage() {
       setTimeout(() => setMessage({ text: '', type: '' }), 3000);
     } catch (error: any) {
       console.error('Error saving attendance:', error);
-      setMessage({ text: 'حدث خطأ أثناء الحفظ', type: 'error' });
+      setMessage({ text: `حدث خطأ أثناء الحفظ: ${error.message || 'خطأ غير معروف'}`, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -438,14 +456,20 @@ export default function AttendancePage() {
       <div className="glass-card p-8 rounded-4xl shadow-2xl shadow-slate-200/50 border border-white/60">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-2">
-            <label className="text-sm font-black text-slate-700 mr-1">الفصل / الشعبة</label>
+            <label className="text-sm font-black text-slate-700 mr-1">الفصل / المادة</label>
             <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
+              value={`${selectedSection}${selectedSubject ? `-${selectedSubject}` : ''}`}
+              onChange={(e) => {
+                const parts = e.target.value.split('-');
+                setSelectedSection(parts[0]);
+                setSelectedSubject(parts[1] || '');
+              }}
               className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
             >
-              {sections.map(s => (
-                <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>
+              {sections.map((s, idx) => (
+                <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>
+                  {s.classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
+                </option>
               ))}
             </select>
           </div>

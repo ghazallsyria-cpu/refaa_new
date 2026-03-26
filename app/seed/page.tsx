@@ -165,23 +165,38 @@ CREATE TABLE IF NOT EXISTS public.attendance (
     semester_id UUID REFERENCES public.semesters(id) ON DELETE SET NULL,
     date DATE NOT NULL,
     period_number INTEGER NOT NULL CHECK (period_number BETWEEN 1 AND 5),
+    subject_id UUID REFERENCES public.subjects(id) ON DELETE SET NULL,
     status attendance_status NOT NULL,
     notes TEXT,
     recorded_by UUID REFERENCES public.users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    UNIQUE(student_id, date, period_number)
+    UNIQUE(student_id, date, period_number, subject_id)
 );
 
 -- Attendance Daily Summary View
 CREATE OR REPLACE VIEW public.attendance_daily_summary AS
-WITH period_counts AS (
+WITH period_status AS (
     SELECT 
         student_id,
         date,
-        COUNT(*) FILTER (WHERE status = 'absent') as absent_periods,
-        COUNT(*) as recorded_periods
+        period_number,
+        MAX(CASE 
+            WHEN status = 'absent' THEN 3
+            WHEN status = 'late' THEN 2
+            WHEN status = 'excused' THEN 1
+            ELSE 0 
+        END) as max_severity
     FROM public.attendance
+    GROUP BY student_id, date, period_number
+),
+daily_counts AS (
+    SELECT 
+        student_id,
+        date,
+        COUNT(*) FILTER (WHERE max_severity = 3) as absent_periods,
+        COUNT(*) as recorded_periods
+    FROM period_status
     GROUP BY student_id, date
 )
 SELECT 
@@ -195,7 +210,7 @@ SELECT
         WHEN absent_periods > 0 THEN 'partial_absent'
         ELSE 'present'
     END as daily_status
-FROM period_counts;
+FROM daily_counts;
 
 -- Enable RLS on the view (if needed, but views usually inherit or need explicit grants)
 -- Note: Views in Supabase/Postgres don't have RLS themselves, but they respect RLS of underlying tables if defined with security_invoker.
@@ -533,17 +548,33 @@ CREATE POLICY "Anyone can view teacher_sections" ON public.teacher_sections FOR 
 CREATE POLICY "Admin and management can manage teacher_sections" ON public.teacher_sections FOR ALL USING (public.get_user_role() IN ('admin', 'management'));
 
 -- Attendance Policies
-CREATE POLICY "Teachers manage own sections attendance" ON public.attendance FOR ALL USING (
+CREATE POLICY "Teachers manage own subjects attendance" ON public.attendance FOR ALL USING (
   public.get_user_role() IN ('admin','management')
-  OR section_id IN (
-    SELECT section_id FROM public.teacher_sections
-    WHERE teacher_id = auth.uid()
+  OR (
+    section_id IN (
+      SELECT section_id FROM public.teacher_sections
+      WHERE teacher_id = auth.uid()
+    )
+    AND (
+      subject_id IS NULL OR subject_id IN (
+        SELECT subject_id FROM public.teacher_sections
+        WHERE teacher_id = auth.uid() AND section_id = public.attendance.section_id
+      )
+    )
   )
 ) WITH CHECK (
   public.get_user_role() IN ('admin','management')
-  OR section_id IN (
-    SELECT section_id FROM public.teacher_sections
-    WHERE teacher_id = auth.uid()
+  OR (
+    section_id IN (
+      SELECT section_id FROM public.teacher_sections
+      WHERE teacher_id = auth.uid()
+    )
+    AND (
+      subject_id IS NULL OR subject_id IN (
+        SELECT subject_id FROM public.teacher_sections
+        WHERE teacher_id = auth.uid() AND section_id = public.attendance.section_id
+      )
+    )
   )
 );
 CREATE POLICY "Parent views child attendance" ON public.attendance FOR SELECT USING (
