@@ -4,9 +4,9 @@
 -- 1. إصلاح مشكلة UNIQUE في جدول attendance
 -- إزالة القيد القديم (student_id, date)
 ALTER TABLE public.attendance DROP CONSTRAINT IF EXISTS attendance_student_id_date_key;
--- إضافة القيد الجديد (student_id, date, section_id)
--- ملاحظة: إذا كان هناك period يجب إضافته، لكن حالياً نستخدم section_id للسماح بحضور مواد مختلفة في نفس اليوم
-ALTER TABLE public.attendance ADD CONSTRAINT attendance_student_date_section_key UNIQUE (student_id, date, section_id);
+ALTER TABLE public.attendance DROP CONSTRAINT IF EXISTS attendance_student_date_section_key;
+-- إضافة القيد الجديد (student_id, date, period_number)
+ALTER TABLE public.attendance ADD CONSTRAINT attendance_student_id_date_period_number_key UNIQUE (student_id, date, period_number);
 
 -- 2. إصلاح رؤية الاختبارات للطلاب (فقط شعبتهم وفي الوقت المحدد)
 -- أولاً، نتأكد من وجود أعمدة start_at و end_at و status في جدول exams

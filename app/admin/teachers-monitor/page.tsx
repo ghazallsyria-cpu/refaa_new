@@ -39,107 +39,119 @@ export default function TeachersMonitorPage() {
   const [search, setSearch] = useState("");
   const [sendingWarning, setSendingWarning] = useState<string | null>(null);
 
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
-  const todayName = DAY_MAP[now.getDay()];
-  const dateLabel = `${now.getDate()} ${MONTH_MAP[now.getMonth()]} ${now.getFullYear()}`;
+  const getSchoolTime = () => {
+    const d = new Date();
+    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+    return new Date(utc + (3 * 3600000));
+  };
+
+  const schoolTime = getSchoolTime();
+  const todayStr = schoolTime.toISOString().split("T")[0];
+  const todayName = DAY_MAP[schoolTime.getDay()];
+  const dateLabel = `${schoolTime.getDate()} ${MONTH_MAP[schoolTime.getMonth()]} ${schoolTime.getFullYear()}`;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const weekAgo = new Date(now);
+      const now = new Date();
+      const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const schoolTime = new Date(utcTime + (3 * 3600000)); // UTC+3
+      const todayStr = schoolTime.toISOString().split("T")[0];
+      const weekAgo = new Date(schoolTime);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
-      const jsDay = now.getDay();
+      const jsDay = schoolTime.getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
+      // 1. Fetch all teachers
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select("id, specialization, users(full_name)");
 
-      if (teachersError) {
-        console.error("Error fetching teachers:", teachersError);
-        return;
-      }
+      if (teachersError) throw teachersError;
       if (!teachersData) return;
 
-      const results: TeacherMonitor[] = await Promise.all(
-        teachersData.map(async (teacher: any) => {
-          // جدول المعلم لليوم
-          const { data: scheduleData, error: scheduleError } = await supabase
-            .from("schedules")
-            .select("section_id, day_of_week, period")
-            .eq("teacher_id", teacher.id)
-            .eq("day_of_week", dbDay);
+      // 2. Fetch all schedules for today
+      const { data: allSchedules, error: schedulesError } = await supabase
+        .from("schedules")
+        .select("teacher_id, section_id, period")
+        .eq("day_of_week", dbDay);
 
-          if (scheduleError) console.error("Error fetching schedule:", scheduleError);
+      if (schedulesError) throw schedulesError;
 
-          const total = scheduleData?.length || 0;
+      // 3. Fetch all attendance for today
+      const { data: allAttendance, error: attendanceError } = await supabase
+        .from("attendance")
+        .select("recorded_by, section_id, period_number, date")
+        .eq("date", todayStr);
 
-          // سجلات الحضور لليوم
-          const { data: attendanceData, error: attendanceError } = await supabase
-            .from("attendance")
-            .select("date, section_id, period_number")
-            .eq("recorded_by", teacher.id)
-            .eq("date", todayStr);
+      if (attendanceError) throw attendanceError;
 
-          if (attendanceError) console.error("Error fetching attendance:", attendanceError);
+      // 4. Fetch assignments count for the week
+      const { data: allAssignments, error: assignmentsError } = await supabase
+        .from("assignments")
+        .select("teacher_id")
+        .gte("created_at", weekAgoStr);
 
-          const recorded = scheduleData?.filter((slot: any) =>
-            attendanceData?.some(a => a.section_id === slot.section_id && a.period_number === slot.period)
-          ).length || 0;
+      if (assignmentsError) throw assignmentsError;
 
-          const missed = total - recorded;
-          const percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
+      // 5. Fetch exams count for the week
+      const { data: allExams, error: examsError } = await supabase
+        .from("exams")
+        .select("teacher_id")
+        .gte("created_at", weekAgoStr);
 
-          const lastRecorded = attendanceData && attendanceData.length > 0
-            ? [...attendanceData].sort((a, b) => b.date.localeCompare(a.date))[0].date
-            : null;
+      if (examsError) throw examsError;
 
-          let status: TeacherMonitor["status"] = "ممتاز";
-          if (percent < 60 || missed > 0) status = "حرج";
-          else if (percent < 85) status = "تحذير";
-          else if (percent < 95) status = "جيد";
+      // 6. Process data in memory
+      const results: TeacherMonitor[] = teachersData.map((teacher: any) => {
+        const teacherSchedules = allSchedules?.filter(s => s.teacher_id === teacher.id) || [];
+        const teacherAttendance = allAttendance?.filter(a => a.recorded_by === teacher.id) || [];
+        
+        const total = teacherSchedules.length;
+        const recorded = teacherSchedules.filter(slot =>
+          teacherAttendance.some(a => a.section_id === slot.section_id && a.period_number === slot.period)
+        ).length;
 
-          // الواجبات هذا الأسبوع
-          const { count: assignmentsCount } = await supabase
-            .from("assignments")
-            .select("id", { count: "exact", head: true })
-            .eq("teacher_id", teacher.id)
-            .gte("created_at", weekAgoStr);
+        const missed = total - recorded;
+        const percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
 
-          // الاختبارات هذا الأسبوع
-          const { count: examsCount } = await supabase
-            .from("exams")
-            .select("id", { count: "exact", head: true })
-            .eq("teacher_id", teacher.id)
-            .gte("created_at", weekAgoStr);
+        const lastRecorded = teacherAttendance.length > 0
+          ? [...teacherAttendance].sort((a, b) => b.date.localeCompare(a.date))[0].date
+          : null;
 
-          const teacherName = teacher.users 
-            ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
-            : "غير محدد";
+        let status: TeacherMonitor["status"] = "ممتاز";
+        if (percent < 60 || missed > 0) status = "حرج";
+        else if (percent < 85) status = "تحذير";
+        else if (percent < 95) status = "جيد";
 
-          return {
-            id: teacher.id,
-            name: teacherName || "غير محدد",
-            specialization: teacher.specialization || "غير محدد",
-            recorded, missed, total, percent,
-            lastRecorded, status,
-            assignmentsCount: assignmentsCount || 0,
-            examsCount: examsCount || 0,
-          };
-        })
-      );
+        const assignmentsCount = allAssignments?.filter(a => a.teacher_id === teacher.id).length || 0;
+        const examsCount = allExams?.filter(e => e.teacher_id === teacher.id).length || 0;
+
+        const teacherName = teacher.users 
+          ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
+          : "غير محدد";
+
+        return {
+          id: teacher.id,
+          name: teacherName || "غير محدد",
+          specialization: teacher.specialization || "غير محدد",
+          recorded, missed, total, percent,
+          lastRecorded, status,
+          assignmentsCount,
+          examsCount,
+        };
+      });
 
       setTeachers(results);
     } catch (e) {
-      console.error(e);
+      console.error("Monitor Fetch Error:", e);
     } finally {
       setLoading(false);
     }
-  }, [todayStr, now]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

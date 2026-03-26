@@ -260,7 +260,7 @@ export default function AttendancePage() {
       // Upsert attendance records
       const { error } = await supabase
         .from('attendance')
-        .upsert(records, { onConflict: 'student_id,date,section_id' });
+        .upsert(records, { onConflict: 'student_id,date,period_number' });
 
       if (error) throw error;
       

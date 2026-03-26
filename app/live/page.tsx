@@ -56,7 +56,10 @@ export default function LiveMonitor() {
     fetchLiveData();
     const interval = setInterval(() => {
       fetchLiveData();
-      setCurrentTime(new Date());
+      const now = new Date();
+      const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const schoolTime = new Date(utcTime + (3 * 3600000)); // UTC+3
+      setCurrentTime(schoolTime);
     }, 60000);
     return () => clearInterval(interval);
   }, [fetchLiveData]);

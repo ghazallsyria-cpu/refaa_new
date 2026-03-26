@@ -45,6 +45,8 @@ export default function TeachersReportPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0];
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
@@ -132,7 +134,7 @@ export default function TeachersReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [reportType, todayStr, now]);
+  }, [reportType]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

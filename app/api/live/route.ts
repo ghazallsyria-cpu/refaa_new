@@ -10,11 +10,14 @@ export async function GET() {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // Get current day and time
+    // Get current day and time in UTC+3 (School Timezone)
     const now = new Date();
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const schoolTime = new Date(utcTime + (3 * 3600000)); // UTC+3
+    
     // JS getDay() 0=Sun, 1=Mon, ..., 6=Sat
     // DB day_of_week 1=Sun, 2=Mon, ..., 5=Thu
-    const jsDay = now.getDay();
+    const jsDay = schoolTime.getDay();
     const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                   jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
@@ -27,8 +30,8 @@ export async function GET() {
     }
 
     // Fixed schedule logic
-    const currentTimeStr = now.getHours().toString().padStart(2, '0') + ':' + 
-                          now.getMinutes().toString().padStart(2, '0');
+    const currentTimeStr = schoolTime.getHours().toString().padStart(2, '0') + ':' + 
+                          schoolTime.getMinutes().toString().padStart(2, '0');
 
     const FIXED_SCHEDULE = [
       { period: 1, start: '09:00', end: '09:35', type: 'class' },
