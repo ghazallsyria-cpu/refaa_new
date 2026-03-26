@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic } from 'next/font/google';
 import "./globals.css";
-import { AppLayout } from "@/components/app-layout";
+import { QueryProvider } from "@/lib/query-provider";
 import { NotificationProvider } from "@/context/notification-context";
 import { AuthProvider } from "@/context/auth-context";
+import { AppLayout } from "@/components/app-layout";
 
 const ibmPlexArabic = IBM_Plex_Sans_Arabic({
   subsets: ['arabic', 'latin'],
@@ -26,9 +27,11 @@ export default function RootLayout({
       <body className="antialiased bg-slate-50 text-slate-900 font-sans" suppressHydrationWarning>
         <AuthProvider>
           <NotificationProvider>
-            <AppLayout>
-              {children}
-            </AppLayout>
+            <QueryProvider>
+              <AppLayout>
+                {children}
+              </AppLayout>
+            </QueryProvider>
           </NotificationProvider>
         </AuthProvider>
       </body>

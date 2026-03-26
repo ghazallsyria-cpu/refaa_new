@@ -7,13 +7,14 @@ import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder, { Question } from '@/components/assignment-builder';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
-import { useEducationalContent } from '@/hooks/use-educational-content';
+import { useAssignments } from '@/hooks/use-assignments';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 
 export default function AssignmentsPage() {
   const { user, userRole, isChecking: authLoading } = useAuth();
-  const { content: assignments, loading: contentLoading, error: contentError, refresh } = useEducationalContent('assignment');
+  const { data, isLoading: contentLoading, error: contentError, refetch: refresh } = useAssignments();
+  const assignments = data?.data || [];
 
   const [subjects, setSubjects] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
