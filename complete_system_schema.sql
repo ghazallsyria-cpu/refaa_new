@@ -267,11 +267,16 @@ CREATE TABLE public.messages (
 -- Function to get user role
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS text
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
-SET ROLE postgres
 AS $$
-  SELECT role::text FROM public.users WHERE id = auth.uid();
+DECLARE
+  v_role text;
+BEGIN
+  SET LOCAL row_level_security = off;
+  SELECT role::text INTO v_role FROM public.users WHERE id = auth.uid();
+  RETURN v_role;
+END;
 $$;
 
 -- Function to update updated_at column

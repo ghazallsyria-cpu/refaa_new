@@ -114,9 +114,7 @@ export default function AssignmentsPage() {
         }] : [];
       }
 
-      setSubjects(subjectsData);
-      setSections(sectionsData);
-      setTeachers(teachersData);
+      // Data is already handled by useSchoolFormData hook
     } catch (error) {
       console.error('Error fetching form data:', error);
     }

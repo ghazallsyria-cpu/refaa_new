@@ -4,10 +4,16 @@
 -- 1. Create the function
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS text
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
-  SELECT role::text FROM public.users WHERE id = auth.uid();
+DECLARE
+  v_role text;
+BEGIN
+  SET LOCAL row_level_security = off;
+  SELECT role::text INTO v_role FROM public.users WHERE id = auth.uid();
+  RETURN v_role;
+END;
 $$;
 
 -- 2. Grant access to the function
