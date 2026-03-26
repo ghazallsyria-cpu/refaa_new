@@ -100,7 +100,7 @@ export function useEducationalContent(contentType?: EducationalContentType) {
             const [attemptsRes, questionsRes] = await Promise.all([
               supabase
                 .from('exam_attempts')
-                .select('score, status') // FIX: needed for status filter
+                .select('score, status')
                 .eq('exam_id', e.id),
 
               supabase
@@ -123,8 +123,7 @@ export function useEducationalContent(contentType?: EducationalContentType) {
               ...e,
               submission_count: attempts.length,
               graded_count: attempts.filter(
-                (a: any) =>
-                  a.status === 'graded' || a.status === 'completed'
+                (a: any) => a.status === 'graded' || a.status === 'completed'
               ).length,
               avg_score: avgScore,
               question_count: questionsRes.count || 0
@@ -183,7 +182,7 @@ export function useEducationalContent(contentType?: EducationalContentType) {
 
               supabase
                 .from('exam_attempts')
-                .select('exam_id, score, status') // FIXED
+                .select('exam_id, score, status')
                 .eq('student_id', user.id)
             ]);
 
@@ -273,7 +272,7 @@ export function useEducationalContent(contentType?: EducationalContentType) {
       const combined: EducationalContent[] = [
         ...examsData.map((e: any) => ({
           id: e.id,
-          type: 'exam',
+          type: 'exam' as EducationalContentType,
           title: e.title,
           description: e.description,
           subject_id: e.subject_id,
@@ -298,7 +297,7 @@ export function useEducationalContent(contentType?: EducationalContentType) {
 
         ...assignmentsData.map((a: any) => ({
           id: a.id,
-          type: 'assignment',
+          type: 'assignment' as EducationalContentType,
           title: a.title,
           description: a.description,
           subject_id: a.subject_id,
