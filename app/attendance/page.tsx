@@ -19,9 +19,42 @@ export default function AttendancePage() {
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
   const [stats, setStats] = useState<any>(null);
+  const [daySchedule, setDaySchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [studentStats, setStudentStats] = useState<any>(null);
+  const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
+
+  const fetchDaySchedule = useCallback(async (targetDate: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const jsDay = new Date(targetDate).getDay();
+      const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
+                    jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+
+      const { data } = await supabase
+        .from('schedules')
+        .select('period, section:sections(name, classes(name)), subject:subjects(name)')
+        .eq('teacher_id', user.id)
+        .eq('day_of_week', dbDay)
+        .order('period');
+      
+      setDaySchedule(data || []);
+    } catch (error) {
+      console.error('Error fetching day schedule:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (date && userRole === 'teacher') {
+      fetchDaySchedule(date);
+    }
+  }, [date, userRole, fetchDaySchedule]);
 
   const fetchStudentsAndAttendance = useCallback(async () => {
     if (!selectedSection) return;
@@ -110,11 +143,7 @@ export default function AttendancePage() {
     }
   }, [selectedSection, date, selectedSubject, period]);
 
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [studentStats, setStudentStats] = useState<any>(null);
-  const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
-
-  const fetchSections = useCallback(async () => {
+  const fetchSections = useCallback(async (targetDate: string, targetPeriod: number) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -158,18 +187,24 @@ export default function AttendancePage() {
       const isAdmin = role === 'admin' || (typeof role === 'string' && role.includes('admin'));
 
       if (isTeacher) {
-        // المعلم يرى فصوله ومواده فقط
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
+        // المعلم يرى فصوله ومواده بناءً على الجدول الدراسي لليوم والحصة المحددة
+        const jsDay = new Date(targetDate).getDay();
+        const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
+                      jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+
+        const { data: scheduledClasses } = await supabase
+          .from('schedules')
           .select('section_id, subject_id, section:sections(id, name, classes(name)), subject:subjects(id, name)')
-          .eq('teacher_id', user.id);
+          .eq('teacher_id', user.id)
+          .eq('day_of_week', dbDay)
+          .eq('period', targetPeriod);
         
-        sectionsData = (teacherSections?.map(ts => ({
-          ...ts.section,
-          subject_id: ts.subject_id,
-          subject_name: (ts as any).subject?.name
+        sectionsData = (scheduledClasses?.map(sc => ({
+          ...sc.section,
+          subject_id: sc.subject_id,
+          subject_name: (sc as any).subject?.name
         })) || []) as any[];
-        console.log('Teacher sections with subjects:', sectionsData);
+        console.log('Teacher scheduled classes for today/period:', sectionsData);
       } else if (isAdmin) {
         // المدير يرى كل الفصول
         const { data: allSections } = await supabase
@@ -189,6 +224,10 @@ export default function AttendancePage() {
         if (sectionsData[0].subject_id) {
           setSelectedSubject(sectionsData[0].subject_id);
         }
+      } else {
+        setSelectedSection('');
+        setSelectedSubject('');
+        setStudents([]);
       }
     } catch (error) {
       console.error('Error fetching sections:', error);
@@ -196,8 +235,10 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    fetchSections();
-  }, [fetchSections]);
+    if (date && period) {
+      fetchSections(date, period);
+    }
+  }, [date, period, fetchSections]);
 
   useEffect(() => {
     if (selectedSection && date) {
@@ -450,21 +491,27 @@ export default function AttendancePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-2">
             <label className="text-sm font-black text-slate-700 mr-1">الفصل / المادة</label>
-            <select
-              value={`${selectedSection}${selectedSubject ? `-${selectedSubject}` : ''}`}
-              onChange={(e) => {
-                const parts = e.target.value.split('-');
-                setSelectedSection(parts[0]);
-                setSelectedSubject(parts[1] || '');
-              }}
-              className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
-            >
-              {sections.map((s, idx) => (
-                <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>
-                  {s.classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
-                </option>
-              ))}
-            </select>
+            {sections.length > 0 ? (
+              <select
+                value={`${selectedSection}${selectedSubject ? `-${selectedSubject}` : ''}`}
+                onChange={(e) => {
+                  const parts = e.target.value.split('-');
+                  setSelectedSection(parts[0]);
+                  setSelectedSubject(parts[1] || '');
+                }}
+                className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
+              >
+                {sections.map((s, idx) => (
+                  <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>
+                    {s.classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="block w-full rounded-2xl border-0 py-4 px-4 text-red-600 bg-red-50 ring-1 ring-inset ring-red-100 sm:text-sm font-bold">
+                لا توجد حصص مجدولة لهذا الوقت
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-black text-slate-700 mr-1">الحصة</label>
@@ -473,9 +520,15 @@ export default function AttendancePage() {
               onChange={(e) => setPeriod(parseInt(e.target.value))}
               className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
             >
-              {[1, 2, 3, 4, 5].map(p => (
-                <option key={p} value={p}>الحصة {p}</option>
-              ))}
+              {[1, 2, 3, 4, 5, 6, 7].map(p => {
+                const scheduled = daySchedule.find(s => s.period === p);
+                const isTeacher = userRole === 'teacher' || (typeof userRole === 'string' && userRole.includes('teacher'));
+                return (
+                  <option key={p} value={p}>
+                    الحصة {p} {isTeacher ? (scheduled ? `(${scheduled.section.classes.name} - ${scheduled.section.name})` : '(فارغة)') : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div className="space-y-2">
