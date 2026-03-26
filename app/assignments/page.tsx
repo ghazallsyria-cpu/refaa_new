@@ -108,7 +108,10 @@ export default function AssignmentsPage() {
         sectionsData = uniqueSections;
 
         const { data: currentTeacher } = await supabase.from('teachers').select('id, users(full_name)').eq('id', user.id).single();
-        teachersData = currentTeacher ? [currentTeacher] : [];
+        teachersData = currentTeacher ? [{
+          id: currentTeacher.id,
+          users: Array.isArray(currentTeacher.users) ? currentTeacher.users[0] : currentTeacher.users
+        }] : [];
       }
 
       setSubjects(subjectsData);
