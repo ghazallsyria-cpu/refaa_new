@@ -24,7 +24,10 @@ export function useAssignmentsFormData() {
             ...s,
             classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
           })),
-          teachers: teachersRes.data || []
+          teachers: (teachersRes.data || []).map((t: any) => ({
+            id: t.id,
+            users: Array.isArray(t.users) ? t.users[0] : t.users
+          }))
         };
       } else if (userRole === 'teacher') {
         // Teacher specific logic...
