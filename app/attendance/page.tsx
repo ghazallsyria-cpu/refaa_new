@@ -24,66 +24,10 @@ export default function AttendancePage() {
     setLoading(true);
     setMessage({ text: '', type: '' });
 
-    const calculateStats = (attendanceData: any[], studentsData: any[]) => {
-      const now = new Date();
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const stats = {
-        daily: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-        weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-        monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-        students: {} as Record<string, any>
-      };
-
-      attendanceData.forEach(a => {
-        const aDate = new Date(a.date);
-        const status = a.status as AttendanceStatus;
-        const isPresent = status === 'present' || status === 'late';
-
-        // Daily (for selected date)
-        if (a.date === date) {
-          stats.daily[status]++;
-          stats.daily.total++;
-        }
-
-        // Weekly
-        if (aDate >= sevenDaysAgo) {
-          stats.weekly[status]++;
-          stats.weekly.total++;
-        }
-
-        // Monthly
-        if (aDate >= thirtyDaysAgo) {
-          stats.monthly[status]++;
-          stats.monthly.total++;
-        }
-
-        // Student stats
-        if (!stats.students[a.student_id]) {
-          stats.students[a.student_id] = { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
-        }
-        stats.students[a.student_id][status]++;
-        stats.students[a.student_id].total++;
-      });
-
-      // Calculate rates
-      if (stats.daily.total > 0) {
-        stats.daily.rate = Math.round(((stats.daily.present + stats.daily.late) / stats.daily.total) * 100);
-      }
-      if (stats.weekly.total > 0) {
-        stats.weekly.rate = Math.round(((stats.weekly.present + stats.weekly.late) / stats.weekly.total) * 100);
-      }
-      if (stats.monthly.total > 0) {
-        stats.monthly.rate = Math.round(((stats.monthly.present + stats.monthly.late) / stats.monthly.total) * 100);
-      }
-
-      setStats(stats);
-    };
-
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       // Fetch students for the section
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
@@ -93,36 +37,36 @@ export default function AttendancePage() {
       if (studentsError) throw studentsError;
       setStudents(studentsData || []);
 
-      // Fetch existing attendance for this date, section, and subject
-      const query = supabase
-        .from('attendance')
-        .select('student_id, status, date, period_number, subject_id')
+      // Fetch existing session
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('attendance_sessions')
+        .select('id, status')
+        .eq('teacher_id', user.id)
         .eq('section_id', selectedSection)
-        .eq('date', date);
-      
-      if (selectedSubject) {
-        query.eq('subject_id', selectedSubject);
-      } else {
-        query.is('subject_id', null);
-      }
+        .eq('subject_id', selectedSubject)
+        .eq('date', date)
+        .eq('period_number', period)
+        .maybeSingle();
 
-      const { data: attendanceData, error: attendanceError } = await query;
+      if (sessionError) throw sessionError;
 
-      if (attendanceError) throw attendanceError;
-
-      // Initialize attendance state for the selected date and period
       const newAttendance: Record<string, AttendanceStatus> = {};
-      
       // Default all to present
       studentsData?.forEach(s => {
         newAttendance[s.id] = 'present';
       });
 
-      // Override with saved data for the selected date and period
-      if (attendanceData && attendanceData.length > 0) {
-        setPeriod(attendanceData[0].period_number);
-        attendanceData.forEach(a => {
-          newAttendance[a.student_id] = a.status as AttendanceStatus;
+      if (sessionData) {
+        // Fetch records for this session
+        const { data: recordsData, error: recordsError } = await supabase
+          .from('attendance_records')
+          .select('student_id, status')
+          .eq('session_id', sessionData.id);
+
+        if (recordsError) throw recordsError;
+
+        recordsData?.forEach(r => {
+          newAttendance[r.student_id] = r.status as AttendanceStatus;
         });
       }
 
@@ -130,13 +74,15 @@ export default function AttendancePage() {
       
       // Fetch daily stats from the view for the selected date
       const { data: dailyStats, error: statsError } = await supabase
-        .from('attendance_daily_summary')
+        .from('daily_attendance_summary')
         .select('*')
         .eq('date', date);
 
       if (!statsError && dailyStats) {
         const stats = {
           daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
+          weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
+          monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
           students: {} as Record<string, any>
         };
 
@@ -158,7 +104,7 @@ export default function AttendancePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSection, date, selectedSubject]);
+  }, [selectedSection, date, selectedSubject, period]);
 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [studentStats, setStudentStats] = useState<any>(null);
@@ -183,7 +129,7 @@ export default function AttendancePage() {
       if (role === 'student') {
         // Fetch student's own daily summary
         const { data: summaryData, error: summaryError } = await supabase
-          .from('attendance_daily_summary')
+          .from('daily_attendance_summary')
           .select('*')
           .eq('student_id', user.id)
           .order('date', { ascending: false });
@@ -260,27 +206,69 @@ export default function AttendancePage() {
   };
 
   const handleSave = async () => {
+    if (!selectedSubject) {
+      setMessage({ text: 'يرجى اختيار المادة أولاً', type: 'error' });
+      return;
+    }
+
     setSaving(true);
     setMessage({ text: '', type: '' });
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+      if (!user) throw new Error('User not found');
+
+      // 1. Ensure session exists
+      let sessionId: string;
+      const { data: existingSession, error: sessionFetchError } = await supabase
+        .from('attendance_sessions')
+        .select('id')
+        .eq('teacher_id', user.id)
+        .eq('section_id', selectedSection)
+        .eq('subject_id', selectedSubject)
+        .eq('date', date)
+        .eq('period_number', period)
+        .maybeSingle();
+
+      if (sessionFetchError) throw sessionFetchError;
+
+      if (existingSession) {
+        sessionId = existingSession.id;
+        // Update session status to submitted if it was draft
+        await supabase
+          .from('attendance_sessions')
+          .update({ status: 'submitted', updated_at: new Date().toISOString() })
+          .eq('id', sessionId);
+      } else {
+        const { data: newSession, error: sessionCreateError } = await supabase
+          .from('attendance_sessions')
+          .insert({
+            teacher_id: user.id,
+            section_id: selectedSection,
+            subject_id: selectedSubject,
+            date: date,
+            period_number: period,
+            status: 'submitted'
+          })
+          .select()
+          .single();
+
+        if (sessionCreateError) throw sessionCreateError;
+        sessionId = newSession.id;
+      }
+
+      // 2. Upsert records
       const records = Object.entries(attendance).map(([studentId, status]) => ({
+        session_id: sessionId,
         student_id: studentId,
-        section_id: selectedSection,
-        subject_id: selectedSubject || null,
-        date: date,
-        period_number: period,
         status: status,
-        recorded_by: user?.id || null
+        updated_at: new Date().toISOString()
       }));
 
-      // Upsert attendance records
-      const { error } = await supabase
-        .from('attendance')
-        .upsert(records, { onConflict: 'student_id,date,period_number,subject_id' });
+      const { error: recordsError } = await supabase
+        .from('attendance_records')
+        .upsert(records, { onConflict: 'session_id,student_id' });
 
-      if (error) throw error;
+      if (recordsError) throw recordsError;
       
       // Send Notifications for absent/late students
       try {
@@ -296,7 +284,7 @@ export default function AttendancePage() {
               notificationPayloads.push({
                 user_id: student.id,
                 title: 'تنبيه حضور',
-                content: `تم تسجيلك كـ ${statusText} بتاريخ ${record.date}`,
+                message: `تم تسجيلك كـ ${statusText} بتاريخ ${date} - الحصة ${period}`,
                 type: 'attendance',
                 link: '/attendance'
               });
@@ -312,6 +300,7 @@ export default function AttendancePage() {
       }
 
       setMessage({ text: 'تم حفظ الغياب والحضور بنجاح', type: 'success' });
+      fetchStudentsAndAttendance(); // Refresh stats
       setTimeout(() => setMessage({ text: '', type: '' }), 3000);
     } catch (error: any) {
       console.error('Error saving attendance:', error);

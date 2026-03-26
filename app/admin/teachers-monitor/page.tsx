@@ -83,8 +83,8 @@ export default function TeachersMonitorPage() {
 
       // 3. Fetch all attendance for today
       const { data: allAttendance, error: attendanceError } = await supabase
-        .from("attendance")
-        .select("recorded_by, section_id, period_number, date")
+        .from("attendance_sessions")
+        .select("teacher_id, section_id, period_number, date")
         .eq("date", todayStr);
 
       if (attendanceError) throw attendanceError;
@@ -108,7 +108,7 @@ export default function TeachersMonitorPage() {
       // 6. Process data in memory
       const results: TeacherMonitor[] = teachersData.map((teacher: any) => {
         const teacherSchedules = allSchedules?.filter(s => s.teacher_id === teacher.id) || [];
-        const teacherAttendance = allAttendance?.filter(a => a.recorded_by === teacher.id) || [];
+        const teacherAttendance = allAttendance?.filter(a => a.teacher_id === teacher.id) || [];
         
         const total = teacherSchedules.length;
         const recorded = teacherSchedules.filter(slot =>

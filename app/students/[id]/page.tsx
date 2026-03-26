@@ -38,7 +38,7 @@ export default function StudentProfilePage() {
       if (student) {
         // Fetch attendance stats
         const { data: attendance } = await supabase
-          .from('attendance_daily_summary')
+          .from('daily_attendance_summary')
           .select('daily_status, date')
           .eq('student_id', student.id);
         

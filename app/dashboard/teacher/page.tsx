@@ -135,8 +135,8 @@ export default function TeacherDashboard() {
             .order('created_at', { ascending: false })
             .limit(5),
           sectionIds.length > 0 ? supabase
-            .from('attendance')
-            .select('status')
+            .from('attendance_sessions')
+            .select('id')
             .in('section_id', sectionIds)
             .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) : Promise.resolve({ data: [] }),
           sectionIds.length > 0 ? supabase
@@ -177,16 +177,27 @@ export default function TeacherDashboard() {
         }
 
         // Calculate real attendance stats
-        const attendanceData = attendanceRes.data || [];
+        const sessionIdsForStats = (attendanceRes.data || []).map(s => s.id);
+        let attendanceData: any[] = [];
+        
+        if (sessionIdsForStats.length > 0) {
+          const { data: records } = await supabase
+            .from('attendance_records')
+            .select('status')
+            .in('session_id', sessionIdsForStats);
+          attendanceData = records || [];
+        }
+
         const presentCount = attendanceData.filter(a => a.status === 'present' || a.status === 'late').length;
         const absentCount = attendanceData.filter(a => a.status === 'absent').length;
         
-        const avgAttendance = attendanceData.length > 0 
-          ? Math.round((presentCount / attendanceData.length) * 100) 
+        const totalRecords = attendanceData.length;
+        const avgAttendance = totalRecords > 0 
+          ? Math.round((presentCount / totalRecords) * 100) 
           : 100;
           
-        const absenceRate = attendanceData.length > 0
-          ? Math.round((absentCount / attendanceData.length) * 100)
+        const absenceRate = totalRecords > 0
+          ? Math.round((absentCount / totalRecords) * 100)
           : 0;
 
         // Calculate stats

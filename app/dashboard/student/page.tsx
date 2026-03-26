@@ -56,8 +56,8 @@ export default function StudentDashboard() {
         // Fetch all student data concurrently
         const [attendanceRes, gradesRes, examsRes, assignmentsRes, scheduleRes, periodsRes] = await Promise.all([
           supabase
-            .from('attendance')
-            .select('status')
+            .from('daily_attendance_summary')
+            .select('daily_status')
             .eq('student_id', student.id)
             .gte('date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
           supabase
@@ -96,16 +96,18 @@ export default function StudentDashboard() {
         if (attendanceRes.data) {
           const attendance = attendanceRes.data;
           const total = attendance.length;
-          const present = attendance.filter(a => a.status === 'present').length;
-          const late = attendance.filter(a => a.status === 'late').length;
-          const absent = attendance.filter(a => a.status === 'absent').length;
+          const present = attendance.filter(a => a.daily_status === 'present').length;
+          const partial = attendance.filter(a => a.daily_status === 'partial_absent').length;
+          const absent = attendance.filter(a => a.daily_status === 'full_absent').length;
+          const incomplete = attendance.filter(a => a.daily_status === 'incomplete').length;
           
           setAttendanceStats({
             total,
             present,
-            late,
+            partial,
             absent,
-            rate: total > 0 ? Math.round((present / total) * 100) : 100
+            incomplete,
+            rate: total > 0 ? Math.round(((present + partial * 0.5) / total) * 100) : 100
           });
         }
 
@@ -382,24 +384,24 @@ export default function StudentDashboard() {
               <div className="p-2 bg-indigo-50 rounded-xl">
                 <Calendar className="h-5 w-5 text-indigo-600" />
               </div>
-              ملخص الحضور
+              ملخص الحضور اليومي
             </h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col items-center justify-center">
-                <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider">حضور</p>
+                <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider">حضور كامل</p>
                 <p className="text-3xl font-bold text-emerald-700 mt-1">{attendanceStats?.present || 0}</p>
               </div>
               <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex flex-col items-center justify-center">
-                <p className="text-xs text-red-600 font-bold uppercase tracking-wider">غياب</p>
+                <p className="text-xs text-red-600 font-bold uppercase tracking-wider">غياب كامل</p>
                 <p className="text-3xl font-bold text-red-700 mt-1">{attendanceStats?.absent || 0}</p>
               </div>
               <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100 flex flex-col items-center justify-center">
-                <p className="text-xs text-amber-600 font-bold uppercase tracking-wider">تأخير</p>
-                <p className="text-3xl font-bold text-amber-700 mt-1">{attendanceStats?.late || 0}</p>
+                <p className="text-xs text-amber-600 font-bold uppercase tracking-wider">غياب جزئي</p>
+                <p className="text-3xl font-bold text-amber-700 mt-1">{attendanceStats?.partial || 0}</p>
               </div>
-              <div className="p-4 rounded-2xl bg-sky-50 border border-sky-100 flex flex-col items-center justify-center">
-                <p className="text-xs text-sky-600 font-bold uppercase tracking-wider">إجمالي</p>
-                <p className="text-3xl font-bold text-sky-700 mt-1">{attendanceStats?.total || 0}</p>
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
+                <p className="text-xs text-slate-600 font-bold uppercase tracking-wider">غير مكتمل</p>
+                <p className="text-3xl font-bold text-slate-700 mt-1">{attendanceStats?.incomplete || 0}</p>
               </div>
             </div>
           </div>

@@ -53,7 +53,7 @@ export default function AdminDashboard() {
           supabase.from('students').select('id', { count: 'exact', head: true }),
           supabase.from('teachers').select('id', { count: 'exact', head: true }),
           supabase.from('sections').select('id', { count: 'exact', head: true }),
-          supabase.from('attendance_daily_summary').select('daily_status').eq('date', today)
+          supabase.from('daily_attendance_summary').select('daily_status').eq('date', today)
         ]);
 
         const totalAttendanceCount = attendanceRes.data?.length || 0;

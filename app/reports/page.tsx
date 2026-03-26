@@ -59,7 +59,7 @@ export default function ReportsPage() {
         supabase.from('students').select('id', { count: 'exact', head: true }),
         supabase.from('teachers').select('id', { count: 'exact', head: true }),
         supabase.from('classes').select('id', { count: 'exact', head: true }),
-        supabase.from('attendance_daily_summary').select('daily_status, date').gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+        supabase.from('daily_attendance_summary').select('daily_status, date').gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
         supabase.from('classes').select('level, sections(students(id))')
       ]);
 

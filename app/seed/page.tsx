@@ -156,27 +156,45 @@ CREATE TABLE IF NOT EXISTS public.teacher_sections (
     PRIMARY KEY (teacher_id, section_id, subject_id, academic_year_id, semester_id)
 );
 
--- Attendance Table
-CREATE TABLE IF NOT EXISTS public.attendance (
+-- Attendance Sessions Table
+CREATE TABLE IF NOT EXISTS public.attendance_sessions (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    student_id UUID REFERENCES public.students(id) ON DELETE CASCADE NOT NULL,
+    teacher_id UUID REFERENCES public.users(id) NOT NULL,
     section_id UUID REFERENCES public.sections(id) ON DELETE CASCADE NOT NULL,
-    academic_year_id UUID REFERENCES public.academic_years(id) ON DELETE SET NULL,
-    semester_id UUID REFERENCES public.semesters(id) ON DELETE SET NULL,
-    date DATE NOT NULL,
-    period_number INTEGER NOT NULL CHECK (period_number BETWEEN 1 AND 5),
-    subject_id UUID REFERENCES public.subjects(id) ON DELETE SET NULL,
-    status attendance_status NOT NULL,
-    notes TEXT,
-    recorded_by UUID REFERENCES public.users(id),
+    subject_id UUID REFERENCES public.subjects(id) ON DELETE CASCADE NOT NULL,
+    period_number INTEGER NOT NULL CHECK (period_number BETWEEN 1 AND 8),
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'submitted')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    UNIQUE(student_id, date, period_number, subject_id)
+    UNIQUE(teacher_id, section_id, subject_id, date, period_number)
 );
 
--- Attendance Daily Summary View
-CREATE OR REPLACE VIEW public.attendance_daily_summary AS
-WITH period_status AS (
+-- Attendance Records Table
+CREATE TABLE IF NOT EXISTS public.attendance_records (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    session_id UUID REFERENCES public.attendance_sessions(id) ON DELETE CASCADE NOT NULL,
+    student_id UUID REFERENCES public.students(id) ON DELETE CASCADE NOT NULL,
+    status attendance_status NOT NULL DEFAULT 'present',
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    UNIQUE(session_id, student_id)
+);
+
+-- Daily Attendance Summary View
+CREATE OR REPLACE VIEW public.daily_attendance_summary AS
+WITH session_data AS (
+    SELECT 
+        r.student_id,
+        s.date,
+        s.period_number,
+        r.status
+    FROM public.attendance_records r
+    JOIN public.attendance_sessions s ON r.session_id = s.id
+    WHERE s.status = 'submitted'
+),
+period_severity AS (
     SELECT 
         student_id,
         date,
@@ -187,7 +205,7 @@ WITH period_status AS (
             WHEN status = 'excused' THEN 1
             ELSE 0 
         END) as max_severity
-    FROM public.attendance
+    FROM session_data
     GROUP BY student_id, date, period_number
 ),
 daily_counts AS (
@@ -196,7 +214,7 @@ daily_counts AS (
         date,
         COUNT(*) FILTER (WHERE max_severity = 3) as absent_periods,
         COUNT(*) as recorded_periods
-    FROM period_status
+    FROM period_severity
     GROUP BY student_id, date
 )
 SELECT 
@@ -411,7 +429,8 @@ ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teacher_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teacher_sections ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exam_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.grades ENABLE ROW LEVEL SECURITY;
@@ -547,43 +566,33 @@ CREATE POLICY "Admin and management can manage teacher_subjects" ON public.teach
 CREATE POLICY "Anyone can view teacher_sections" ON public.teacher_sections FOR SELECT USING (true);
 CREATE POLICY "Admin and management can manage teacher_sections" ON public.teacher_sections FOR ALL USING (public.get_user_role() IN ('admin', 'management'));
 
--- Attendance Policies
-CREATE POLICY "Teachers manage own subjects attendance" ON public.attendance FOR ALL USING (
-  public.get_user_role() IN ('admin','management')
-  OR (
-    section_id IN (
-      SELECT section_id FROM public.teacher_sections
-      WHERE teacher_id = auth.uid()
+-- Attendance Sessions Policies
+CREATE POLICY "Teachers manage own sessions" ON public.attendance_sessions
+    FOR ALL USING (teacher_id = auth.uid())
+    WITH CHECK (teacher_id = auth.uid());
+
+CREATE POLICY "Admins view all sessions" ON public.attendance_sessions
+    FOR SELECT USING (public.get_user_role() IN ('admin', 'management'));
+
+-- Attendance Records Policies
+CREATE POLICY "Teachers manage own session records" ON public.attendance_records
+    FOR ALL USING (
+        session_id IN (SELECT id FROM public.attendance_sessions WHERE teacher_id = auth.uid())
     )
-    AND (
-      subject_id IS NULL OR subject_id IN (
-        SELECT subject_id FROM public.teacher_sections
-        WHERE teacher_id = auth.uid() AND section_id = public.attendance.section_id
-      )
-    )
-  )
-) WITH CHECK (
-  public.get_user_role() IN ('admin','management')
-  OR (
-    section_id IN (
-      SELECT section_id FROM public.teacher_sections
-      WHERE teacher_id = auth.uid()
-    )
-    AND (
-      subject_id IS NULL OR subject_id IN (
-        SELECT subject_id FROM public.teacher_sections
-        WHERE teacher_id = auth.uid() AND section_id = public.attendance.section_id
-      )
-    )
-  )
-);
-CREATE POLICY "Parent views child attendance" ON public.attendance FOR SELECT USING (
-  student_id IN (
-    SELECT id FROM public.students 
-    WHERE parent_id = auth.uid()
-  )
-);
-CREATE POLICY "Students view own attendance" ON public.attendance FOR SELECT USING (student_id = auth.uid());
+    WITH CHECK (
+        session_id IN (SELECT id FROM public.attendance_sessions WHERE teacher_id = auth.uid())
+    );
+
+CREATE POLICY "Admins view all records" ON public.attendance_records
+    FOR SELECT USING (public.get_user_role() IN ('admin', 'management'));
+
+CREATE POLICY "Students view own records" ON public.attendance_records
+    FOR SELECT USING (student_id = auth.uid());
+
+CREATE POLICY "Parents view child records" ON public.attendance_records
+    FOR SELECT USING (
+        student_id IN (SELECT id FROM public.students WHERE parent_id = auth.uid())
+    );
 
 -- Exams Policies
 CREATE POLICY "Teachers manage own exams" ON public.exams FOR ALL USING (teacher_id = auth.uid() OR public.get_user_role() IN ('admin', 'management'));

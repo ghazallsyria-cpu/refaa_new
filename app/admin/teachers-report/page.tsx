@@ -85,9 +85,9 @@ export default function TeachersReportPage() {
 
           // سجلات الحضور
           const { data: attendanceData, error: attendanceError } = await supabase
-            .from("attendance")
+            .from("attendance_sessions")
             .select("date, section_id, period_number")
-            .eq("recorded_by", teacher.id)
+            .eq("teacher_id", teacher.id)
             .gte("date", fromDate);
 
           if (attendanceError) console.error("Error fetching attendance:", attendanceError);
