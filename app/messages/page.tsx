@@ -242,10 +242,10 @@ export default function MessagesPage() {
     return [];
   };
 
-  const loadFilteredStudents = async (sectionId: string) => {
+  const loadFilteredStudents = useCallback(async (sectionId: string) => {
     const students = await fetchStudentsBySection(sectionId);
     setFilteredStudents(students);
-  };
+  }, [fetchStudentsBySection]);
 
   useEffect(() => {
     if (recipientType === 'student' && selectedSectionId) {
@@ -253,7 +253,7 @@ export default function MessagesPage() {
     } else {
       setFilteredStudents([]);
     }
-  }, [recipientType, selectedSectionId]);
+  }, [recipientType, selectedSectionId, loadFilteredStudents]);
 
   useEffect(() => {
     if (activeTab === 'messages') {

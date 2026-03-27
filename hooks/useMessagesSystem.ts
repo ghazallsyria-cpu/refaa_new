@@ -184,7 +184,7 @@ export function useMessagesSystem() {
     loadInitialData();
   }, [loadInitialData]);
 
-  const fetchStudentsBySection = async (sectionId: string) => {
+  const fetchStudentsBySection = useCallback(async (sectionId: string) => {
     try {
       const { data, error } = await supabase
         .from('students')
@@ -204,7 +204,7 @@ export function useMessagesSystem() {
       console.error('Error fetching students by section:', error);
       return [];
     }
-  };
+  }, []);
 
   const sendMessage = async (receiverId: string, subject: string, content: string) => {
     if (!user) throw new Error('User not authenticated');

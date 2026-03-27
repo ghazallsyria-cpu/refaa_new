@@ -306,7 +306,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchUserData();
-  }, [user, isPublicPage, isLoginPage]);
+  }, [user, isPublicPage, isLoginPage, userRole, userName]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

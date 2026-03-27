@@ -62,15 +62,7 @@ export default function ClassesPage() {
   const isAdmin = userRole === 'admin' || userRole === 'management';
 
   useEffect(() => {
-    fetchClassesData().then(() => {
-      // Expand first class by default if exists
-      if (classes.length > 0) {
-        setExpandedClass(classes[0].id);
-        if (classes[0].sections.length > 0) {
-          setExpandedSection(classes[0].sections[0].id);
-        }
-      }
-    });
+    fetchClassesData();
   }, [fetchClassesData]);
 
   // Expand first class by default when classes load
