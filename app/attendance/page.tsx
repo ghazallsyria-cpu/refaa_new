@@ -549,7 +549,7 @@ export default function AttendancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/50 bg-white/40 backdrop-blur-sm">
-              {loading ? (
+              {systemLoading ? (
                 <tr>
                   <td colSpan={5} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-4">
@@ -648,7 +648,7 @@ export default function AttendancePage() {
 
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-slate-100">
-          {loading ? (
+          {systemLoading ? (
             <div className="py-20 text-center">
               <div className="flex flex-col items-center gap-4">
                 <div className="h-10 w-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
