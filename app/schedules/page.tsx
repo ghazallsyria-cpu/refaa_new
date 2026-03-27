@@ -7,7 +7,7 @@ import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 type Section = {
   id: string;
   name: string;
-  classes: { name: string };
+  classes: { name: string }[];
 };
 
 type Subject = {
@@ -51,10 +51,9 @@ export default function SchedulesPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,29 +75,25 @@ export default function SchedulesPage() {
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
-    try {
-      const data = await fetchInitialScheduleData();
-      setSections(data.sections || []);
-      setSubjects(data.subjects || []);
-      setTeachers(data.teachers || []);
-      setPeriods(data.periods || []);
+    const data = await fetchInitialScheduleData();
 
-      if (data.sections?.length) {
-        setSelectedSectionId(data.sections[0].id);
-      }
-    } finally {
-      setLoading(false);
+    setSections(data.sections || []);
+    setSubjects(data.subjects || []);
+    setTeachers(data.teachers || []);
+    setPeriods(data.periods || []);
+
+    if (data.sections?.length) {
+      setSelectedSectionId(data.sections[0].id);
     }
+
+    setLoading(false);
   }, [fetchInitialScheduleData]);
 
   const fetchSchedules = useCallback(async (sectionId: string) => {
     setLoading(true);
-    try {
-      const data = await fetchSchedulesData({ sectionId });
-      setSchedules(data || []);
-    } finally {
-      setLoading(false);
-    }
+    const data = await fetchSchedulesData({ sectionId });
+    setSchedules(data || []);
+    setLoading(false);
   }, [fetchSchedulesData]);
 
   useEffect(() => {
@@ -111,9 +106,10 @@ export default function SchedulesPage() {
     }
   }, [selectedSectionId, fetchSchedules]);
 
-  const openCellModal = (day: number, period: number, existing?: Schedule) => {
-    if (!selectedSectionId) return;
+  const getCellData = (day: number, period: number) =>
+    schedules.find(s => s.day_of_week === day && s.period === period);
 
+  const openCellModal = (day: number, period: number, existing?: Schedule) => {
     setCurrentCell({
       day,
       period,
@@ -121,46 +117,34 @@ export default function SchedulesPage() {
       subjectId: existing?.subject_id || '',
       teacherId: existing?.teacher_id || '',
     });
-
     setIsModalOpen(true);
   };
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!currentCell.subjectId || !currentCell.teacherId) return;
+    const payload = {
+      section_id: selectedSectionId,
+      subject_id: currentCell.subjectId,
+      teacher_id: currentCell.teacherId,
+      day_of_week: currentCell.day,
+      period: currentCell.period,
+    };
 
-    setIsSubmitting(true);
-
-    try {
-      const payload = {
-        section_id: selectedSectionId,
-        subject_id: currentCell.subjectId,
-        teacher_id: currentCell.teacherId,
-        day_of_week: currentCell.day,
-        period: currentCell.period,
-      };
-
-      if (currentCell.scheduleId) {
-        await updateSchedule(currentCell.scheduleId, payload);
-      } else {
-        await addSchedule(payload);
-      }
-
-      await fetchSchedules(selectedSectionId);
-      setIsModalOpen(false);
-    } finally {
-      setIsSubmitting(false);
+    if (currentCell.scheduleId) {
+      await updateSchedule(currentCell.scheduleId, payload);
+    } else {
+      await addSchedule(payload);
     }
+
+    await fetchSchedules(selectedSectionId);
+    setIsModalOpen(false);
   };
 
   const handleDelete = async (id: string) => {
     await deleteSchedule(id);
     await fetchSchedules(selectedSectionId);
   };
-
-  const getCellData = (day: number, period: number) =>
-    schedules.find(s => s.day_of_week === day && s.period === period);
 
   return (
     <div>
@@ -171,7 +155,7 @@ export default function SchedulesPage() {
       >
         {sections.map(s => (
           <option key={s.id} value={s.id}>
-            {s.classes?.name} - {s.name}
+            {s.classes?.[0]?.name} - {s.name}
           </option>
         ))}
       </select>
@@ -200,8 +184,8 @@ export default function SchedulesPage() {
                   return (
                     <td
                       key={p.id}
+                      className="border h-20 text-center cursor-pointer"
                       onClick={() => openCellModal(day.id, p.period_number, cell)}
-                      className="border h-20 cursor-pointer text-center"
                     >
                       <div>{cell?.subjects?.name || '-'}</div>
 
@@ -229,11 +213,13 @@ export default function SchedulesPage() {
           <Dialog.Overlay className="fixed inset-0 bg-black/40" />
           <Dialog.Content className="fixed inset-0 m-auto max-w-md bg-white p-6">
 
-            <form onSubmit={handleSaveSchedule}>
+            <form onSubmit={handleSaveSchedule} className="space-y-3">
 
               <select
                 value={currentCell.subjectId || ''}
-                onChange={(e) => setCurrentCell({ ...currentCell, subjectId: e.target.value })}
+                onChange={(e) =>
+                  setCurrentCell({ ...currentCell, subjectId: e.target.value })
+                }
               >
                 <option value="">مادة</option>
                 {subjects.map(s => (
@@ -243,7 +229,9 @@ export default function SchedulesPage() {
 
               <select
                 value={currentCell.teacherId || ''}
-                onChange={(e) => setCurrentCell({ ...currentCell, teacherId: e.target.value })}
+                onChange={(e) =>
+                  setCurrentCell({ ...currentCell, teacherId: e.target.value })
+                }
               >
                 <option value="">معلم</option>
                 {teachers.map(t => (
@@ -252,7 +240,7 @@ export default function SchedulesPage() {
               </select>
 
               <button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? '...' : 'حفظ'}
+                حفظ
               </button>
 
             </form>
