@@ -142,7 +142,7 @@ export default function ClassesPage() {
     if (!searchTerm) return cls;
     
     // Filter sections and students based on search term
-    const filteredSections = cls.sections.map(sec => {
+    const filteredSections = cls.sections.map((sec: any) => {
       const filteredStudents = sec.students.filter(stu => 
         stu.user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         stu.national_id.includes(searchTerm)
