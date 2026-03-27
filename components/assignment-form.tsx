@@ -26,9 +26,16 @@ export default function AssignmentForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (initialAnswers && Object.keys(initialAnswers).length > 0) {
-      setAnswers(initialAnswers);
-    }
+    if (!initialAnswers || Object.keys(initialAnswers).length === 0) return;
+
+    setAnswers(prev => {
+      const same =
+        JSON.stringify(prev) === JSON.stringify(initialAnswers);
+
+      if (same) return prev;
+
+      return initialAnswers;
+    });
   }, [initialAnswers]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
@@ -139,7 +146,8 @@ export default function AssignmentForm({
             {question.type === 'checkbox' && (
               <div className="space-y-2">
                 {question.options?.map((option, i) => {
-                  const checked = ((answers[question.id] as string[]) || []).includes(option);
+                  const checked =
+                    ((answers[question.id] as string[]) || []).includes(option);
 
                   return (
                     <label key={`${question.id}-${i}`} className="flex gap-2 items-center">
