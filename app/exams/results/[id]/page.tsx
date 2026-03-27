@@ -117,6 +117,32 @@ export default function ExamResults() {
     fetchData();
   }, [fetchData]);
 
+  // ✅ إضافة دالة حذف المحاولة التي كانت مفقودة
+  const handleDeleteAttempt = async (attemptId: string) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه المحاولة؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+    
+    try {
+      // إذا كان "لم يتقدم" لا تحاول حذفه من قاعدة البيانات، بل قم بتحديث الواجهة فقط
+      if (!attemptId.startsWith('missing-')) {
+        await deleteAttempt(attemptId);
+      }
+      
+      // تحديث الحالة محلياً لإزالة السطر فوراً
+      setAttempts(prev => prev.map(a => 
+        a.id === attemptId 
+          ? { ...a, id: `missing-${a.student.id}`, status: 'not_attempted', score: 0, completed_at: '', started_at: '' } 
+          : a
+      ));
+      
+      // يمكنك عرض رسالة نجاح هنا إذا كان لديك نظام إشعارات
+      alert('تم حذف المحاولة بنجاح وإعادة الطالب لحالة لم يتقدم');
+      
+    } catch (err) {
+      console.error('Error deleting attempt:', err);
+      alert('حدث خطأ أثناء محاولة حذف بيانات الطالب.');
+    }
+  };
+
   // Calculate stats whenever attempts or selected section changes
   useEffect(() => {
     if (!exam) return;
@@ -203,9 +229,9 @@ export default function ExamResults() {
     const data = filteredAttempts.map(a => ({
       'الطالب': a.student.full_name,
       'الفصل': a.student.section_name,
-      'تاريخ التقديم': new Date(a.completed_at).toLocaleDateString('ar-SA'),
+      'تاريخ التقديم': a.completed_at ? new Date(a.completed_at).toLocaleDateString('ar-SA') : 'لم يتقدم',
       'الدرجة (%)': a.score,
-      'الحالة': a.score >= (exam?.passing_score || 50) ? 'ناجح' : 'راسب'
+      'الحالة': a.status === 'not_attempted' ? 'لم يتقدم' : a.score >= (exam?.passing_score || 50) ? 'ناجح' : 'راسب'
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -612,13 +638,17 @@ export default function ExamResults() {
                           >
                             <FileText className="h-5 w-5" />
                           </button>
-                          <button 
-                            onClick={() => handleDeleteAttempt(attempt.id)}
-                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95"
-                            title="حذف المحاولة"
-                          >
-                            <XCircle className="h-5 w-5" />
-                          </button>
+                          
+                          {/* زر الحذف مع إضافة التحقق إذا لم يتقدم الطالب فلا حاجة لحذفه */}
+                          {attempt.status !== 'not_attempted' && (
+                            <button 
+                              onClick={() => handleDeleteAttempt(attempt.id)}
+                              className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95"
+                              title="إعادة تعيين المحاولة"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -637,3 +667,4 @@ export default function ExamResults() {
     </div>
   );
 }
+
