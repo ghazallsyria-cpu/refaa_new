@@ -124,7 +124,7 @@ export default function AssignmentForm({
                     onChange={() => handleAnswerChange(question.id, option)}
                     disabled={readOnly}
                   />
-                  {option}
+{option.toString()}
                 </label>
               ))}
             </div>
