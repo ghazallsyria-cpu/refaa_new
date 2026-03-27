@@ -29,7 +29,7 @@ export default function TeachersPage() {
     saveAssignments: addTeacherAssignmentHook // I'll use saveAssignments for single too
   } = useTeacherAssignmentsSystem();
 
-  const loading = usersLoading || assignmentsLoading;
+  const isDataLoading = usersLoading || assignmentsLoading;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('الكل');
@@ -436,7 +436,7 @@ export default function TeachersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 bg-white">
-                {loading ? (
+                {isDataLoading ? (
                   <tr>
                     <td colSpan={6} className="py-32 text-center">
                       <div className="flex flex-col items-center gap-4">
@@ -549,7 +549,7 @@ export default function TeachersPage() {
 
           {/* Mobile Card View */}
           <div className="md:hidden p-6 grid gap-6">
-            {loading ? (
+            {isDataLoading ? (
               <div className="py-20 text-center">
                  <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                  <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">جاري التحميل...</span>
