@@ -1,3 +1,4 @@
+import { withRoleGuard, ROLES } from '@/lib/role-guard';
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -33,7 +34,7 @@ const MONTH_MAP: Record<number, string> = {
   8: "سبتمبر", 9: "أكتوبر", 10: "نوفمبر", 11: "ديسمبر"
 };
 
-export default function TeachersMonitorPage() {
+function TeachersMonitorPage() {
   const [teachers, setTeachers] = useState<TeacherMonitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -358,3 +359,6 @@ export default function TeachersMonitorPage() {
     </div>
   );
 }
+
+// صفحة محمية - للمسؤولين والإدارة فقط
+export default withRoleGuard(TeachersMonitorPage, ROLES.ADMIN_MANAGEMENT);
