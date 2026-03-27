@@ -4,12 +4,18 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   Plus, Save, Trash2, Copy, GripVertical, 
-  ArrowRight, Check, X, Image as ImageIcon
+  ArrowRight, Check, X, Image as ImageIcon,
+  Clock, Target, FileText, Calendar, Layout, 
+  Settings as SettingsIcon, ShieldCheck, Shuffle, Eye
 } from 'lucide-react';
 import { motion, Reorder, AnimatePresence } from 'motion/react';
+import * as Dialog from '@radix-ui/react-dialog';
+import * as Switch from '@radix-ui/react-switch';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
+import { useSchoolFormData } from '@/hooks/use-school-form-data';
 import ImageUpload from '@/components/ImageUpload';
+import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { Question, QuestionType, newQuestion as createNewQuestion } from '@/types/question';
 
 const QuestionCard = memo(({ 
@@ -44,9 +50,11 @@ const QuestionCard = memo(({
               </label>
               <ImageUpload 
                 initialImageUrl={q.media_url}
-                onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url, media_type: url ? 'image' : undefined })}
-                onRemove={() => updateQuestion(q.id, { media_url: undefined, media_type: undefined })}
-                label="رفع صورة للسؤال"
+                onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url, media_type: 'image' })}
+                onRemove={() => {
+                  if (q.media_url) deleteFromCloudinary(q.media_url);
+                  updateQuestion(q.id, { media_url: undefined, media_type: undefined });
+                }}
               />
             </div>
           </div>
@@ -56,7 +64,7 @@ const QuestionCard = memo(({
             <select 
               value={q.type}
               onChange={(e) => updateQuestion(q.id, { type: e.target.value as QuestionType })}
-              className="w-full px-6 py-5 rounded-3xl bg-white border-0 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 font-black appearance-none cursor-pointer"
+              className="w-full px-6 py-5 rounded-3xl bg-white border-0 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 font-black appearance-none cursor-pointer shadow-sm"
             >
               <option value="multiple_choice">اختيار من متعدد</option>
               <option value="true_false">صح أو خطأ</option>
@@ -68,6 +76,7 @@ const QuestionCard = memo(({
 
         {q.type !== 'essay' && (
           <div className="space-y-4">
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">خيارات الإجابة</label>
             {q.options?.map((opt: any, optIdx: number) => (
               <div key={opt.id} className="flex items-center gap-5 p-4 rounded-3xl bg-slate-50/50 border border-slate-100 group/opt hover:bg-white hover:shadow-lg transition-all">
                 <button 
@@ -95,7 +104,7 @@ const QuestionCard = memo(({
         )}
 
         <div className="flex items-center justify-between pt-10 border-t border-slate-100">
-          <div className="flex items-center gap-4 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100">
+          <div className="flex items-center gap-4 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shadow-inner">
             <span className="text-xs font-black text-slate-400 uppercase tracking-widest">النقاط:</span>
             <input 
               type="number" 
@@ -120,8 +129,27 @@ export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
   const { fetchExamDetails, saveExam } = useExamsSystem();
+  const { data: formData } = useSchoolFormData();
   
-  const [exam, setExam] = useState<any>({ title: '', status: 'draft', max_score: 100, duration: 30, exam_date: new Date().toISOString().split('T')[0] });
+  const [exam, setExam] = useState<any>({ 
+    title: '', 
+    description: '',
+    status: 'draft', 
+    max_score: 100, 
+    passing_score: 50,
+    duration: 30, 
+    exam_date: new Date().toISOString().split('T')[0],
+    start_time: '08:00',
+    end_time: '23:00',
+    subject_id: '',
+    settings: {
+      shuffle_questions: false,
+      shuffle_options: false,
+      show_results: true,
+      allow_backtrack: true,
+      browser_lock: false
+    }
+  });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(params.id !== 'new');
   const [saving, setSaving] = useState(false);
@@ -129,7 +157,16 @@ export default function QuizBuilder() {
   useEffect(() => {
     if (params.id !== 'new') {
       fetchExamDetails(params.id as string).then(res => {
-        setExam(res.exam);
+        setExam({
+          ...res.exam,
+          settings: res.exam.settings || {
+            shuffle_questions: false,
+            shuffle_options: false,
+            show_results: true,
+            allow_backtrack: true,
+            browser_lock: false
+          }
+        });
         setQuestions(res.questions);
         setLoading(false);
       }).catch(() => setLoading(false));
@@ -176,6 +213,7 @@ export default function QuizBuilder() {
 
   const handleSave = async () => {
     if (!exam.title) return alert('يرجى إدخال عنوان الاختبار');
+    if (!exam.subject_id) return alert('يرجى اختيار المادة الدراسية');
     setSaving(true);
     try {
       await saveExam(exam, questions, params.id === 'new');
@@ -185,6 +223,13 @@ export default function QuizBuilder() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateSetting = (key: string, value: boolean) => {
+    setExam({
+      ...exam,
+      settings: { ...exam.settings, [key]: value }
+    });
   };
 
   if (loading) return (
@@ -197,39 +242,128 @@ export default function QuizBuilder() {
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
-          <button onClick={() => router.back()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 transition-all active:scale-95"><ArrowRight className="h-5 w-5" /></button>
-          <h1 className="text-xl font-black truncate max-w-[300px] text-slate-900 leading-none">{exam.title || 'اختبار جديد'}</h1>
-          <button 
-            onClick={handleSave} 
-            disabled={saving} 
-            className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-4 rounded-[20px] font-black disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
-          >
-            {saving ? 'جاري الحفظ...' : 'حفظ الاختبار'}
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.back()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 transition-all active:scale-95"><ArrowRight className="h-5 w-5" /></button>
+            <h1 className="text-xl font-black truncate max-w-[200px] md:max-w-[300px] text-slate-900 leading-none">{exam.title || 'اختبار جديد'}</h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* زر الإعدادات */}
+            <Dialog.Root>
+              <Dialog.Trigger asChild>
+                <button className="h-12 px-5 flex items-center gap-3 rounded-2xl bg-white border border-slate-200 text-slate-600 font-black hover:text-indigo-600 hover:border-indigo-100 transition-all active:scale-95 shadow-sm">
+                  <SettingsIcon className="h-5 w-5" />
+                  <span className="hidden md:inline text-sm">الإعدادات</span>
+                </button>
+              </Dialog.Trigger>
+              <Dialog.Portal>
+                <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] animate-in fade-in duration-300" />
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md bg-white rounded-[40px] shadow-2xl z-[101] p-10 focus:outline-none animate-in zoom-in-95 duration-300">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><SettingsIcon size={20} /></div>
+                      <Dialog.Title className="text-2xl font-black text-slate-900">إعدادات الاختبار</Dialog.Title>
+                    </div>
+                    <Dialog.Close className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all"><X size={20} /></Dialog.Close>
+                  </div>
+
+                  <div className="space-y-6">
+                    {[
+                      { key: 'shuffle_questions', label: 'ترتيب عشوائي للأسئلة', icon: Shuffle },
+                      { key: 'shuffle_options', label: 'ترتيب عشوائي للخيارات', icon: List },
+                      { key: 'show_results', label: 'إظهار النتيجة فوراً بعد الحل', icon: Eye },
+                      { key: 'allow_backtrack', label: 'السماح بالعودة للأسئلة السابقة', icon: ArrowRight },
+                      { key: 'browser_lock', label: 'منع تبديل التبويبات (حماية الغش)', icon: ShieldCheck },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center justify-between p-4 rounded-3xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <item.icon className="h-5 w-5 text-slate-400" />
+                          <span className="font-bold text-slate-700">{item.label}</span>
+                        </div>
+                        <Switch.Root 
+                          checked={exam.settings[item.key]}
+                          onCheckedChange={(val) => updateSetting(item.key, val)}
+                          className={`w-12 h-7 rounded-full relative transition-colors shadow-inner focus:outline-none ${exam.settings[item.key] ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                        >
+                          <Switch.Thumb className={`block w-5 h-5 bg-white rounded-full transition-transform duration-200 shadow-lg translate-x-1 ${exam.settings[item.key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </Switch.Root>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-10">
+                    <Dialog.Close className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all">تم حفظ الإعدادات</Dialog.Close>
+                  </div>
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
+
+            <button 
+              onClick={handleSave} 
+              disabled={saving} 
+              className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-4 rounded-[20px] font-black disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
+            >
+              {saving ? 'جاري الحفظ...' : 'حفظ الاختبار'}
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-12 space-y-10">
+        {/* إعدادات الاختبار الرئيسية */}
         <div className="glass-card rounded-[40px] border-t-[16px] border-t-indigo-600 p-10 space-y-8 shadow-2xl shadow-slate-200/50">
-          <input 
-            type="text" 
-            value={exam.title} 
-            onChange={(e) => setExam({ ...exam, title: e.target.value })}
-            className="w-full text-5xl font-black border-none focus:ring-0 bg-transparent placeholder:text-slate-200 tracking-tighter"
-            placeholder="عنوان الاختبار"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10 border-t border-slate-100">
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">الدرجة الكلية</label>
-              <input type="number" value={exam.max_score} onChange={(e) => setExam({ ...exam, max_score: parseInt(e.target.value) })} className="w-full p-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold" />
+          <div className="space-y-6">
+            <input 
+              type="text" 
+              value={exam.title} 
+              onChange={(e) => setExam({ ...exam, title: e.target.value })}
+              className="w-full text-5xl font-black border-none focus:ring-0 bg-transparent placeholder:text-slate-200 tracking-tighter"
+              placeholder="عنوان الاختبار"
+            />
+            <textarea 
+              value={exam.description} 
+              onChange={(e) => setExam({ ...exam, description: e.target.value })}
+              className="w-full text-xl font-medium border-none focus:ring-0 bg-transparent placeholder:text-slate-300 resize-none"
+              placeholder="وصف الاختبار وتعليمات للطلاب..."
+              rows={2}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-slate-100">
+             <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Layout className="h-3 w-3" /> المادة الدراسية</label>
+              <select 
+                value={exam.subject_id} 
+                onChange={(e) => setExam({ ...exam, subject_id: e.target.value })}
+                className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold appearance-none shadow-sm"
+              >
+                <option value="">اختر المادة</option>
+                {formData?.subjects?.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">المدة (دقيقة)</label>
-              <input type="number" value={exam.duration} onChange={(e) => setExam({ ...exam, duration: parseInt(e.target.value) })} className="w-full p-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold" />
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Target className="h-3 w-3" /> درجة النجاح (%)</label>
+              <input type="number" value={exam.passing_score} onChange={(e) => setExam({ ...exam, passing_score: parseInt(e.target.value) })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm" />
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">التاريخ</label>
-              <input type="date" value={exam.exam_date} onChange={(e) => setExam({ ...exam, exam_date: e.target.value })} className="w-full p-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold" />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-6">
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock className="h-3 w-3" /> مدة الاختبار (دقيقة)</label>
+              <input type="number" value={exam.duration} onChange={(e) => setExam({ ...exam, duration: parseInt(e.target.value) })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm" />
+            </div>
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Calendar className="h-3 w-3" /> تاريخ الاختبار</label>
+              <input type="date" value={exam.exam_date} onChange={(e) => setExam({ ...exam, exam_date: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm" />
+            </div>
+             <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Layout className="h-3 w-3" /> وقت البدء - الانتهاء</label>
+              <div className="flex items-center gap-2">
+                <input type="time" value={exam.start_time} onChange={(e) => setExam({ ...exam, start_time: e.target.value })} className="w-1/2 p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm text-center" />
+                <input type="time" value={exam.end_time} onChange={(e) => setExam({ ...exam, end_time: e.target.value })} className="w-1/2 p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm text-center" />
+              </div>
             </div>
           </div>
         </div>
