@@ -342,7 +342,7 @@ export default function AnnouncementsPage() {
                       </div>
                     </div>
                     
-                    <div className={`w-full lg:w-4 ${getAudienceColor(announcement.target_role).split(' ')[0]} hidden lg:block opacity-40`}></div>
+                    <div className={`w-full lg:w-4 ${getAudienceColor(announcement.target_role ?? 'all').split(' ')[0]} hidden lg:block opacity-40`}></div>
                   </motion.div>
                 );
               })}
