@@ -7,16 +7,15 @@ import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder, { Question } from '@/components/assignment-builder';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
-import { useAssignments } from '@/hooks/use-assignments';
+import { useAssignments, type AssignmentWithMeta } from '@/hooks/use-assignments';
 import { useSchoolFormData } from '@/hooks/use-school-form-data';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
-import { Teacher, Subject, Section } from '@/types';
+import type { Teacher, Subject, Section } from '@/types';
 
 export default function AssignmentsPage() {
   const { user, userRole, isChecking: authLoading } = useAuth();
-  const { data, isLoading: contentLoading, error: contentError, refetch: refresh } = useAssignments();
-  const assignments = data?.data || [];
+  const { data: assignments = [], isLoading: contentLoading, error: contentError, refetch: refresh } = useAssignments();
 
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const subjects = formData?.subjects || [];
