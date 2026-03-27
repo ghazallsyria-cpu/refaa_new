@@ -80,7 +80,7 @@ export function useEducationalContent(contentType?: EducationalContentType) {
         
         const examsWithStats = await Promise.all((data || []).map(async (e: any) => {
           const [attemptsRes, questionsRes] = await Promise.all([
-            supabase.from('exam_attempts').select('score').eq('exam_id', e.id),
+            supabase.from('exam_attempts').select('score','status').eq('exam_id', e.id),
             supabase.from('questions').select('id', { count: 'exact', head: true }).eq('exam_id', e.id)
           ]);
           
