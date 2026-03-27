@@ -19,6 +19,13 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
 }
 
+interface AttendanceStats {
+  daily: { present: number; absent: number; partial: number; incomplete: number; total: number; rate: number };
+  weekly: { present: number; absent: number; late: number; excused: number; total: number; rate: number };
+  monthly: { present: number; absent: number; late: number; excused: number; total: number; rate: number };
+  students: Record<string, any>;
+}
+
 export function useAttendanceSystem() {
   const { user, userRole } = useAuth();
   const [sections, setSections] = useState<any[]>([]);
@@ -94,7 +101,6 @@ export function useAttendanceSystem() {
     setError(null);
 
     try {
-      // Fetch students for the section
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select('id, users(full_name)')
@@ -102,7 +108,6 @@ export function useAttendanceSystem() {
 
       if (studentsError) throw studentsError;
 
-      // Fetch existing session
       const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_sessions')
         .select('id, status')
@@ -133,27 +138,26 @@ export function useAttendanceSystem() {
         });
       }
 
-      // Fetch daily stats
       const { data: dailyStats, error: statsError } = await supabase
         .from('daily_attendance_summary')
         .select('*')
         .eq('date', date);
 
-      let stats = null;
+      let stats: AttendanceStats | null = null;
       if (!statsError && dailyStats) {
         stats = {
           daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
           weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
           monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-          students: {} as Record<string, any>
+          students: {}
         };
 
         dailyStats.forEach(s => {
-          if (s.daily_status === 'present') stats.daily.present++;
-          else if (s.daily_status === 'full_absent') stats.daily.absent++;
-          else if (s.daily_status === 'partial_absent') stats.daily.partial++;
-          else if (s.daily_status === 'incomplete') stats.daily.incomplete++;
-          stats.daily.total++;
+          if (s.daily_status === 'present') stats!.daily.present++;
+          else if (s.daily_status === 'full_absent') stats!.daily.absent++;
+          else if (s.daily_status === 'partial_absent') stats!.daily.partial++;
+          else if (s.daily_status === 'incomplete') stats!.daily.incomplete++;
+          stats!.daily.total++;
         });
 
         if (stats.daily.total > 0) {
