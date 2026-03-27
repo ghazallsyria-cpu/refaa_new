@@ -2,6 +2,16 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
+// --- تعريفات الأنواع (TypeScript Types) ---
+type UserResponse = { full_name: string };
+type RecentStudent = { created_at: string; users: UserResponse | UserResponse[] | null };
+type RecentItem = { title: string; created_at: string };
+type AttendanceRecord = { daily_status: string };
+type AssignmentSectionRecord = { assignment_id: string };
+type ExamSectionRecord = { exam_id: string };
+type SectionData = { id: string; name?: string; classes?: { id?: string; name?: string } | null; students?: { count: number }[] | null };
+type TeacherSectionRecord = { section_id: string; section: SectionData };
+
 export function useDashboardSystem() {
   const { user } = useAuth();
 
@@ -21,8 +31,9 @@ export function useDashboardSystem() {
         supabase.from('daily_attendance_summary').select('daily_status').eq('date', today)
       ]);
 
-      const totalAttendanceCount = attendanceRes.data?.length || 0;
-      const presentAttendanceCount = attendanceRes.data?.filter((a: any) => a.daily_status === 'present').length || 0;
+      const attendanceData = (attendanceRes.data || []) as AttendanceRecord[];
+      const totalAttendanceCount = attendanceData.length;
+      const presentAttendanceCount = attendanceData.filter(a => a.daily_status === 'present').length;
 
       const attendanceRate = totalAttendanceCount > 0
         ? Math.round((presentAttendanceCount / totalAttendanceCount) * 100)
@@ -54,26 +65,34 @@ export function useDashboardSystem() {
         supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
       ]);
 
-      const activities: any[] = [
-        ...(recentStudents || []).map((s: any) => ({
-          title: `إضافة الطالب: ${Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name || 'غير معروف'}`,
-          time: s.created_at,
-          type: 'students',
-          color: 'bg-indigo-100 text-indigo-600'
-        })),
-        ...(recentDocs || []).map((d: any) => ({
+      const typedStudents = (recentStudents || []) as unknown as RecentStudent[];
+      const typedDocs = (recentDocs || []) as RecentItem[];
+      const typedExams = (recentExams || []) as RecentItem[];
+      const typedNotifs = (recentNotifs || []) as RecentItem[];
+
+      const activities = [
+        ...typedStudents.map(s => {
+          const fullName = Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name;
+          return {
+            title: `إضافة الطالب: ${fullName || 'غير معروف'}`,
+            time: s.created_at,
+            type: 'students',
+            color: 'bg-indigo-100 text-indigo-600'
+          };
+        }),
+        ...typedDocs.map(d => ({
           title: `مستند جديد: ${d.title}`,
           time: d.created_at,
           type: 'documents',
           color: 'bg-emerald-100 text-emerald-600'
         })),
-        ...(recentExams || []).map((e: any) => ({
+        ...typedExams.map(e => ({
           title: `اختبار جديد: ${e.title}`,
           time: e.created_at,
           type: 'exams',
           color: 'bg-amber-100 text-amber-600'
         })),
-        ...(recentNotifs || []).map((n: any) => ({
+        ...typedNotifs.map(n => ({
           title: `إعلان جديد: ${n.title}`,
           time: n.created_at,
           type: 'notifications',
@@ -110,8 +129,8 @@ export function useDashboardSystem() {
         supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id)
       ]);
 
-      const assignmentIds = assignmentSections?.map((a: any) => a.assignment_id) || [];
-      const examIds = examSections?.map((e: any) => e.exam_id) || [];
+      const assignmentIds = ((assignmentSections || []) as AssignmentSectionRecord[]).map(a => a.assignment_id);
+      const examIds = ((examSections || []) as ExamSectionRecord[]).map(e => e.exam_id);
 
       const [
         { data: assignments },
@@ -133,8 +152,9 @@ export function useDashboardSystem() {
         supabase.from('class_periods').select('*').order('period_number')
       ]);
 
-      const totalDays = attendance?.length || 0;
-      const presentDays = attendance?.filter((a: any) => a.daily_status === 'present').length || 0;
+      const attendanceData = (attendance || []) as AttendanceRecord[];
+      const totalDays = attendanceData.length;
+      const presentDays = attendanceData.filter(a => a.daily_status === 'present').length;
       const attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100;
 
       return {
@@ -199,8 +219,9 @@ export function useDashboardSystem() {
 
       const { data: teacherSections } = await supabase.from('teacher_sections').select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))').eq('teacher_id', user.id);
       
-      const sections = teacherSections?.map((ts: any) => ts.section) || [];
-      const sectionIds = sections.map((s: any) => s.id);
+      const typedTeacherSections = (teacherSections || []) as unknown as TeacherSectionRecord[];
+      const sections = typedTeacherSections.map(ts => ts.section).filter(Boolean);
+      const sectionIds = sections.map(s => s.id);
 
       const [
         recentExams,
@@ -266,4 +287,5 @@ export function useDashboardSystem() {
     fetchTeacherSchedule
   };
 }
+
 
