@@ -138,8 +138,8 @@ export default function ClassesPage() {
     }
   };
 
-  const filteredClasses = classes
-    .map(cls => {
+  const filteredClasses = (classes as ClassData[])
+    .map((cls: ClassData) => {
       if (!searchTerm) return cls;
 
       const filteredSections = cls.sections
@@ -151,14 +151,14 @@ export default function ClassesPage() {
 
           return { ...sec, students: filteredStudents };
         })
-        .filter(sec =>
+        .filter((sec: Section) =>
           sec.students.length > 0 ||
           sec.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
       return { ...cls, sections: filteredSections };
     })
-    .filter(cls =>
+    .filter((cls: ClassData) =>
       cls.sections.length > 0 ||
       cls.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -178,7 +178,7 @@ export default function ClassesPage() {
           <h1 className="text-4xl font-black">إدارة الفصول</h1>
           <p>
             {classes.reduce(
-              (acc, cls) =>
+              (acc, cls: ClassData) =>
                 acc + cls.sections.reduce((s, sec) => s + sec.students.length, 0),
               0
             )} طالب
@@ -221,7 +221,7 @@ export default function ClassesPage() {
 
                     {expandedSection === section.id && (
                       <div className="mt-2">
-                        {section.students.map((stu) => (
+                        {section.students.map((stu: Student) => (
                           <div key={stu.id}>
                             {stu.user.full_name} - {stu.national_id}
                           </div>
@@ -249,6 +249,7 @@ export default function ClassesPage() {
                     onChange={(e) => setInputValue(e.target.value)}
                     className="border p-2 w-full mt-3"
                   />
+
                   {modalConfig.type === 'addClass' && (
                     <input
                       type="number"
@@ -262,9 +263,7 @@ export default function ClassesPage() {
 
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={closeModal}>إلغاء</button>
-              <button onClick={handleModalSubmit}>
-                حفظ
-              </button>
+              <button onClick={handleModalSubmit}>حفظ</button>
             </div>
           </div>
         </div>
