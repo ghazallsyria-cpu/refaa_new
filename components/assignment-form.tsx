@@ -39,6 +39,7 @@ export default function AssignmentForm({
 
   const handleAnswerChange = (questionId: string, value: any) => {
     if (readOnly) return;
+
     setAnswers(prev => ({ ...prev, [questionId]: value }));
 
     if (errors[questionId]) {
@@ -98,7 +99,7 @@ export default function AssignmentForm({
         >
           <div className="flex justify-between mb-4">
             <h3 className="font-bold text-lg">
-              {question.text}
+              {question.content}
               {question.isRequired && <span className="text-red-500">*</span>}
             </h3>
             <span className="text-xs">{question.points} نقاط</span>
@@ -144,7 +145,7 @@ export default function AssignmentForm({
             {question.type === 'checkbox' && (
               <div className="space-y-2">
                 {question.options?.map((option) => {
-                  const checked = (answers[question.id] || []).includes(option);
+                  const checked = ((answers[question.id] as string[]) || []).includes(option);
 
                   return (
                     <label key={option} className="flex gap-2 items-center">
