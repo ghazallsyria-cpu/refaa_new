@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertCircle, Send } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Question } from '@/types/question';
@@ -25,17 +25,15 @@ export default function AssignmentForm({
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const hasHydrated = useRef(false);
+
   useEffect(() => {
     if (!initialAnswers || Object.keys(initialAnswers).length === 0) return;
 
-    setAnswers(prev => {
-      const same =
-        JSON.stringify(prev) === JSON.stringify(initialAnswers);
+    if (hasHydrated.current) return;
+    hasHydrated.current = true;
 
-      if (same) return prev;
-
-      return initialAnswers;
-    });
+    setAnswers(initialAnswers);
   }, [initialAnswers]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
@@ -129,7 +127,7 @@ export default function AssignmentForm({
             {question.type === 'multiple_choice' && (
               <div className="space-y-2">
                 {question.options?.map((option, i) => (
-                  <label key={`${question.id}-${i}`} className="flex gap-2 items-center">
+                  <label key={`${question.id}-${String(option)}-${i}`} className="flex gap-2 items-center">
                     <input
                       type="radio"
                       name={question.id}
@@ -150,7 +148,7 @@ export default function AssignmentForm({
                     ((answers[question.id] as string[]) || []).includes(option);
 
                   return (
-                    <label key={`${question.id}-${i}`} className="flex gap-2 items-center">
+                    <label key={`${question.id}-${String(option)}-${i}`} className="flex gap-2 items-center">
                       <input
                         type="checkbox"
                         checked={checked}
