@@ -1,56 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-
-type Option = {
+export type Option = {
   id: string;
   text: string;
 };
 
-type Question = {
+export type Question = {
   id: string;
   title: string;
   options: Option[];
 };
 
-export default function AssignmentBuilder() {
-  const [questions, setQuestions] = useState<Question[]>([]);
+type Props = {
+  questions: Question[];
+  onChange: (value: Question[]) => void;
+};
 
-  const updateQuestion = (questionId: string, data: Partial<Question>) => {
-    setQuestions((prev) =>
-      prev.map((q) => (q.id === questionId ? { ...q, ...data } : q))
-    );
-  };
-
-  const addOption = (questionId: string) => {
-    const q = questions.find((x) => x.id === questionId);
-    if (!q) return;
-
-    const newOption: Option = {
-      id: crypto.randomUUID(),
-      text: `خيار ${(q.options?.length || 0) + 1}`,
-    };
-
-    const options: Option[] = [...q.options, newOption];
-
-    updateQuestion(questionId, { options });
-  };
-
-  const updateOption = (
-    questionId: string,
-    optionId: string,
-    value: string
-  ) => {
-    const q = questions.find((x) => x.id === questionId);
-    if (!q) return;
-
-    const options: Option[] = q.options.map((opt) =>
-      opt.id === optionId ? { ...opt, text: value } : opt
-    );
-
-    updateQuestion(questionId, { options });
-  };
-
+export default function AssignmentBuilder({ questions, onChange }: Props) {
   const addQuestion = () => {
     const newQuestion: Question = {
       id: crypto.randomUUID(),
@@ -58,7 +24,50 @@ export default function AssignmentBuilder() {
       options: [],
     };
 
-    setQuestions((prev) => [...prev, newQuestion]);
+    onChange([...questions, newQuestion]);
+  };
+
+  const updateQuestion = (id: string, data: Partial<Question>) => {
+    onChange(
+      questions.map((q) => (q.id === id ? { ...q, ...data } : q))
+    );
+  };
+
+  const addOption = (questionId: string) => {
+    const target = questions.find((q) => q.id === questionId);
+    if (!target) return;
+
+    const newOption: Option = {
+      id: crypto.randomUUID(),
+      text: `خيار ${target.options.length + 1}`,
+    };
+
+    onChange(
+      questions.map((q) =>
+        q.id === questionId
+          ? { ...q, options: [...q.options, newOption] }
+          : q
+      )
+    );
+  };
+
+  const updateOption = (
+    questionId: string,
+    optionId: string,
+    value: string
+  ) => {
+    onChange(
+      questions.map((q) => {
+        if (q.id !== questionId) return q;
+
+        return {
+          ...q,
+          options: q.options.map((opt) =>
+            opt.id === optionId ? { ...opt, text: value } : opt
+          ),
+        };
+      })
+    );
   };
 
   return null;
