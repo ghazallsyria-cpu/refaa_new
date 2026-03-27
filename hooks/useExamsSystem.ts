@@ -94,6 +94,7 @@ export function useExamsSystem() {
 
       setData(mappedData);
     } catch (err: any) {
+      console.error("Fetch error:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -163,36 +164,78 @@ export function useExamsSystem() {
     return { exam: examData, students: [], attempts: attemptsData || [], questions: qData || [], answers: [] };
   }, []);
 
-  // --- الدالة المصلحة لجلب اسم الطالب ---
+  // --- الدالة المصلحة والنهائية لجلب تفاصيل محاولة الطالب ---
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
     try {
-      const [examRes, studentRes, attemptRes] = await Promise.all([
-        supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single(),
-        supabase.from('students').select('*, users:id(full_name, email)').eq('id', studentId).single(),
-        supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentId).maybeSingle()
-      ]);
+      // 1. جلب بيانات الاختبار مع المادة
+      const { data: examData, error: examError } = await supabase
+        .from('exams')
+        .select('*, subject:subjects(name)')
+        .eq('id', examId)
+        .single();
 
-      if (examRes.error) throw examRes.error;
-      if (studentRes.error) throw studentRes.error;
+      if (examError) throw examError;
 
-      let answers = [];
-      if (attemptRes.data) {
-        const { data } = await supabase.from('student_answers').select('*, question:questions(*, options:question_options(*))').eq('attempt_id', attemptRes.data.id);
-        answers = data || [];
+      // 2. جلب بيانات الطالب مع الاسم من جدول users (عبر الربط)
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select(`
+          id,
+          users:id (
+            full_name
+          )
+        `)
+        .eq('id', studentId)
+        .single();
+
+      if (studentError) throw studentError;
+
+      // 3. جلب المحاولة نفسها
+      const { data: attemptData, error: attemptError } = await supabase
+        .from('exam_attempts')
+        .select('*')
+        .eq('exam_id', examId)
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (attemptError) throw attemptError;
+
+      // 4. جلب الإجابات مع تفاصيل الأسئلة والخيارات
+      let answersData = [];
+      if (attemptData) {
+        const { data: answers, error: answersError } = await supabase
+          .from('student_answers')
+          .select(`
+            *,
+            question:questions (
+              *,
+              options:question_options (*)
+            )
+          `)
+          .eq('attempt_id', attemptData.id);
+        
+        if (answersError) throw answersError;
+        answersData = answers || [];
       }
 
-      // منطق استخراج الاسم الصحيح (سواء كان كائناً أو مصفوفة)
-      const rawUser = studentRes.data?.users;
-      const fullName = Array.isArray(rawUser) ? rawUser[0]?.full_name : rawUser?.full_name;
+      // معالجة استخراج الاسم بشكل آمن
+      const rawUser = studentData?.users;
+      const fullName = Array.isArray(rawUser) ? rawUser[0]?.full_name : (rawUser as any)?.full_name;
 
       return {
-        exam: { ...examRes.data, subject_name: examRes.data?.subject?.name || 'مادة عامة' },
-        student: { ...studentRes.data, full_name: fullName || 'اسم الطالب غير متوفر' },
-        attempt: attemptRes.data,
-        answers
+        exam: {
+          ...examData,
+          subject_name: examData.subject?.name || 'مادة عامة'
+        },
+        student: {
+          ...studentData,
+          full_name: fullName || 'اسم الطالب غير متوفر'
+        },
+        attempt: attemptData,
+        answers: answersData
       };
     } catch (err) {
-      console.error("Error fetching result details:", err);
+      console.error("Critical error in fetchStudentExamResult:", err);
       throw err;
     }
   }, []);
