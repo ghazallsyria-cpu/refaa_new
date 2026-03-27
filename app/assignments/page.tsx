@@ -54,17 +54,15 @@ export default function AssignmentsPage() {
         const [subjectsRes, sectionsRes, teachersRes] = await Promise.all([
           supabase.from('subjects').select('*').order('name'),
           supabase.from('sections').select('*, classes(name)').order('name'),
-          // تم التعديل لجلب كافة الحقول لضمان توافق النوع Teacher
           supabase.from('teachers').select('*, users(full_name)')
         ]);
         
-        subjectsData = subjectsRes.data || [];
+        subjectsData = (subjectsRes.data || []) as Subject[];
         sectionsData = (sectionsRes.data || []).map((s: any) => ({
           ...s,
           classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
-        }));
+        })) as Section[];
         
-        // تم التعديل باستخدام ...t لتمرير national_id و hire_date وغيرها
         teachersData = (teachersRes.data || []).map((t: any) => ({
           ...t,
           id: t.id,
@@ -91,7 +89,7 @@ export default function AssignmentsPage() {
             return subject?.id === id;
           });
           return Array.isArray(ts?.subject) ? ts?.subject[0] : ts?.subject;
-        }).filter((s): s is Subject => !!s);
+        }).filter(Boolean) as Subject[];
 
         const uniqueSections = Array.from(new Set((teacherSectionsData || []).map(ts => {
           const section = Array.isArray(ts.section) ? ts.section[0] : ts.section;
@@ -107,12 +105,11 @@ export default function AssignmentsPage() {
             ...section,
             classes: Array.isArray(section.classes) ? section.classes[0] : section.classes
           };
-        }).filter((s): s is Section => !!s);
+        }).filter(Boolean) as Section[];
 
         subjectsData = uniqueSubjects;
         sectionsData = uniqueSections;
 
-        // تم التعديل هنا أيضاً لجلب بيانات المعلم كاملة
         const { data: currentTeacher } = await supabase
           .from('teachers')
           .select('*, users(full_name)')
