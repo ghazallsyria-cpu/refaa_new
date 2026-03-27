@@ -2,11 +2,6 @@
 
 import { Question } from '@/types/question';
 
-type Option = {
-  id: string;
-  text: string;
-};
-
 type Props = {
   questions: Question[];
   onChange: (value: Question[]) => void;
@@ -14,13 +9,21 @@ type Props = {
 
 export default function AssignmentBuilder({ questions, onChange }: Props) {
   const addQuestion = () => {
-    const newQuestion = {
+    const newQuestion: Question = {
       id: crypto.randomUUID(),
+
+      // حقول مطلوبة حسب type الحقيقي في المشروع
       title: '',
+      type: 'text',
+      content: '',
+      points: 0,
+      isRequired: false,
+
+      // إذا النظام يدعم options
       options: [],
     };
 
-    onChange([...questions, newQuestion as Question]);
+    onChange([...questions, newQuestion]);
   };
 
   const updateQuestion = (id: string, data: Partial<Question>) => {
@@ -30,12 +33,12 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
   };
 
   const addOption = (questionId: string) => {
-    const target = questions.find((q) => q.id === questionId);
-    if (!target) return;
+    const q = questions.find((x) => x.id === questionId);
+    if (!q) return;
 
     const newOption = {
       id: crypto.randomUUID(),
-      text: `خيار ${(target as any).options?.length + 1 || 1}`,
+      text: `خيار ${(q as any).options?.length + 1 || 1}`,
     };
 
     onChange(
