@@ -1,3 +1,4 @@
+export * from './question';
 export interface Teacher {
   id: string;
   users: {

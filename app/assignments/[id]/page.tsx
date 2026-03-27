@@ -9,7 +9,7 @@ import AssignmentForm from '@/components/assignment-form';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
-import { Question } from '@/components/assignment-builder';
+import { Question } from '@/types/question';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import * as XLSX from 'xlsx';

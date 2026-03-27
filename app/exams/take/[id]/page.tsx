@@ -12,15 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
-type Question = {
-  id: string;
-  type: string;
-  content: string;
-  points: number;
-  media_url?: string;
-  media_type?: string;
-  options: { id: string, content: string }[];
-};
+import { Question } from '@/types/question';
 
 type Exam = {
   id: string;

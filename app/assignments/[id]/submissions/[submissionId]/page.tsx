@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import AssignmentForm from '@/components/assignment-form';
-import { Question } from '@/components/assignment-builder';
+import { Question } from '@/types/question';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 

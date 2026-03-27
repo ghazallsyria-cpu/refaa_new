@@ -17,24 +17,7 @@ import * as Switch from '@radix-ui/react-switch';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
-type QuestionType = 'multiple_choice' | 'true_false' | 'multi_select' | 'essay' | 'fill_in_blank' | 'matching' | 'ordering';
-
-type Option = {
-  id: string;
-  content: string;
-  is_correct: boolean;
-};
-
-type Question = {
-  id: string;
-  type: QuestionType;
-  content: string;
-  points: number;
-  explanation?: string;
-  options: Option[];
-  media_url?: string;
-  media_type?: 'image' | 'video' | 'pdf';
-};
+import { Question, QuestionType, Option } from '@/types/question';
 
 type ExamData = {
   id?: string;
