@@ -263,8 +263,8 @@ export default function AnnouncementsPage() {
                     <div className="p-10 flex-1">
                       <div className="flex flex-col sm:flex-row justify-between items-start gap-6 mb-8">
                         <div className="flex items-center gap-6">
-                          <div className={`h-16 w-16 rounded-3xl flex items-center justify-center shadow-xl ${getAudienceColor(announcement.target_role).split(' ')[0]}`}>
-                            <Bell className={`h-8 w-8 ${getAudienceColor(announcement.target_role).split(' ')[1]}`} />
+                          <div className={`h-16 w-16 rounded-3xl flex items-center justify-center shadow-xl ${getAudienceColor(announcement.target_role || 'all').split(' ')[0]}`}>
+                            <Bell className={`h-8 w-8 ${getAudienceColor(announcement.target_role || 'all').split(' ')[1]}`} />
                           </div>
                           <div>
                             <h3 className="text-3xl font-black text-slate-900 leading-tight tracking-tight group-hover:text-indigo-600 transition-colors">
@@ -275,9 +275,9 @@ export default function AnnouncementsPage() {
                                 <Calendar className="h-4 w-4 text-indigo-500" />
                                 <span dir="ltr">{dateObj.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
                               </div>
-                              <div className={`flex items-center gap-2 px-4 py-1.5 rounded-2xl border ${getAudienceColor(announcement.target_role)}`}>
+                              <div className={`flex items-center gap-2 px-4 py-1.5 rounded-2xl border ${getAudienceColor(announcement.target_role || 'all')}`}>
                                 <Users className="h-4 w-4" />
-                                <span>{getAudienceLabel(announcement.target_role)}</span>
+                                <span>{getAudienceLabel(announcement.target_role || 'all')}</span>
                               </div>
                             </div>
                           </div>
@@ -359,8 +359,8 @@ export default function AnnouncementsPage() {
                 <div className="space-y-10">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-6">
-                      <div className={`h-20 w-20 rounded-[2.5rem] flex items-center justify-center shadow-xl ${getAudienceColor(selectedAnnouncement.target_role).split(' ')[0]}`}>
-                        <Bell className={`h-10 w-10 ${getAudienceColor(selectedAnnouncement.target_role).split(' ')[1]}`} />
+                      <div className={`h-20 w-20 rounded-[2.5rem] flex items-center justify-center shadow-xl ${getAudienceColor(selectedAnnouncement.target_role || 'all').split(' ')[0]}`}>
+                        <Bell className={`h-10 w-10 ${getAudienceColor(selectedAnnouncement.target_role || 'all').split(' ')[1]}`} />
                       </div>
                       <div>
                         <Dialog.Title className="text-4xl font-black text-slate-900 tracking-tight leading-tight">
@@ -371,9 +371,9 @@ export default function AnnouncementsPage() {
                             <Calendar className="h-4 w-4 text-indigo-500" />
                             <span dir="ltr">{new Date(selectedAnnouncement.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
                           </div>
-                          <div className={`flex items-center gap-2 px-4 py-1.5 rounded-2xl border ${getAudienceColor(selectedAnnouncement.target_role)}`}>
+                          <div className={`flex items-center gap-2 px-4 py-1.5 rounded-2xl border ${getAudienceColor(selectedAnnouncement.target_role || 'all')}`}>
                             <Users className="h-4 w-4" />
-                            <span>{getAudienceLabel(selectedAnnouncement.target_role)}</span>
+                            <span>{getAudienceLabel(selectedAnnouncement.target_role || 'all')}</span>
                           </div>
                         </div>
                       </div>
