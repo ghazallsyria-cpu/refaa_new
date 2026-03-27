@@ -23,7 +23,7 @@ export interface Assignment {
 export interface AssignmentQuestion {
   id: string;
   text: string;
-  type: 'multiple_choice' | 'text' | 'file';
+  type: 'multiple_choice' | 'text' | 'file' | 'checkbox' | 'paragraph';
   options?: string[];
   points: number;
   isRequired: boolean;
