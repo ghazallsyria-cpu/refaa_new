@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Question } from '@/types/question';
 
 interface Props {
@@ -17,14 +18,15 @@ export default function AssignmentForm({
   initialAnswers = {},
   readOnly = false
 }: Props) {
-  const handleChange = (id: string, value: any, setState: any, state: any) => {
-    setState({
-      ...state,
-      [id]: value
-    });
-  };
+  const [answers, setAnswers] =
+    useState<Record<string, any>>(initialAnswers);
 
-  const [answers, setAnswers] = React.useState<Record<string, any>>(initialAnswers);
+  const updateAnswer = (id: string, value: any) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [id]: value
+    }));
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,17 +36,15 @@ export default function AssignmentForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       {questions.map((q) => (
-        <div key={q.id} className="border p-3 rounded">
-          <div className="mb-2">{q.content}</div>
+        <div key={q.id} className="border p-3 rounded space-y-2">
+          <div>{q.content}</div>
 
           {q.type === 'text' && (
             <input
               disabled={readOnly}
               className="w-full border p-2"
               value={answers[q.id] || ''}
-              onChange={(e) =>
-                handleChange(q.id, e.target.value, setAnswers, answers)
-              }
+              onChange={(e) => updateAnswer(q.id, e.target.value)}
             />
           )}
 
@@ -55,7 +55,7 @@ export default function AssignmentForm({
               className="w-full border p-2"
               value={answers[q.id] || ''}
               onChange={(e) =>
-                handleChange(q.id, Number(e.target.value), setAnswers, answers)
+                updateAnswer(q.id, Number(e.target.value))
               }
             />
           )}
@@ -65,9 +65,7 @@ export default function AssignmentForm({
               disabled={readOnly}
               className="w-full border p-2"
               value={answers[q.id] || ''}
-              onChange={(e) =>
-                handleChange(q.id, e.target.value, setAnswers, answers)
-              }
+              onChange={(e) => updateAnswer(q.id, e.target.value)}
             >
               {q.options.map((opt, i) => (
                 <option key={i} value={opt}>
