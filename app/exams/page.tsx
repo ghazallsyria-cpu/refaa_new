@@ -16,7 +16,7 @@ import { useAuth } from '@/context/auth-context';
 export default function ExamsDashboard() {
   const { user, userRole, isChecking: authLoading } = useAuth();
   
-  // استدعاء الهوك مع التأكد من جلب الدالة الجديدة
+  // جلب البيانات والدوال من الهوك المصلح
   const { 
     data: exams, 
     loading: contentLoading, 
@@ -27,13 +27,8 @@ export default function ExamsDashboard() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // الحماية من الأخطاء في حال كانت المصفوفة غير موجودة
+  // تصفية الاختبارات بناءً على البحث والحالة
   const filteredExams = (exams || []).filter(exam => {
     const titleMatch = exam.title?.toLowerCase().includes(searchTerm.toLowerCase());
     const subjectMatch = exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -48,7 +43,6 @@ export default function ExamsDashboard() {
     try {
       if (deleteExamWithMedia) {
         await deleteExamWithMedia(examId);
-        // تحديث القائمة بعد الحذف
         if (refresh) refresh();
       }
     } catch (err) {
@@ -96,7 +90,8 @@ export default function ExamsDashboard() {
     return 'available';
   };
 
-  if (!mounted || authLoading || contentLoading) {
+  // تم إزالة شرط mounted واستبداله بـ authLoading و contentLoading فقط لتجنب خطأ ESLint
+  if (authLoading || contentLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
