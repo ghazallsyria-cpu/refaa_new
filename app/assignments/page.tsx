@@ -9,7 +9,7 @@ import {
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
-import { Question, toAssignmentQuestion } from '@/types/question';
+import { Question } from '@/types/question';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useSchoolFormData } from '@/hooks/use-school-form-data';
@@ -37,7 +37,7 @@ export default function AssignmentsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [currentAssignment, setCurrentAssignment] = useState<any>({});
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [notification, setNotification] = useState<any>(null);
@@ -78,7 +78,7 @@ export default function AssignmentsPage() {
       await saveAssignment(
         payload,
         currentAssignment.id || null,
-        questions.map(toAssignmentQuestion),
+        questions,
         currentAssignment.section_ids || [],
         subjects
       );
