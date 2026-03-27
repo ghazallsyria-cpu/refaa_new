@@ -65,7 +65,7 @@ export default function AssignmentsPage() {
       await saveAssignment(
         payload, 
         currentAssignment.id || null, 
-        questions.map(toAssignmentQuestion), 
+        questions,
         currentAssignment.section_ids || [],
         subjects
       );
