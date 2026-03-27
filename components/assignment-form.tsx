@@ -134,7 +134,7 @@ export default function AssignmentForm({
             <div className="space-y-2">
               {question.options?.map((option, i) => {
                 const checked =
-                  ((answers[question.id] as string[]) || []).includes(option);
+                  ((answers[question.id] as string[]) || []).includes(String(option));
 
                 return (
                   <label key={`${question.id}-${i}`} className="flex gap-2 items-center">
