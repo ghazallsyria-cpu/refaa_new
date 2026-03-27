@@ -1,27 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Question } from '@/types/question';
+import { Question, newQuestion } from '@/types/question';
 
 interface Props {
   questions: Question[];
   onChange: (questions: Question[]) => void;
 }
 
-const createEmptyQuestion = (): Question => ({
-  id: crypto.randomUUID(),
-  type: 'mcq',
-  title: '',
-  content: '',
-  points: 1,
-  isRequired: false,
-  options: []
-});
-
 export default function AssignmentBuilder({ questions, onChange }: Props) {
-  const addQuestion = () => {
-    const newQuestion = createEmptyQuestion();
-    onChange([...questions, newQuestion]);
+
+  const addQuestion = (type: Question['type'] = 'text') => {
+    const q = newQuestion(type);
+    onChange([...questions, q]);
   };
 
   const updateQuestion = (id: string, data: Partial<Question>) => {
@@ -38,23 +29,16 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
 
   return (
     <div className="space-y-4">
+
       {questions.map((q) => (
         <div key={q.id} className="border p-4 rounded space-y-2">
-          <input
-            value={q.title}
-            onChange={(e) =>
-              updateQuestion(q.id, { title: e.target.value })
-            }
-            placeholder="Title"
-            className="w-full border p-2"
-          />
 
-          <textarea
+          <input
             value={q.content}
             onChange={(e) =>
               updateQuestion(q.id, { content: e.target.value })
             }
-            placeholder="Content"
+            placeholder="Question content"
             className="w-full border p-2"
           />
 
@@ -84,15 +68,17 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
           >
             Delete
           </button>
+
         </div>
       ))}
 
       <button
-        onClick={addQuestion}
+        onClick={() => addQuestion('text')}
         className="px-4 py-2 bg-black text-white"
       >
         Add Question
       </button>
+
     </div>
   );
 }
