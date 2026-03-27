@@ -1,5 +1,6 @@
-import { withRoleGuard, ROLES } from '@/lib/role-guard';
 "use client";
+
+import { withRoleGuard, ROLES } from '@/lib/role-guard';
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
