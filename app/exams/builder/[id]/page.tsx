@@ -7,7 +7,7 @@ import {
   ArrowRight, Check, X, Image as ImageIcon,
   Clock, Target, FileText, Calendar, Layout, 
   Settings as SettingsIcon, ShieldCheck, Shuffle, Eye,
-  List // تم إضافة الاستيراد المفقود هنا
+  List, BookOpen, Users
 } from 'lucide-react';
 import { motion, Reorder, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -130,7 +130,7 @@ export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
   const { fetchExamDetails, saveExam } = useExamsSystem();
-  const { data: formData } = useSchoolFormData();
+  const { data: formData, loading: formLoading } = useSchoolFormData();
   
   const [exam, setExam] = useState<any>({ 
     title: '', 
@@ -143,6 +143,7 @@ export default function QuizBuilder() {
     start_time: '08:00',
     end_time: '23:00',
     subject_id: '',
+    section_ids: [],
     settings: {
       shuffle_questions: false,
       shuffle_options: false,
@@ -160,6 +161,7 @@ export default function QuizBuilder() {
       fetchExamDetails(params.id as string).then(res => {
         setExam({
           ...res.exam,
+          section_ids: res.exam.section_ids || [],
           settings: res.exam.settings || {
             shuffle_questions: false,
             shuffle_options: false,
@@ -176,6 +178,16 @@ export default function QuizBuilder() {
       setLoading(false);
     }
   }, [params.id, fetchExamDetails]);
+
+  const toggleSection = (sectionId: string) => {
+    setExam((prev: any) => {
+      const currentIds = prev.section_ids || [];
+      const newIds = currentIds.includes(sectionId)
+        ? currentIds.filter((id: string) => id !== sectionId)
+        : [...currentIds, sectionId];
+      return { ...prev, section_ids: newIds };
+    });
+  };
 
   const updateQuestion = useCallback((id: string, updates: Partial<Question>) => {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
@@ -215,6 +227,8 @@ export default function QuizBuilder() {
   const handleSave = async () => {
     if (!exam.title) return alert('يرجى إدخال عنوان الاختبار');
     if (!exam.subject_id) return alert('يرجى اختيار المادة الدراسية');
+    if (!exam.section_ids || exam.section_ids.length === 0) return alert('يرجى اختيار صف واحد على الأقل');
+    
     setSaving(true);
     try {
       await saveExam(exam, questions, params.id === 'new');
@@ -253,7 +267,7 @@ export default function QuizBuilder() {
               <Dialog.Trigger asChild>
                 <button className="h-12 px-5 flex items-center gap-3 rounded-2xl bg-white border border-slate-200 text-slate-600 font-black hover:text-indigo-600 hover:border-indigo-100 transition-all active:scale-95 shadow-sm">
                   <SettingsIcon className="h-5 w-5" />
-                  <span className="hidden md:inline text-sm">الإعدادات</span>
+                  <span className="hidden md:inline text-sm">إعدادات متقدمة</span>
                 </button>
               </Dialog.Trigger>
               <Dialog.Portal>
@@ -292,7 +306,7 @@ export default function QuizBuilder() {
                   </div>
 
                   <div className="mt-10">
-                    <Dialog.Close className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all text-center">تم حفظ الإعدادات</Dialog.Close>
+                    <Dialog.Close className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all text-center">حفظ الإعدادات</Dialog.Close>
                   </div>
                 </Dialog.Content>
               </Dialog.Portal>
@@ -303,7 +317,7 @@ export default function QuizBuilder() {
               disabled={saving} 
               className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-4 rounded-[20px] font-black disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
             >
-              {saving ? 'جاري الحفظ...' : 'حفظ الاختبار'}
+              {saving ? 'جاري الحفظ...' : 'حفظ ونشر'}
             </button>
           </div>
         </div>
@@ -330,13 +344,13 @@ export default function QuizBuilder() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-10 border-t border-slate-100">
              <div className="space-y-3">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Layout className="h-3 w-3" /> المادة الدراسية</label>
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><BookOpen className="h-3 w-3" /> المادة الدراسية</label>
               <select 
                 value={exam.subject_id} 
                 onChange={(e) => setExam({ ...exam, subject_id: e.target.value })}
-                className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold appearance-none shadow-sm"
+                className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold appearance-none shadow-sm cursor-pointer"
               >
-                <option value="">اختر المادة</option>
+                <option value="">{formLoading ? 'جاري تحميل المواد...' : 'اختر المادة'}</option>
                 {formData?.subjects?.map((s: any) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -345,6 +359,37 @@ export default function QuizBuilder() {
             <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Target className="h-3 w-3" /> درجة النجاح (%)</label>
               <input type="number" value={exam.passing_score} onChange={(e) => setExam({ ...exam, passing_score: parseInt(e.target.value) })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm" />
+            </div>
+          </div>
+
+          {/* قسم اختيار الصفوف - المُعاد إضافته */}
+          <div className="space-y-4 pt-6 border-t border-slate-50">
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <Users className="h-3 w-3" /> الصفوف المستهدفة (المجموعات الدراسية)
+            </label>
+            <div className="flex flex-wrap gap-3">
+              {formData?.sections?.length > 0 ? (
+                formData.sections.map((section: any) => {
+                  const isSelected = exam.section_ids?.includes(section.id);
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => toggleSection(section.id)}
+                      className={`px-6 py-3 rounded-2xl text-sm font-black transition-all border-2 ${
+                        isSelected 
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' 
+                        : 'bg-white border-slate-100 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      {section.name}
+                      {isSelected && <Check className="h-3 w-3 inline-block mr-2" />}
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-400 italic">لا توجد صفوف معرفة في النظام.</p>
+              )}
             </div>
           </div>
 
@@ -358,7 +403,7 @@ export default function QuizBuilder() {
               <input type="date" value={exam.exam_date} onChange={(e) => setExam({ ...exam, exam_date: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm" />
             </div>
              <div className="space-y-3">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Layout className="h-3 w-3" /> وقت البدء - الانتهاء</label>
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock className="h-3 w-3" /> وقت البدء - الانتهاء</label>
               <div className="flex items-center gap-2">
                 <input type="time" value={exam.start_time} onChange={(e) => setExam({ ...exam, start_time: e.target.value })} className="w-1/2 p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm text-center" />
                 <input type="time" value={exam.end_time} onChange={(e) => setExam({ ...exam, end_time: e.target.value })} className="w-1/2 p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 font-bold shadow-sm text-center" />
