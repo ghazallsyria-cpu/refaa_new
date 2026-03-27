@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, Plus, Trash2, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
@@ -52,30 +51,12 @@ export default function SchedulesPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
-  const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
-
-  // ✅ FIX كامل: إضافة updateSchedule
-  const { 
-    fetchInitialScheduleData, 
-    fetchSchedules: fetchSchedulesData, 
-    addSchedule, 
-    updateSchedule,
-    deleteSchedule: deleteScheduleAction 
-  } = useSchedulesSystem();
-
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
 
   const [currentCell, setCurrentCell] = useState<{
     day: number;
@@ -85,6 +66,14 @@ export default function SchedulesPage() {
     teacherId?: string;
   }>({ day: 0, period: 1 });
 
+  const {
+    fetchInitialScheduleData,
+    fetchSchedules: fetchSchedulesData,
+    addSchedule,
+    updateSchedule,
+    deleteSchedule
+  } = useSchedulesSystem();
+
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
@@ -92,14 +81,11 @@ export default function SchedulesPage() {
       setSections(data.sections || []);
       setSubjects(data.subjects || []);
       setTeachers(data.teachers || []);
-      setTeacherAssignments(data.assignments || []);
       setPeriods(data.periods || []);
 
       if (data.sections?.length) {
         setSelectedSectionId(data.sections[0].id);
       }
-    } catch {
-      showNotification('error', 'فشل تحميل البيانات');
     } finally {
       setLoading(false);
     }
@@ -108,11 +94,8 @@ export default function SchedulesPage() {
   const fetchSchedules = useCallback(async (sectionId: string) => {
     setLoading(true);
     try {
-      // ✅ FIX مهم
-      const data = await fetchSchedulesData({ section_id: sectionId });
+      const data = await fetchSchedulesData({ sectionId });
       setSchedules(data || []);
-    } catch {
-      showNotification('error', 'فشل تحميل الجدول');
     } finally {
       setLoading(false);
     }
@@ -123,7 +106,9 @@ export default function SchedulesPage() {
   }, [fetchInitialData]);
 
   useEffect(() => {
-    if (selectedSectionId) fetchSchedules(selectedSectionId);
+    if (selectedSectionId) {
+      fetchSchedules(selectedSectionId);
+    }
   }, [selectedSectionId, fetchSchedules]);
 
   const openCellModal = (day: number, period: number, existing?: Schedule) => {
@@ -143,10 +128,7 @@ export default function SchedulesPage() {
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!currentCell.subjectId || !currentCell.teacherId) {
-      showNotification('error', 'اختر المادة والمعلم');
-      return;
-    }
+    if (!currentCell.subjectId || !currentCell.teacherId) return;
 
     setIsSubmitting(true);
 
@@ -167,27 +149,21 @@ export default function SchedulesPage() {
 
       await fetchSchedules(selectedSectionId);
       setIsModalOpen(false);
-      showNotification('success', 'تم الحفظ');
-    } catch {
-      showNotification('error', 'خطأ أثناء الحفظ');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const confirmDelete = async () => {
-    if (!scheduleToDelete) return;
-
-    await deleteScheduleAction(scheduleToDelete);
+  const handleDelete = async (id: string) => {
+    await deleteSchedule(id);
     await fetchSchedules(selectedSectionId);
-    setScheduleToDelete(null);
   };
 
   const getCellData = (day: number, period: number) =>
     schedules.find(s => s.day_of_week === day && s.period === period);
 
   return (
-    <div className="space-y-6">
+    <div>
 
       <select
         value={selectedSectionId}
@@ -200,47 +176,64 @@ export default function SchedulesPage() {
         ))}
       </select>
 
-      <table className="w-full border">
-        <thead>
-          <tr>
-            <th>اليوم</th>
-            {periods.map(p => <th key={p.id}>حصة {p.period_number}</th>)}
-          </tr>
-        </thead>
-
-        <tbody>
-          {DAYS.map(day => (
-            <tr key={day.id}>
-              <td>{day.name}</td>
-
-              {periods.map(p => {
-                const cell = getCellData(day.id, p.period_number);
-
-                return (
-                  <td
-                    key={p.id}
-                    onClick={() => openCellModal(day.id, p.period_number, cell)}
-                    className="border h-20 cursor-pointer text-center"
-                  >
-                    {cell?.subjects?.name || '-'}
-                  </td>
-                );
-              })}
+      {loading ? (
+        <div>...</div>
+      ) : (
+        <table className="w-full border">
+          <thead>
+            <tr>
+              <th>اليوم</th>
+              {periods.map(p => (
+                <th key={p.id}>حصة {p.period_number}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {DAYS.map(day => (
+              <tr key={day.id}>
+                <td>{day.name}</td>
+
+                {periods.map(p => {
+                  const cell = getCellData(day.id, p.period_number);
+
+                  return (
+                    <td
+                      key={p.id}
+                      onClick={() => openCellModal(day.id, p.period_number, cell)}
+                      className="border h-20 cursor-pointer text-center"
+                    >
+                      <div>{cell?.subjects?.name || '-'}</div>
+
+                      {cell && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(cell.id);
+                          }}
+                        >
+                          حذف
+                        </button>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/40" />
           <Dialog.Content className="fixed inset-0 m-auto max-w-md bg-white p-6">
 
-            <form onSubmit={handleSaveSchedule} className="space-y-3">
+            <form onSubmit={handleSaveSchedule}>
 
               <select
                 value={currentCell.subjectId || ''}
-                onChange={(e) => setCurrentCell({...currentCell, subjectId: e.target.value})}
+                onChange={(e) => setCurrentCell({ ...currentCell, subjectId: e.target.value })}
               >
                 <option value="">مادة</option>
                 {subjects.map(s => (
@@ -250,7 +243,7 @@ export default function SchedulesPage() {
 
               <select
                 value={currentCell.teacherId || ''}
-                onChange={(e) => setCurrentCell({...currentCell, teacherId: e.target.value})}
+                onChange={(e) => setCurrentCell({ ...currentCell, teacherId: e.target.value })}
               >
                 <option value="">معلم</option>
                 {teachers.map(t => (
