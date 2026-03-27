@@ -12,7 +12,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
-import { Question } from '@/types/question';
+// تم استيراد Question و Option من المصدر الموثوق
+import { Question, Option } from '@/types/question';
 
 type Exam = {
   id: string;
@@ -22,7 +23,12 @@ type Exam = {
   exam_date: string;
   start_time: string;
   end_time: string;
-  settings: any;
+  settings: {
+    shuffle_questions?: boolean;
+    shuffle_options?: boolean;
+    show_result_immediately?: boolean;
+    allow_backtracking?: boolean;
+  };
 };
 
 export default function TakeQuiz() {
@@ -33,7 +39,10 @@ export default function TakeQuiz() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  
+  // تحديد النوع بدقة للتخلص من any
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
@@ -44,17 +53,15 @@ export default function TakeQuiz() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchQuiz = useCallback(async () => {
     try {
       const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
       
-      // Check if exam is available based on date and time
       const now = new Date();
       const examDate = new Date(examData.exam_date);
       
-      // Combine date and time for start and end
       const startTimeParts = (examData.start_time || '00:00').split(':');
       const endTimeParts = (examData.end_time || '23:59').split(':');
       
@@ -83,19 +90,10 @@ export default function TakeQuiz() {
 
       if (examData.duration) {
         const durationSeconds = examData.duration * 60;
-        
-        // Also check if end_time is sooner than duration
         const secondsUntilEnd = Math.floor((endDateTime.getTime() - now.getTime()) / 1000);
-        
-        // Use the smaller of the two
         const finalTimeLeft = Math.min(durationSeconds, secondsUntilEnd);
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
       }
-
-      // Note: We are not handling the attempt creation here anymore, 
-      // submitExam will handle creating/updating the attempt.
-      // For a real production app, we should probably still create an 'ongoing' attempt here.
-      // But for this refactor, we'll let submitExam handle it to simplify.
 
     } catch (err) {
       console.error('Error fetching quiz:', err);
@@ -123,14 +121,15 @@ export default function TakeQuiz() {
         let isCorrect = false;
         let pointsEarned = 0;
 
+        // إزالة any لأن TypeScript يعرف الآن أن o من نوع Option
         if (q.type === 'multiple_choice' || q.type === 'true_false') {
-          const correctOpt = q.options.find((o: any) => o.is_correct);
+          const correctOpt = q.options.find(o => o.is_correct);
           isCorrect = studentAnswer === correctOpt?.id;
           pointsEarned = isCorrect ? q.points : 0;
         } else if (q.type === 'multi_select') {
-          const correctOpts = q.options.filter((o: any) => o.is_correct).map((o: any) => o.id);
-          const studentOpts = studentAnswer || [];
-          isCorrect = correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
+          const correctOpts = q.options.filter(o => o.is_correct).map(o => o.id);
+          const studentOpts = (studentAnswer as string[]) || [];
+          isCorrect = correctOpts.length === studentOpts.length && correctOpts.every(id => studentOpts.includes(id));
           pointsEarned = isCorrect ? q.points : 0;
         }
 
@@ -175,7 +174,7 @@ export default function TakeQuiz() {
     };
   }, [timeLeft, isFinished, handleSubmit]);
 
-  const handleAnswerChange = (questionId: string, value: any) => {
+  const handleAnswerChange = (questionId: string, value: string | string[]) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
@@ -336,14 +335,15 @@ export default function TakeQuiz() {
               {currentQuestion?.type === 'multi_select' && (
                 <div className="grid gap-3">
                   {currentQuestion.options.map((option) => {
-                    const isSelected = (answers[currentQuestion.id] || []).includes(option.id);
+                    const studentAnswers = (answers[currentQuestion.id] as string[]) || [];
+                    const isSelected = studentAnswers.includes(option.id);
                     return (
                       <button
                         key={option.id}
                         onClick={() => {
-                          const current = answers[currentQuestion.id] || [];
+                          const current = (answers[currentQuestion.id] as string[]) || [];
                           const next = isSelected 
-                            ? current.filter((id: string) => id !== option.id)
+                            ? current.filter(id => id !== option.id)
                             : [...current, option.id];
                           handleAnswerChange(currentQuestion.id, next);
                         }}
@@ -371,7 +371,7 @@ export default function TakeQuiz() {
 
               {currentQuestion?.type === 'essay' && (
                 <textarea
-                  value={answers[currentQuestion.id] || ''}
+                  value={(answers[currentQuestion.id] as string) || ''}
                   onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
                   placeholder="اكتب إجابتك هنا بالتفصيل..."
                   className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-lg leading-relaxed"
@@ -381,7 +381,7 @@ export default function TakeQuiz() {
               {currentQuestion?.type === 'fill_in_blank' && (
                 <input
                   type="text"
-                  value={answers[currentQuestion.id] || ''}
+                  value={(answers[currentQuestion.id] as string) || ''}
                   onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
                   placeholder="أدخل الكلمة المفقودة..."
                   className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-lg font-bold text-center"
@@ -431,3 +431,4 @@ export default function TakeQuiz() {
     </div>
   );
 }
+
