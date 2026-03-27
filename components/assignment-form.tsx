@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React from 'react';
 import { Question } from '@/types/question';
 
 interface Props {
@@ -18,14 +18,10 @@ export default function AssignmentForm({
   initialAnswers = {},
   readOnly = false
 }: Props) {
-  const [answers, setAnswers] =
-    useState<Record<string, any>>(initialAnswers);
+  const [answers, setAnswers] = React.useState<Record<string, any>>(initialAnswers);
 
-  const updateAnswer = (id: string, value: any) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [id]: value
-    }));
+  const handleChange = (id: string, value: any) => {
+    setAnswers(prev => ({ ...prev, [id]: value }));
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -34,56 +30,90 @@ export default function AssignmentForm({
   };
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit}>
       {questions.map((q) => (
-        <div key={q.id} className="border p-3 rounded space-y-2">
-          <div>{q.content}</div>
+        <div key={q.id}>
+          <p>{q.content}</p>
 
-          {q.type === 'text' && (
+          {(q.type === 'text' || q.type === 'fill_in_blank') && (
             <input
+              type="text"
               disabled={readOnly}
-              className="w-full border p-2"
               value={answers[q.id] || ''}
-              onChange={(e) => updateAnswer(q.id, e.target.value)}
+              onChange={(e) => handleChange(q.id, e.target.value)}
             />
           )}
 
-          {q.type === 'number' && (
-            <input
-              type="number"
+          {q.type === 'paragraph' && (
+            <textarea
               disabled={readOnly}
-              className="w-full border p-2"
               value={answers[q.id] || ''}
-              onChange={(e) =>
-                updateAnswer(q.id, Number(e.target.value))
-              }
+              onChange={(e) => handleChange(q.id, e.target.value)}
             />
           )}
 
-          {q.type === 'mcq' && q.options && (
+          {q.type === 'essay' && (
+            <textarea
+              disabled={readOnly}
+              value={answers[q.id] || ''}
+              onChange={(e) => handleChange(q.id, e.target.value)}
+            />
+          )}
+
+          {q.type === 'multiple_choice' && q.options.length > 0 && (
             <select
               disabled={readOnly}
-              className="w-full border p-2"
               value={answers[q.id] || ''}
-              onChange={(e) => updateAnswer(q.id, e.target.value)}
+              onChange={(e) => handleChange(q.id, e.target.value)}
             >
-              {q.options.map((opt, i) => (
-                <option key={i} value={opt}>
-                  {opt}
+              <option value="">اختر إجابة</option>
+              {q.options.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.content}
                 </option>
               ))}
             </select>
+          )}
+
+          {q.type === 'true_false' && (
+            <select
+              disabled={readOnly}
+              value={answers[q.id] || ''}
+              onChange={(e) => handleChange(q.id, e.target.value)}
+            >
+              <option value="">اختر</option>
+              <option value="true">صح</option>
+              <option value="false">خطأ</option>
+            </select>
+          )}
+
+          {q.type === 'multi_select' && q.options.length > 0 && (
+            <div>
+              {q.options.map((opt) => (
+                <label key={opt.id}>
+                  <input
+                    type="checkbox"
+                    disabled={readOnly}
+                    checked={(answers[q.id] || []).includes(opt.id)}
+                    onChange={(e) => {
+                      const current = answers[q.id] || [];
+                      const updated = e.target.checked
+                        ? [...current, opt.id]
+                        : current.filter((v: string) => v !== opt.id);
+                      handleChange(q.id, updated);
+                    }}
+                  />
+                  {opt.content}
+                </label>
+              ))}
+            </div>
           )}
         </div>
       ))}
 
       {!readOnly && (
-        <button
-          disabled={isSubmitting}
-          className="px-4 py-2 bg-black text-white"
-          type="submit"
-        >
-          Submit
+        <button type="submit" disabled={isSubmitting}>
+          إرسال
         </button>
       )}
     </form>
