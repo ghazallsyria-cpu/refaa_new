@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
+// تعريف الواجهة لضمان سلامة الأنواع
 export interface Exam {
   id: string;
   title: string;
@@ -25,6 +26,7 @@ export interface Exam {
   graded_count?: number;
   avg_score?: number;
   question_count?: number;
+  section_ids?: string[];
 }
 
 export function useExamsSystem() {
@@ -33,6 +35,7 @@ export function useExamsSystem() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 1. جلب قائمة الاختبارات (الرئيسية)
   const fetchExams = useCallback(async () => {
     if (!user || !userRole) return;
     setLoading(true);
@@ -56,9 +59,7 @@ export function useExamsSystem() {
           .single();
 
         if (studentProfile?.section_id) {
-          query = query
-            .eq('section_id', studentProfile.section_id)
-            .eq('status', 'published');
+          query = query.eq('section_id', studentProfile.section_id).eq('status', 'published');
         } else {
           setData([]);
           setLoading(false);
@@ -71,11 +72,12 @@ export function useExamsSystem() {
 
       let mappedData = (examsData || []).map((e: any) => ({
         ...e,
-        subject_name: e.subject?.name,
-        teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
-        section_name: e.section?.name,
+        subject_name: e.subject?.name || 'مادة عامة',
+        teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name || 'معلم غير معروف',
+        section_name: e.section?.name || 'غير محدد',
       }));
 
+      // جلب إحصائيات المعلم/الأدمن
       if (['teacher', 'admin', 'management'].includes(userRole)) {
         const examsWithStats = await Promise.all(mappedData.map(async (e: any) => {
           const [attemptsRes, questionsRes] = await Promise.all([
@@ -99,6 +101,7 @@ export function useExamsSystem() {
         mappedData = examsWithStats;
       }
 
+      // جلب حالة التسليم للطالب
       if (userRole === 'student') {
         const { data: attemptsData } = await supabase
           .from('exam_attempts')
@@ -128,26 +131,16 @@ export function useExamsSystem() {
     fetchExams();
   }, [fetchExams]);
 
+  // 2. جلب تفاصيل اختبار للتعديل (Builder)
   const fetchExamDetails = async (examId: string) => {
-    const { data: examData, error: examError } = await supabase
-      .from('exams')
-      .select('*')
-      .eq('id', examId)
-      .single();
-
+    const { data: examData, error: examError } = await supabase.from('exams').select('*').eq('id', examId).single();
     if (examError) throw examError;
 
-    const { data: examSectionsData } = await supabase
-      .from('exam_sections')
-      .select('section_id')
-      .eq('exam_id', examId);
+    const { data: examSectionsData } = await supabase.from('exam_sections').select('section_id').eq('exam_id', examId);
     
     const { data: questionsData, error: questionsError } = await supabase
       .from('questions')
-      .select(`
-        *,
-        options:question_options(*)
-      `)
+      .select(`*, options:question_options(*)`)
       .eq('exam_id', examId)
       .order('order_index');
 
@@ -162,6 +155,7 @@ export function useExamsSystem() {
     };
   };
 
+  // 3. حفظ الاختبار (API)
   const saveExam = async (examData: any, questions: any[], isNew: boolean) => {
     if (!user) throw new Error('User not authenticated');
     const response = await fetch('/api/exams/save', {
@@ -175,6 +169,7 @@ export function useExamsSystem() {
     return result.examId;
   };
 
+  // 4. جلب اختبار للطالب (Take Exam)
   const fetchExamForStudent = async (examId: string) => {
     const { data: examData, error: examError } = await supabase
       .from('exams')
@@ -202,6 +197,7 @@ export function useExamsSystem() {
     };
   };
 
+  // 5. تسليم الإجابات
   const submitExam = async (examId: string, answers: any, score: number, status: string, timeSpent: number) => {
     if (!user) throw new Error('User not authenticated');
     const response = await fetch('/api/exams/submit-exam', {
@@ -215,6 +211,7 @@ export function useExamsSystem() {
     return result.attemptId;
   };
 
+  // 6. حذف الاختبار
   const deleteExam = async (examId: string) => {
     if (!user) throw new Error('User not authenticated');
     const response = await fetch('/api/exams/delete', {
@@ -226,6 +223,27 @@ export function useExamsSystem() {
     await fetchExams();
   };
 
+  // 7. حذف الاختبار مع ملفات الميديا (Cloudinary)
+  const deleteExamWithMedia = async (examId: string) => {
+    if (!user) throw new Error('User not authenticated');
+    try {
+      const { data: questions } = await supabase.from('questions').select('media_url').eq('exam_id', examId);
+      if (questions && questions.length > 0) {
+        for (const q of questions) {
+          if (q.media_url) {
+            try { await deleteFromCloudinary(q.media_url); } catch (e) { console.error('Media delete error:', e); }
+          }
+        }
+      }
+      await deleteExam(examId);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error in deleteExamWithMedia:', err);
+      throw err;
+    }
+  };
+
+  // 8. جلب نتائج اختبار كاملة (للمعلم)
   const fetchExamResults = useCallback(async (examId: string) => {
     const { data: examData } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single();
     
@@ -235,8 +253,8 @@ export function useExamsSystem() {
       if (students) {
         studentsData = students.map((s: any) => ({
           id: s.id,
-          full_name: s.users?.full_name || 'طالب غير معروف',
-          email: s.users?.email || '',
+          full_name: Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name || 'طالب غير معروف',
+          email: Array.isArray(s.users) ? s.users[0]?.email : s.users?.email || '',
           section_name: s.section?.name || 'غير محدد'
         }));
       }
@@ -254,6 +272,7 @@ export function useExamsSystem() {
     return { exam: examData, students: studentsData, attempts: attemptsData || [], questions: qData || [], answers: aData };
   }, []);
 
+  // 9. حذف محاولة طالب
   const deleteAttempt = useCallback(async (attemptId: string) => {
     const response = await fetch('/api/exams/delete-attempt', {
       method: 'POST',
@@ -264,6 +283,7 @@ export function useExamsSystem() {
     return { success: true };
   }, [user]);
 
+  // 10. جلب نتيجة تفصيلية لطالب محدد
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
     const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
     const { data: studentData } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).single();
@@ -279,7 +299,7 @@ export function useExamsSystem() {
       exam: examData,
       student: {
         ...studentData,
-        full_name: Array.isArray(studentData.users) ? studentData.users[0]?.full_name : studentData.users?.full_name
+        full_name: Array.isArray(studentData?.users) ? studentData.users[0]?.full_name : studentData?.users?.full_name
       },
       attempt: attemptData,
       answers: answersData
@@ -288,7 +308,7 @@ export function useExamsSystem() {
 
   return {
     data, loading, error, refetch: fetchExams,
-    deleteExam, fetchExamDetails, saveExam,
+    deleteExam, deleteExamWithMedia, fetchExamDetails, saveExam,
     fetchExamForStudent, submitExam, fetchExamResults,
     deleteAttempt, fetchStudentExamResult
   };
