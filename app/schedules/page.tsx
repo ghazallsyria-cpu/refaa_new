@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
@@ -28,7 +28,6 @@ type Schedule = {
   day_of_week: number;
   period: number;
   subjects?: { name: string };
-  teachers?: { users?: { full_name: string } };
 };
 
 type Period = {
@@ -70,41 +69,42 @@ export default function SchedulesPage() {
     fetchSchedules: fetchSchedulesData,
     addSchedule,
     updateSchedule,
-    deleteSchedule
+    deleteSchedule,
   } = useSchedulesSystem();
 
-  const fetchInitialData = useCallback(async () => {
-    setLoading(true);
-    const data = await fetchInitialScheduleData();
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true);
 
-    setSections(data.sections || []);
-    setSubjects(data.subjects || []);
-    setTeachers(data.teachers || []);
-    setPeriods(data.periods || []);
+      const data = await fetchInitialScheduleData();
 
-    if (data.sections?.length) {
-      setSelectedSectionId(data.sections[0].id);
-    }
+      setSections(data.sections || []);
+      setSubjects(data.subjects || []);
+      setTeachers(data.teachers || []);
+      setPeriods(data.periods || []);
 
-    setLoading(false);
+      if (data.sections?.length) {
+        setSelectedSectionId(data.sections[0].id);
+      }
+
+      setLoading(false);
+    };
+
+    run();
   }, [fetchInitialScheduleData]);
 
-  const fetchSchedules = useCallback(async (sectionId: string) => {
-    setLoading(true);
-    const data = await fetchSchedulesData({ sectionId });
-    setSchedules(data || []);
-    setLoading(false);
-  }, [fetchSchedulesData]);
-
   useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
+    const run = async () => {
+      if (!selectedSectionId) return;
 
-  useEffect(() => {
-    if (selectedSectionId) {
-      fetchSchedules(selectedSectionId);
-    }
-  }, [selectedSectionId, fetchSchedules]);
+      setLoading(true);
+      const data = await fetchSchedulesData({ sectionId: selectedSectionId });
+      setSchedules(data || []);
+      setLoading(false);
+    };
+
+    run();
+  }, [selectedSectionId, fetchSchedulesData]);
 
   const getCellData = (day: number, period: number) =>
     schedules.find(s => s.day_of_week === day && s.period === period);
@@ -117,11 +117,16 @@ export default function SchedulesPage() {
       subjectId: existing?.subject_id || '',
       teacherId: existing?.teacher_id || '',
     });
+
     setIsModalOpen(true);
   };
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!currentCell.subjectId || !currentCell.teacherId) return;
+
+    setIsSubmitting(true);
 
     const payload = {
       section_id: selectedSectionId,
@@ -137,13 +142,17 @@ export default function SchedulesPage() {
       await addSchedule(payload);
     }
 
-    await fetchSchedules(selectedSectionId);
+    const data = await fetchSchedulesData({ sectionId: selectedSectionId });
+    setSchedules(data || []);
+
     setIsModalOpen(false);
+    setIsSubmitting(false);
   };
 
   const handleDelete = async (id: string) => {
     await deleteSchedule(id);
-    await fetchSchedules(selectedSectionId);
+    const data = await fetchSchedulesData({ sectionId: selectedSectionId });
+    setSchedules(data || []);
   };
 
   return (
