@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
 
-export type QuestionType = 'text' | 'paragraph' | 'multiple_choice' | 'checkbox';
+export type QuestionType = 'text' | 'paragraph' | 'multiple_choice' | 'checkbox' | 'file';
 
 export type Question = {
   id: string;
