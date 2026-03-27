@@ -10,7 +10,6 @@ import { motion, Reorder, AnimatePresence } from 'motion/react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 import ImageUpload from '@/components/ImageUpload';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { Question, QuestionType, newQuestion as createNewQuestion } from '@/types/question';
 
 const QuestionCard = memo(({ 
@@ -45,11 +44,9 @@ const QuestionCard = memo(({
               </label>
               <ImageUpload 
                 initialImageUrl={q.media_url}
-                onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url, media_type: 'image' })}
-                onRemove={() => {
-                  if (q.media_url) deleteFromCloudinary(q.media_url);
-                  updateQuestion(q.id, { media_url: undefined, media_type: undefined });
-                }}
+                onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url, media_type: url ? 'image' : undefined })}
+                onRemove={() => updateQuestion(q.id, { media_url: undefined, media_type: undefined })}
+                label="رفع صورة للسؤال"
               />
             </div>
           </div>
@@ -90,7 +87,7 @@ const QuestionCard = memo(({
               </div>
             ))}
             {q.type !== 'true_false' && (
-              <button onClick={() => addOption(q.id)} className="flex items-center gap-3 px-6 py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-indigo-600 hover:text-indigo-600 hover:bg-white transition-all font-black text-sm">
+              <button onClick={() => addOption(q.id)} className="flex items-center gap-3 px-6 py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-indigo-500 hover:text-indigo-600 hover:bg-white transition-all font-black text-sm">
                 <Plus className="h-5 w-5" /> إضافة خيار جديد
               </button>
             )}
@@ -198,7 +195,7 @@ export default function QuizBuilder() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
-      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl shadow-slate-200/20">
+      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
           <button onClick={() => router.back()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 transition-all active:scale-95"><ArrowRight className="h-5 w-5" /></button>
           <h1 className="text-xl font-black truncate max-w-[300px] text-slate-900 leading-none">{exam.title || 'اختبار جديد'}</h1>
