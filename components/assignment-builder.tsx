@@ -8,45 +8,45 @@ interface Props {
   onChange: (questions: Question[]) => void;
 }
 
+const createEmptyQuestion = (): Question => ({
+  id: crypto.randomUUID(),
+  type: 'mcq',
+  title: '',
+  content: '',
+  points: 1,
+  isRequired: false,
+  options: []
+});
+
 export default function AssignmentBuilder({ questions, onChange }: Props) {
   const addQuestion = () => {
-    const newQuestion: Question = {
-      id: crypto.randomUUID(),
-      type: 'mcq',
-      title: '',
-      content: '',
-      points: 1,
-      isRequired: false,
-      options: []
-    };
-
+    const newQuestion = createEmptyQuestion();
     onChange([...questions, newQuestion]);
   };
 
   const updateQuestion = (id: string, data: Partial<Question>) => {
-    const updated = questions.map((q) =>
-      q.id === id ? { ...q, ...data } : q
+    onChange(
+      questions.map((q) =>
+        q.id === id ? { ...q, ...data } : q
+      )
     );
-
-    onChange(updated);
   };
 
   const removeQuestion = (id: string) => {
-    const filtered = questions.filter((q) => q.id !== id);
-    onChange(filtered);
+    onChange(questions.filter((q) => q.id !== id));
   };
 
   return (
     <div className="space-y-4">
       {questions.map((q) => (
-        <div key={q.id} className="border p-4 rounded">
+        <div key={q.id} className="border p-4 rounded space-y-2">
           <input
             value={q.title}
             onChange={(e) =>
               updateQuestion(q.id, { title: e.target.value })
             }
-            placeholder="Question title"
-            className="w-full border p-2 mb-2"
+            placeholder="Title"
+            className="w-full border p-2"
           />
 
           <textarea
@@ -54,8 +54,8 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
             onChange={(e) =>
               updateQuestion(q.id, { content: e.target.value })
             }
-            placeholder="Question content"
-            className="w-full border p-2 mb-2"
+            placeholder="Content"
+            className="w-full border p-2"
           />
 
           <input
@@ -64,7 +64,7 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
             onChange={(e) =>
               updateQuestion(q.id, { points: Number(e.target.value) })
             }
-            className="w-full border p-2 mb-2"
+            className="w-full border p-2"
           />
 
           <label className="flex items-center gap-2">
@@ -80,7 +80,7 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
 
           <button
             onClick={() => removeQuestion(q.id)}
-            className="text-red-500 mt-2"
+            className="text-red-600"
           >
             Delete
           </button>
