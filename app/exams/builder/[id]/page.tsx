@@ -14,10 +14,17 @@ import { motion, Reorder, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as Switch from '@radix-ui/react-switch';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'; // تم نقل هذا الاستيراد للأعلى
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
-import { Question, QuestionType, Option } from '@/types/question';
+// تم استيراد newQuestion باسم createNewQuestion لتجنب التعارض
+import { Question, QuestionType, Option, newQuestion as createNewQuestion } from '@/types/question';
+
+import { useAuth } from '@/context/auth-context';
+import { useSchoolFormData } from '@/hooks/use-school-form-data';
+import { Teacher, Subject, Section } from '@/types';
+import ImageUpload from '@/components/ImageUpload';
 
 type ExamData = {
   id?: string;
@@ -29,7 +36,7 @@ type ExamData = {
   teacher_id?: string;
   duration: number;
   max_attempts: number;
-  max_score: number; // Added max_score
+  max_score: number;
   exam_date: string;
   start_time?: string;
   end_time?: string;
@@ -42,11 +49,6 @@ type ExamData = {
   };
 };
 
-import { useAuth } from '@/context/auth-context';
-import { useSchoolFormData } from '@/hooks/use-school-form-data';
-import { Teacher, Subject, Section } from '@/types';
-import ImageUpload from '@/components/ImageUpload';
-
 export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
@@ -58,11 +60,11 @@ export default function QuizBuilder() {
     title: '',
     description: '',
     subject_id: '',
-    section_ids: [], // Changed from section_id to section_ids
+    section_ids: [],
     teacher_id: '',
     duration: 30,
     max_attempts: 1,
-    max_score: 100, // Default to 100
+    max_score: 100,
     exam_date: new Date().toISOString().split('T')[0],
     start_time: '08:00',
     end_time: '23:59',
@@ -98,25 +100,10 @@ export default function QuizBuilder() {
     setTimeout(() => setNotification(null), 5000);
   };
 
+  // ✅ التعديل السحري هنا: استخدام الدالة الجاهزة التي تضمن وجود isRequired وخيارات صحيحة
   const addQuestion = useCallback((type: QuestionType) => {
-    const newQuestion: Question = {
-      id: crypto.randomUUID(),
-      type,
-      content: '',
-      points: 1,
-      options: type === 'multiple_choice' || type === 'multi_select' 
-        ? [
-            { id: crypto.randomUUID(), content: 'الخيار الأول', is_correct: true },
-            { id: crypto.randomUUID(), content: 'الخيار الثاني', is_correct: false }
-          ]
-        : type === 'true_false'
-        ? [
-            { id: crypto.randomUUID(), content: 'صح', is_correct: true },
-            { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
-          ]
-        : []
-    };
-    setQuestions(prev => [...prev, newQuestion]);
+    const createdQuestion = createNewQuestion(type);
+    setQuestions(prev => [...prev, createdQuestion]);
   }, []);
 
   useEffect(() => {
@@ -135,9 +122,7 @@ export default function QuizBuilder() {
 
         setQuestions(questionsData || []);
       } else {
-        // Default first question
         addQuestion('multiple_choice');
-        // Set teacher_id for new exam
         if (user) {
           setExam(prev => ({ ...prev, teacher_id: user.id }));
         }
@@ -197,7 +182,6 @@ export default function QuizBuilder() {
       if (q.id === questionId) {
         const newOptions = q.options.map(o => {
           if (o.id === optionId) {
-            // If setting to correct and it's MCQ or T/F, uncheck others
             if (updates.is_correct && (q.type === 'multiple_choice' || q.type === 'true_false')) {
               return { ...o, ...updates };
             }
@@ -229,7 +213,6 @@ export default function QuizBuilder() {
       return;
     }
 
-    // التحقق من أن مجموع درجات الأسئلة يساوي الدرجة الكلية
     const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
     const maxScore = Number(exam.max_score) || 0;
 
@@ -281,7 +264,6 @@ export default function QuizBuilder() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24 relative">
-      {/* Notification Toast */}
       <AnimatePresence>
         {notification && (
           <motion.div 
@@ -303,7 +285,6 @@ export default function QuizBuilder() {
         )}
       </AnimatePresence>
 
-      {/* Sticky Header */}
       <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl shadow-slate-200/20">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
           <div className="flex items-center gap-5">
@@ -325,7 +306,6 @@ export default function QuizBuilder() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* مؤشر مجموع الدرجات */}
             <div className={`hidden lg:flex items-center gap-3 px-5 py-3 rounded-2xl border font-black transition-all ${
               questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0) === (Number(exam.max_score) || 0)
                 ? 'bg-emerald-50/50 border-emerald-100 text-emerald-600'
@@ -466,7 +446,6 @@ export default function QuizBuilder() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-12 space-y-10">
-        {/* Quiz Header Info */}
         <div className="glass-card rounded-[40px] border-t-[16px] border-t-indigo-600 border border-white/60 shadow-2xl shadow-slate-200/50 p-10 space-y-8 relative overflow-hidden">
           <div className="absolute -right-20 -top-20 h-64 w-64 bg-indigo-50/30 rounded-full blur-3xl -z-10" />
           <div className="space-y-4">
@@ -578,7 +557,6 @@ export default function QuizBuilder() {
           </div>
         </div>
 
-        {/* Questions List */}
         <Reorder.Group axis="y" values={questions} onReorder={setQuestions} className="space-y-10">
           <AnimatePresence initial={false}>
             {questions.map((q, index) => (
@@ -590,13 +568,11 @@ export default function QuizBuilder() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="glass-card rounded-[40px] border border-white/60 shadow-2xl shadow-slate-200/50 group relative overflow-hidden"
               >
-                {/* Drag Handle */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10">
                   <GripVertical className="h-6 w-6 text-slate-300" />
                 </div>
 
                 <div className="p-10 space-y-10">
-                  {/* Question Header */}
                   <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex-1 space-y-3">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
@@ -631,7 +607,6 @@ export default function QuizBuilder() {
                     </div>
                   </div>
 
-                  {/* Options Area */}
                   <div className="space-y-6">
                     {q.type === 'multiple_choice' || q.type === 'multi_select' || q.type === 'true_false' ? (
                       <div className="space-y-4">
@@ -688,7 +663,6 @@ export default function QuizBuilder() {
                     )}
                   </div>
 
-                  {/* Question Footer Actions */}
                   <div className="flex flex-col sm:flex-row items-center justify-between pt-10 border-t border-slate-100 gap-6">
                     <div className="flex items-center gap-6">
                       <div className="flex items-center gap-4 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shadow-inner">
@@ -734,7 +708,6 @@ export default function QuizBuilder() {
           </AnimatePresence>
         </Reorder.Group>
 
-        {/* Add Question Button */}
         <div className="flex justify-center pt-10">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
@@ -777,7 +750,6 @@ export default function QuizBuilder() {
         </div>
       </main>
 
-      {/* Floating Bottom Bar for Mobile */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 md:hidden flex items-center gap-4 bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[32px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] z-40">
         <button onClick={() => addQuestion('multiple_choice')} className="h-14 w-14 flex items-center justify-center bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-200 active:scale-90 transition-transform">
           <Plus className="h-8 w-8" />
@@ -792,5 +764,3 @@ export default function QuizBuilder() {
   );
 }
 
-// Radix Dropdown Components (Simplified import for this demo)
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
