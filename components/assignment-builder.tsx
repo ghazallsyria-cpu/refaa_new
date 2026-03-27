@@ -1,6 +1,7 @@
 'use client';
 
-import { Question, newQuestion } from '@/types/question';
+import type { Question } from '@/types/question';
+import { newQuestion } from '@/types/question';
 
 interface Props {
   questions: Question[];
