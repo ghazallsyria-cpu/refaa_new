@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { AlertCircle, Send } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Question } from '@/types/question';
@@ -22,15 +22,9 @@ export default function AssignmentForm({
   readOnly = false,
   children
 }: AssignmentFormProps) {
-  const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const hasHydrated = useRef(false);
 
-  useEffect(() => {
-    if (hasHydrated.current) return;
-    hasHydrated.current = true;
-    setAnswers(initialAnswers);
-  }, [initialAnswers]);
+  const [answers, setAnswers] = useState<Record<string, any>>(() => initialAnswers);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleAnswerChange = (questionId: string, value: any) => {
     if (readOnly) return;
@@ -77,10 +71,7 @@ export default function AssignmentForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (readOnly) return;
-
-    if (validate()) {
-      onSubmit(answers);
-    }
+    if (validate()) onSubmit(answers);
   };
 
   return (
