@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { Subject, Section, Teacher } from '@/types';
+import { Question, normalizeQuestion } from '@/types/question';
 
 export interface Assignment {
   id: string;
@@ -18,15 +19,6 @@ export interface Assignment {
   assignment_sections?: any[];
   submission_count?: number;
   graded_count?: number;
-}
-
-export interface AssignmentQuestion {
-  id: string;
-  text: string;
-  type: 'multiple_choice' | 'text' | 'file' | 'checkbox' | 'paragraph';
-  options?: string[];
-  points: number;
-  isRequired: boolean;
 }
 
 export function useAssignmentsSystem() {
@@ -113,7 +105,7 @@ export function useAssignmentsSystem() {
     fetchAssignments();
   }, [fetchAssignments]);
 
-  const fetchAssignmentQuestions = async (assignmentId: string): Promise<AssignmentQuestion[]> => {
+  const fetchAssignmentQuestions = useCallback(async (assignmentId: string): Promise<Question[]> => {
     try {
       const { data, error } = await supabase
         .from('assignment_questions')
@@ -123,10 +115,10 @@ export function useAssignmentsSystem() {
       
       if (error) throw error;
       
-      return (data || []).map(q => ({
+      return (data || []).map(q => normalizeQuestion({
         id: q.id,
-        text: q.question_text,
-        type: q.question_type as any,
+        content: q.question_text,
+        type: q.question_type,
         options: q.options,
         points: q.points,
         isRequired: q.is_required
@@ -135,12 +127,12 @@ export function useAssignmentsSystem() {
       console.error('Error fetching questions:', err);
       return [];
     }
-  };
+  }, []);
 
   const saveAssignment = async (
     payload: any, 
     assignmentId: string | null, 
-    questions: AssignmentQuestion[], 
+    questions: Question[], 
     sectionIds: string[],
     subjects: Subject[]
   ) => {
@@ -234,7 +226,14 @@ export function useAssignmentsSystem() {
 
       return {
         assignment: assignmentData,
-        questions: qData || [],
+        questions: (qData || []).map(q => normalizeQuestion({
+          id: q.id,
+          content: q.question_text,
+          type: q.question_type,
+          options: q.options,
+          points: q.points,
+          isRequired: q.is_required
+        })),
         submission: submissionData,
         answers: answersData,
         allSubmissions: allSubmissionsData
@@ -307,7 +306,14 @@ export function useAssignmentsSystem() {
       return {
         submission: submissionData,
         assignment: assignmentData,
-        questions: qData || [],
+        questions: (qData || []).map(q => normalizeQuestion({
+          id: q.id,
+          content: q.question_text,
+          type: q.question_type,
+          options: q.options,
+          points: q.points,
+          isRequired: q.is_required
+        })),
         answers: answersData || []
       };
     } catch (err) {
@@ -346,5 +352,5 @@ export function useAssignmentsSystem() {
     submitAssignment,
     fetchSubmissionDetails,
     updateSubmissionGrade
-  };
+  } as const;
 }

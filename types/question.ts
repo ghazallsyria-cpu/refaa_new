@@ -15,37 +15,23 @@ export interface Question {
   options: Option[];
   media_url?: string;
   media_type?: 'image' | 'video' | 'pdf';
-  text?: string; // For backward compatibility
-  isRequired?: boolean; // For backward compatibility
-}
-
-export interface AssignmentQuestion {
-  id: string;
-  text: string;
-  type: 'multiple_choice' | 'text' | 'file' | 'checkbox' | 'paragraph';
-  options?: string[];
-  points: number;
   isRequired: boolean;
 }
 
-export const toAssignmentQuestion = (question: Question): AssignmentQuestion => {
+export const normalizeQuestion = (raw: any): Question => {
   return {
-    id: question.id,
-    text: question.text || question.content,
-    type: question.type as AssignmentQuestion['type'],
-    options: question.options.map(o => o.content),
-    points: question.points,
-    isRequired: question.isRequired || false,
-  };
-};
-
-export const fromAssignmentQuestion = (question: AssignmentQuestion): Question => {
-  return {
-    id: question.id,
-    content: question.text,
-    type: question.type as QuestionType,
-    options: question.options?.map(o => ({ id: crypto.randomUUID(), content: o, is_correct: false })) || [],
-    points: question.points,
-    isRequired: question.isRequired,
+    id: raw.id || crypto.randomUUID(),
+    type: raw.type || 'text',
+    content: raw.content || raw.text || '',
+    points: raw.points || 0,
+    explanation: raw.explanation,
+    options: Array.isArray(raw.options) 
+      ? raw.options.map((o: any) => typeof o === 'string' 
+          ? { id: crypto.randomUUID(), content: o, is_correct: false } 
+          : o) 
+      : [],
+    media_url: raw.media_url,
+    media_type: raw.media_type,
+    isRequired: !!raw.isRequired,
   };
 };
