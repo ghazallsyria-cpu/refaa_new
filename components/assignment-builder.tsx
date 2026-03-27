@@ -1,14 +1,10 @@
 'use client';
 
-export type Option = {
+import { Question } from '@/types/question';
+
+type Option = {
   id: string;
   text: string;
-};
-
-export type Question = {
-  id: string;
-  title: string;
-  options: Option[];
 };
 
 type Props = {
@@ -18,13 +14,13 @@ type Props = {
 
 export default function AssignmentBuilder({ questions, onChange }: Props) {
   const addQuestion = () => {
-    const newQuestion: Question = {
+    const newQuestion = {
       id: crypto.randomUUID(),
       title: '',
       options: [],
     };
 
-    onChange([...questions, newQuestion]);
+    onChange([...questions, newQuestion as Question]);
   };
 
   const updateQuestion = (id: string, data: Partial<Question>) => {
@@ -37,15 +33,18 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
     const target = questions.find((q) => q.id === questionId);
     if (!target) return;
 
-    const newOption: Option = {
+    const newOption = {
       id: crypto.randomUUID(),
-      text: `خيار ${target.options.length + 1}`,
+      text: `خيار ${(target as any).options?.length + 1 || 1}`,
     };
 
     onChange(
       questions.map((q) =>
         q.id === questionId
-          ? { ...q, options: [...q.options, newOption] }
+          ? {
+              ...q,
+              options: [...(q as any).options, newOption],
+            }
           : q
       )
     );
@@ -62,7 +61,7 @@ export default function AssignmentBuilder({ questions, onChange }: Props) {
 
         return {
           ...q,
-          options: q.options.map((opt) =>
+          options: (q as any).options.map((opt: any) =>
             opt.id === optionId ? { ...opt, text: value } : opt
           ),
         };
