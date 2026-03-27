@@ -5,7 +5,6 @@ import { Calendar, Clock, Plus, Trash2, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
-// Types
 type Section = {
   id: string;
   name: string;
@@ -64,7 +63,7 @@ export default function SchedulesPage() {
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
 
-  // ✅ FIX: إضافة updateSchedule
+  // ✅ FIX كامل: إضافة updateSchedule
   const { 
     fetchInitialScheduleData, 
     fetchSchedules: fetchSchedulesData, 
@@ -75,7 +74,7 @@ export default function SchedulesPage() {
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
-    setTimeout(() => setNotification(null), 5000);
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const [currentCell, setCurrentCell] = useState<{
@@ -90,11 +89,11 @@ export default function SchedulesPage() {
     setLoading(true);
     try {
       const data = await fetchInitialScheduleData();
-      setSections(data.sections as any);
-      setSubjects(data.subjects as any);
-      setTeachers(data.teachers as any);
-      setTeacherAssignments(data.assignments);
-      setPeriods(data.periods);
+      setSections(data.sections || []);
+      setSubjects(data.subjects || []);
+      setTeachers(data.teachers || []);
+      setTeacherAssignments(data.assignments || []);
+      setPeriods(data.periods || []);
 
       if (data.sections?.length) {
         setSelectedSectionId(data.sections[0].id);
@@ -109,8 +108,9 @@ export default function SchedulesPage() {
   const fetchSchedules = useCallback(async (sectionId: string) => {
     setLoading(true);
     try {
-      const data = await fetchSchedulesData({ section_id: sectionId }); // ✅ FIX
-      setSchedules(data as any);
+      // ✅ FIX مهم
+      const data = await fetchSchedulesData({ section_id: sectionId });
+      setSchedules(data || []);
     } catch {
       showNotification('error', 'فشل تحميل الجدول');
     } finally {
@@ -123,9 +123,7 @@ export default function SchedulesPage() {
   }, [fetchInitialData]);
 
   useEffect(() => {
-    if (selectedSectionId) {
-      fetchSchedules(selectedSectionId);
-    }
+    if (selectedSectionId) fetchSchedules(selectedSectionId);
   }, [selectedSectionId, fetchSchedules]);
 
   const openCellModal = (day: number, period: number, existing?: Schedule) => {
@@ -145,7 +143,10 @@ export default function SchedulesPage() {
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!currentCell.subjectId || !currentCell.teacherId) return;
+    if (!currentCell.subjectId || !currentCell.teacherId) {
+      showNotification('error', 'اختر المادة والمعلم');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -199,7 +200,7 @@ export default function SchedulesPage() {
         ))}
       </select>
 
-      <table className="w-full">
+      <table className="w-full border">
         <thead>
           <tr>
             <th>اليوم</th>
@@ -219,9 +220,9 @@ export default function SchedulesPage() {
                   <td
                     key={p.id}
                     onClick={() => openCellModal(day.id, p.period_number, cell)}
-                    className="border h-20 cursor-pointer"
+                    className="border h-20 cursor-pointer text-center"
                   >
-                    {cell?.subjects?.name}
+                    {cell?.subjects?.name || '-'}
                   </td>
                 );
               })}
@@ -235,7 +236,8 @@ export default function SchedulesPage() {
           <Dialog.Overlay className="fixed inset-0 bg-black/40" />
           <Dialog.Content className="fixed inset-0 m-auto max-w-md bg-white p-6">
 
-            <form onSubmit={handleSaveSchedule}>
+            <form onSubmit={handleSaveSchedule} className="space-y-3">
+
               <select
                 value={currentCell.subjectId || ''}
                 onChange={(e) => setCurrentCell({...currentCell, subjectId: e.target.value})}
@@ -256,9 +258,10 @@ export default function SchedulesPage() {
                 ))}
               </select>
 
-              <button type="submit">
+              <button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? '...' : 'حفظ'}
               </button>
+
             </form>
 
           </Dialog.Content>
