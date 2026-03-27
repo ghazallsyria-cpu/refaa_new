@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 
 type Section = {
   id: string;
   name: string;
-  classes: { name: string }[];
 };
 
 type Subject = {
@@ -17,246 +15,69 @@ type Subject = {
 
 type Teacher = {
   id: string;
-  users: { full_name: string };
-};
-
-type Schedule = {
-  id: string;
-  section_id: string;
-  subject_id: string;
-  teacher_id: string;
-  day_of_week: number;
-  period: number;
-  subjects?: { name: string };
+  specialization: string;
+  users: {
+    full_name: string;
+  }[];
 };
 
 type Period = {
   id: string;
-  period_number: number;
-  start_time: string;
-  end_time: string;
+  name: string;
 };
 
-const DAYS = [
-  { id: 1, name: 'الأحد' },
-  { id: 2, name: 'الإثنين' },
-  { id: 3, name: 'الثلاثاء' },
-  { id: 4, name: 'الأربعاء' },
-  { id: 5, name: 'الخميس' },
-];
+type Schedule = any;
 
 export default function SchedulesPage() {
   const [sections, setSections] = useState<Section[]>([]);
-  const [periods, setPeriods] = useState<Period[]>([]);
-  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [currentCell, setCurrentCell] = useState<{
-    day: number;
-    period: number;
-    scheduleId?: string;
-    subjectId?: string;
-    teacherId?: string;
-  }>({ day: 0, period: 1 });
-
-  const {
-    fetchInitialScheduleData,
-    fetchSchedules: fetchSchedulesData,
-    addSchedule,
-    updateSchedule,
-    deleteSchedule,
-  } = useSchedulesSystem();
+  const [periods, setPeriods] = useState<Period[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
 
   useEffect(() => {
-    const run = async () => {
-      setLoading(true);
+    const load = async () => {
+      const [sectionsRes, subjectsRes, teachersRes, periodsRes] = await Promise.all([
+        supabase.from('sections').select('*'),
+        supabase.from('subjects').select('*'),
+        supabase.from('teachers').select('id, specialization, users(full_name)'),
+        supabase.from('periods').select('*'),
+      ]);
 
-      const data = await fetchInitialScheduleData();
+      setSections(sectionsRes.data || []);
+      setSubjects(subjectsRes.data || []);
 
-      setSections(data.sections || []);
-      setSubjects(data.subjects || []);
-      setTeachers(data.teachers || []);
-      setPeriods(data.periods || []);
+      // FIX: flatten users safely
+      const fixedTeachers =
+        (teachersRes.data || []).map((t: any) => ({
+          id: t.id,
+          specialization: t.specialization,
+          users: Array.isArray(t.users) ? t.users : [],
+        }));
 
-      if (data.sections?.length) {
-        setSelectedSectionId(data.sections[0].id);
-      }
+      setTeachers(fixedTeachers);
 
-      setLoading(false);
+      setPeriods(periodsRes.data || []);
     };
 
-    run();
-  }, [fetchInitialScheduleData]);
+    load();
+  }, []);
 
   useEffect(() => {
-    const run = async () => {
-      if (!selectedSectionId) return;
+    if (!selectedSectionId) return;
 
-      setLoading(true);
-      const data = await fetchSchedulesData({ sectionId: selectedSectionId });
+    const loadSchedules = async () => {
+      const { data } = await supabase
+        .from('schedules')
+        .select('*')
+        .eq('section_id', selectedSectionId);
+
       setSchedules(data || []);
-      setLoading(false);
     };
 
-    run();
-  }, [selectedSectionId, fetchSchedulesData]);
+    loadSchedules();
+  }, [selectedSectionId]);
 
-  const getCellData = (day: number, period: number) =>
-    schedules.find(s => s.day_of_week === day && s.period === period);
-
-  const openCellModal = (day: number, period: number, existing?: Schedule) => {
-    setCurrentCell({
-      day,
-      period,
-      scheduleId: existing?.id,
-      subjectId: existing?.subject_id || '',
-      teacherId: existing?.teacher_id || '',
-    });
-
-    setIsModalOpen(true);
-  };
-
-  const handleSaveSchedule = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!currentCell.subjectId || !currentCell.teacherId) return;
-
-    setIsSubmitting(true);
-
-    const payload = {
-      section_id: selectedSectionId,
-      subject_id: currentCell.subjectId,
-      teacher_id: currentCell.teacherId,
-      day_of_week: currentCell.day,
-      period: currentCell.period,
-    };
-
-    if (currentCell.scheduleId) {
-      await updateSchedule(currentCell.scheduleId, payload);
-    } else {
-      await addSchedule(payload);
-    }
-
-    const data = await fetchSchedulesData({ sectionId: selectedSectionId });
-    setSchedules(data || []);
-
-    setIsModalOpen(false);
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    await deleteSchedule(id);
-    const data = await fetchSchedulesData({ sectionId: selectedSectionId });
-    setSchedules(data || []);
-  };
-
-  return (
-    <div>
-
-      <select
-        value={selectedSectionId}
-        onChange={(e) => setSelectedSectionId(e.target.value)}
-      >
-        {sections.map(s => (
-          <option key={s.id} value={s.id}>
-            {s.classes?.[0]?.name} - {s.name}
-          </option>
-        ))}
-      </select>
-
-      {loading ? (
-        <div>...</div>
-      ) : (
-        <table className="w-full border">
-          <thead>
-            <tr>
-              <th>اليوم</th>
-              {periods.map(p => (
-                <th key={p.id}>حصة {p.period_number}</th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {DAYS.map(day => (
-              <tr key={day.id}>
-                <td>{day.name}</td>
-
-                {periods.map(p => {
-                  const cell = getCellData(day.id, p.period_number);
-
-                  return (
-                    <td
-                      key={p.id}
-                      className="border h-20 text-center cursor-pointer"
-                      onClick={() => openCellModal(day.id, p.period_number, cell)}
-                    >
-                      <div>{cell?.subjects?.name || '-'}</div>
-
-                      {cell && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(cell.id);
-                          }}
-                        >
-                          حذف
-                        </button>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/40" />
-          <Dialog.Content className="fixed inset-0 m-auto max-w-md bg-white p-6">
-
-            <form onSubmit={handleSaveSchedule} className="space-y-3">
-
-              <select
-                value={currentCell.subjectId || ''}
-                onChange={(e) =>
-                  setCurrentCell({ ...currentCell, subjectId: e.target.value })
-                }
-              >
-                <option value="">مادة</option>
-                {subjects.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-
-              <select
-                value={currentCell.teacherId || ''}
-                onChange={(e) =>
-                  setCurrentCell({ ...currentCell, teacherId: e.target.value })
-                }
-              >
-                <option value="">معلم</option>
-                {teachers.map(t => (
-                  <option key={t.id} value={t.id}>{t.users.full_name}</option>
-                ))}
-              </select>
-
-              <button type="submit" disabled={isSubmitting}>
-                حفظ
-              </button>
-
-            </form>
-
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-    </div>
-  );
+  return null;
 }
