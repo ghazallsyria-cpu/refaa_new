@@ -656,7 +656,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 </button>
               </Dialog.Close>
               <button
-                onClick={handleDeleteAssignment}
+                onClick={handleDeleteAssignmentAction}
                 className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl shadow-red-100 hover:bg-red-700 hover:shadow-red-200 transition-all active:scale-95"
               >
                 تأكيد الحذف
