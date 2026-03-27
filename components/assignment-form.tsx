@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, Send } from 'lucide-react';
+import { AlertCircle, Send } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { Question } from '@/types/question';
 
@@ -27,13 +27,7 @@ export default function AssignmentForm({
 
   useEffect(() => {
     if (initialAnswers && Object.keys(initialAnswers).length > 0) {
-      const timer = setTimeout(() => {
-        setAnswers(prev => {
-          if (JSON.stringify(prev) === JSON.stringify(initialAnswers)) return prev;
-          return initialAnswers;
-        });
-      }, 0);
-      return () => clearTimeout(timer);
+      setAnswers(initialAnswers);
     }
   }, [initialAnswers]);
 
@@ -127,8 +121,8 @@ export default function AssignmentForm({
 
             {question.type === 'multiple_choice' && (
               <div className="space-y-2">
-                {question.options?.map((option) => (
-                  <label key={option} className="flex gap-2 items-center">
+                {question.options?.map((option, i) => (
+                  <label key={`${question.id}-${i}`} className="flex gap-2 items-center">
                     <input
                       type="radio"
                       name={question.id}
@@ -144,11 +138,11 @@ export default function AssignmentForm({
 
             {question.type === 'checkbox' && (
               <div className="space-y-2">
-                {question.options?.map((option) => {
+                {question.options?.map((option, i) => {
                   const checked = ((answers[question.id] as string[]) || []).includes(option);
 
                   return (
-                    <label key={option} className="flex gap-2 items-center">
+                    <label key={`${question.id}-${i}`} className="flex gap-2 items-center">
                       <input
                         type="checkbox"
                         checked={checked}
