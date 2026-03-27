@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Users, BookOpen, ChevronDown, ChevronUp, Search, User, GraduationCap, Edit, Trash2, Plus, X, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { useClassesSystem } from '@/hooks/useClassesSystem';
+import { useAuth } from '@/context/auth-context';
 
 type Student = {
   id: string;
@@ -30,12 +31,22 @@ type ClassData = {
 };
 
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { userRole } = useAuth();
+  const { 
+    classes, 
+    loading, 
+    fetchClassesData, 
+    addClass, 
+    updateClass, 
+    deleteClass, 
+    addSection, 
+    updateSection, 
+    deleteSection 
+  } = useClassesSystem();
+
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
 
   // Modal State
   const [modalConfig, setModalConfig] = useState<{
@@ -48,110 +59,29 @@ export default function ClassesPage() {
   const [inputLevel, setInputLevel] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const isAdmin = userRole === 'admin' || userRole === 'management';
+
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-        if (userData?.role === 'admin' || userData?.role === 'management') {
-          setIsAdmin(true);
-        }
-      }
-    };
-    checkAdmin();
-    fetchClassesData();
-  }, []);
-
-  const fetchClassesData = async () => {
-    try {
-      setLoading(true);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // جلب دور المستخدم
-      const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-      const isTeacher = userData?.role === 'teacher' || (typeof userData?.role === 'string' && userData?.role.includes('teacher'));
-
-      // Fetch classes
-      let classesQuery = supabase.from('classes').select('*').order('level');
-      const { data: classesData, error: classesError } = await classesQuery;
-        
-      if (classesError) throw classesError;
-
-      // Fetch sections
-      let sectionsQuery = supabase.from('sections').select('*').order('name');
-      
-      // إذا كان معلماً، نجلب فصوله فقط
-      if (isTeacher) {
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
-          .select('section_id')
-          .eq('teacher_id', user.id);
-        
-        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-        sectionsQuery = sectionsQuery.in('id', sectionIds);
-      }
-
-      const { data: sectionsData, error: sectionsError } = await sectionsQuery;
-        
-      if (sectionsError) throw sectionsError;
-
-      // Fetch students with user details
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select(`
-          id,
-          national_id,
-          section_id,
-          users (
-            full_name,
-            email
-          )
-        `);
-        
-      if (studentsError) throw studentsError;
-
-      // Organize data
-      const organizedClasses: ClassData[] = classesData.map((cls: any) => {
-        const classSections = sectionsData
-          .filter((sec: any) => sec.class_id === cls.id)
-          .map((sec: any) => {
-            const sectionStudents = studentsData
-              .filter((stu: any) => stu.section_id === sec.id)
-              .map((stu: any) => ({
-                id: stu.id,
-                national_id: stu.national_id,
-                user: stu.users
-              }));
-              
-            return {
-              ...sec,
-              students: sectionStudents
-            };
-          });
-          
-        return {
-          ...cls,
-          sections: classSections
-        };
-      }).filter((cls: any) => cls.sections.length > 0); // إخفاء الفصول التي لا تحتوي على أقسام للمعلم
-
-      setClasses(organizedClasses);
-      
+    fetchClassesData().then(() => {
       // Expand first class by default if exists
-      if (organizedClasses.length > 0) {
-        setExpandedClass(organizedClasses[0].id);
-        if (organizedClasses[0].sections.length > 0) {
-          setExpandedSection(organizedClasses[0].sections[0].id);
+      if (classes.length > 0) {
+        setExpandedClass(classes[0].id);
+        if (classes[0].sections.length > 0) {
+          setExpandedSection(classes[0].sections[0].id);
         }
       }
-    } catch (error) {
-      console.error('Error fetching classes data:', error);
-    } finally {
-      setLoading(false);
+    });
+  }, [fetchClassesData]);
+
+  // Expand first class by default when classes load
+  useEffect(() => {
+    if (classes.length > 0 && !expandedClass) {
+      setExpandedClass(classes[0].id);
+      if (classes[0].sections.length > 0) {
+        setExpandedSection(classes[0].sections[0].id);
+      }
     }
-  };
+  }, [classes, expandedClass]);
 
   const toggleClass = (classId: string) => {
     if (expandedClass === classId) {
@@ -175,26 +105,19 @@ export default function ClassesPage() {
     setIsSubmitting(true);
     try {
       if (modalConfig.type === 'addClass') {
-        const { error } = await supabase.from('classes').insert([{ name: inputValue, level: inputLevel }]);
-        if (error) throw error;
+        await addClass(inputValue, inputLevel);
       } else if (modalConfig.type === 'editClass') {
-        const { error } = await supabase.from('classes').update({ name: inputValue, level: inputLevel }).eq('id', modalConfig.data.id);
-        if (error) throw error;
+        await updateClass(modalConfig.data.id, inputValue, inputLevel);
       } else if (modalConfig.type === 'deleteClass') {
-        const { error } = await supabase.from('classes').delete().eq('id', modalConfig.data.id);
-        if (error) throw error;
+        await deleteClass(modalConfig.data.id);
       } else if (modalConfig.type === 'addSection') {
-        const { error } = await supabase.from('sections').insert([{ name: inputValue, class_id: modalConfig.data.classId }]);
-        if (error) throw error;
+        await addSection(inputValue, modalConfig.data.classId);
       } else if (modalConfig.type === 'editSection') {
-        const { error } = await supabase.from('sections').update({ name: inputValue }).eq('id', modalConfig.data.id);
-        if (error) throw error;
+        await updateSection(modalConfig.data.id, inputValue);
       } else if (modalConfig.type === 'deleteSection') {
-        const { error } = await supabase.from('sections').delete().eq('id', modalConfig.data.id);
-        if (error) throw error;
+        await deleteSection(modalConfig.data.id);
       }
       
-      await fetchClassesData();
       closeModal();
     } catch (error: any) {
       console.error('Error in modal action:', error);

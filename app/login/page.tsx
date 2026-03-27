@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { School, Lock, User, ArrowLeft, ShieldCheck, Heart, Code } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { signIn } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,69 +21,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      let authEmail = civilId;
-      
-      if (!civilId.includes('@')) {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('id, users!inner(email)')
-          .eq('national_id', civilId)
-          .maybeSingle();
-          
-        if (studentData && studentData.users) {
-          authEmail = (studentData.users as any).email;
-        } else {
-          const { data: teacherData } = await supabase
-            .from('teachers')
-            .select('id, users!inner(email)')
-            .eq('national_id', civilId)
-            .maybeSingle();
-            
-          if (teacherData && teacherData.users) {
-            authEmail = (teacherData.users as any).email;
-          } else {
-            const { data: parentData } = await supabase
-              .from('parents')
-              .select('id, users!inner(email)')
-              .eq('national_id', civilId)
-              .maybeSingle();
-              
-            if (parentData && parentData.users) {
-              authEmail = (parentData.users as any).email;
-            } else {
-              authEmail = `${civilId}@alrefaa.edu`;
-            }
-          }
-        }
-      }
-
-      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: authEmail,
-        password,
-      });
-
-      if (signInError) throw signInError;
-      
-      if (authData.user) {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('role, must_reset_password')
-          .eq('id', authData.user.id)
-          .maybeSingle();
-
-        if (userError) throw userError;
-
-        if (!userData) {
-          throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
-        }
-
-        if (userData.must_reset_password) {
-          router.push('/reset-password');
-          return;
-        }
-      }
-      
-      router.push('/');
+      await signIn(civilId, password);
     } catch (err: any) {
       setError(err.message || 'حدث خطأ أثناء تسجيل الدخول. تأكد من البيانات وحاول مرة أخرى.');
     } finally {

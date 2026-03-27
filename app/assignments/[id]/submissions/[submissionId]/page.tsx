@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { supabase } from '@/lib/supabase';
 import { ArrowRight, User, Calendar, Clock, CheckCircle, AlertCircle, Save, MessageSquare, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import AssignmentForm from '@/components/assignment-form';
 import { Question } from '@/components/assignment-builder';
+import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
+import { useAuth } from '@/context/auth-context';
 
 type Assignment = {
   id: string;
@@ -32,6 +33,9 @@ type Submission = {
 export default function GradingPage({ params }: { params: Promise<{ id: string, submissionId: string }> }) {
   const { id: assignmentId, submissionId } = use(params);
   const router = useRouter();
+  const { user } = useAuth();
+  const { fetchSubmissionDetails, updateSubmissionGrade } = useAssignmentsSystem();
+  
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -45,24 +49,12 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch assignment
-      const { data: assignmentData } = await supabase
-        .from('assignments')
-        .select('id, title')
-        .eq('id', assignmentId)
-        .single();
+      const details = await fetchSubmissionDetails(submissionId);
       
-      if (assignmentData) setAssignment(assignmentData);
+      if (details.assignment) setAssignment(details.assignment as any);
 
-      // Fetch questions
-      const { data: qData } = await supabase
-        .from('assignment_questions')
-        .select('*')
-        .eq('assignment_id', assignmentId)
-        .order('order');
-      
-      if (qData) {
-        setQuestions(qData.map(q => ({
+      if (details.questions) {
+        setQuestions(details.questions.map((q: any) => ({
           id: q.id,
           text: q.question_text,
           type: q.question_type as any,
@@ -72,27 +64,23 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         })));
       }
 
-      // Fetch submission
-      const { data: subData } = await supabase
-        .from('assignment_submissions')
-        .select('*, students(users(full_name))')
-        .eq('id', submissionId)
-        .single();
-      
-      if (subData) {
-        setSubmission(subData as any);
-        setGrade(subData.grade?.toString() || '');
-        setFeedback(subData.feedback || '');
+      if (details.submission) {
+        // Map student data to match existing UI expectations if needed
+        const mappedSubmission = {
+          ...details.submission,
+          students: {
+            users: {
+              full_name: details.submission.student?.users?.full_name || 'طالب غير معروف'
+            }
+          }
+        };
+        setSubmission(mappedSubmission as any);
+        setGrade(details.submission.grade?.toString() || '');
+        setFeedback(details.submission.feedback || '');
 
-        // Fetch answers
-        const { data: answersData } = await supabase
-          .from('assignment_answers')
-          .select('*')
-          .eq('submission_id', submissionId);
-        
-        if (answersData) {
+        if (details.answers) {
           const answersMap: Record<string, any> = {};
-          answersData.forEach(a => {
+          details.answers.forEach((a: any) => {
             answersMap[a.question_id] = a.selected_options || a.answer_text;
           });
           setAnswers(answersMap);
@@ -103,7 +91,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     } finally {
       setLoading(false);
     }
-  }, [assignmentId, submissionId]);
+  }, [submissionId, fetchSubmissionDetails]);
 
   useEffect(() => {
     fetchData();
@@ -117,7 +105,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
     setIsSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
       
       const numericGrade = parseFloat(grade);
       if (isNaN(numericGrade)) {
@@ -125,18 +113,14 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         return;
       }
 
-      const { error } = await supabase
-        .from('assignment_submissions')
-        .update({
-          grade: numericGrade,
-          feedback,
-          status: 'graded',
-          graded_at: new Date().toISOString(),
-          graded_by: user?.id
-        })
-        .eq('id', submissionId);
+      await updateSubmissionGrade(
+        submissionId, 
+        numericGrade, 
+        feedback, 
+        submission?.student_id || '', 
+        assignment?.title || ''
+      );
 
-      if (error) throw error;
       setNotification({ type: 'success', message: 'تم حفظ التقييم بنجاح' });
       
       // Clear notification after 3 seconds

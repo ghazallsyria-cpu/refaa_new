@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { usePerformanceSystem } from '@/hooks/usePerformanceSystem';
+import { useAuth } from '@/context/auth-context';
 import { 
   FileText, 
   PenTool, 
@@ -23,7 +24,9 @@ import Link from 'next/link';
 
 export default function StudentPerformancePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const { user, userRole, isChecking } = useAuth();
+  const { loading: systemLoading, fetchPerformanceData } = usePerformanceSystem();
+  
   const [studentData, setStudentData] = useState<any>(null);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
   const [assignmentSubmissions, setAssignmentSubmissions] = useState<any[]>([]);
@@ -34,112 +37,34 @@ export default function StudentPerformancePage() {
     completedAssignments: 0
   });
 
-  const fetchPerformanceData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      // Check role
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      
-      if (userData?.role !== 'student') {
-        router.push('/dashboard');
-        return;
-      }
-
-      // Fetch student info
-      const { data: student } = await supabase
-        .from('students')
-        .select(`
-          id,
-          sections (name, classes (name))
-        `)
-        .eq('id', user.id)
-        .single();
-      
-      setStudentData(student);
-
-      // Fetch exam attempts
-      console.log('Fetching exam attempts for user:', user.id);
-      const { data: attempts, error: attemptsError } = await supabase
-        .from('exam_attempts')
-        .select(`
-          id,
-          score,
-          status,
-          completed_at,
-          exams!inner (title, total_marks, max_score, subjects!inner (name))
-        `)
-        .eq('student_id', user.id)
-        .order('completed_at', { ascending: false });
-
-      if (attemptsError) {
-        console.error('Error fetching exam attempts:', attemptsError);
-      } else {
-        console.log('Fetched attempts:', attempts);
-      }
-      setExamAttempts(attempts || []);
-
-      // Fetch assignment submissions
-      console.log('Fetching assignment submissions for user:', user.id);
-      const { data: submissions, error: submissionsError } = await supabase
-        .from('assignment_submissions')
-        .select(`
-          id,
-          grade,
-          feedback,
-          submitted_at,
-          status,
-          assignments!inner (title, total_marks, subjects!inner (name))
-        `)
-        .eq('student_id', user.id)
-        .order('submitted_at', { ascending: false });
-
-      if (submissionsError) {
-        console.error('Error fetching assignment submissions:', submissionsError);
-      } else {
-        console.log('Fetched submissions:', submissions);
-      }
-      setAssignmentSubmissions(submissions || []);
-
-      // Calculate stats
-      const gradedExams = attempts?.filter(a => a.status === 'graded' || a.status === 'completed') || [];
-      const avgExam = gradedExams.length > 0 
-        ? gradedExams.reduce((acc, curr) => acc + (curr.score || 0), 0) / gradedExams.length 
-        : 0;
-
-      const gradedAssignments = submissions?.filter(s => s.status === 'graded') || [];
-      const avgAssignment = gradedAssignments.length > 0
-        ? gradedAssignments.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedAssignments.length
-        : 0;
-
-      setStats({
-        avgExamScore: Math.round(avgExam),
-        avgAssignmentScore: Math.round(avgAssignment),
-        completedExams: attempts?.length || 0,
-        completedAssignments: submissions?.length || 0
-      });
-
-    } catch (error) {
-      console.error('Error fetching performance data:', error);
-    } finally {
-      setLoading(false);
+  const loadPerformanceData = useCallback(async () => {
+    if (!user || userRole !== 'student') return;
+    
+    const data = await fetchPerformanceData();
+    if (data) {
+      setStudentData(data.student);
+      setExamAttempts(data.examAttempts);
+      setAssignmentSubmissions(data.assignmentSubmissions);
+      setStats(data.stats);
     }
-  }, [router]);
+  }, [user, userRole, fetchPerformanceData]);
 
   useEffect(() => {
-    fetchPerformanceData();
-  }, [fetchPerformanceData]);
+    if (!isChecking) {
+      if (!user) {
+        router.push('/login');
+      } else if (userRole !== 'student') {
+        router.push('/dashboard');
+      } else {
+        const timer = setTimeout(() => {
+          loadPerformanceData();
+        }, 0);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [user, userRole, isChecking, router, loadPerformanceData]);
 
-  if (loading) {
+  if (systemLoading || isChecking) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">

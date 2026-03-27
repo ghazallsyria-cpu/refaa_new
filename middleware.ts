@@ -32,15 +32,15 @@ export async function middleware(request: NextRequest) {
   );
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
 
   // Public routes: /login, /reset-password, /live
   const isPublicRoute = path.startsWith('/login') || path.startsWith('/reset-password') || path.startsWith('/live');
 
-  if (!session && !isPublicRoute) {
+  if (!user && !isPublicRoute) {
     const redirectResponse = NextResponse.redirect(new URL('/login', request.url));
     // Copy cookies from the current response object to the redirect response
     response.cookies.getAll().forEach((cookie) => {

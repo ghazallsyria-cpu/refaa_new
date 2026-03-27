@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Clock, Plus, Trash2, X, Edit2, AlertCircle, Search } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
 // Types
 type Section = {
@@ -64,6 +64,7 @@ export default function SchedulesPage() {
   
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
+  const { fetchInitialScheduleData, fetchSchedules: fetchSchedulesData, addSchedule, deleteSchedule: deleteScheduleAction } = useSchedulesSystem();
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -79,9 +80,43 @@ export default function SchedulesPage() {
     teacherId?: string;
   }>({ day: 0, period: 1 });
 
+  const fetchInitialData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchInitialScheduleData();
+      setSections(data.sections as unknown as Section[]);
+      setSubjects(data.subjects as unknown as Subject[]);
+      setTeachers(data.teachers as unknown as Teacher[]);
+      setTeacherAssignments(data.assignments);
+      setPeriods(data.periods);
+      
+      if (data.sections && data.sections.length > 0) {
+        setSelectedSectionId(data.sections[0].id);
+      }
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      showNotification('error', 'فشل تحميل البيانات الأولية');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchInitialScheduleData]);
+
+  const fetchSchedules = useCallback(async (sectionId: string) => {
+    setLoading(true);
+    try {
+      const data = await fetchSchedulesData({ sectionId });
+      setSchedules(data as unknown as Schedule[]);
+    } catch (error) {
+      console.error('Error fetching schedules:', error);
+      showNotification('error', 'فشل تحميل الجدول');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchSchedulesData]);
+
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [fetchInitialData]);
 
   useEffect(() => {
     if (selectedSectionId) {
@@ -89,60 +124,7 @@ export default function SchedulesPage() {
     } else {
       setSchedules([]);
     }
-  }, [selectedSectionId]);
-
-  const fetchInitialData = async () => {
-    setLoading(true);
-    try {
-      const [sectionsRes, subjectsRes, teachersRes, assignmentsRes, periodsRes] = await Promise.all([
-        supabase.from('sections').select('id, name, classes(name)').order('name'),
-        supabase.from('subjects').select('id, name').order('name'),
-        supabase.from('teachers').select('id, users(full_name)'),
-        supabase.from('teacher_sections').select('teacher_id, section_id, subject_id'),
-        supabase.from('class_periods').select('*').order('period_number')
-      ]);
-
-      if (sectionsRes.data) setSections((sectionsRes.data as unknown) as Section[]);
-      if (subjectsRes.data) setSubjects((subjectsRes.data as unknown) as Subject[]);
-      if (teachersRes.data) setTeachers((teachersRes.data as unknown) as Teacher[]);
-      if (assignmentsRes.data) setTeacherAssignments(assignmentsRes.data);
-      if (periodsRes.data) setPeriods(periodsRes.data);
-      
-      if (sectionsRes.data && sectionsRes.data.length > 0) {
-        setSelectedSectionId(sectionsRes.data[0].id);
-      }
-    } catch (error) {
-      console.error('Error fetching initial data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSchedules = async (sectionId: string) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('schedules')
-        .select(`
-          id,
-          section_id,
-          subject_id,
-          teacher_id,
-          day_of_week,
-          period,
-          subjects (name),
-          teachers (users (full_name))
-        `)
-        .eq('section_id', sectionId);
-
-      if (error) throw error;
-      setSchedules((data as unknown) as Schedule[] || []);
-    } catch (error) {
-      console.error('Error fetching schedules:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [selectedSectionId, fetchSchedules]);
 
   const openCellModal = (day: number, period: number, existingSchedule?: Schedule) => {
     if (!selectedSectionId) {
@@ -179,29 +161,10 @@ export default function SchedulesPage() {
 
       if (currentCell.scheduleId) {
         // Update
-        const { error } = await supabase
-          .from('schedules')
-          .update(payload)
-          .eq('id', currentCell.scheduleId);
-          
-        if (error) {
-          if (error.code === '23505') { // Unique violation
-            throw new Error('المعلم لديه حصة أخرى في نفس الوقت');
-          }
-          throw error;
-        }
+        await updateSchedule(currentCell.scheduleId, payload);
       } else {
         // Insert
-        const { error } = await supabase
-          .from('schedules')
-          .insert([payload]);
-          
-        if (error) {
-          if (error.code === '23505') { // Unique violation
-            throw new Error('المعلم لديه حصة أخرى في نفس الوقت');
-          }
-          throw error;
-        }
+        await addSchedule(payload);
       }
 
       await fetchSchedules(selectedSectionId);
@@ -209,7 +172,11 @@ export default function SchedulesPage() {
       showNotification('success', 'تم حفظ الحصة بنجاح');
     } catch (error: any) {
       console.error('Error saving schedule:', error);
-      showNotification('error', error.message || 'حدث خطأ أثناء حفظ الحصة');
+      if (error.code === '23505') {
+        showNotification('error', 'المعلم لديه حصة أخرى في نفس الوقت');
+      } else {
+        showNotification('error', error.message || 'حدث خطأ أثناء حفظ الحصة');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -219,8 +186,7 @@ export default function SchedulesPage() {
     if (!scheduleToDelete) return;
     
     try {
-      const { error } = await supabase.from('schedules').delete().eq('id', scheduleToDelete);
-      if (error) throw error;
+      await deleteScheduleAction(scheduleToDelete);
       await fetchSchedules(selectedSectionId);
       showNotification('success', 'تم حذف الحصة بنجاح');
     } catch (error) {

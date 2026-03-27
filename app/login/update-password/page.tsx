@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { School, Lock } from 'lucide-react';
 
@@ -10,6 +10,7 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { updatePassword } = useAuth();
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,12 +18,7 @@ export default function UpdatePasswordPage() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: password,
-      });
-
-      if (error) throw error;
-      
+      await updatePassword(password);
       router.push('/login');
     } catch (err: any) {
       setError(err.message || 'حدث خطأ أثناء تحديث كلمة المرور');

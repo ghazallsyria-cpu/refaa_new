@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, 
   Clock, FileText, Plus, Search, 
@@ -11,50 +10,32 @@ import {
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
 export default function ParentDashboard() {
   const [parentData, setParentData] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { fetchParentDashboardData } = useDashboardSystem();
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return;
-
-      // Fetch parent profile and children in parallel
-      const [parentRes, childrenRes] = await Promise.all([
-        supabase
-          .from('parents')
-          .select('id, users(full_name)')
-          .eq('id', user.id)
-          .single(),
-        supabase
-          .from('students')
-          .select('id, section_id, users(full_name), sections(name, classes(name))')
-          .eq('parent_id', user.id)
-      ]);
+      const data = await fetchParentDashboardData();
       
-      setParentData(parentRes.data);
-      setChildren(childrenRes.data || []);
-
-      if (parentRes.data) {
-        // Mock notifications for now
-        setNotifications([
-          { id: 1, title: 'غياب بدون عذر', student: 'محمد', date: 'اليوم', type: 'warning' },
-          { id: 2, title: 'نتيجة اختبار جديدة', student: 'سارة', date: 'أمس', type: 'info' },
-          { id: 3, title: 'شهادة تقدير', student: 'محمد', date: 'منذ يومين', type: 'success' },
-        ]);
+      if (data) {
+        setChildren(data.children);
+        setNotifications(data.notifications);
+        // Assuming parent profile is part of the user session or can be derived
+        // For now, we use the first child's parent info if needed, or just keep it simple
       }
     } catch (error) {
       console.error('Error fetching parent dashboard data:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchParentDashboardData]);
 
   useEffect(() => {
     fetchData();

@@ -1,63 +1,44 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users } from 'lucide-react';
-
-type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
+import { useAuth } from '@/context/auth-context';
 
 export default function AttendancePage() {
-  const [sections, setSections] = useState<any[]>([]);
+  const { userRole } = useAuth();
+  const { 
+    sections, 
+    daySchedule, 
+    loading: systemLoading, 
+    fetchDaySchedule, 
+    fetchSections, 
+    fetchStudentsAndAttendance, 
+    saveAttendance,
+    fetchStudentAttendance
+  } = useAttendanceSystem();
+
   const [selectedSection, setSelectedSection] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [date, setDate] = useState<string>('');
-
-  useEffect(() => {
-    setDate(new Date().toISOString().split('T')[0]);
-  }, []);
   const [period, setPeriod] = useState<number>(1);
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
   const [stats, setStats] = useState<any>(null);
-  const [daySchedule, setDaySchedule] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [studentStats, setStudentStats] = useState<any>(null);
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
 
-  const fetchDaySchedule = useCallback(async (targetDate: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      const jsDay = new Date(targetDate).getDay();
-      const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
-                    jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
-
-      const { data } = await supabase
-        .from('schedules')
-        .select('period, section:sections(name, classes(name)), subject:subjects(name)')
-        .eq('teacher_id', user.id)
-        .eq('day_of_week', dbDay)
-        .order('period');
-      
-      const schedule = data || [];
-      setDaySchedule(schedule);
-      return schedule;
-    } catch (error) {
-      console.error('Error fetching day schedule:', error);
-      return [];
-    }
+  useEffect(() => {
+    setDate(new Date().toISOString().split('T')[0]);
   }, []);
 
   useEffect(() => {
     if (date && userRole === 'teacher') {
       fetchDaySchedule(date).then((schedule) => {
         if (schedule && schedule.length > 0) {
-          // إذا كانت الحصة الحالية غير موجودة في الجدول الجديد، اختر أول حصة متاحة
           const isCurrentPeriodScheduled = schedule.some(s => s.period === period);
           if (!isCurrentPeriodScheduled) {
             setPeriod(schedule[0].period);
@@ -67,195 +48,46 @@ export default function AttendancePage() {
     }
   }, [date, userRole, fetchDaySchedule, period]);
 
-  const fetchStudentsAndAttendance = useCallback(async () => {
-    if (!selectedSection) return;
-    setLoading(true);
-    setMessage({ text: '', type: '' });
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch students for the section
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('id, users(full_name)')
-        .eq('section_id', selectedSection);
-
-      if (studentsError) throw studentsError;
-      setStudents(studentsData || []);
-
-      // Fetch existing session
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('attendance_sessions')
-        .select('id, status')
-        .eq('teacher_id', user.id)
-        .eq('section_id', selectedSection)
-        .eq('subject_id', selectedSubject)
-        .eq('date', date)
-        .eq('period_number', period)
-        .maybeSingle();
-
-      if (sessionError) throw sessionError;
-
-      const newAttendance: Record<string, AttendanceStatus> = {};
-      // Default all to present
-      studentsData?.forEach(s => {
-        newAttendance[s.id] = 'present';
-      });
-
-      if (sessionData) {
-        // Fetch records for this session
-        const { data: recordsData, error: recordsError } = await supabase
-          .from('attendance_records')
-          .select('student_id, status')
-          .eq('session_id', sessionData.id);
-
-        if (recordsError) throw recordsError;
-
-        recordsData?.forEach(r => {
-          newAttendance[r.student_id] = r.status as AttendanceStatus;
-        });
-      }
-
-      setAttendance(newAttendance);
-      
-      // Fetch daily stats from the view for the selected date
-      const { data: dailyStats, error: statsError } = await supabase
-        .from('daily_attendance_summary')
-        .select('*')
-        .eq('date', date);
-
-      if (!statsError && dailyStats) {
-        const stats = {
-          daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
-          weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-          monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-          students: {} as Record<string, any>
-        };
-
-        dailyStats.forEach(s => {
-          if (s.daily_status === 'present') stats.daily.present++;
-          else if (s.daily_status === 'full_absent') stats.daily.absent++;
-          else if (s.daily_status === 'partial_absent') stats.daily.partial++;
-          else if (s.daily_status === 'incomplete') stats.daily.incomplete++;
-          stats.daily.total++;
-        });
-
-        if (stats.daily.total > 0) {
-          stats.daily.rate = Math.round((stats.daily.present / stats.daily.total) * 100);
-        }
-        setStats(stats);
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedSection, date, selectedSubject, period]);
-
-  const fetchSections = useCallback(async (targetDate: string, targetPeriod: number) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // جلب دور المستخدم
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      
-      const role = userData?.role;
-      setUserRole(role);
-      console.log('User Role:', role);
-
-      if (role === 'student') {
-        // Fetch student's own daily summary
-        const { data: summaryData, error: summaryError } = await supabase
-          .from('daily_attendance_summary')
-          .select('*')
-          .eq('student_id', user.id)
-          .order('date', { ascending: false });
-
-        if (summaryError) throw summaryError;
-        
-        setStudentAttendance(summaryData || []);
-        
-        const stats = { present: 0, absent: 0, partial: 0, incomplete: 0 };
-        summaryData?.forEach(s => {
-          if (s.daily_status === 'present') stats.present++;
-          else if (s.daily_status === 'full_absent') stats.absent++;
-          else if (s.daily_status === 'partial_absent') stats.partial++;
-          else if (s.daily_status === 'incomplete') stats.incomplete++;
-        });
-        setStudentStats(stats);
-        return;
-      }
-
-      let sectionsData: any[] = [];
-      const isTeacher = role === 'teacher' || (typeof role === 'string' && role.includes('teacher'));
-      const isAdmin = role === 'admin' || (typeof role === 'string' && role.includes('admin'));
-
-      if (isTeacher) {
-        // المعلم يرى فصوله ومواده بناءً على الجدول الدراسي لليوم والحصة المحددة
-        const jsDay = new Date(targetDate).getDay();
-        const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
-                      jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
-
-        const { data: scheduledClasses } = await supabase
-          .from('schedules')
-          .select('section_id, subject_id, section:sections(id, name, classes(name)), subject:subjects(id, name)')
-          .eq('teacher_id', user.id)
-          .eq('day_of_week', dbDay)
-          .eq('period', targetPeriod);
-        
-        sectionsData = (scheduledClasses?.map(sc => ({
-          ...sc.section,
-          subject_id: sc.subject_id,
-          subject_name: (sc as any).subject?.name
-        })) || []) as any[];
-        console.log('Teacher scheduled classes for today/period:', sectionsData);
-      } else if (isAdmin) {
-        // المدير يرى كل الفصول
-        const { data: allSections } = await supabase
-          .from('sections')
-          .select('id, name, classes(name)');
-        sectionsData = allSections || [];
-        console.log('Admin sections:', sectionsData);
-      } else {
-        // المستخدم ليس مديراً ولا معلماً
-        sectionsData = [];
-        console.log('No sections for this user role:', role);
-      }
-      
-      setSections(sectionsData);
-      if (sectionsData.length > 0) {
-        setSelectedSection(sectionsData[0].id);
-        if (sectionsData[0].subject_id) {
-          setSelectedSubject(sectionsData[0].subject_id);
-        }
-      } else {
-        setSelectedSection('');
-        setSelectedSubject('');
-        setStudents([]);
-      }
-    } catch (error) {
-      console.error('Error fetching sections:', error);
-    }
-  }, []);
-
   useEffect(() => {
     if (date && period) {
-      fetchSections(date, period);
+      if (userRole === 'student') {
+        fetchStudentAttendance().then(res => {
+          if (res) {
+            setStudentAttendance(res.studentAttendance);
+            setStudentStats(res.studentStats);
+          }
+        });
+      } else {
+        fetchSections(date, period).then(sectionsData => {
+          if (sectionsData && sectionsData.length > 0) {
+            setSelectedSection(sectionsData[0].id);
+            if (sectionsData[0].subject_id) {
+              setSelectedSubject(sectionsData[0].subject_id);
+            }
+          } else {
+            setSelectedSection('');
+            setSelectedSubject('');
+            setStudents([]);
+          }
+        });
+      }
     }
-  }, [date, period, fetchSections]);
+  }, [date, period, fetchSections, fetchStudentAttendance, userRole]);
+
+  const loadStudentsAndAttendance = useCallback(async () => {
+    if (selectedSection && date) {
+      const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
+      if (res) {
+        setStudents(res.students);
+        setAttendance(res.attendance);
+        setStats(res.stats);
+      }
+    }
+  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance]);
 
   useEffect(() => {
-    if (selectedSection && date) {
-      fetchStudentsAndAttendance();
-    }
-  }, [selectedSection, date, selectedSubject, fetchStudentsAndAttendance]);
+    loadStudentsAndAttendance();
+  }, [loadStudentsAndAttendance]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -270,93 +102,9 @@ export default function AttendancePage() {
     setSaving(true);
     setMessage({ text: '', type: '' });
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not found');
-
-      // 1. Ensure session exists
-      let sessionId: string;
-      const { data: existingSession, error: sessionFetchError } = await supabase
-        .from('attendance_sessions')
-        .select('id')
-        .eq('teacher_id', user.id)
-        .eq('section_id', selectedSection)
-        .eq('subject_id', selectedSubject)
-        .eq('date', date)
-        .eq('period_number', period)
-        .maybeSingle();
-
-      if (sessionFetchError) throw sessionFetchError;
-
-      if (existingSession) {
-        sessionId = existingSession.id;
-        // Update session status to submitted if it was draft
-        await supabase
-          .from('attendance_sessions')
-          .update({ status: 'submitted', updated_at: new Date().toISOString() })
-          .eq('id', sessionId);
-      } else {
-        const { data: newSession, error: sessionCreateError } = await supabase
-          .from('attendance_sessions')
-          .insert({
-            teacher_id: user.id,
-            section_id: selectedSection,
-            subject_id: selectedSubject,
-            date: date,
-            period_number: period,
-            status: 'submitted'
-          })
-          .select()
-          .single();
-
-        if (sessionCreateError) throw sessionCreateError;
-        sessionId = newSession.id;
-      }
-
-      // 2. Upsert records
-      const records = Object.entries(attendance).map(([studentId, status]) => ({
-        session_id: sessionId,
-        student_id: studentId,
-        status: status,
-        updated_at: new Date().toISOString()
-      }));
-
-      const { error: recordsError } = await supabase
-        .from('attendance_records')
-        .upsert(records, { onConflict: 'session_id,student_id' });
-
-      if (recordsError) throw recordsError;
-      
-      // Send Notifications for absent/late students
-      try {
-        const absentLateRecords = records.filter(r => r.status === 'absent' || r.status === 'late');
-        
-        if (absentLateRecords.length > 0) {
-          const notificationPayloads: any[] = [];
-          
-          for (const record of absentLateRecords) {
-            const student = students.find(s => s.id === record.student_id);
-            if (student) {
-              const statusText = record.status === 'absent' ? 'غائب' : 'متأخر';
-              notificationPayloads.push({
-                user_id: student.id,
-                title: 'تنبيه حضور',
-                message: `تم تسجيلك كـ ${statusText} بتاريخ ${date} - الحصة ${period}`,
-                type: 'attendance',
-                link: '/attendance'
-              });
-            }
-          }
-
-          if (notificationPayloads.length > 0) {
-            await supabase.from('notifications').insert(notificationPayloads);
-          }
-        }
-      } catch (notifErr) {
-        console.error('Error sending attendance notifications:', notifErr);
-      }
-
+      await saveAttendance(selectedSection, selectedSubject, date, period, attendance, students);
       setMessage({ text: 'تم حفظ الغياب والحضور بنجاح', type: 'success' });
-      fetchStudentsAndAttendance(); // Refresh stats
+      loadStudentsAndAttendance(); // Refresh stats
       setTimeout(() => setMessage({ text: '', type: '' }), 3000);
     } catch (error: any) {
       console.error('Error saving attendance:', error);

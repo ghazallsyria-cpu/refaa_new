@@ -1,0 +1,366 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
+
+export interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  section_id?: string;
+  subject: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
+  sender?: any;
+  receiver?: any;
+  section?: any;
+}
+
+export interface Announcement {
+  id: string;
+  author_id: string;
+  title: string;
+  content: string;
+  target_role?: string;
+  created_at: string;
+  author?: any;
+}
+
+export function useMessagesSystem() {
+  const { user, userRole } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [teacherSections, setTeacherSections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMessages = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          sender:sender_id(full_name),
+          receiver:receiver_id(full_name),
+          section:section_id(name, classes(name))
+        `)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (fetchError) throw fetchError;
+      setMessages(data || []);
+    } catch (err: any) {
+      console.error("Error fetching messages:", err);
+      setError(err.message || 'Failed to load messages');
+    }
+  }, [user]);
+
+  const fetchAnnouncements = useCallback(async () => {
+    if (!user) return;
+    try {
+      let query = supabase
+        .from('announcements')
+        .select(`
+          *,
+          author:author_id(full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (userRole === 'student') {
+        query = query.or(`target_role.eq.student,target_role.is.null`);
+      } else if (userRole === 'parent') {
+        query = query.or(`target_role.eq.parent,target_role.is.null`);
+      }
+
+      const { data, error: fetchError } = await query;
+      if (fetchError) throw fetchError;
+      setAnnouncements(data || []);
+    } catch (err: any) {
+      console.error('Error fetching announcements:', err);
+      setError(err.message);
+    }
+  }, [user, userRole]);
+
+  const fetchUsers = useCallback(async () => {
+    if (!user) return;
+    try {
+      if (userRole === 'student') {
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('section_id')
+          .eq('id', user.id)
+          .single();
+
+        if (studentData?.section_id) {
+          const { data: teacherSections } = await supabase
+            .from('teacher_sections')
+            .select('teacher_id')
+            .eq('section_id', studentData.section_id);
+
+          const teacherIds = teacherSections?.map(ts => ts.teacher_id) || [];
+          
+          if (teacherIds.length > 0) {
+            const { data, error } = await supabase
+              .from('users')
+              .select('id, full_name, role')
+              .or(`id.in.(${teacherIds.join(',')}),role.in.(admin,management)`)
+              .order('full_name');
+            if (error) throw error;
+            setUsers(data || []);
+          } else {
+            const { data, error } = await supabase
+              .from('users')
+              .select('id, full_name, role')
+              .in('role', ['admin', 'management'])
+              .order('full_name');
+            setUsers(data || []);
+          }
+        } else {
+          const { data, error } = await supabase
+            .from('users')
+            .select('id, full_name, role')
+            .in('role', ['admin', 'management'])
+            .order('full_name');
+          setUsers(data || []);
+        }
+      } else {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, full_name, role')
+          .order('full_name');
+        if (error) throw error;
+        setUsers(data || []);
+      }
+    } catch (err: any) {
+      console.error('Error fetching users:', err);
+      setError(err.message);
+    }
+  }, [user, userRole]);
+
+  const fetchTeacherSections = useCallback(async () => {
+    if (!user || userRole !== 'teacher') return;
+    try {
+      const { data: sectionsData } = await supabase
+        .from('teacher_sections')
+        .select(`
+          section_id,
+          section:sections(id, name, classes(name))
+        `)
+        .eq('teacher_id', user.id);
+      
+      const uniqueSections = Array.from(new Set((sectionsData || []).map(s => s.section_id)))
+        .map(id => {
+          const s = sectionsData?.find(item => item.section_id === id);
+          const section = Array.isArray(s?.section) ? s.section[0] : s?.section;
+          if (!section) return null;
+          const classes = Array.isArray(section.classes) ? section.classes[0] : section.classes;
+          return {
+            id: section.id,
+            name: section.name,
+            classes: classes
+          };
+        });
+      
+      setTeacherSections(uniqueSections.filter(Boolean));
+    } catch (err: any) {
+      console.error('Error fetching teacher sections:', err);
+    }
+  }, [user, userRole]);
+
+  const loadInitialData = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([
+      fetchMessages(),
+      fetchAnnouncements(),
+      fetchUsers(),
+      fetchTeacherSections()
+    ]);
+    setLoading(false);
+  }, [fetchMessages, fetchAnnouncements, fetchUsers, fetchTeacherSections]);
+
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  const fetchStudentsBySection = async (sectionId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select(`
+          id,
+          users(id, full_name, role)
+        `)
+        .eq('section_id', sectionId);
+      
+      if (error) throw error;
+      
+      return data?.map(s => {
+        const u = Array.isArray(s.users) ? s.users[0] : s.users;
+        return u;
+      }).filter(Boolean) || [];
+    } catch (error) {
+      console.error('Error fetching students by section:', error);
+      return [];
+    }
+  };
+
+  const sendMessage = async (receiverId: string, subject: string, content: string) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    try {
+      const response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiverId,
+          subject,
+          content,
+          userId: user.id
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to send message');
+
+      await fetchMessages();
+    } catch (err) {
+      console.error('Error sending message:', err);
+      throw err;
+    }
+  };
+
+  const sendGroupMessage = async (sectionId: string, subject: string, content: string) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    const response = await fetch('/api/messages/send-group', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectionId,
+        subject,
+        content,
+        senderId: user.id,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'حدث خطأ أثناء إرسال الرسالة الجماعية');
+    
+    await fetchMessages();
+  };
+
+  const sendAnnouncement = async (title: string, content: string, targetRole: string) => {
+    if (!user) throw new Error('User not authenticated');
+
+    try {
+      const response = await fetch('/api/messages/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          content,
+          targetRole,
+          userId: user.id
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to send announcement');
+
+      await fetchAnnouncements();
+    } catch (err) {
+      console.error('Error sending announcement:', err);
+      throw err;
+    }
+  };
+
+  const markAsRead = async (messageIds: string[]) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    try {
+      const response = await fetch('/api/messages/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageIds,
+          userId: user.id
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to mark messages as read');
+
+      await fetchMessages();
+    } catch (err) {
+      console.error('Error marking messages as read:', err);
+      throw err;
+    }
+  };
+
+  const deleteMessages = async (messageIds: string[]) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    try {
+      const response = await fetch('/api/messages/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageIds,
+          userId: user.id
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to delete messages');
+
+      await fetchMessages();
+    } catch (err) {
+      console.error('Error deleting messages:', err);
+      throw err;
+    }
+  };
+
+  const updateMessage = async (messageId: string, content: string) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    try {
+      const response = await fetch('/api/messages/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          content,
+          userId: user.id
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to update message');
+
+      await fetchMessages();
+    } catch (err) {
+      console.error('Error updating message:', err);
+      throw err;
+    }
+  };
+
+  return { 
+    messages, 
+    announcements, 
+    users, 
+    teacherSections, 
+    loading, 
+    error, 
+    fetchMessages, 
+    fetchAnnouncements,
+    fetchStudentsBySection,
+    sendMessage, 
+    sendGroupMessage,
+    sendAnnouncement,
+    markAsRead,
+    deleteMessages,
+    updateMessage
+  };
+}

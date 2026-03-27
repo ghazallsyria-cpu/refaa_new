@@ -14,6 +14,10 @@ interface AuthContextType {
   platformClosed: boolean;
   closeMessage: string;
   signOut: () => Promise<void>;
+  signIn: (civilId: string, password: string) => Promise<void>;
+  resetPassword: (password: string) => Promise<void>;
+  requestPasswordReset: (civilId: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +37,151 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
   const isPublicPage = isLoginPage || isResetPasswordPage;
+
+  const signIn = async (civilId: string, password: string) => {
+    let authEmail = civilId;
+    
+    if (!civilId.includes('@')) {
+      // Try to find student
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('id, users!inner(email)')
+        .eq('national_id', civilId)
+        .maybeSingle();
+        
+      if (studentData && studentData.users) {
+        authEmail = (studentData.users as any).email;
+      } else {
+        // Try to find teacher
+        const { data: teacherData } = await supabase
+          .from('teachers')
+          .select('id, users!inner(email)')
+          .eq('national_id', civilId)
+          .maybeSingle();
+          
+        if (teacherData && teacherData.users) {
+          authEmail = (teacherData.users as any).email;
+        } else {
+          // Try to find parent
+          const { data: parentData } = await supabase
+            .from('parents')
+            .select('id, users!inner(email)')
+            .eq('national_id', civilId)
+            .maybeSingle();
+            
+          if (parentData && parentData.users) {
+            authEmail = (parentData.users as any).email;
+          } else {
+            // Default fallback
+            authEmail = `${civilId}@alrefaa.edu`;
+          }
+        }
+      }
+    }
+
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password,
+    });
+
+    if (signInError) throw signInError;
+    
+    if (authData.user) {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role, must_reset_password')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (userError) throw userError;
+
+      if (!userData) {
+        throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
+      }
+
+      if (userData.must_reset_password) {
+        setMustResetPassword(true);
+        router.push('/reset-password');
+      } else {
+        router.push('/');
+      }
+    }
+  };
+
+  const requestPasswordReset = async (civilId: string) => {
+    let authEmail = '';
+    
+    // Check students
+    const { data: studentData } = await supabase
+      .from('students')
+      .select('users!inner(email)')
+      .eq('national_id', civilId)
+      .maybeSingle();
+      
+    if (studentData && studentData.users) {
+      authEmail = (studentData.users as any).email;
+    } else {
+      // Check teachers
+      const { data: teacherData } = await supabase
+        .from('teachers')
+        .select('users!inner(email)')
+        .eq('national_id', civilId)
+        .maybeSingle();
+        
+      if (teacherData && teacherData.users) {
+        authEmail = (teacherData.users as any).email;
+      } else {
+        // Check parents
+        const { data: parentData } = await supabase
+          .from('parents')
+          .select('users!inner(email)')
+          .eq('national_id', civilId)
+          .maybeSingle();
+          
+        if (parentData && parentData.users) {
+          authEmail = (parentData.users as any).email;
+        }
+      }
+    }
+
+    if (!authEmail) {
+      throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+      redirectTo: `${window.location.origin}/login/update-password`,
+    });
+
+    if (error) throw error;
+  };
+
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: password,
+    });
+
+    if (error) throw error;
+  };
+
+  const resetPassword = async (password: string) => {
+    if (!user) throw new Error('غير مصرح لك بإجراء هذا التغيير');
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: password
+    });
+
+    if (updateError) throw updateError;
+
+    // Update the must_reset_password flag
+    const { error: dbError } = await supabase
+      .from('users')
+      .update({ must_reset_password: false })
+      .eq('id', user.id);
+
+    if (dbError) throw dbError;
+    
+    setMustResetPassword(false);
+  };
 
   useEffect(() => {
     const initAuth = async () => {
@@ -178,7 +327,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdminByEmail, 
       platformClosed, 
       closeMessage,
-      signOut
+      signOut,
+      signIn,
+      resetPassword,
+      requestPasswordReset,
+      updatePassword
     }}>
       {children}
     </AuthContext.Provider>

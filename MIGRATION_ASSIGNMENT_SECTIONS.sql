@@ -19,4 +19,7 @@ ALTER TABLE public.assignment_sections ENABLE ROW LEVEL SECURITY;
 
 -- Policies
 CREATE POLICY "Anyone can view assignment sections" ON public.assignment_sections FOR SELECT USING (true);
-CREATE POLICY "Teachers manage assignment sections" ON public.assignment_sections FOR ALL USING (public.get_user_role() IN ('admin', 'teacher'));
+CREATE POLICY "Teachers manage assignment sections" ON public.assignment_sections FOR ALL USING (
+    (auth.jwt() ->> 'role' IN ('admin', 'management')) OR 
+    public.is_teacher_of_assignment(assignment_id)
+);

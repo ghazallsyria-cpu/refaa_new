@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function ResetPasswordPage() {
+  const { user, isChecking, resetPassword } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,14 +16,10 @@ export default function ResetPasswordPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-      }
-    };
-    checkAuth();
-  }, [router]);
+    if (!isChecking && !user) {
+      router.push('/login');
+    }
+  }, [user, isChecking, router]);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,23 +39,7 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('غير مصرح لك بإجراء هذا التغيير');
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password
-      });
-
-      if (updateError) throw updateError;
-
-      // Update the must_reset_password flag
-      const { error: dbError } = await supabase
-        .from('users')
-        .update({ must_reset_password: false })
-        .eq('id', user.id);
-
-      if (dbError) throw dbError;
-
+      await resetPassword(password);
       setSuccess(true);
       setTimeout(() => {
         router.push('/');

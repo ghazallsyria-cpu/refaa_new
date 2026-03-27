@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useSubjectsSystem } from '@/hooks/useSubjectsSystem';
 import { BookOpen, Plus, Search, Edit2, Trash2, Users, X, Check, User, AlertCircle } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,6 +24,15 @@ type Subject = {
 };
 
 export default function SubjectsPage() {
+  const { 
+    loading: hookLoading, 
+    fetchSubjectsData, 
+    addSubject, 
+    updateSubject, 
+    deleteSubject, 
+    saveTeacherAssignments 
+  } = useSubjectsSystem();
+
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,69 +59,16 @@ export default function SubjectsPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Fetch subjects
-      const { data: subjectsData, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('*')
-        .order('name');
-        
-      if (subjectsError) throw subjectsError;
-
-      // Fetch teachers with user details
-      const { data: teachersData, error: teachersError } = await supabase
-        .from('teachers')
-        .select(`
-          id,
-          national_id,
-          specialization,
-          users (
-            full_name,
-            email
-          )
-        `);
-        
-      if (teachersError) throw teachersError;
-
-      // Fetch teacher-subject mappings
-      const { data: mappingsData, error: mappingsError } = await supabase
-        .from('teacher_subjects')
-        .select('*');
-        
-      if (mappingsError) throw mappingsError;
-
-      // Format teachers
-      const formattedTeachers = teachersData.map((t: any) => ({
-        id: t.id,
-        national_id: t.national_id,
-        specialization: t.specialization,
-        user: t.users
-      }));
-      
-      setAllTeachers(formattedTeachers);
-
-      // Organize subjects with their teachers
-      const organizedSubjects: Subject[] = subjectsData.map((sub: any) => {
-        const assignedTeacherIds = mappingsData
-          .filter((m: any) => m.subject_id === sub.id)
-          .map((m: any) => m.teacher_id);
-          
-        const assignedTeachers = formattedTeachers.filter(t => assignedTeacherIds.includes(t.id));
-          
-        return {
-          ...sub,
-          teachers: assignedTeachers
-        };
-      });
-
-      setSubjects(organizedSubjects);
+      const data = await fetchSubjectsData();
+      setSubjects(data.subjects as Subject[]);
+      setAllTeachers(data.allTeachers as Teacher[]);
     } catch (error: any) {
       console.error('Error fetching subjects data:', error);
       showNotification('error', 'حدث خطأ أثناء جلب البيانات: ' + error.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchSubjectsData]);
 
   useEffect(() => {
     fetchData();
@@ -125,20 +81,9 @@ export default function SubjectsPage() {
     setIsSubmitting(true);
     try {
       if (currentSubject.id) {
-        // Update
-        const { error } = await supabase
-          .from('subjects')
-          .update({ name: currentSubject.name, code: currentSubject.code })
-          .eq('id', currentSubject.id);
-          
-        if (error) throw error;
+        await updateSubject(currentSubject.id, currentSubject.name, currentSubject.code);
       } else {
-        // Insert
-        const { error } = await supabase
-          .from('subjects')
-          .insert([{ name: currentSubject.name, code: currentSubject.code }]);
-          
-        if (error) throw error;
+        await addSubject(currentSubject.name, currentSubject.code);
       }
       
       await fetchData();
@@ -157,12 +102,7 @@ export default function SubjectsPage() {
     if (!subjectToDelete) return;
     
     try {
-      const { error } = await supabase
-        .from('subjects')
-        .delete()
-        .eq('id', subjectToDelete);
-        
-      if (error) throw error;
+      await deleteSubject(subjectToDelete);
       await fetchData();
       showNotification('success', 'تم حذف المادة بنجاح');
     } catch (error: any) {
@@ -192,28 +132,7 @@ export default function SubjectsPage() {
     
     setIsSubmitting(true);
     try {
-      // First, delete existing assignments for this subject
-      const { error: deleteError } = await supabase
-        .from('teacher_subjects')
-        .delete()
-        .eq('subject_id', selectedSubjectId);
-        
-      if (deleteError) throw deleteError;
-      
-      // Then, insert new assignments if any
-      if (selectedTeacherIds.length > 0) {
-        const newAssignments = selectedTeacherIds.map(teacherId => ({
-          subject_id: selectedSubjectId,
-          teacher_id: teacherId
-        }));
-        
-        const { error: insertError } = await supabase
-          .from('teacher_subjects')
-          .insert(newAssignments);
-          
-        if (insertError) throw insertError;
-      }
-      
+      await saveTeacherAssignments(selectedSubjectId, selectedTeacherIds);
       await fetchData();
       setIsAssignModalOpen(false);
       showNotification('success', 'تم حفظ تعيينات المعلمين بنجاح!');

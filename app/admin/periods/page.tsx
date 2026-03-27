@@ -1,43 +1,35 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { usePeriodsSystem, Period } from '@/hooks/usePeriodsSystem';
 import { Clock, Plus, Trash2, X, Save, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type Period = {
-  id: string;
-  period_number: number;
-  start_time: string;
-  end_time: string;
-};
-
 export default function PeriodsPage() {
+  const { loading: hookLoading, fetchPeriods, addPeriod, deletePeriod } = usePeriodsSystem();
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newPeriod, setNewPeriod] = useState({ period_number: 1, start_time: '', end_time: '' });
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  const fetchPeriods = useCallback(async () => {
+  const loadPeriods = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('class_periods')
-      .select('*')
-      .order('period_number');
-    if (error) {
+    try {
+      const data = await fetchPeriods();
+      setPeriods(data);
+      setNewPeriod(prev => ({ ...prev, period_number: (data?.length || 0) + 1 }));
+    } catch (error) {
       console.error('Error fetching periods:', error);
       setMessage({ text: 'حدث خطأ أثناء تحميل أوقات الحصص', type: 'error' });
-    } else {
-      setPeriods(data || []);
-      setNewPeriod(prev => ({ ...prev, period_number: (data?.length || 0) + 1 }));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, []);
+  }, [fetchPeriods]);
 
   useEffect(() => {
-    fetchPeriods();
-  }, [fetchPeriods]);
+    loadPeriods();
+  }, [loadPeriods]);
 
   const handleAddPeriod = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,11 +37,9 @@ export default function PeriodsPage() {
     setMessage({ text: '', type: '' });
 
     try {
-      const { error } = await supabase.from('class_periods').insert([newPeriod]);
-      if (error) throw error;
-      
+      await addPeriod(newPeriod);
       setMessage({ text: 'تمت إضافة الحصة بنجاح', type: 'success' });
-      fetchPeriods();
+      loadPeriods();
       setNewPeriod({ period_number: periods.length + 2, start_time: '', end_time: '' });
     } catch (error: any) {
       console.error('Error adding period:', error);
@@ -63,11 +53,9 @@ export default function PeriodsPage() {
     if (!confirm('هل أنت متأكد من حذف هذه الحصة؟')) return;
     
     try {
-      const { error } = await supabase.from('class_periods').delete().eq('id', id);
-      if (error) throw error;
-      
+      await deletePeriod(id);
       setMessage({ text: 'تم حذف الحصة بنجاح', type: 'success' });
-      fetchPeriods();
+      loadPeriods();
     } catch (error: any) {
       console.error('Error deleting period:', error);
       setMessage({ text: 'حدث خطأ أثناء حذف الحصة', type: 'error' });

@@ -1,14 +1,23 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Plus, Search, Edit, Trash2, X, Key, UserPlus, Download, Filter, MapPin, Briefcase, Phone, Mail, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useUsersSystem } from '@/hooks/useUsersSystem';
 
 export default function ParentsPage() {
-  const [parents, setParents] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    parents,
+    students,
+    loading,
+    fetchParents,
+    fetchStudents,
+    addParent,
+    updateParent,
+    deleteUser,
+    resetPassword
+  } = useUsersSystem();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -42,71 +51,14 @@ export default function ParentsPage() {
   const handleResetPasswordClick = async (parent: any) => {
     setResettingPassword(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch('/api/users/reset-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ userId: parent.id }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل إعادة تعيين كلمة المرور');
-      }
-
-      showNotification('success', `تم إعادة تعيين كلمة المرور بنجاح. كلمة المرور الجديدة هي: ${data.newPassword}`);
+      const result = await resetPassword(parent.id);
+      showNotification('success', `تم إعادة تعيين كلمة المرور بنجاح. كلمة المرور الجديدة هي: ${result.newPassword}`);
     } catch (error: any) {
-      console.error('Error resetting password:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء إعادة تعيين كلمة المرور');
     } finally {
       setResettingPassword(false);
     }
   };
-
-  const fetchParents = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('parents')
-        .select(`
-          id,
-          national_id,
-          address,
-          job_title,
-          users (full_name, email, phone),
-          students (id, users (full_name))
-        `);
-
-      if (error) throw error;
-      setParents(data || []);
-    } catch (error) {
-      console.error('Error fetching parents:', error);
-      showNotification('error', 'حدث خطأ أثناء جلب بيانات أولياء الأمور');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchStudents = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select(`
-          id,
-          users (full_name)
-        `);
-      if (error) throw error;
-      setStudents(data || []);
-    } catch (error) {
-      console.error('Error fetching students:', error);
-    }
-  }, []);
 
   useEffect(() => {
     fetchParents();
@@ -120,52 +72,12 @@ export default function ParentsPage() {
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          email: addForm.email || null,
-          full_name: addForm.full_name,
-          national_id: addForm.national_id,
-          phone: addForm.phone,
-          role: 'parent',
-          address: addForm.address,
-          job_title: addForm.job_title
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل إنشاء حساب ولي الأمر');
-      }
-
-      // Link students if any selected
-      if (selectedStudents.length > 0) {
-        const { error: linkError } = await supabase
-          .from('students')
-          .update({ parent_id: data.userId })
-          .in('id', selectedStudents);
-        
-        if (linkError) {
-          console.error('Error linking students:', linkError);
-          showNotification('error', 'تم إنشاء الحساب ولكن فشل ربط بعض الطلاب');
-        }
-      }
-
-      showNotification('success', `تم إضافة ولي الأمر بنجاح (كلمة المرور: ${data.password})`);
+      const result = await addParent({ ...addForm, student_ids: selectedStudents });
+      showNotification('success', `تم إضافة ولي الأمر بنجاح (كلمة المرور: ${result.password})`);
       setShowAddModal(false);
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', address: '', job_title: '' });
       setSelectedStudents([]);
-      fetchParents();
     } catch (error: any) {
-      console.error('Error adding parent:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء إضافة ولي الأمر');
     }
   };
@@ -186,77 +98,11 @@ export default function ParentsPage() {
 
   const handleEditSubmit = async () => {
     try {
-      const nationalIdChanged = editForm.national_id !== (editingParent.national_id || '');
-
-      // If national_id changed, update Auth email via server API (requires service role key)
-      if (nationalIdChanged) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/api/users/update-national-id', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            userId: editingParent.id,
-            newNationalId: editForm.national_id,
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني في المصادقة');
-        // Sync the email in editForm to the new derived email
-        editForm.email = result.newEmail;
-      }
-
-      // Update users table
-      const { error: userError } = await supabase
-        .from('users')
-        .update({
-          full_name: editForm.full_name,
-          email: editForm.email,
-          phone: editForm.phone
-        })
-        .eq('id', editingParent.id);
-
-      if (userError) throw userError;
-
-      // Update parents table
-      const { error: parentError } = await supabase
-        .from('parents')
-        .update({
-          national_id: editForm.national_id,
-          address: editForm.address,
-          job_title: editForm.job_title
-        })
-        .eq('id', editingParent.id);
-
-      if (parentError) throw parentError;
-
-      // Update student links
-      // 1. Remove old links
-      const { error: unlinkError } = await supabase
-        .from('students')
-        .update({ parent_id: null })
-        .eq('parent_id', editingParent.id);
-      
-      if (unlinkError) throw unlinkError;
-
-      // 2. Add new links
-      if (selectedStudents.length > 0) {
-        const { error: linkError } = await supabase
-          .from('students')
-          .update({ parent_id: editingParent.id })
-          .in('id', selectedStudents);
-        
-        if (linkError) throw linkError;
-      }
-
+      await updateParent(editingParent.id, editingParent.national_id, { ...editForm, student_ids: selectedStudents });
       showNotification('success', 'تم تحديث بيانات ولي الأمر بنجاح');
       setShowEditModal(false);
       setSelectedStudents([]);
-      fetchParents();
     } catch (error: any) {
-      console.error('Error updating parent:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء تحديث بيانات ولي الأمر');
     }
   };
@@ -273,27 +119,11 @@ export default function ParentsPage() {
     if (!parentToDelete) return;
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch(`/api/users/delete?id=${parentToDelete}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'فشل حذف ولي الأمر');
-      }
-
+      await deleteUser(parentToDelete);
       showNotification('success', 'تم حذف ولي الأمر بنجاح');
       setShowDeleteModal(false);
       setParentToDelete(null);
-      fetchParents();
     } catch (error: any) {
-      console.error('Error deleting parent:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حذف ولي الأمر');
     }
   };

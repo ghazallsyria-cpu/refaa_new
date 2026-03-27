@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { 
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, LayoutDashboard, 
@@ -11,6 +10,7 @@ import {
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import { useUsersSystem } from '@/hooks/useUsersSystem';
 
 export default function StudentProfilePage() {
   const params = useParams();
@@ -21,59 +21,23 @@ export default function StudentProfilePage() {
   const [absentDates, setAbsentDates] = useState<string[]>([]);
   const [recentGrades, setRecentGrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { fetchStudentProfile } = useUsersSystem();
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-
-      // Fetch student profile
-      const { data: student } = await supabase
-        .from('students')
-        .select('*, users(*), sections(*, classes(*))')
-        .eq('id', studentId)
-        .single();
+      const profileData = await fetchStudentProfile(studentId);
       
-      setStudentData(student);
-
-      if (student) {
-        // Fetch attendance stats
-        const { data: attendance } = await supabase
-          .from('daily_attendance_summary')
-          .select('daily_status, date')
-          .eq('student_id', student.id);
-        
-        if (attendance) {
-          const total = attendance.length;
-          const present = attendance.filter(a => a.daily_status === 'present').length;
-          const partial = attendance.filter(a => a.daily_status === 'partial_absent').length;
-          const absent = attendance.filter(a => a.daily_status === 'full_absent');
-          
-          setAttendanceStats({
-            total,
-            present,
-            partial,
-            absent: absent.length,
-            rate: total > 0 ? Math.round(((present + partial * 0.5) / total) * 100) : 100
-          });
-          setAbsentDates(absent.map(a => a.date));
-        }
-
-        // Fetch recent grades
-        const { data: grades } = await supabase
-          .from('exam_attempts')
-          .select('*, exam:exams(title, subject:subjects(name))')
-          .eq('student_id', student.id)
-          .order('completed_at', { ascending: false })
-          .limit(5);
-        
-        setRecentGrades(grades || []);
-      }
+      setStudentData(profileData.student);
+      setAttendanceStats(profileData.attendanceStats);
+      setAbsentDates(profileData.absentDates);
+      setRecentGrades(profileData.recentGrades);
     } catch (error) {
       console.error('Error fetching student profile data:', error);
     } finally {
       setLoading(false);
     }
-  }, [studentId]);
+  }, [studentId, fetchStudentProfile]);
 
   useEffect(() => {
     fetchData();

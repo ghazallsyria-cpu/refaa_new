@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Calendar, Clock, BookOpen, Users, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -19,44 +19,28 @@ export default function TeacherSchedulePage() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const { fetchTeacherSchedule: fetchScheduleData } = useDashboardSystem();
 
-  useEffect(() => {
-    fetchTeacherSchedule();
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const fetchTeacherSchedule = async () => {
+  const fetchTeacherSchedule = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return;
-
-      const [scheduleRes, periodsRes] = await Promise.all([
-        supabase
-          .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
-          .eq('teacher_id', user.id)
-          .order('day_of_week')
-          .order('period'),
-        supabase
-          .from('class_periods')
-          .select('*')
-          .order('period_number')
-      ]);
-
-      if (scheduleRes.error) throw scheduleRes.error;
-      if (periodsRes.error) throw periodsRes.error;
-
-      setSchedule(scheduleRes.data || []);
-      setPeriods(periodsRes.data || []);
+      const data = await fetchScheduleData();
+      if (data) {
+        setSchedule(data.schedule);
+        setPeriods(data.periods);
+      }
     } catch (error) {
       console.error('Error fetching teacher schedule:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchScheduleData]);
+
+  useEffect(() => {
+    fetchTeacherSchedule();
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, [fetchTeacherSchedule]);
 
   const getCellData = (day: number, period: number) => {
     return schedule.find(s => s.day_of_week === day && s.period === period);

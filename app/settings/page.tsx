@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
+import { useSettingsSystem, PlatformSettings, ProfileSettings } from '@/hooks/useSettingsSystem';
+import { useAuth } from '@/context/auth-context';
 import { 
   Building2, 
   User, 
@@ -15,13 +16,25 @@ import {
 type Tab = 'school' | 'profile' | 'notifications' | 'security' | 'platform';
 
 export default function SettingsPage() {
+  const { userRole } = useAuth();
+  const { 
+    loading, 
+    error: systemError, 
+    fetchProfile, 
+    fetchPlatformSettings, 
+    updateProfile, 
+    updatePlatformSettings, 
+    updatePassword 
+  } = useSettingsSystem();
+
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isStudent, setIsStudent] = useState(false);
+  
+  const isAdmin = userRole === 'admin' || userRole === 'management';
+  const isStudent = userRole === 'student';
 
-  const [platformSettings, setPlatformSettings] = useState({
+  const [platformSettings, setPlatformSettings] = useState<Partial<PlatformSettings>>({
     id: '',
     is_open: true,
     open_date: '',
@@ -38,7 +51,7 @@ export default function SettingsPage() {
     email: 'info@alrifaa.edu'
   });
 
-  const [profileSettings, setProfileSettings] = useState({
+  const [profileSettings, setProfileSettings] = useState<ProfileSettings>({
     full_name: '',
     email: '',
     phone: '',
@@ -52,84 +65,47 @@ export default function SettingsPage() {
     confirmPassword: ''
   });
 
+  const loadSettings = useCallback(async () => {
+    const [profile, platform] = await Promise.all([
+      fetchProfile(),
+      fetchPlatformSettings()
+    ]);
+
+    if (profile) setProfileSettings(profile);
+    if (platform) {
+      setPlatformSettings({
+        id: platform.id,
+        is_open: platform.is_open,
+        open_date: platform.open_date,
+        close_date: platform.close_date,
+        message: platform.message
+      });
+      setSchoolSettings({
+        name: platform.school_name,
+        academic_year: platform.academic_year,
+        semester: platform.semester,
+        address: platform.address,
+        phone: platform.phone,
+        email: platform.email
+      });
+    }
+
+    if (isAdmin) {
+      setActiveTab('school');
+    } else if (isStudent) {
+      setActiveTab('security');
+    }
+  }, [fetchProfile, fetchPlatformSettings, isAdmin, isStudent]);
+
   useEffect(() => {
-    const fetchSettings = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('full_name, email, phone, role')
-          .eq('id', user.id)
-          .single();
-        
-        if (userData) {
-          let zoomLink = '';
-          if (userData.role === 'teacher') {
-            const { data: teacherData } = await supabase
-              .from('teachers')
-              .select('zoom_link')
-              .eq('id', user.id)
-              .single();
-            if (teacherData) {
-              zoomLink = teacherData.zoom_link || '';
-            }
-          }
-
-          setProfileSettings({
-            full_name: userData.full_name || '',
-            email: userData.email || '',
-            phone: userData.phone || '',
-            role: userData.role || '',
-            zoom_link: zoomLink
-          });
-        }
-        
-        if (userData?.role === 'admin' || userData?.role === 'management') {
-          setIsAdmin(true);
-          setActiveTab('school');
-        } else if (userData?.role === 'student') {
-          setIsStudent(true);
-          setActiveTab('security');
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('platform_settings')
-        .select('*')
-        .limit(1)
-        .single();
-
-      if (data) {
-        setPlatformSettings({
-          id: data.id,
-          is_open: data.is_open,
-          open_date: data.open_date ? new Date(data.open_date).toISOString().slice(0, 16) : '',
-          close_date: data.close_date ? new Date(data.close_date).toISOString().slice(0, 16) : '',
-          message: data.message || 'المنصة مغلقة حاليا للصيانة'
-        });
-        
-        setSchoolSettings({
-          name: data.school_name || 'مدرسة الرفعة النموذجية',
-          academic_year: data.academic_year || '2025 - 2026',
-          semester: data.semester || 'الفصل الدراسي الأول',
-          address: data.address || 'شارع الملك فهد، حي الياسمين، الرياض',
-          phone: data.phone || '0112345678',
-          email: data.email || 'info@alrifaa.edu'
-        });
-      }
-    };
-
-    fetchSettings();
-  }, []);
+    loadSettings();
+  }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);
     setMessage({ text: '', type: '' });
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('يجب تسجيل الدخول أولاً');
-
       if (activeTab === 'security') {
         if (passwordData.newPassword !== passwordData.confirmPassword) {
           throw new Error('كلمات المرور الجديدة غير متطابقة');
@@ -138,16 +114,11 @@ export default function SettingsPage() {
           throw new Error('يجب أن تكون كلمة المرور 6 أحرف على الأقل');
         }
 
-        const { error } = await supabase.auth.updateUser({
-          password: passwordData.newPassword
-        });
-        if (error) throw error;
-
+        await updatePassword(passwordData.newPassword);
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       } else if (isAdmin && (activeTab === 'platform' || activeTab === 'school')) {
-        let updateData: any = {
-          updated_by: user?.id,
-          updated_at: new Date().toISOString()
+        let updateData: Partial<PlatformSettings> = {
+          id: platformSettings.id
         };
 
         if (activeTab === 'platform') {
@@ -155,8 +126,8 @@ export default function SettingsPage() {
             ...updateData,
             is_open: platformSettings.is_open,
             message: platformSettings.message,
-            open_date: platformSettings.open_date ? new Date(platformSettings.open_date).toISOString() : null,
-            close_date: platformSettings.close_date ? new Date(platformSettings.close_date).toISOString() : null,
+            open_date: platformSettings.open_date,
+            close_date: platformSettings.close_date,
           };
         } else if (activeTab === 'school') {
           updateData = {
@@ -170,39 +141,9 @@ export default function SettingsPage() {
           };
         }
 
-        if (platformSettings.id) {
-          const { error } = await supabase
-            .from('platform_settings')
-            .update(updateData)
-            .eq('id', platformSettings.id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from('platform_settings')
-            .insert([updateData]);
-          if (error) throw error;
-        }
+        await updatePlatformSettings(updateData);
       } else if (activeTab === 'profile') {
-        // Update user profile
-        const { error: userError } = await supabase
-          .from('users')
-          .update({
-            full_name: profileSettings.full_name,
-            phone: profileSettings.phone
-          })
-          .eq('id', user.id);
-        if (userError) throw userError;
-
-        // Update teacher specific data if applicable
-        if (profileSettings.role === 'teacher') {
-          const { error: teacherError } = await supabase
-            .from('teachers')
-            .update({
-              zoom_link: profileSettings.zoom_link
-            })
-            .eq('id', user.id);
-          if (teacherError) throw teacherError;
-        }
+        await updateProfile(profileSettings);
       } else {
         // For other tabs, simulate save
         await new Promise(resolve => setTimeout(resolve, 800));

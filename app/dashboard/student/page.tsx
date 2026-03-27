@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { 
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, LayoutDashboard, 
@@ -17,6 +16,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
 export default function StudentDashboard() {
   const [studentData, setStudentData] = useState<any>(null);
@@ -33,101 +33,28 @@ export default function StudentDashboard() {
     setMounted(true);
   }, []);
 
+  const { fetchStudentDashboardData } = useDashboardSystem();
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return;
-
-      // Fetch student profile
-      const { data: student } = await supabase
-        .from('students')
-        .select('*, users(*), sections(*, classes(*))')
-        .eq('id', user.id)
-        .single();
+      const data = await fetchStudentDashboardData();
       
-      setStudentData(student);
-
-      if (student) {
-        // Fetch assignments linked to this section via assignment_sections table
-        const { data: assignmentSections } = await supabase
-          .from('assignment_sections')
-          .select('assignment_id')
-          .eq('section_id', student.section_id);
-        
-        const sectionAssignmentIds = assignmentSections?.map(as => as.assignment_id) || [];
-
-        // Fetch all student data concurrently
-        const [attendanceRes, gradesRes, examsRes, assignmentsRes, scheduleRes, periodsRes] = await Promise.all([
-          supabase
-            .from('daily_attendance_summary')
-            .select('daily_status')
-            .eq('student_id', student.id)
-            .gte('date', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-          supabase
-            .from('exam_attempts')
-            .select('id, score, completed_at, exam:exams(title, subject:subjects(name))')
-            .eq('student_id', student.id)
-            .order('completed_at', { ascending: false })
-            .limit(5),
-          supabase
-            .from('exams')
-            .select('id, title, start_time, subject:subjects(name)')
-            .eq('section_id', student.section_id)
-            .eq('status', 'published')
-            .gte('start_time', new Date().toISOString())
-            .order('start_time', { ascending: true })
-            .limit(3),
-          supabase
-            .from('assignments')
-            .select('id, title, due_date, subject:subjects(name)')
-            .or(`id.in.(${sectionAssignmentIds.join(',') || '00000000-0000-0000-0000-000000000000'}),section_id.eq.${student.section_id}`)
-            .gte('due_date', new Date().toISOString())
-            .order('due_date', { ascending: true })
-            .limit(3),
-          supabase
-            .from('schedules')
-            .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))')
-            .eq('section_id', student.section_id)
-            .eq('day_of_week', new Date().getDay() + 1)
-            .order('period'),
-          supabase
-            .from('class_periods')
-            .select('*')
-            .order('period_number')
-        ]);
-
-        if (attendanceRes.data) {
-          const attendance = attendanceRes.data;
-          const total = attendance.length;
-          const present = attendance.filter(a => a.daily_status === 'present').length;
-          const partial = attendance.filter(a => a.daily_status === 'partial_absent').length;
-          const absent = attendance.filter(a => a.daily_status === 'full_absent').length;
-          const incomplete = attendance.filter(a => a.daily_status === 'incomplete').length;
-          
-          setAttendanceStats({
-            total,
-            present,
-            partial,
-            absent,
-            incomplete,
-            rate: total > 0 ? Math.round(((present + partial * 0.5) / total) * 100) : 100
-          });
-        }
-
-        setRecentGrades(gradesRes.data || []);
-        setUpcomingExams(examsRes.data || []);
-        setUpcomingAssignments(assignmentsRes.data || []);
-        setTodaysSchedule(scheduleRes.data || []);
-        setPeriods(periodsRes.data || []);
+      if (data) {
+        setStudentData(data.student);
+        setAttendanceStats({ rate: data.attendanceRate });
+        setRecentGrades(data.grades);
+        setUpcomingExams(data.exams);
+        setUpcomingAssignments(data.assignments);
+        setTodaysSchedule(data.todaysSchedule);
+        setPeriods(data.periods);
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchStudentDashboardData]);
 
   useEffect(() => {
     fetchData();

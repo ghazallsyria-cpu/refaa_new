@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { 
   BarChart2, Users, Clock, CheckCircle, 
   XCircle, AlertCircle, ArrowRight, Download,
   Search, Filter, MoreHorizontal, ChevronRight,
   TrendingUp, TrendingDown, HelpCircle, FileSpreadsheet,
-  FileText
+  FileText, Trash2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, Cell, PieChart, Pie
@@ -39,6 +39,7 @@ type ExamStats = {
 export default function ExamResults() {
   const params = useParams();
   const router = useRouter();
+  const { fetchExamResults, deleteAttempt } = useExamsSystem();
   const [exam, setExam] = useState<any>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,54 +56,14 @@ export default function ExamResults() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: examData } = await supabase
-        .from('exams')
-        .select('*, subject:subjects(name)')
-        .eq('id', params.id)
-        .single();
+      const { exam: examData, students: studentsData, attempts: attemptsData, questions: qData, answers: aData } = await fetchExamResults(params.id as string);
+      
       setExam(examData);
+      setAllStudents(studentsData);
+      setQuestionsData(qData);
+      setAnswersData(aData);
 
-      // Fetch all students in the assigned sections
-      let currentAllStudents: any[] = [];
-      if (examData?.section_ids && examData.section_ids.length > 0) {
-        const { data: studentsData } = await supabase
-          .from('students')
-          .select(`
-            id,
-            users(full_name, email),
-            section:sections(name, classes(name))
-          `)
-          .in('section_id', examData.section_ids);
-        
-        currentAllStudents = (studentsData || []).map(s => {
-          const sectionData = s.section as any;
-          const className = Array.isArray(sectionData?.classes) ? sectionData?.classes[0]?.name : sectionData?.classes?.name;
-          const sectionName = sectionData?.name ? `${className ? className + ' - ' : ''}${sectionData.name}` : 'غير محدد';
-          
-          return {
-            id: s.id,
-            full_name: (s.users as any)?.full_name || 'طالب غير معروف',
-            email: (s.users as any)?.email || '',
-            section_name: sectionName
-          };
-        });
-        setAllStudents(currentAllStudents);
-      }
-
-      const { data: attemptsData } = await supabase
-        .from('exam_attempts')
-        .select(`
-          *,
-          student:students(
-            id, 
-            users(full_name),
-            section:sections(name, classes(name))
-          )
-        `)
-        .eq('exam_id', params.id)
-        .order('completed_at', { ascending: false });
-
-      const formattedAttempts = (attemptsData || []).map(a => {
+      const formattedAttempts = (attemptsData || []).map((a: any) => {
         const studentData = a.student as any;
         const sectionData = studentData?.section;
         const className = Array.isArray(sectionData?.classes) ? sectionData?.classes[0]?.name : sectionData?.classes?.name;
@@ -120,9 +81,9 @@ export default function ExamResults() {
 
       // Merge with all students to include those who didn't attempt
       const mergedAttempts = [...formattedAttempts];
-      const attemptedStudentIds = new Set(formattedAttempts.map(a => a.student.id));
+      const attemptedStudentIds = new Set(formattedAttempts.map((a: any) => a.student.id));
 
-      currentAllStudents.forEach(student => {
+      studentsData.forEach((student: any) => {
         if (!attemptedStudentIds.has(student.id)) {
           mergedAttempts.push({
             id: `missing-${student.id}`,
@@ -145,28 +106,12 @@ export default function ExamResults() {
       const sections = Array.from(new Set(mergedAttempts.map(a => a.student.section_name))).filter(Boolean);
       setAvailableSections(sections);
 
-      // Fetch Questions and Answers for real analytics
-      const { data: qData } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('exam_id', params.id)
-        .order('order_index');
-      
-      setQuestionsData(qData || []);
-
-      const { data: aData } = await supabase
-        .from('student_answers')
-        .select('*')
-        .in('attempt_id', formattedAttempts.map(a => a.id));
-        
-      setAnswersData(aData || []);
-
     } catch (err) {
       console.error('Error fetching results:', err);
     } finally {
       setLoading(false);
     }
-  }, [params.id]);
+  }, [params.id, fetchExamResults]);
 
   useEffect(() => {
     fetchData();
@@ -668,12 +613,7 @@ export default function ExamResults() {
                             <FileText className="h-5 w-5" />
                           </button>
                           <button 
-                            onClick={async () => {
-                              if (confirm('هل أنت متأكد من حذف هذه المحاولة؟')) {
-                                await supabase.from('exam_attempts').delete().eq('id', attempt.id);
-                                fetchData();
-                              }
-                            }}
+                            onClick={() => handleDeleteAttempt(attempt.id)}
                             className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95"
                             title="حذف المحاولة"
                           >

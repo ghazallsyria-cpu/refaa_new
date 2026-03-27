@@ -1,15 +1,27 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Plus, Search, MoreHorizontal, Edit, Trash2, X, Key, Filter, Download, UserPlus, Users, ArrowRight, AlertCircle, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as XLSX from 'xlsx';
+import { useUsersSystem } from '@/hooks/useUsersSystem';
 
 export default function StudentsPage() {
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    students,
+    sections,
+    parents,
+    loading,
+    fetchStudents,
+    fetchSections,
+    fetchParents,
+    addStudent,
+    updateStudent,
+    deleteUser,
+    resetPassword
+  } = useUsersSystem();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -29,39 +41,13 @@ export default function StudentsPage() {
     phone: '',
     parent_id: ''
   });
-  const [sections, setSections] = useState<any[]>([]);
-  const [parents, setParents] = useState<any[]>([]);
   const [selectedSection, setSelectedSection] = useState('all');
 
   useEffect(() => {
     fetchStudents();
     fetchSections();
     fetchParents();
-  }, []);
-
-  const fetchParents = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('parents')
-        .select('id, users(full_name)');
-      if (error) throw error;
-      setParents(data || []);
-    } catch (error) {
-      console.error('Error fetching parents:', error);
-    }
-  };
-
-  const fetchSections = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('sections')
-        .select('id, name, classes(name)');
-      if (error) throw error;
-      setSections(data || []);
-    } catch (error) {
-      console.error('Error fetching sections:', error);
-    }
-  };
+  }, [fetchStudents, fetchSections, fetchParents]);
 
   const handleAddSubmit = async () => {
     try {
@@ -70,38 +56,12 @@ export default function StudentsPage() {
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          email: addForm.email || null,
-          full_name: addForm.full_name,
-          national_id: addForm.national_id,
-          phone: addForm.phone,
-          role: 'student',
-          section_id: addForm.section_id || null,
-          parent_id: addForm.parent_id || null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل إنشاء حساب الطالب');
-      }
+      await addStudent(addForm);
 
       alert('تمت الإضافة بنجاح');
       setShowAddModal(false);
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', section_id: '', parent_id: '' });
-      fetchStudents();
     } catch (error: any) {
-      console.error('Error adding student:', error);
       alert(error.message || 'حدث خطأ أثناء إضافة الطالب');
     }
   };
@@ -120,59 +80,14 @@ export default function StudentsPage() {
 
   const handleEditSubmit = async () => {
     try {
-      const nationalIdChanged = editForm.national_id !== (editingStudent.national_id || '');
-
-      // If national_id changed, update Auth email via server API (requires service role key)
-      if (nationalIdChanged) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/api/users/update-national-id', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            userId: editingStudent.id,
-            newNationalId: editForm.national_id,
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني في المصادقة');
-        // Sync the email in editForm to the new derived email
-        editForm.email = result.newEmail;
-      }
-
-      // Update users table
-      const { error: userError } = await supabase
-        .from('users')
-        .update({
-          full_name: editForm.full_name,
-          email: editForm.email,
-          phone: editForm.phone
-        })
-        .eq('id', editingStudent.id);
-
-      if (userError) throw userError;
-
-      // Update students table
-      const { error: studentError } = await supabase
-        .from('students')
-        .update({
-          national_id: editForm.national_id,
-          parent_id: editForm.parent_id || null
-        })
-        .eq('id', editingStudent.id);
-
-      if (studentError) throw studentError;
-
+      await updateStudent(editingStudent.id, editingStudent.national_id, editForm);
       alert('تم تحديث بيانات الطالب بنجاح');
       setShowEditModal(false);
-      fetchStudents();
     } catch (error: any) {
-      console.error('Error updating student:', error);
       alert(error.message || 'حدث خطأ أثناء تحديث بيانات الطالب');
     }
   };
+
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
 
@@ -183,49 +98,11 @@ export default function StudentsPage() {
 
   const handleResetPasswordSubmit = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/users/reset-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify(resetPasswordForm)
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.error || 'فشل تغيير كلمة المرور');
-      
-      alert(`تم تغيير كلمة المرور بنجاح. كلمة المرور الجديدة: ${data.newPassword || resetPasswordForm.newPassword}`);
+      const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword);
+      alert(`تم تغيير كلمة المرور بنجاح. كلمة المرور الجديدة: ${result.newPassword}`);
       setShowPasswordResetModal(false);
     } catch (error: any) {
-      console.error('Error resetting password:', error);
       alert(error.message || 'حدث خطأ أثناء تغيير كلمة المرور');
-    }
-  };
-
-  const fetchStudents = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select(`
-          id,
-          national_id,
-          gender,
-          parent_id,
-          users (full_name, email, phone),
-          sections (name, classes (name)),
-          parents (users (full_name))
-        `);
-
-      if (error) throw error;
-      setStudents(data || []);
-    } catch (error) {
-      console.error('Error fetching students:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -241,28 +118,12 @@ export default function StudentsPage() {
     if (!studentToDelete) return;
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch(`/api/users/delete?id=${studentToDelete}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل حذف الطالب');
-      }
-      
+      await deleteUser(studentToDelete);
       alert('تم حذف الطالب بنجاح');
       setShowDeleteModal(false);
       setStudentToDelete(null);
       fetchStudents();
     } catch (error: any) {
-      console.error('Error deleting student:', error);
       alert(error.message || 'حدث خطأ أثناء حذف الطالب');
     }
   };

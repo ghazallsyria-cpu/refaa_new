@@ -1,13 +1,36 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { Plus, Search, Filter, Edit, Trash2, X, Key, BookOpen, AlertCircle, Users, GraduationCap, Briefcase, Save, Folder, ChevronLeft } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
+import { useUsersSystem } from '@/hooks/useUsersSystem';
+import { useTeacherAssignmentsSystem } from '@/hooks/useTeacherAssignmentsSystem';
 
 export default function TeachersPage() {
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    teachers,
+    sections,
+    subjects,
+    loading: usersLoading,
+    fetchTeachers,
+    fetchSections,
+    fetchSubjects,
+    addTeacher,
+    updateTeacher,
+    deleteUser,
+    resetPassword
+  } = useUsersSystem();
+
+  const {
+    loading: assignmentsLoading,
+    fetchTeacherAssignments,
+    saveAssignments: assignTeacherToSections,
+    deleteAssignment: removeTeacherAssignment,
+    saveAssignments: addTeacherAssignmentHook // I'll use saveAssignments for single too
+  } = useTeacherAssignmentsSystem();
+
+  const loading = usersLoading || assignmentsLoading;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('الكل');
 
@@ -49,24 +72,10 @@ export default function TeachersPage() {
 
   const handleResetPasswordSubmit = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/users/reset-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
-        body: JSON.stringify(resetPasswordForm)
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.error || 'فشل تغيير كلمة المرور');
-      
-      showNotification('success', `تم تغيير كلمة المرور بنجاح. كلمة المرور الجديدة: ${data.newPassword || resetPasswordForm.newPassword}`);
+      const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword);
+      showNotification('success', `تم تغيير كلمة المرور بنجاح. كلمة المرور الجديدة: ${result.newPassword}`);
       setShowPasswordResetModal(false);
     } catch (error: any) {
-      console.error('Error resetting password:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء تغيير كلمة المرور');
     }
   };
@@ -74,67 +83,20 @@ export default function TeachersPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleAddSubmit = async () => {
-    console.log('handleAddSubmit triggered');
     if (submitting) return;
     
     if (!addForm.full_name || !addForm.national_id) {
-      console.log('Validation failed: missing full_name or national_id');
       showNotification('error', 'يرجى تعبئة الحقول الإلزامية (الاسم والرقم المدني)');
       return;
     }
 
     try {
       setSubmitting(true);
-      console.log('Form data:', addForm);
-
-      console.log('Getting session...');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error('Session error:', sessionError);
-        throw sessionError;
-      }
-      
-      const token = session?.access_token;
-      console.log('Token obtained:', token ? 'Yes' : 'No');
-
-      if (!token) {
-        showNotification('error', 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
-        setSubmitting(false);
-        return;
-      }
-
-      console.log('Sending request to /api/users/create...');
-      const response = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          email: addForm.email || null,
-          full_name: addForm.full_name,
-          national_id: addForm.national_id,
-          phone: addForm.phone,
-          role: 'teacher',
-          specialization: addForm.specialization,
-          zoom_link: addForm.zoom_link,
-        }),
-      });
-
-      console.log('Response status:', response.status);
-      const data = await response.json();
-      console.log('Response data:', data);
-
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل إنشاء حساب المعلم');
-      }
-
-      showNotification('success', `تم إضافة المعلم بنجاح (كلمة المرور: ${data.password})`);
+      const result = await addTeacher(addForm);
+      showNotification('success', `تم إضافة المعلم بنجاح (كلمة المرور: ${result.password})`);
       setShowAddModal(false);
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '' });
-      fetchTeachers();
     } catch (error: any) {
-      console.error('Error adding teacher:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء إضافة المعلم');
     } finally {
       setSubmitting(false);
@@ -160,58 +122,10 @@ export default function TeachersPage() {
     if (submittingEdit) return;
     try {
       setSubmittingEdit(true);
-
-      const nationalIdChanged = editForm.national_id !== (editingTeacher.national_id || '');
-
-      // If national_id changed, update Auth email via server API (requires service role key)
-      if (nationalIdChanged) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/api/users/update-national-id', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`
-          },
-          body: JSON.stringify({
-            userId: editingTeacher.id,
-            newNationalId: editForm.national_id,
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني في المصادقة');
-        // Sync the email in editForm to the new derived email
-        editForm.email = result.newEmail;
-      }
-
-      // Update users table
-      const { error: userError } = await supabase
-        .from('users')
-        .update({
-          full_name: editForm.full_name,
-          email: editForm.email,
-          phone: editForm.phone
-        })
-        .eq('id', editingTeacher.id);
-
-      if (userError) throw userError;
-
-      // Update teachers table
-      const { error: teacherError } = await supabase
-        .from('teachers')
-        .update({
-          national_id: editForm.national_id,
-          specialization: editForm.specialization,
-          zoom_link: editForm.zoom_link
-        })
-        .eq('id', editingTeacher.id);
-
-      if (teacherError) throw teacherError;
-
+      await updateTeacher(editingTeacher.id, editingTeacher.national_id, editForm);
       showNotification('success', 'تم تحديث بيانات المعلم بنجاح');
       setShowEditModal(false);
-      fetchTeachers();
     } catch (error: any) {
-      console.error('Error updating teacher:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء تحديث بيانات المعلم');
     } finally {
       setSubmittingEdit(false);
@@ -220,34 +134,14 @@ export default function TeachersPage() {
 
   useEffect(() => {
     fetchTeachers();
-  }, []);
-
-  const fetchTeachers = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('teachers')
-        .select(`
-          *,
-          users (full_name, email, phone),
-          teacher_sections (count)
-        `);
-
-      if (error) throw error;
-      setTeachers(data || []);
-    } catch (error) {
-      console.error('Error fetching teachers:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchSections();
+    fetchSubjects();
+  }, [fetchTeachers, fetchSections, fetchSubjects]);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [teacherToDelete, setTeacherToDelete] = useState<string | null>(null);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
-  const [sections, setSections] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
   const [teacherSections, setTeacherSections] = useState<any[]>([]);
   const [bulkAssignData, setBulkAssignData] = useState<{ section_ids: string[], subject_ids: string[] }>({
     section_ids: [],
@@ -257,15 +151,13 @@ export default function TeachersPage() {
   const handleAssignmentClick = async (teacher: any) => {
     setSelectedTeacher(teacher);
     setBulkAssignData({ section_ids: [], subject_ids: [] });
-    const [sRes, subRes, tsRes] = await Promise.all([
-      supabase.from('sections').select('id, name, classes(name)'),
-      supabase.from('subjects').select('id, name'),
-      supabase.from('teacher_sections').select('teacher_id, section_id, subject_id').eq('teacher_id', teacher.id)
-    ]);
-    if (sRes.data) setSections(sRes.data);
-    if (subRes.data) setSubjects(subRes.data);
-    if (tsRes.data) setTeacherSections(tsRes.data);
-    setShowAssignmentModal(true);
+    try {
+      const assignments = await fetchTeacherAssignments(teacher.id);
+      setTeacherSections(assignments);
+      setShowAssignmentModal(true);
+    } catch (error: any) {
+      showNotification('error', 'حدث خطأ أثناء جلب تعيينات المعلم');
+    }
   };
 
   const handleBulkAssign = async () => {
@@ -285,14 +177,13 @@ export default function TeachersPage() {
       });
     });
 
-    const { data, error } = await supabase.from('teacher_sections').upsert(newAssignments, { ignoreDuplicates: true }).select();
-    if (!error) {
-      // Refresh teacher sections
-      const { data: refreshed } = await supabase.from('teacher_sections').select('teacher_id, section_id, subject_id').eq('teacher_id', selectedTeacher.id);
-      if (refreshed) setTeacherSections(refreshed);
+    try {
+      await assignTeacherToSections(selectedTeacher.id, newAssignments);
+      const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
+      setTeacherSections(refreshed);
       setBulkAssignData({ section_ids: [], subject_ids: [] });
       showNotification('success', 'تم تنفيذ التعيين المتعدد بنجاح');
-    } else {
+    } catch (error: any) {
       showNotification('error', 'فشل التعيين المتعدد');
     }
   };
@@ -313,23 +204,23 @@ export default function TeachersPage() {
 
   const toggleAssignment = async (sectionId: string, subjectId: string) => {
     const existing = teacherSections.find(ts => ts.section_id === sectionId && ts.subject_id === subjectId);
-    if (existing) {
-      await supabase.from('teacher_sections').delete()
-        .eq('teacher_id', selectedTeacher.id)
-        .eq('section_id', sectionId)
-        .eq('subject_id', subjectId);
-      setTeacherSections(teacherSections.filter(ts => !(ts.section_id === sectionId && ts.subject_id === subjectId)));
-      showNotification('success', 'تم إزالة التعيين بنجاح');
-    } else {
-      const { data, error } = await supabase.from('teacher_sections').insert({
-        teacher_id: selectedTeacher.id,
-        section_id: sectionId,
-        subject_id: subjectId
-      }).select().single();
-      if (data) {
-        setTeacherSections([...teacherSections, data]);
+    try {
+      if (existing) {
+        await removeTeacherAssignment(selectedTeacher.id, sectionId, subjectId);
+        setTeacherSections(teacherSections.filter(ts => !(ts.section_id === sectionId && ts.subject_id === subjectId)));
+        showNotification('success', 'تم إزالة التعيين بنجاح');
+      } else {
+        await assignTeacherToSections([{
+          teacher_id: selectedTeacher.id,
+          section_id: sectionId,
+          subject_id: subjectId
+        }]);
+        const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
+        setTeacherSections(refreshed);
         showNotification('success', 'تم إضافة التعيين بنجاح');
       }
+    } catch (error: any) {
+      showNotification('error', 'حدث خطأ أثناء تعديل التعيين');
     }
   };
 
@@ -342,28 +233,11 @@ export default function TeachersPage() {
     if (!teacherToDelete) return;
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch(`/api/users/delete?id=${teacherToDelete}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'فشل حذف المعلم');
-      }
-      
+      await deleteUser(teacherToDelete);
       showNotification('success', 'تم حذف المعلم بنجاح');
       setShowDeleteModal(false);
       setTeacherToDelete(null);
-      fetchTeachers();
     } catch (error: any) {
-      console.error('Error deleting teacher:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حذف المعلم');
     }
   };

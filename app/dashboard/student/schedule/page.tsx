@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Clock, BookOpen, User } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -18,54 +18,27 @@ export default function StudentSchedulePage() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState<any>(null);
+  const { fetchStudentSchedule: fetchScheduleData } = useDashboardSystem();
 
-  useEffect(() => {
-    fetchStudentSchedule();
-  }, []);
-
-  const fetchStudentSchedule = async () => {
+  const fetchStudentSchedule = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return;
-
-      // Get student's section
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('section_id, sections(name, classes(name))')
-        .eq('id', user.id)
-        .single();
-
-      if (studentError) throw studentError;
-      setStudentInfo(student);
-
-      if (student?.section_id) {
-        const [scheduleRes, periodsRes] = await Promise.all([
-          supabase
-            .from('schedules')
-            .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
-            .eq('section_id', student.section_id)
-            .order('day_of_week')
-            .order('period'),
-          supabase
-            .from('class_periods')
-            .select('*')
-            .order('period_number')
-        ]);
-
-        if (scheduleRes.error) throw scheduleRes.error;
-        if (periodsRes.error) throw periodsRes.error;
-
-        setSchedule(scheduleRes.data || []);
-        setPeriods(periodsRes.data || []);
+      const data = await fetchScheduleData();
+      if (data) {
+        setStudentInfo(data.student);
+        setSchedule(data.schedule);
+        setPeriods(data.periods);
       }
     } catch (error) {
       console.error('Error fetching student schedule:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchScheduleData]);
+
+  useEffect(() => {
+    fetchStudentSchedule();
+  }, [fetchStudentSchedule]);
 
   const getCellData = (day: number, period: number) => {
     return schedule.find(s => s.day_of_week === day && s.period === period);

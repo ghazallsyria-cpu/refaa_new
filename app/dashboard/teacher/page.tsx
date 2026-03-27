@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, 
   Clock, FileText, Plus, Search, 
@@ -14,6 +13,7 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
 export default function TeacherDashboard() {
   const [teacherData, setTeacherData] = useState<any>(null);
@@ -34,6 +34,7 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
+  const { fetchTeacherDashboardData } = useDashboardSystem();
 
   useEffect(() => {
     setMounted(true);
@@ -79,148 +80,27 @@ export default function TeacherDashboard() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return;
-
-      // Fetch teacher profile
-      const { data: teacher } = await supabase
-        .from('teachers')
-        .select('*, users(*)')
-        .eq('id', user.id)
-        .single();
+      const data = await fetchTeacherDashboardData();
       
-      setTeacherData(teacher);
-
-      if (teacher) {
-        // Fetch teacher's sections assigned to this teacher
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
-          .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
-          .eq('teacher_id', user.id);
-        
-        const sectionsData = (teacherSections?.map(ts => ts.section) || []) as any[];
-        setSections(sectionsData);
-
-        // Fetch exams for the teacher's sections
-        const sectionIds = sectionsData.map((s: any) => s.id);
-        
-        // Fetch all assignments first to use for stats and submissions query
-        const allAssignments = await supabase
-          .from('assignments')
-          .select('id, title, section_id, due_date, subjects(name), sections(name, classes(name))')
-          .in('section_id', sectionIds)
-          .order('created_at', { ascending: false })
-          .limit(5);
-          
-        const assignmentIds = allAssignments.data?.map(a => a.id) || [];
-        const recentAssignmentsData = allAssignments.data || [];
-        
-        const [examsRes, scheduleRes, periodsRes, messagesRes, attendanceRes, examsCountRes, assignmentsCountRes, submissionsRes] = await Promise.all([
-          sectionIds.length > 0 ? supabase
-            .from('exams')
-            .select('id, title, created_at, start_time, subject:subjects(name), section:sections(name)')
-            .in('section_id', sectionIds)
-            .order('created_at', { ascending: false })
-            .limit(5) : Promise.resolve({ data: [] }),
-          supabase
-            .from('schedules')
-            .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(name, classes(name))')
-            .eq('teacher_id', user.id)
-            .order('day_of_week')
-            .order('period'),
-          supabase
-            .from('class_periods')
-            .select('*')
-            .order('period_number'),
-          supabase
-            .from('messages')
-            .select('id, subject, content, created_at, sender:sender_id(full_name)')
-            .eq('receiver_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(5),
-          sectionIds.length > 0 ? supabase
-            .from('attendance_sessions')
-            .select('id')
-            .in('section_id', sectionIds)
-            .gte('date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) : Promise.resolve({ data: [] }),
-          sectionIds.length > 0 ? supabase
-            .from('exams')
-            .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
-          sectionIds.length > 0 ? supabase
-            .from('assignments')
-            .select('id', { count: 'exact', head: true })
-            .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
-          assignmentIds.length > 0 ? supabase
-            .from('assignment_submissions')
-            .select('assignment_id')
-            .in('assignment_id', assignmentIds) : Promise.resolve({ data: [] })
-        ]);
-        
-        setRecentExams(examsRes.data || []);
-        setRecentAssignments(recentAssignmentsData);
-        setSchedule(scheduleRes.data || []);
-        setPeriods(periodsRes.data || []);
-        setMessages(messagesRes.data || []);
-
-        // Calculate assignment stats by class
-        if (allAssignments.data) {
-          const statsByAssignment = allAssignments.data.map(assignment => {
-            const submissionCount = submissionsRes.data?.filter(s => s.assignment_id === assignment.id).length || 0;
-            const totalStudents = sectionsData.find(s => s.id === assignment.section_id)?.students?.[0]?.count || 0;
-            return {
-              id: assignment.id,
-              title: assignment.title,
-              className: `${(assignment.sections as any)?.classes?.name || (assignment.sections as any)?.[0]?.classes?.name || ''} - ${(assignment.sections as any)?.name || (assignment.sections as any)?.[0]?.name || ''}`,
-              submissionCount,
-              totalStudents,
-              percentage: totalStudents > 0 ? Math.round((submissionCount / totalStudents) * 100) : 0
-            };
-          });
-          setAssignmentStats(statsByAssignment);
-        }
-
-        // Calculate real attendance stats
-        const sessionIdsForStats = (attendanceRes.data || []).map(s => s.id);
-        let attendanceData: any[] = [];
-        
-        if (sessionIdsForStats.length > 0) {
-          const { data: records } = await supabase
-            .from('attendance_records')
-            .select('status')
-            .in('session_id', sessionIdsForStats);
-          attendanceData = records || [];
-        }
-
-        const presentCount = attendanceData.filter(a => a.status === 'present' || a.status === 'late').length;
-        const absentCount = attendanceData.filter(a => a.status === 'absent').length;
-        
-        const totalRecords = attendanceData.length;
-        const avgAttendance = totalRecords > 0 
-          ? Math.round((presentCount / totalRecords) * 100) 
-          : 100;
-          
-        const absenceRate = totalRecords > 0
-          ? Math.round((absentCount / totalRecords) * 100)
-          : 0;
-
-        // Calculate stats
-        const totalStudents = sectionsData?.reduce((acc, s) => acc + (s.students?.[0]?.count || 0), 0) || 0;
-        setStats({
-          totalStudents,
-          totalExams: (examsCountRes as any).count || 0,
-          totalAssignments: (assignmentsCountRes as any).count || 0,
-          avgAttendance,
-          absenceRate
-        });
+      if (data) {
+        setTeacherData(data.teacher);
+        setSections(data.sections);
+        setRecentExams(data.recentExams);
+        setRecentAssignments(data.recentAssignments);
+        setSchedule(data.schedule);
+        setPeriods(data.periods);
+        setMessages(data.messages);
+        setStats(prev => ({
+          ...prev,
+          ...data.stats
+        }));
       }
     } catch (error) {
       console.error('Error fetching teacher dashboard data:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchTeacherDashboardData]);
 
   useEffect(() => {
     fetchData();

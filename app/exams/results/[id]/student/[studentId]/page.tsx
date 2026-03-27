@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { ArrowRight, BookOpen, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
 
 export default function StudentExamResult() {
   const params = useParams();
   const router = useRouter();
   const { id: examId, studentId } = params;
+  const { fetchStudentExamResult } = useExamsSystem();
   const [exam, setExam] = useState<any>(null);
   const [student, setStudent] = useState<any>(null);
   const [answers, setAnswers] = useState<any[]>([]);
@@ -18,67 +19,18 @@ export default function StudentExamResult() {
     try {
       setLoading(true);
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
+      const { exam: examData, student: studentData, attempt: attemptData, answers: answersData } = await fetchStudentExamResult(examId as string, studentId as string);
 
-      // Check role and permissions
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      
-      if (userData?.role === 'student' && user.id !== studentId) {
-        router.push('/dashboard');
-        return;
-      }
-
-      // Fetch Exam
-      const { data: examData } = await supabase
-        .from('exams')
-        .select('*')
-        .eq('id', examId)
-        .single();
       setExam(examData);
-
-      // Fetch Student
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('*, users(full_name)')
-        .eq('id', studentId)
-        .single();
       setStudent(studentData);
-
-      // Fetch Attempt
-      console.log('Fetching attempt for exam:', examId, 'and student:', studentId);
-      const { data: attemptData, error: attemptError } = await supabase
-        .from('exam_attempts')
-        .select('*')
-        .eq('exam_id', examId)
-        .eq('student_id', studentId)
-        .single();
-      
-      console.log('Attempt data:', attemptData, 'Error:', attemptError);
-
-      if (attemptData) {
-        // Fetch Answers
-        const { data: answersData } = await supabase
-          .from('student_answers')
-          .select('*, question:questions(*, options:question_options(*))')
-          .eq('attempt_id', attemptData.id);
-        
-        setAnswers(answersData || []);
-      }
+      setAnswers(answersData);
 
     } catch (err) {
       console.error('Error fetching student exam result:', err);
     } finally {
       setLoading(false);
     }
-  }, [examId, studentId, router]);
+  }, [examId, studentId, fetchStudentExamResult]);
 
   useEffect(() => {
     fetchData();

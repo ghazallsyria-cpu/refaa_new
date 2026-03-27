@@ -1,15 +1,34 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { MessageSquare, Megaphone, Plus, Search, Send, User, Clock, Check, CheckCheck, X, UserPlus, Filter, Mail, Bell, ArrowRight, Users, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '@/context/auth-context';
+import { useMessagesSystem } from '@/hooks/useMessagesSystem';
 
 type Tab = 'messages' | 'announcements';
 
 export default function MessagesPage() {
+  const { user: currentUser, userRole } = useAuth();
+  const {
+    messages,
+    announcements,
+    users,
+    teacherSections,
+    loading,
+    error,
+    fetchMessages,
+    fetchAnnouncements,
+    fetchStudentsBySection,
+    sendMessage: hookSendMessage,
+    sendGroupMessage: hookSendGroupMessage,
+    sendAnnouncement: hookSendAnnouncement,
+    markAsRead: hookMarkAsRead,
+    deleteMessages: hookDeleteMessages,
+    updateMessage: hookUpdateMessage
+  } = useMessagesSystem();
+
   const [activeTab, setActiveTab] = useState<Tab>('messages');
-  const [messages, setMessages] = useState<any[]>([]);
   const [groupedMessages, setGroupedMessages] = useState<any[]>([]);
   const [activeThread, setActiveThread] = useState<any | null>(null);
   const [threadMessages, setThreadMessages] = useState<any[]>([]);
@@ -17,14 +36,10 @@ export default function MessagesPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [editingMessage, setEditingMessage] = useState<any | null>(null);
   const [editContent, setEditContent] = useState('');
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewMessage, setShowNewMessage] = useState(false);
   const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
-  const [users, setUsers] = useState<any[]>([]);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [teacherSections, setTeacherSections] = useState<any[]>([]);
   const [step, setStep] = useState(1);
   const [recipientType, setRecipientType] = useState<'teacher' | 'student' | ''>('');
   const [selectedSectionId, setSelectedSectionId] = useState('');
@@ -32,70 +47,39 @@ export default function MessagesPage() {
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', target_role: 'all', content: '' });
   const [isGroupMessage, setIsGroupMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 5000);
+  };
+
+  useEffect(() => {
+    if (error) {
+      showNotification('error', error);
+    }
+  }, [error]);
 
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyContent.trim() || !activeThread) return;
+    if (!replyContent.trim() || !activeThread || !currentUser) return;
 
     setIsReplying(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('يجب تسجيل الدخول أولاً');
-
       const isGroup = !!activeThread.section_id;
       
-      if (isGroup && currentUser?.role === 'teacher') {
-        // Teacher replying to a group thread -> send to all students in section
-        const response = await fetch('/api/messages/send-group', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sectionId: activeThread.section_id,
-            subject: activeThread.subject,
-            content: replyContent,
-            senderId: user.id,
-          }),
-        });
-
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'حدث خطأ أثناء إرسال الرد الجماعي');
+      if (isGroup && userRole === 'teacher') {
+        await hookSendGroupMessage(activeThread.section_id, activeThread.subject, replyContent);
       } else {
-        // Private reply or student replying to group thread
-        // If it's a group thread and a student is replying, they reply to the original sender (teacher)
         const receiverId = isGroup 
           ? activeThread.sender_id 
-          : (activeThread.sender_id === user.id ? activeThread.receiver_id : activeThread.sender_id);
+          : (activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id);
 
-        const { data: sentMsg, error } = await supabase
-          .from('messages')
-          .insert([{
-            sender_id: user.id,
-            receiver_id: receiverId,
-            section_id: activeThread.section_id || null,
-            subject: activeThread.subject,
-            content: replyContent,
-            is_read: false
-          }])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Send notification to receiver
-        await supabase.from('notifications').insert([{
-          user_id: receiverId,
-          type: 'message',
-          title: 'رسالة جديدة',
-          content: `لديك رسالة جديدة من ${currentUser?.full_name || 'مستخدم'}: ${activeThread.subject}`,
-          link: '/messages',
-          is_read: false
-        }]);
+        await hookSendMessage(receiverId, activeThread.subject, replyContent);
       }
 
       setReplyContent('');
-      fetchMessages(); // Refresh inbox
       fetchThread(activeThread.convId); // Refresh current thread
       showNotification('success', 'تم إرسال الرد بنجاح');
     } catch (error: any) {
@@ -148,14 +132,7 @@ export default function MessagesPage() {
 
   const markAsRead = async (messageIds: string[]) => {
     try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ is_read: true })
-        .in('id', messageIds)
-        .eq('is_read', false);
-      
-      if (error) throw error;
-      fetchMessages();
+      await hookMarkAsRead(messageIds);
     } catch (error) {
       console.error('Error marking as read:', error);
     }
@@ -208,18 +185,12 @@ export default function MessagesPage() {
     if (!confirm('هل أنت متأكد من حذف هذه الرسائل؟')) return;
     
     try {
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .in('id', messageIds);
-      
-      if (error) throw error;
+      await hookDeleteMessages(messageIds);
       
       showNotification('success', 'تم حذف الرسائل بنجاح');
       if (activeThread && messageIds.some(id => activeThread.allIds.includes(id))) {
         setActiveThread(null);
       }
-      fetchMessages();
     } catch (error: any) {
       console.error('Error deleting message:', error);
       showNotification('error', 'حدث خطأ أثناء حذف الرسالة');
@@ -230,17 +201,11 @@ export default function MessagesPage() {
     if (!editContent.trim() || !editingMessage) return;
 
     try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ content: editContent })
-        .eq('id', editingMessage.id);
-
-      if (error) throw error;
+      await hookUpdateMessage(editingMessage.id, editContent);
 
       showNotification('success', 'تم تحديث الرسالة بنجاح');
       setEditingMessage(null);
       setEditContent('');
-      fetchMessages();
       if (activeThread) {
         fetchThread(activeThread.convId);
       }
@@ -257,171 +222,6 @@ export default function MessagesPage() {
     setIsGroupMessage(false);
     setStep(1);
   };
-
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 5000);
-  };
-
-  const fetchUsers = useCallback(async (currentUserData?: any) => {
-    try {
-      if (currentUserData?.role === 'student') {
-        // Fetch student's section
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('section_id')
-          .eq('id', currentUserData.id)
-          .single();
-
-        if (studentData?.section_id) {
-          // Fetch teachers for this section
-          const { data: teacherSections } = await supabase
-            .from('teacher_sections')
-            .select('teacher_id')
-            .eq('section_id', studentData.section_id);
-
-          const teacherIds = teacherSections?.map(ts => ts.teacher_id) || [];
-          
-          if (teacherIds.length > 0) {
-            const { data, error } = await supabase
-              .from('users')
-              .select('id, full_name, role')
-              .or(`id.in.(${teacherIds.join(',')}),role.in.(admin,management)`)
-              .order('full_name');
-            if (error) throw error;
-            setUsers(data || []);
-          } else {
-            const { data, error } = await supabase
-              .from('users')
-              .select('id, full_name, role')
-              .in('role', ['admin', 'management'])
-              .order('full_name');
-            setUsers(data || []);
-          }
-        } else {
-          const { data, error } = await supabase
-            .from('users')
-            .select('id, full_name, role')
-            .in('role', ['admin', 'management'])
-            .order('full_name');
-          setUsers(data || []);
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, full_name, role')
-          .order('full_name');
-        if (error) throw error;
-        setUsers(data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  }, []);
-
-  const fetchAnnouncements = useCallback(async (currentUserData?: any) => {
-    try {
-      let query = supabase
-        .from('announcements')
-        .select(`
-          *,
-          author:author_id(full_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (currentUserData?.role === 'student') {
-        query = query.or(`target_role.eq.student,target_role.is.null`);
-      } else if (currentUserData?.role === 'parent') {
-        query = query.or(`target_role.eq.parent,target_role.is.null`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setAnnouncements(data || []);
-    } catch (error) {
-      console.error('Error fetching announcements:', error);
-    }
-  }, []);
-
-  const fetchMessages = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('يجب تسجيل الدخول أولاً');
-      
-      console.log('Fetching messages for user:', user.id);
-
-      let query = supabase
-        .from('messages')
-        .select(`
-          *,
-          sender:sender_id(full_name),
-          receiver:receiver_id(full_name),
-          section:section_id(name, classes(name))
-        `)
-        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-        .order('created_at', { ascending: false });
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setMessages(data || []);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      showNotification('error', 'حدث خطأ أثناء جلب الرسائل');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchInitialData = useCallback(async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        setCurrentUser(userData);
-
-        if (userData.role === 'teacher') {
-          const { data: sectionsData } = await supabase
-            .from('teacher_sections')
-            .select(`
-              section_id,
-              section:sections(id, name, classes(name))
-            `)
-            .eq('teacher_id', user.id);
-          
-          // Deduplicate sections
-          const uniqueSections = Array.from(new Set((sectionsData || []).map(s => s.section_id)))
-            .map(id => {
-              const s = sectionsData?.find(item => item.section_id === id);
-              const section = Array.isArray(s?.section) ? s.section[0] : s?.section;
-              if (!section) return null;
-              const classes = Array.isArray(section.classes) ? section.classes[0] : section.classes;
-              return {
-                id: section.id,
-                name: section.name,
-                classes: classes
-              };
-            });
-          
-          setTeacherSections(uniqueSections.filter(Boolean));
-        }
-        fetchMessages();
-        fetchAnnouncements(userData);
-        fetchUsers(userData);
-      }
-    } catch (error) {
-      console.error('Error fetching initial data:', error);
-    }
-  }, [fetchUsers, fetchAnnouncements, fetchMessages]);
-
-  useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
 
   const getFilteredRecipients = () => {
     if (!recipientType) return [];
@@ -442,38 +242,18 @@ export default function MessagesPage() {
     return [];
   };
 
-  const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
+  const loadFilteredStudents = async (sectionId: string) => {
+    const students = await fetchStudentsBySection(sectionId);
+    setFilteredStudents(students);
+  };
 
   useEffect(() => {
     if (recipientType === 'student' && selectedSectionId) {
-      fetchStudentsBySection(selectedSectionId);
+      loadFilteredStudents(selectedSectionId);
     } else {
       setFilteredStudents([]);
     }
   }, [recipientType, selectedSectionId]);
-
-  const fetchStudentsBySection = async (sectionId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .select(`
-          id,
-          users(id, full_name, role)
-        `)
-        .eq('section_id', sectionId);
-      
-      if (error) throw error;
-      
-      const studentsList = data?.map(s => {
-        const user = Array.isArray(s.users) ? s.users[0] : s.users;
-        return user;
-      }).filter(Boolean) || [];
-      
-      setFilteredStudents(studentsList);
-    } catch (error) {
-      console.error('Error fetching students by section:', error);
-    }
-  };
 
   useEffect(() => {
     if (activeTab === 'messages') {
@@ -503,55 +283,15 @@ export default function MessagesPage() {
 
     setIsSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('يجب تسجيل الدخول أولاً');
-
       if (isGroupMessage) {
-        // Use the new API route for group messages
-        const response = await fetch('/api/messages/send-group', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sectionId: selectedSectionId,
-            subject: newMessage.subject,
-            content: newMessage.content,
-            senderId: user.id,
-          }),
-        });
-
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'حدث خطأ أثناء إرسال الرسالة الجماعية');
+        await hookSendGroupMessage(selectedSectionId, newMessage.subject, newMessage.content);
       } else {
-        // Individual message
-        const { data: sentMsg, error } = await supabase
-          .from('messages')
-          .insert([{
-            sender_id: user.id,
-            receiver_id: newMessage.receiver_id,
-            subject: newMessage.subject,
-            content: newMessage.content,
-            is_read: false
-          }])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Send notification to receiver
-        await supabase.from('notifications').insert([{
-          user_id: newMessage.receiver_id,
-          type: 'message',
-          title: 'رسالة جديدة',
-          content: `لديك رسالة جديدة من ${currentUser?.full_name || 'مستخدم'}: ${newMessage.subject}`,
-          link: '/messages',
-          is_read: false
-        }]);
+        await hookSendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
       }
       
       showNotification('success', isGroupMessage ? 'تم إرسال الرسالة الجماعية بنجاح' : 'تم إرسال الرسالة بنجاح');
       setShowNewMessage(false);
       resetMessageForm();
-      fetchMessages();
     } catch (error: any) {
       console.error('Error sending message:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء إرسال الرسالة');
@@ -569,47 +309,11 @@ export default function MessagesPage() {
 
     setIsSubmitting(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('يجب تسجيل الدخول أولاً');
-
-      const { error } = await supabase
-        .from('announcements')
-        .insert([{
-          author_id: user.id,
-          title: newAnnouncement.title,
-          content: newAnnouncement.content,
-          target_role: newAnnouncement.target_role === 'all' ? null : newAnnouncement.target_role
-        }]);
-
-      if (error) throw error;
-      
-      try {
-        let usersQuery = supabase.from('users').select('id');
-        if (newAnnouncement.target_role !== 'all') {
-          usersQuery = usersQuery.eq('role', newAnnouncement.target_role);
-        }
-        const { data: targetUsers } = await usersQuery;
-
-        if (targetUsers && targetUsers.length > 0) {
-          const notifications = targetUsers.map(u => ({
-            user_id: u.id,
-            type: 'announcement',
-            title: 'إعلان جديد',
-            content: `تم نشر إعلان جديد: ${newAnnouncement.title}`,
-            link: '/messages',
-            is_read: false
-          }));
-          
-          await supabase.from('notifications').insert(notifications);
-        }
-      } catch (notifErr) {
-        console.error('Error sending announcement notifications:', notifErr);
-      }
+      await hookSendAnnouncement(newAnnouncement.title, newAnnouncement.content, newAnnouncement.target_role);
 
       showNotification('success', 'تم نشر الإعلان بنجاح');
       setShowNewAnnouncement(false);
       setNewAnnouncement({ title: '', target_role: 'all', content: '' });
-      fetchAnnouncements();
     } catch (error: any) {
       console.error('Error sending announcement:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء نشر الإعلان');

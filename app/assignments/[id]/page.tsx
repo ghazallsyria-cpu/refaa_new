@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { supabase } from '@/lib/supabase';
 import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Settings, Share2, BarChart3, MoreVertical, Eye, X, Calendar, Download, FileSpreadsheet, Edit, ArrowLeft, GraduationCap, LayoutDashboard, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -17,6 +16,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
+import { useAuth } from '@/context/auth-context';
 
 type Assignment = {
   id: string;
@@ -47,14 +48,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentId = resolvedParams.id;
   
   const router = useRouter();
+  const { user, userRole } = useAuth();
+  const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment } = useAssignmentsSystem();
+  
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [mySubmission, setMySubmission] = useState<Submission | null>(null);
   const [myAnswers, setMyAnswers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [studentId, setStudentId] = useState<string | null>(null);
 
   // Management State
@@ -139,63 +141,20 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   };
 
   const fetchData = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      setUserId(user.id);
-
-      // Fetch user role
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      
-      const role = userData?.role || 'student';
-      setUserRole(role);
-
-      if (role === 'student') {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('id')
-          .eq('id', user.id)
-          .single();
-        setStudentId(studentData?.id || user.id);
+      if (userRole === 'student') {
+        setStudentId(user.id); // Assuming studentId is same as userId for now
       }
 
-      // Fetch assignment details
-      const { data: assignmentData, error: assignmentError } = await supabase
-        .from('assignments')
-        .select(`
-          id,
-          title,
-          description,
-          due_date,
-          file_url,
-          subjects (name),
-          sections (name, classes (name)),
-          teachers (users (id, full_name))
-        `)
-        .eq('id', assignmentId)
-        .single();
-
-      if (assignmentError) throw assignmentError;
-      setAssignment((assignmentData as unknown) as Assignment);
-      setEditData(assignmentData as any);
-
-      // Fetch questions
-      const { data: qData } = await supabase
-        .from('assignment_questions')
-        .select('*')
-        .eq('assignment_id', assignmentId)
-        .order('order');
+      const details = await fetchAssignmentDetails(assignmentId);
       
-      if (qData) {
-        setQuestions(qData.map(q => ({
+      setAssignment(details.assignment as any);
+      setEditData(details.assignment as any);
+      
+      if (details.questions) {
+        setQuestions(details.questions.map((q: any) => ({
           id: q.id,
           text: q.question_text,
           type: q.question_type as any,
@@ -205,84 +164,31 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         })));
       }
 
-      // Fetch submissions based on role
-      if (role === 'student') {
-        // Fetch only my submission
-        const { data: subData, error: subError } = await supabase
-          .from('assignment_submissions')
-          .select('*')
-          .eq('assignment_id', assignmentId)
-          .eq('student_id', user.id)
-          .maybeSingle();
-        
-        if (!subError && subData) {
-          setMySubmission(subData as Submission);
-          setContent(subData.content || '');
-          setFileUrl(subData.file_url || '');
+      if (userRole === 'student') {
+        if (details.submission) {
+          setMySubmission(details.submission as any);
+          setContent(details.submission.content || '');
+          setFileUrl(details.submission.file_url || '');
 
-          // Fetch answers
-          const { data: answersData } = await supabase
-            .from('assignment_answers')
-            .select('*')
-            .eq('submission_id', subData.id);
-          
-          if (answersData) {
+          if (details.answers) {
             const answersMap: Record<string, any> = {};
-            answersData.forEach(a => {
+            details.answers.forEach((a: any) => {
               answersMap[a.question_id] = a.selected_options || a.answer_text;
             });
             setMyAnswers(answersMap);
           }
         }
-      } else if (role === 'teacher' || role === 'admin' || role === 'management') {
-        // Fetch all submissions for this assignment
-        const { data: subsData, error: subsError } = await supabase
-          .from('assignment_submissions')
-          .select(`
-            *,
-            students (
-              users (full_name),
-              sections (
-                name,
-                classes (name)
-              )
-            )
-          `)
-          .eq('assignment_id', assignmentId)
-          .order('submitted_at', { ascending: false });
-        
-        if (!subsError && subsData) {
-          setSubmissions(subsData as unknown as Submission[]);
-        }
-      }
-
-      // Fetch form data for edit modal
-      if (role === 'teacher' || role === 'admin' || role === 'management') {
-        const [subjectsRes, sectionsRes, teachersRes] = await Promise.all([
-          supabase.from('subjects').select('id, name').order('name'),
-          supabase.from('sections').select('id, name, classes(name)').order('name'),
-          supabase.from('teachers').select('id, users(full_name)')
-        ]);
-        setSubjects(subjectsRes.data || []);
-        setSections((sectionsRes.data || []).map((s: any) => ({
-          ...s,
-          classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
-        })));
-        setTeachers(teachersRes.data || []);
+      } else if (['teacher', 'admin', 'management'].includes(userRole || '')) {
+        setSubmissions(details.allSubmissions as any);
       }
 
     } catch (error: any) {
       console.error('Error fetching data:', error);
-      // It's possible the table doesn't exist yet, so we catch the error gracefully
-      if (error.code === '42P01') {
-        console.warn('assignment_submissions table might not exist yet.');
-      } else {
-        showNotification('error', 'حدث خطأ أثناء جلب البيانات: ' + error.message);
-      }
+      showNotification('error', 'حدث خطأ أثناء جلب البيانات: ' + error.message);
     } finally {
       setLoading(false);
     }
-  }, [assignmentId, router]);
+  }, [assignmentId, user, userRole, fetchAssignmentDetails]);
 
   useEffect(() => {
     fetchData();
@@ -291,63 +197,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const handleSubmitAnswers = async (answers: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      // 1. Create or Update Submission
-      const submissionPayload = {
-        assignment_id: assignmentId,
-        student_id: studentId,
-        status: 'submitted',
-        submitted_at: new Date().toISOString(),
-        content: content,
-        file_url: fileUrl
-      };
-
-      let submissionId: string;
-      if (mySubmission) {
-        const { error } = await supabase
-          .from('assignment_submissions')
-          .update(submissionPayload)
-          .eq('id', mySubmission.id);
-        if (error) throw error;
-        submissionId = mySubmission.id;
-      } else {
-        const { data: newSub, error } = await supabase
-          .from('assignment_submissions')
-          .insert([submissionPayload])
-          .select()
-          .single();
-        if (error) throw error;
-        submissionId = newSub.id;
-      }
-
-      // 2. Save Answers
-      // Delete old answers
-      await supabase.from('assignment_answers').delete().eq('submission_id', submissionId);
-
       const answersPayload = Object.entries(answers).map(([qId, value]) => {
         const question = questions.find(q => q.id === qId);
         const isMultiple = question?.type === 'multiple_choice' || question?.type === 'checkbox';
         return {
-          submission_id: submissionId,
           question_id: qId,
           answer_text: isMultiple ? null : value,
           selected_options: isMultiple ? value : null
         };
       });
 
-      const { error: answersError } = await supabase.from('assignment_answers').insert(answersPayload);
-      if (answersError) throw answersError;
-
-      // Notify teacher
-      if (assignment?.teachers?.users?.id) {
-        await supabase.from('notifications').insert([{
-          user_id: assignment.teachers.users.id,
-          type: 'assignment',
-          title: 'تسليم واجب جديد',
-          content: `قام الطالب بتسليم الواجب: ${assignment.title}`,
-          link: `/assignments/${assignmentId}`,
-          is_read: false
-        }]);
-      }
+      await submitAssignment(assignmentId, answersPayload, mySubmission?.id);
 
       showNotification('success', 'تم تسليم الواجب بنجاح!');
       await fetchData();
@@ -369,30 +229,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         due_date: new Date(editData.due_date!).toISOString(),
       };
 
-      const { error } = await supabase
-        .from('assignments')
-        .update(payload)
-        .eq('id', assignmentId);
-
-      if (error) throw error;
-
-      // Update Questions
-      const { error: deleteError } = await supabase.from('assignment_questions').delete().eq('assignment_id', assignmentId);
-      if (deleteError) throw deleteError;
-
-      if (questions.length > 0) {
-        const questionsPayload = questions.map((q, index) => ({
-          assignment_id: assignmentId,
-          question_text: q.text,
-          question_type: q.type,
-          options: q.options || null,
-          points: q.points,
-          is_required: q.isRequired,
-          order: index
-        }));
-        const { error: insertError } = await supabase.from('assignment_questions').insert(questionsPayload);
-        if (insertError) throw insertError;
-      }
+      await saveAssignment(payload, assignmentId, questions as any, [], []);
 
       showNotification('success', 'تم تحديث الواجب بنجاح');
       setIsEditModalOpen(false);
@@ -404,7 +241,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
   };
 
-  const handleDeleteAssignment = async () => {
+  const handleDeleteAssignmentAction = async () => {
     try {
       // 1. Delete assignment file from Cloudinary
       if (assignment?.file_url) {
@@ -420,8 +257,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         }
       }
 
-      const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
-      if (error) throw error;
+      await deleteAssignment(assignmentId);
       router.push('/assignments');
     } catch (error: any) {
       showNotification('error', 'خطأ في الحذف: ' + error.message);

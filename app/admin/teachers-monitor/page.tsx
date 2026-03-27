@@ -1,9 +1,7 @@
 "use client";
 
-import { withRoleGuard, ROLES } from '@/lib/role-guard';
-
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion } from "motion/react";
 import {
   CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send
@@ -35,7 +33,8 @@ const MONTH_MAP: Record<number, string> = {
   8: "سبتمبر", 9: "أكتوبر", 10: "نوفمبر", 11: "ديسمبر"
 };
 
-function TeachersMonitorPage() {
+export default function TeachersMonitorPage() {
+  const { loading: hookLoading, fetchTeachersMonitorData, sendTeacherWarning } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherMonitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -72,48 +71,11 @@ function TeachersMonitorPage() {
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
-      // 1. Fetch all teachers
-      const { data: teachersData, error: teachersError } = await supabase
-        .from("teachers")
-        .select("id, specialization, users(full_name)");
-
-      if (teachersError) throw teachersError;
-      if (!teachersData) return;
-
-      // 2. Fetch all schedules for today
-      const { data: allSchedules, error: schedulesError } = await supabase
-        .from("schedules")
-        .select("teacher_id, section_id, period")
-        .eq("day_of_week", dbDay);
-
-      if (schedulesError) throw schedulesError;
-
-      // 3. Fetch all attendance for today
-      const { data: allAttendance, error: attendanceError } = await supabase
-        .from("attendance_sessions")
-        .select("teacher_id, section_id, period_number, date")
-        .eq("date", todayStr);
-
-      if (attendanceError) throw attendanceError;
-
-      // 4. Fetch assignments count for the week
-      const { data: allAssignments, error: assignmentsError } = await supabase
-        .from("assignments")
-        .select("teacher_id")
-        .gte("created_at", weekAgoStr);
-
-      if (assignmentsError) throw assignmentsError;
-
-      // 5. Fetch exams count for the week
-      const { data: allExams, error: examsError } = await supabase
-        .from("exams")
-        .select("teacher_id")
-        .gte("created_at", weekAgoStr);
-
-      if (examsError) throw examsError;
+      const data = await fetchTeachersMonitorData(todayStr, dbDay, weekAgoStr);
+      const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
       // 6. Process data in memory
-      const results: TeacherMonitor[] = teachersData.map((teacher: any) => {
+      const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
         const teacherSchedules = allSchedules?.filter(s => s.teacher_id === teacher.id) || [];
         const teacherAttendance = allAttendance?.filter(a => a.teacher_id === teacher.id) || [];
         
@@ -158,7 +120,7 @@ function TeachersMonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, [schoolTime, todayStr]);
+  }, [schoolTime, todayStr, fetchTeachersMonitorData]);
 
   useEffect(() => {
     if (todayStr) {
@@ -169,13 +131,7 @@ function TeachersMonitorPage() {
   const sendWarning = async (teacherId: string) => {
     setSendingWarning(teacherId);
     try {
-      await supabase.from("notifications").insert({
-        user_id: teacherId,
-        title: "تنبيه إداري",
-        message: "يرجى استكمال تسجيل الحضور والغياب للحصص الموكلة إليك اليوم.",
-        type: "system",
-        read: false
-      });
+      await sendTeacherWarning(teacherId);
       alert("تم إرسال التنبيه بنجاح");
     } catch (e) {
       console.error(e);
@@ -360,6 +316,3 @@ function TeachersMonitorPage() {
     </div>
   );
 }
-
-// صفحة محمية - للمسؤولين والإدارة فقط
-export default withRoleGuard(TeachersMonitorPage, ROLES.ADMIN_MANAGEMENT);

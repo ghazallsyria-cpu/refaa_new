@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -15,6 +16,7 @@ const DAYS = [
 ];
 
 export default function SchedulePage() {
+  const { user, userRole: authRole, isChecking } = useAuth();
   const [viewType, setViewType] = useState<'teacher' | 'section'>('teacher');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
@@ -34,62 +36,55 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const { 
+    fetchInitialScheduleData, 
+    fetchUserRole, 
+    fetchStudentSection, 
+    fetchSchedules: fetchSchedulesData, 
+    addSchedule, 
+    updateSchedule, 
+    deleteSchedule,
+    checkConflicts,
+    swapSchedules,
+    notifyScheduleChange
+  } = useSchedulesSystem();
 
   const fetchFilters = useCallback(async () => {
+    if (isChecking) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      let currentUserRole = null;
+      let currentUserRole = authRole;
       if (user) {
-        setUserEmail(user.email || null);
-        const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single();
-        currentUserRole = profile?.role || null;
-        setUserRole(currentUserRole);
-        
-        const isSystemAdmin = profile?.role === 'admin' || profile?.role === 'management';
+        const isSystemAdmin = currentUserRole === 'admin' || currentUserRole === 'management';
         setIsAdmin(isSystemAdmin);
       } else {
         setIsAdmin(false);
       }
 
-      const [teachersRes, sectionsRes, subjectsRes, assignmentsRes, periodsRes] = await Promise.all([
-        supabase.from('teachers').select('id, specialization, users(full_name)'),
-        supabase.from('sections').select('id, name, classes(name)'),
-        supabase.from('subjects').select('id, name'),
-        supabase.from('teacher_sections').select('teacher_id, section_id, subject_id'),
-        supabase.from('class_periods').select('*').order('period_number')
-      ]);
-
-      if (teachersRes.data) setTeachers(teachersRes.data);
-      if (sectionsRes.data) setSections(sectionsRes.data);
-      if (subjectsRes.data) setSubjects(subjectsRes.data);
-      if (assignmentsRes.data) setAssignments(assignmentsRes.data);
-      if (periodsRes.data) setPeriods(periodsRes.data);
+      const data = await fetchInitialScheduleData();
+      setTeachers(data.teachers);
+      setSections(data.sections);
+      setSubjects(data.subjects);
+      setAssignments(data.assignments);
+      setPeriods(data.periods);
 
       if (currentUserRole === 'teacher' && user) {
         setSelectedId(user.id);
         setViewType('teacher');
         setShowAllSchedules(false);
       } else if (currentUserRole === 'student' && user) {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('section_id')
-          .eq('id', user.id)
-          .single();
-        
-        if (studentData?.section_id) {
-          setSelectedId(studentData.section_id);
+        const sectionId = await fetchStudentSection(user.id);
+        if (sectionId) {
+          setSelectedId(sectionId);
           setViewType('section');
           setShowAllSchedules(false);
         }
-      } else if (teachersRes.data?.[0]) {
-        setSelectedId(teachersRes.data[0].id);
+      } else if (data.teachers?.[0]) {
+        setSelectedId(data.teachers[0].id);
       }
     } catch (err) {
       console.error(err);
     }
-  }, []);
+  }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
   // تصفية الفصول المتاحة بناءً على المعلم المختار (في حال عرض جدول المعلم)
   const availableSections = (viewType === 'teacher' && selectedId)
@@ -126,101 +121,38 @@ export default function SchedulePage() {
       const sourcePeriod = swappingFrom.period;
 
       // Conflict checks for the swap
-      // We need to check if swappingFrom's teacher/section has a conflict at (targetDay, targetPeriod)
-      // and if targetSlot's teacher/section has a conflict at (sourceDay, sourcePeriod)
+      const conflicts = await checkConflicts(targetDay, targetPeriod, swappingFrom.teacher_id, swappingFrom.section_id, swappingFrom.id);
       
-      const { data: conflicts } = await supabase
-        .from('schedules')
-        .select('id, teacher_id, section_id, day_of_week, period')
-        .or(`day_of_week.eq.${targetDay},day_of_week.eq.${sourceDay}`)
-        .filter('period', 'in', `(${targetPeriod},${sourcePeriod})`);
+      const targetConflicts = conflicts.filter(c => 
+        c.id !== targetSlot?.id && 
+        (c.teacher_id === swappingFrom.teacher_id || c.section_id === swappingFrom.section_id)
+      );
 
-      if (conflicts) {
-        // Check for conflicts at target slot for swappingFrom's teacher/section
-        const targetConflicts = conflicts.filter(c => 
-          c.day_of_week === targetDay && 
-          c.period === targetPeriod && 
-          c.id !== targetSlot?.id && 
-          (c.teacher_id === swappingFrom.teacher_id || c.section_id === swappingFrom.section_id)
+      if (targetConflicts.length > 0) {
+        alert('تعذر التبديل: يوجد تعارض في الحصة المستهدفة للمعلم أو الفصل');
+        setLoading(false);
+        return;
+      }
+
+      if (targetSlot) {
+        const sourceConflicts = await checkConflicts(sourceDay, sourcePeriod, targetSlot.teacher_id, targetSlot.section_id, targetSlot.id);
+        const filteredSourceConflicts = sourceConflicts.filter(c => 
+          c.id !== swappingFrom.id && 
+          (c.teacher_id === targetSlot.teacher_id || c.section_id === targetSlot.section_id)
         );
 
-        if (targetConflicts.length > 0) {
-          alert('تعذر التبديل: يوجد تعارض في الحصة المستهدفة للمعلم أو الفصل');
+        if (filteredSourceConflicts.length > 0) {
+          alert('تعذر التبديل: يوجد تعارض في الحصة الأصلية للمعلم أو الفصل المنقول');
           setLoading(false);
           return;
         }
-
-        // If targetSlot exists, check for conflicts at source slot
-        if (targetSlot) {
-          const sourceConflicts = conflicts.filter(c => 
-            c.day_of_week === sourceDay && 
-            c.period === sourcePeriod && 
-            c.id !== swappingFrom.id && 
-            (c.teacher_id === targetSlot.teacher_id || c.section_id === targetSlot.section_id)
-          );
-
-          if (sourceConflicts.length > 0) {
-            alert('تعذر التبديل: يوجد تعارض في الحصة الأصلية للمعلم أو الفصل المنقول');
-            setLoading(false);
-            return;
-          }
-        }
       }
 
+      await swapSchedules(swappingFrom.id, sourceDay, sourcePeriod, targetSlot?.id || null, targetDay, targetPeriod);
+
+      await notifyScheduleChange(swappingFrom, targetDay, targetPeriod, DAYS);
       if (targetSlot) {
-        // Swap two lessons
-        const { error: err1 } = await supabase
-          .from('schedules')
-          .update({ day_of_week: sourceDay, period: sourcePeriod })
-          .eq('id', targetSlot.id);
-        
-        if (err1) throw err1;
-
-        const { error: err2 } = await supabase
-          .from('schedules')
-          .update({ day_of_week: targetDay, period: targetPeriod })
-          .eq('id', swappingFrom.id);
-        
-        if (err2) throw err2;
-      } else {
-        // Move to empty slot
-        const { error } = await supabase
-          .from('schedules')
-          .update({ day_of_week: targetDay, period: targetPeriod })
-          .eq('id', swappingFrom.id);
-        
-        if (error) throw error;
-      }
-
-      // Send notifications
-      const notifyUsers = async (lesson: any, newDay: number, newPeriod: number) => {
-        const dayName = DAYS.find(d => d.id === newDay)?.name || '';
-        const msg = `تم تغيير موعد حصة ${lesson.subjects?.name} إلى يوم ${dayName} الحصة ${newPeriod}`;
-        
-        // Notify teacher
-        await supabase.from('notifications').insert({
-          user_id: lesson.teacher_id,
-          title: 'تحديث الجدول الدراسي',
-          content: msg,
-          type: 'system'
-        });
-
-        // Notify students in the section
-        const { data: students } = await supabase.from('students').select('id').eq('section_id', lesson.section_id);
-        if (students) {
-          const studentNotifs = students.map(s => ({
-            user_id: s.id,
-            title: 'تحديث الجدول الدراسي',
-            content: msg,
-            type: 'system'
-          }));
-          await supabase.from('notifications').insert(studentNotifs);
-        }
-      };
-
-      await notifyUsers(swappingFrom, targetDay, targetPeriod);
-      if (targetSlot) {
-        await notifyUsers(targetSlot, sourceDay, sourcePeriod);
+        await notifyScheduleChange(targetSlot, sourceDay, sourcePeriod, DAYS);
       }
 
       setSwappingFrom(null);
@@ -244,74 +176,43 @@ export default function SchedulePage() {
     
     try {
       // 1. التحقق من وجود تضارب
-      // تضارب للمعلم
-      let teacherQuery = supabase
-        .from('schedules')
-        .select('id, sections(name, classes(name)), subjects(name)')
-        .eq('day_of_week', selectedSlot.day)
-        .eq('period', selectedSlot.period)
-        .eq('teacher_id', formData.teacher_id);
-      
-      if (editingId) {
-        teacherQuery = teacherQuery.neq('id', editingId);
-      }
-      
-      const { data: teacherConflict, error: tError } = await teacherQuery.maybeSingle();
+      const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
 
-      if (tError) throw tError;
-
-      // تضارب للفصل
-      let sectionQuery = supabase
-        .from('schedules')
-        .select('id, teachers(users(full_name)), subjects(name)')
-        .eq('day_of_week', selectedSlot.day)
-        .eq('period', selectedSlot.period)
-        .eq('section_id', formData.section_id);
-      
-      if (editingId) {
-        sectionQuery = sectionQuery.neq('id', editingId);
-      }
-
-      const { data: sectionConflict, error: sError } = await sectionQuery.maybeSingle();
-
-      if (sError) throw sError;
-
-      if (teacherConflict) {
-        const section = (Array.isArray(teacherConflict.sections) ? teacherConflict.sections[0] : teacherConflict.sections) as any;
-        const subject = (Array.isArray(teacherConflict.subjects) ? teacherConflict.subjects[0] : teacherConflict.subjects) as any;
-        const className = (section?.classes && Array.isArray(section.classes) ? section.classes[0]?.name : section?.classes?.name);
-        alert(`تضارب: المعلم لديه حصة (${subject?.name}) مع فصل (${className} - ${section?.name}) في هذا الوقت.`);
-        return;
-      }
-
-      if (sectionConflict) {
-        const teacher = (Array.isArray(sectionConflict.teachers) ? sectionConflict.teachers[0] : sectionConflict.teachers) as any;
-        const subject = (Array.isArray(sectionConflict.subjects) ? sectionConflict.subjects[0] : sectionConflict.subjects) as any;
-        const teacherName = (teacher?.users && Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher?.users?.full_name);
-        alert(`تضارب: هذا الفصل لديه حصة (${subject?.name}) مع المعلم (${teacherName}) في هذا الوقت.`);
-        return;
+      if (conflicts.length > 0) {
+        const tConflict = conflicts.find(c => c.teacher_id === formData.teacher_id);
+        if (tConflict) {
+          const section = (Array.isArray(tConflict.sections) ? tConflict.sections[0] : tConflict.sections) as any;
+          const subject = (Array.isArray(tConflict.subjects) ? tConflict.subjects[0] : tConflict.subjects) as any;
+          const className = (section?.classes && Array.isArray(section.classes) ? section.classes[0]?.name : section?.classes?.name);
+          alert(`تضارب: المعلم لديه حصة (${subject?.name}) مع فصل (${className} - ${section?.name}) في هذا الوقت.`);
+          return;
+        }
+        
+        const sConflict = conflicts.find(c => c.section_id === formData.section_id);
+        if (sConflict) {
+          const teacher = (Array.isArray(sConflict.teachers) ? sConflict.teachers[0] : sConflict.teachers) as any;
+          const subject = (Array.isArray(sConflict.subjects) ? sConflict.subjects[0] : sConflict.subjects) as any;
+          const teacherName = (teacher?.users && Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher?.users?.full_name);
+          alert(`تضارب: هذا الفصل لديه حصة (${subject?.name}) مع المعلم (${teacherName}) في هذا الوقت.`);
+          return;
+        }
       }
 
       // 2. الإضافة أو التحديث إذا لم يوجد تضارب
       if (editingId) {
-        const { error } = await supabase
-          .from('schedules')
-          .update({
-            teacher_id: formData.teacher_id,
-            section_id: formData.section_id,
-            subject_id: formData.subject_id,
-          })
-          .eq('id', editingId);
-        if (error) throw error;
+        await updateSchedule(editingId, {
+          teacher_id: formData.teacher_id,
+          section_id: formData.section_id,
+          subject_id: formData.subject_id,
+        });
       } else {
-        const { error } = await supabase.from('schedules').insert({
+        await addSchedule({
           teacher_id: formData.teacher_id,
           section_id: formData.section_id,
           subject_id: formData.subject_id,
           day_of_week: selectedSlot.day,
           period: selectedSlot.period
         });
-        if (error) throw error;
       }
       
       setIsModalOpen(false);
@@ -327,8 +228,7 @@ export default function SchedulePage() {
   const handleDeleteSchedule = async (id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذه الحصة؟')) return;
     try {
-      const { error } = await supabase.from('schedules').delete().eq('id', id);
-      if (error) throw error;
+      await deleteSchedule(id);
       fetchSchedule();
     } catch (err) {
       console.error(err);
@@ -339,24 +239,16 @@ export default function SchedulePage() {
   const fetchSchedule = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase.from('schedules').select(`
-        id, day_of_week, period,
-        teachers(id, users(full_name), zoom_link),
-        sections(id, name, classes(name)),
-        subjects(id, name)
-      `);
-
-      // If admin and showAllSchedules is true, fetch all to show occupancy
+      let filters: any = {};
       if (!(isAdmin && showAllSchedules)) {
         if (viewType === 'teacher') {
-          query = query.eq('teacher_id', selectedId);
+          filters.teacher_id = selectedId;
         } else {
-          query = query.eq('section_id', selectedId);
+          filters.section_id = selectedId;
         }
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await fetchSchedulesData(filters);
       console.log('Fetched schedule data:', data);
       setScheduleData(data || []);
     } catch (err: any) {
@@ -365,7 +257,7 @@ export default function SchedulePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedId, viewType, isAdmin, showAllSchedules]);
+  }, [selectedId, viewType, isAdmin, showAllSchedules, fetchSchedulesData]);
 
   useEffect(() => {
     if (!selectedId && !showAllSchedules) return;
@@ -428,12 +320,12 @@ export default function SchedulePage() {
         }
       `}</style>
       {/* Debug Info */}
-      {isAdmin && userRole !== 'teacher' && (
+      {isAdmin && authRole !== 'teacher' && (
         <div className="bg-yellow-100 p-4 rounded-lg text-sm text-yellow-800 no-print">
           <p className="font-bold">Debug Info:</p>
           <p>isAdmin: {String(isAdmin)}</p>
-          <p>Email: {userEmail || 'غير مسجل'}</p>
-          <p>Role: {userRole || 'بدون دور'}</p>
+          <p>Email: {user?.email || 'غير مسجل'}</p>
+          <p>Role: {authRole || 'بدون دور'}</p>
           <p>إذا كنت مديراً ولا تظهر خيارات الإدارة، يرجى التأكد من دورك في قاعدة البيانات أو التواصل مع المطور.</p>
         </div>
       )}
@@ -441,10 +333,10 @@ export default function SchedulePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {userRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الدراسي'}
+            {authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الدراسي'}
           </h1>
           <p className="text-slate-500">
-            {userRole === 'teacher' 
+            {authRole === 'teacher' 
               ? 'عرض حصصك الدراسية الأسبوعية' 
               : 'عرض الجداول الدراسية للمعلمين والفصول'}
           </p>

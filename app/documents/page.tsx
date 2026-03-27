@@ -1,19 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useDocumentsSystem, Document } from '@/hooks/useDocumentsSystem';
 import { Plus, Search, Edit2, Trash2, FileText, X, Filter, Link as LinkIcon, ExternalLink, Calendar, Folder, FileArchive, UploadCloud } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
-
-type Document = {
-  id: string;
-  title: string;
-  description: string;
-  file_url: string;
-  category: string;
-  created_at: string;
-};
 
 const CATEGORY_OPTIONS = [
   { value: 'all', label: 'جميع التصنيفات' },
@@ -24,6 +14,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function DocumentsPage() {
+  const { loading: systemLoading, fetchDocuments, saveDocument, deleteDocument } = useDocumentsSystem();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,32 +37,16 @@ export default function DocumentsPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const fetchDocuments = useCallback(async () => {
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching documents:', error);
-        showNotification('error', 'حدث خطأ أثناء جلب المستندات: ' + error.message);
-        setDocuments([]);
-      } else {
-        setDocuments((data as unknown) as Document[] || []);
-      }
-    } catch (error: any) {
-      console.error('Error:', error);
-      showNotification('error', 'حدث خطأ غير متوقع: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    const data = await fetchDocuments();
+    setDocuments(data);
+    setLoading(false);
+  }, [fetchDocuments]);
 
   useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+    loadDocuments();
+  }, [loadDocuments]);
 
   const handleSaveDocument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,76 +67,12 @@ export default function DocumentsPage() {
 
     setIsSubmitting(true);
     try {
-      let finalFileUrl = currentDocument.file_url;
-
-      // Handle File Upload to Cloudinary
-      if (uploadType === 'file' && selectedFile) {
-        if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || !process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET) {
-          throw new Error('يرجى إعداد إعدادات Cloudinary في المتغيرات البيئية');
-        }
-
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET);
-
-        const res = await fetch(
-          `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/auto/upload`,
-          { method: 'POST', body: formData }
-        );
-
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error?.message || 'فشل رفع الملف إلى Cloudinary');
-        }
-
-        finalFileUrl = data.secure_url;
-      }
-
-      const payload = {
-        title: currentDocument.title,
-        description: currentDocument.description || null,
-        file_url: finalFileUrl,
-        category: currentDocument.category,
-      };
-
-      if (currentDocument.id) {
-        // Update
-        // Delete old file if it's being replaced
-        if (uploadType === 'file' && selectedFile && currentDocument.file_url) {
-          await deleteFromCloudinary(currentDocument.file_url, 'raw');
-        }
-
-        const { data, error } = await supabase
-          .from('documents')
-          .update(payload)
-          .eq('id', currentDocument.id)
-          .select();
-          
-        if (error) {
-          console.error('Supabase Update Error Details:', JSON.stringify(error, null, 2));
-          throw error;
-        }
-      } else {
-        // Insert
-        const { data, error } = await supabase
-          .from('documents')
-          .insert([payload])
-          .select();
-          
-        if (error) {
-          console.error('Supabase Insert Error Details:', JSON.stringify(error, null, 2));
-          throw error;
-        }
-      }
-
-      await fetchDocuments();
+      await saveDocument(currentDocument, selectedFile || undefined);
+      await loadDocuments();
       setIsModalOpen(false);
       setCurrentDocument({});
       setSelectedFile(null);
-      
-      // إظهار رسالة نجاح للمستخدم
       showNotification('success', 'تم حفظ المستند بنجاح!');
-      
     } catch (error: any) {
       console.error('Error saving document:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حفظ المستند');
@@ -174,18 +85,9 @@ export default function DocumentsPage() {
     if (!documentToDelete) return;
     
     try {
-      // Get the document to find its file_url
       const docToDelete = documents.find(d => d.id === documentToDelete);
-      
-      const { error } = await supabase.from('documents').delete().eq('id', documentToDelete);
-      if (error) throw error;
-
-      // Delete from Cloudinary if it's a Cloudinary URL
-      if (docToDelete?.file_url) {
-        await deleteFromCloudinary(docToDelete.file_url, 'raw');
-      }
-
-      await fetchDocuments();
+      await deleteDocument(documentToDelete, docToDelete?.file_url);
+      await loadDocuments();
       showNotification('success', 'تم حذف المستند بنجاح');
     } catch (error) {
       console.error('Error deleting document:', error);

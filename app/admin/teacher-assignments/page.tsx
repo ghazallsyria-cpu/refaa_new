@@ -1,16 +1,23 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useTeacherAssignmentsSystem } from '@/hooks/useTeacherAssignmentsSystem';
 import { Plus, Trash2, Save, ArrowRight, Users, Edit2, X } from 'lucide-react';
 import Link from 'next/link';
 
 export default function TeacherAssignmentsPage() {
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    loading: hookLoading, 
+    error: hookError,
+    teachers, 
+    sections, 
+    subjects, 
+    assignments, 
+    fetchData, 
+    saveAssignments, 
+    deleteAssignment, 
+    updateAssignment 
+  } = useTeacherAssignmentsSystem();
 
   const [newAssignments, setNewAssignments] = useState<{ teacher_id: string; section_id: string; subject_id: string }[]>([]);
   const [bulkMode, setBulkMode] = useState(false);
@@ -23,24 +30,7 @@ export default function TeacherAssignmentsPage() {
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [editForm, setEditForm] = useState({ section_id: '', subject_id: '' });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    const [tRes, sRes, subRes, aRes] = await Promise.all([
-      supabase.from('teachers').select('id, users(full_name)'),
-      supabase.from('sections').select('id, name, classes(name)'),
-      supabase.from('subjects').select('id, name'),
-      supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teacher:teachers(users(full_name)), section:sections(name, classes(name)), subject:subjects(name)')
-    ]);
-
-    if (tRes.data) setTeachers(tRes.data);
-    if (sRes.data) setSections(sRes.data);
-    if (subRes.data) setSubjects(subRes.data);
-    if (aRes.data) setAssignments(aRes.data);
-    setLoading(false);
-  }, []);
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
@@ -84,14 +74,13 @@ export default function TeacherAssignmentsPage() {
 
     if (validAssignments.length === 0) return;
 
-    const { error } = await supabase.from('teacher_sections').upsert(validAssignments, { ignoreDuplicates: true });
-    if (!error) {
+    try {
+      await saveAssignments(validAssignments);
       setNewAssignments([]);
       setBulkMode(false);
       setBulkData({ teacher_id: '', subject_id: '', section_ids: [] });
-      fetchData();
       alert('تم حفظ التعيينات بنجاح');
-    } else {
+    } catch (error: any) {
       alert('فشل حفظ التعيينات: ' + error.message);
     }
   };
@@ -109,11 +98,11 @@ export default function TeacherAssignmentsPage() {
 
   const handleDelete = async (teacher_id: string, section_id: string, subject_id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا التعيين؟')) return;
-    await supabase.from('teacher_sections').delete()
-      .eq('teacher_id', teacher_id)
-      .eq('section_id', section_id)
-      .eq('subject_id', subject_id);
-    fetchData();
+    try {
+      await deleteAssignment(teacher_id, section_id, subject_id);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const openEditModal = (assignment: any) => {
@@ -140,23 +129,21 @@ export default function TeacherAssignmentsPage() {
       }
     }
 
-    const { error } = await supabase
-      .from('teacher_sections')
-      .update({ 
-        section_id: editForm.section_id, 
-        subject_id: editForm.subject_id 
-      })
-      .match({ 
-        teacher_id: editingAssignment.teacher_id, 
-        section_id: editingAssignment.section_id, 
-        subject_id: editingAssignment.subject_id 
-      });
-
-    if (!error) {
+    try {
+      await updateAssignment(
+        { 
+          teacher_id: editingAssignment.teacher_id, 
+          section_id: editingAssignment.section_id, 
+          subject_id: editingAssignment.subject_id 
+        },
+        { 
+          section_id: editForm.section_id, 
+          subject_id: editForm.subject_id 
+        }
+      );
       setEditingAssignment(null);
-      fetchData();
       alert('تم تحديث التعيين بنجاح');
-    } else {
+    } catch (error: any) {
       alert('فشل التحديث: ' + error.message);
     }
   };

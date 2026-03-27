@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { 
   Plus, Search, Filter, BookOpen, Users, 
   BarChart2, Clock, MoreVertical, Edit2, 
@@ -11,20 +10,20 @@ import {
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
-import { useEducationalContent } from '@/hooks/use-educational-content';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 
 export default function ExamsDashboard() {
   const { user, userRole, isChecking: authLoading } = useAuth();
-  const { content: exams, loading: contentLoading, error: contentError, refresh } = useEducationalContent('exam');
+  const { data: exams, loading: contentLoading, error: contentError, refetch: refresh, deleteExamWithMedia } = useExamsSystem();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const filteredExams = exams.filter(exam => {
@@ -38,26 +37,7 @@ export default function ExamsDashboard() {
     if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) return;
     
     try {
-      // 1. Fetch all questions for this exam to get their media_urls
-      const { data: questions, error: qError } = await supabase
-        .from('questions')
-        .select('media_url')
-        .eq('exam_id', examId);
-      
-      if (qError) throw qError;
-
-      // 2. Delete all question images from Cloudinary
-      if (questions && questions.length > 0) {
-        for (const q of questions) {
-          if (q.media_url) {
-            await deleteFromCloudinary(q.media_url);
-          }
-        }
-      }
-
-      const { error } = await supabase.from('exams').delete().eq('id', examId);
-      if (error) throw error;
-      refresh();
+      await deleteExamWithMedia(examId);
     } catch (err) {
       console.error('Error deleting exam:', err);
     }

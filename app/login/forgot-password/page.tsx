@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { School, User, ArrowRight } from 'lucide-react';
 
@@ -11,6 +11,7 @@ export default function ForgotPasswordPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { requestPasswordReset } = useAuth();
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,53 +20,7 @@ export default function ForgotPasswordPage() {
     setMessage(null);
 
     try {
-      // 1. Look up email
-      let authEmail = '';
-      
-      // Check students
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('users!inner(email)')
-        .eq('national_id', civilId)
-        .single();
-        
-      if (studentData && studentData.users) {
-        authEmail = (studentData.users as any).email;
-      } else {
-        // Check teachers
-        const { data: teacherData } = await supabase
-          .from('teachers')
-          .select('users!inner(email)')
-          .eq('national_id', civilId)
-          .single();
-          
-        if (teacherData && teacherData.users) {
-          authEmail = (teacherData.users as any).email;
-        } else {
-          // Check parents
-          const { data: parentData } = await supabase
-            .from('parents')
-            .select('users!inner(email)')
-            .eq('national_id', civilId)
-            .single();
-            
-          if (parentData && parentData.users) {
-            authEmail = (parentData.users as any).email;
-          }
-        }
-      }
-
-      if (!authEmail) {
-        throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
-      }
-
-      // 2. Trigger reset
-      const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
-        redirectTo: `${window.location.origin}/login/update-password`,
-      });
-
-      if (error) throw error;
-      
+      await requestPasswordReset(civilId);
       setMessage('تم إرسال رابط إعادة تعيين كلمة المرور إلى البريد الإلكتروني المرتبط بحسابك.');
     } catch (err: any) {
       setError(err.message || 'حدث خطأ أثناء محاولة إعادة تعيين كلمة المرور');

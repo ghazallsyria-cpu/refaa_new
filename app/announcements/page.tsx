@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useAnnouncementsSystem, Announcement } from '@/hooks/useAnnouncementsSystem';
+import { useAuth } from '@/context/auth-context';
 import { Plus, Search, Edit2, Trash2, Megaphone, Bell, X, Users, Calendar, Filter, AlertCircle, ArrowRight } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,17 +10,6 @@ import Image from 'next/image';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 import ImageUpload from '@/components/ImageUpload';
-
-type Announcement = {
-  id: string;
-  title: string;
-  content: string;
-  target_role: string;
-  created_at: string;
-  author_id?: string;
-  image_url?: string;
-  users?: { full_name: string };
-};
 
 const AUDIENCE_OPTIONS = [
   { value: 'all', label: 'الجميع' },
@@ -29,8 +19,15 @@ const AUDIENCE_OPTIONS = [
 ];
 
 export default function AnnouncementsPage() {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { userRole } = useAuth();
+  const { 
+    announcements, 
+    loading, 
+    fetchAnnouncements, 
+    saveAnnouncement, 
+    deleteAnnouncement 
+  } = useAnnouncementsSystem();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [audienceFilter, setAudienceFilter] = useState('all_types');
   
@@ -47,67 +44,15 @@ export default function AnnouncementsPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
-  const fetchAnnouncements = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
-      
-      let role = null;
-      if (session?.user?.id) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-        role = userData?.role || null;
-        setUserRole(role);
-      }
-
-      let query = supabase
-        .from('announcements')
-        .select(`
-          id,
-          title,
-          content,
-          target_role,
-          image_url,
-          created_at
-        `)
-        .order('created_at', { ascending: false });
-
-      if (role !== 'admin' && role !== 'management') {
-        if (role) {
-          query = query.or(`target_role.eq.${role},target_role.is.null`);
-        } else {
-          // If no role found, only show public announcements (target_role is null)
-          query = query.is('target_role', null);
-        }
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching announcements:', error);
-        showNotification('error', 'حدث خطأ أثناء جلب الإعلانات: ' + error.message);
-        setAnnouncements([]);
-      } else {
-        setAnnouncements((data as unknown) as Announcement[] || []);
-      }
-    } catch (error: any) {
-      console.error('Error:', error);
-      showNotification('error', 'حدث خطأ غير متوقع: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadAnnouncements = useCallback(async () => {
+    await fetchAnnouncements(userRole);
+  }, [fetchAnnouncements, userRole]);
 
   useEffect(() => {
-    fetchAnnouncements();
-  }, [fetchAnnouncements]);
+    loadAnnouncements();
+  }, [loadAnnouncements]);
 
   const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,60 +63,15 @@ export default function AnnouncementsPage() {
 
     setIsSubmitting(true);
     try {
-      const payload = {
-        title: currentAnnouncement.title,
-        content: currentAnnouncement.content,
-        target_role: currentAnnouncement.target_role === 'all' ? null : currentAnnouncement.target_role,
-        image_url: currentAnnouncement.image_url || null,
-      };
-
-      if (currentAnnouncement.id) {
-        // Update
-        // Delete old image if it's being replaced
-        if (currentAnnouncement.image_url && currentAnnouncement.image_url !== payload.image_url) {
-          await deleteFromCloudinary(currentAnnouncement.image_url);
-        }
-
-        const { error } = await supabase
-          .from('announcements')
-          .update(payload)
-          .eq('id', currentAnnouncement.id);
-          
-        if (error) throw error;
-      } else {
-        // Insert
-        const { data: newAnn, error } = await supabase
-          .from('announcements')
-          .insert([payload])
-          .select()
-          .single();
-          
-        if (error) throw error;
-
-        // Send Notifications to target audience
-        try {
-          let usersQuery = supabase.from('users').select('id');
-          if (payload.target_role) {
-            usersQuery = usersQuery.eq('role', payload.target_role);
-          }
-          const { data: targetUsers } = await usersQuery;
-
-          if (targetUsers && targetUsers.length > 0) {
-            const notificationPayloads = targetUsers.map(user => ({
-              user_id: user.id,
-              title: 'إعلان جديد',
-              content: payload.title,
-              type: 'announcement',
-              link: '/announcements'
-            }));
-            await supabase.from('notifications').insert(notificationPayloads);
-          }
-        } catch (notifErr) {
-          console.error('Error sending announcement notifications:', notifErr);
-        }
+      // Delete old image if it's being replaced
+      const originalAnn = announcements.find(a => a.id === currentAnnouncement.id);
+      if (originalAnn?.image_url && originalAnn.image_url !== currentAnnouncement.image_url) {
+        await deleteFromCloudinary(originalAnn.image_url);
       }
 
-      await fetchAnnouncements();
+      await saveAnnouncement(currentAnnouncement);
+
+      await loadAnnouncements();
       setIsModalOpen(false);
       setCurrentAnnouncement({});
       showNotification('success', 'تم حفظ الإعلان بنجاح!');
@@ -187,18 +87,10 @@ export default function AnnouncementsPage() {
     if (!announcementToDelete) return;
     
     try {
-      // Get the announcement to find its image_url
       const annToDelete = announcements.find(a => a.id === announcementToDelete);
+      await deleteAnnouncement(announcementToDelete, annToDelete?.image_url);
 
-      const { error } = await supabase.from('announcements').delete().eq('id', announcementToDelete);
-      if (error) throw error;
-
-      // Delete from Cloudinary if it's a Cloudinary URL
-      if (annToDelete?.image_url) {
-        await deleteFromCloudinary(annToDelete.image_url);
-      }
-
-      await fetchAnnouncements();
+      await loadAnnouncements();
       showNotification('success', 'تم حذف الإعلان بنجاح');
     } catch (error) {
       console.error('Error deleting announcement:', error);

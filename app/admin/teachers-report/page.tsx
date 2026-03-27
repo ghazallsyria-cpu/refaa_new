@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion } from "motion/react";
 import {
   CheckCircle2, FileText, Download, Users, Calendar, Clock, Search
@@ -33,6 +33,7 @@ const MONTH_MAP: Record<number, string> = {
 };
 
 export default function TeachersReportPage() {
+  const { loading: hookLoading, fetchTeachersReportData } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState<"day" | "week">("day");
@@ -54,95 +55,62 @@ export default function TeachersReportPage() {
     setLoading(true);
     try {
       const now = new Date();
-      const todayStrLocal = now.toISOString().split("T")[0];
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const fromDate = reportType === "day" ? todayStr : weekAgoStr;
       
       const jsDay = now.getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
-      const { data: teachersData, error: teachersError } = await supabase
-        .from("teachers")
-        .select("id, specialization, users(full_name)");
+      const data = await fetchTeachersReportData(reportType, todayStr, dbDay, weekAgoStr);
 
-      if (teachersError) {
-        console.error("Error fetching teachers:", teachersError);
-        return;
-      }
-      if (!teachersData) return;
+      const results: TeacherReport[] = data.map((item: any) => {
+        const { teacher, scheduleData, attendanceData } = item;
+        const total = scheduleData?.length || 0;
 
-      const results: TeacherReport[] = await Promise.all(
-        teachersData.map(async (teacher: any) => {
-          // جدول المعلم
-          const daysFilter = reportType === "day"
-            ? [dbDay]
-            : [1, 2, 3, 4, 5];
+        const recorded = scheduleData?.filter((slot: any) =>
+          attendanceData?.some((a: any) => {
+            const aDate = new Date(a.date);
+            const aDay = aDate.getDay();
+            const aDbDay = aDay === 0 ? 1 : aDay === 1 ? 2 : aDay === 2 ? 3 : aDay === 3 ? 4 : aDay === 4 ? 5 : 0;
+            return a.section_id === slot.section_id && a.period_number === slot.period && aDbDay === slot.day_of_week;
+          })
+        ).length || 0;
 
-          const { data: scheduleData, error: scheduleError } = await supabase
-            .from("schedules")
-            .select("section_id, day_of_week, period")
-            .eq("teacher_id", teacher.id)
-            .in("day_of_week", daysFilter);
+        const missed = total - recorded;
+        let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
 
-          if (scheduleError) console.error("Error fetching schedule:", scheduleError);
+        const lastRecorded = attendanceData && attendanceData.length > 0
+          ? [...attendanceData].sort((a, b) => b.date.localeCompare(a.date))[0].date
+          : null;
 
-          const total = scheduleData?.length || 0;
+        let status: TeacherReport["status"] = "ممتاز";
+        let notes = "";
 
-          // سجلات الحضور
-          const { data: attendanceData, error: attendanceError } = await supabase
-            .from("attendance_sessions")
-            .select("date, section_id, period_number")
-            .eq("teacher_id", teacher.id)
-            .gte("date", fromDate);
+        if (total === 0) {
+          notes = "لا يوجد حصص مجدولة";
+          status = "ممتاز";
+          percent = 100;
+        } else {
+          if (percent < 60 || (missed > 0 && reportType === "day")) status = "حرج";
+          else if (percent < 85) status = "تحذير";
+          else if (percent < 95) status = "جيد";
+        }
 
-          if (attendanceError) console.error("Error fetching attendance:", attendanceError);
+        const teacherName = teacher.users 
+          ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
+          : "غير محدد";
 
-          const recorded = scheduleData?.filter((slot: any) =>
-            attendanceData?.some(a => {
-              const aDate = new Date(a.date);
-              const aDay = aDate.getDay();
-              const aDbDay = aDay === 0 ? 1 : aDay === 1 ? 2 : aDay === 2 ? 3 : aDay === 3 ? 4 : aDay === 4 ? 5 : 0;
-              return a.section_id === slot.section_id && a.period_number === slot.period && aDbDay === slot.day_of_week;
-            })
-          ).length || 0;
-
-          const missed = total - recorded;
-          let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
-
-          const lastRecorded = attendanceData && attendanceData.length > 0
-            ? [...attendanceData].sort((a, b) => b.date.localeCompare(a.date))[0].date
-            : null;
-
-          let status: TeacherReport["status"] = "ممتاز";
-          let notes = "";
-
-          if (total === 0) {
-            notes = "لا يوجد حصص مجدولة";
-            status = "ممتاز"; // No classes scheduled is not a failure
-            percent = 100;
-          } else {
-            if (percent < 60 || (missed > 0 && reportType === "day")) status = "حرج";
-            else if (percent < 85) status = "تحذير";
-            else if (percent < 95) status = "جيد";
-          }
-
-          const teacherName = teacher.users 
-            ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
-            : "غير محدد";
-
-          return {
-            id: teacher.id,
-            name: teacherName || "غير محدد",
-            specialization: teacher.specialization || "غير محدد",
-            recorded, missed, total, percent,
-            lastRecorded, status, notes,
-            selected: true,
-          };
-        })
-      );
+        return {
+          id: teacher.id,
+          name: teacherName || "غير محدد",
+          specialization: teacher.specialization || "غير محدد",
+          recorded, missed, total, percent,
+          lastRecorded, status, notes,
+          selected: true,
+        };
+      });
 
       setTeachers(results);
     } catch (e) {
@@ -150,7 +118,7 @@ export default function TeachersReportPage() {
     } finally {
       setLoading(false);
     }
-  }, [reportType, todayStr]);
+  }, [reportType, todayStr, fetchTeachersReportData]);
 
   useEffect(() => {
     if (todayStr) {

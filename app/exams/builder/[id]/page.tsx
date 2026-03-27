@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { 
   Plus, Save, Eye, Settings, Trash2, 
   Copy, GripVertical, Image as ImageIcon, 
@@ -16,6 +15,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as Switch from '@radix-ui/react-switch';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
 
 type QuestionType = 'multiple_choice' | 'true_false' | 'multi_select' | 'essay' | 'fill_in_blank' | 'matching' | 'ordering';
 
@@ -70,6 +70,7 @@ export default function QuizBuilder() {
   const { user, userRole } = useAuth();
   const isNew = params.id === 'new';
   
+  const { fetchExamDetails, saveExam } = useExamsSystem();
   const [exam, setExam] = useState<ExamData>({
     title: '',
     description: '',
@@ -142,36 +143,13 @@ export default function QuizBuilder() {
   const fetchInitialData = useCallback(async () => {
     try {
       if (!isNew) {
-        const { data: examData, error: examError } = await supabase
-          .from('exams')
-          .select('*')
-          .eq('id', params.id)
-          .single();
-
-        if (examError) throw examError;
-
-        const { data: examSectionsData, error: examSectionsError } = await supabase
-          .from('exam_sections')
-          .select('section_id')
-          .eq('exam_id', params.id);
-        
-        if (examSectionsError) throw examSectionsError;
+        const { exam: examData, questions: questionsData } = await fetchExamDetails(params.id as string);
         
         setExam({
           ...examData,
-          section_ids: examSectionsData ? examSectionsData.map(es => es.section_id) : []
+          section_ids: examData.section_ids || []
         });
 
-        const { data: questionsData, error: questionsError } = await supabase
-          .from('questions')
-          .select(`
-            *,
-            options:question_options(*)
-          `)
-          .eq('exam_id', params.id)
-          .order('order_index');
-
-        if (questionsError) throw questionsError;
         setQuestions(questionsData || []);
       } else {
         // Default first question
@@ -186,7 +164,7 @@ export default function QuizBuilder() {
     } finally {
       setLoading(false);
     }
-  }, [isNew, params.id, addQuestion, user]);
+  }, [isNew, params.id, addQuestion, user, fetchExamDetails]);
 
   useEffect(() => {
     fetchInitialData();
@@ -279,128 +257,29 @@ export default function QuizBuilder() {
 
     setSaving(true);
     try {
-      // 1. Save Exam
-      let examId = exam.id;
       let finalTeacherId = exam.teacher_id;
 
-      if (!finalTeacherId) {
-        const userId = (await supabase.auth.getUser()).data.user?.id;
-        const { data: teacher, error: teacherError } = await supabase.from('teachers').select('id').eq('id', userId).single();
-        if (teacherError || !teacher) {
-          throw new Error('لم يتم العثور على سجل المعلم. يرجى التأكد من تسجيل الدخول كمعلم أو اختيار معلم من القائمة.');
-        }
-        finalTeacherId = teacher.id;
-      }
-
-      const { section_ids, ...examPayload } = exam;
-      
-      if (isNew) {
-        const { data: newExam, error } = await supabase
-          .from('exams')
-          .insert([{ 
-            ...examPayload, 
-            max_score: exam.max_score || 100, 
-            total_marks: exam.max_score || 100, 
-            teacher_id: finalTeacherId, 
-            status: exam.status,
-            start_time: exam.start_time,
-            end_time: exam.end_time
-          }])
-          .select()
-          .single();
-        if (error) throw error;
-        examId = newExam.id;
-      } else {
-        const { error } = await supabase
-          .from('exams')
-          .update({ 
-            ...examPayload, 
-            max_score: exam.max_score || 100, 
-            total_marks: exam.max_score || 100, 
-            teacher_id: finalTeacherId, 
-            status: exam.status,
-            start_time: exam.start_time,
-            end_time: exam.end_time
-          })
-          .eq('id', examId);
-        if (error) throw error;
-      }
-
-      // 2. Save Exam Sections
-      await supabase.from('exam_sections').delete().eq('exam_id', examId);
-      if (section_ids && section_ids.length > 0) {
-        const sectionsToInsert = section_ids.map((sId: string) => ({
-          exam_id: examId,
-          section_id: sId
-        }));
-        const { error: sectionsError } = await supabase.from('exam_sections').insert(sectionsToInsert);
-        if (sectionsError) throw sectionsError;
-      }
-
-      // 2. Save Questions (Delete old ones and insert new ones for simplicity in this demo)
-      // In production, you'd want to sync them properly
-      await supabase.from('questions').delete().eq('exam_id', examId);
-
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const { data: newQ, error: qError } = await supabase
-          .from('questions')
-          .insert([{
-            exam_id: examId,
-            type: q.type,
-            content: q.content,
-            points: q.points,
-            explanation: q.explanation,
-            order_index: i,
-            media_url: q.media_url,
-            media_type: q.media_type
-          }])
-          .select()
-          .single();
-
-        if (qError) throw qError;
-
-      if (q.options.length > 0) {
-          const optionsPayload = q.options.map((o, idx) => ({
-            question_id: newQ.id,
-            content: o.content,
-            is_correct: o.is_correct,
-            order_index: idx
-          }));
-          await supabase.from('question_options').insert(optionsPayload);
+      if (!finalTeacherId && userRole === 'admin') {
+        if (teachers.length > 0) {
+          finalTeacherId = teachers[0].id;
+        } else {
+          throw new Error('يجب اختيار معلم للاختبار');
         }
       }
 
-      // 3. Send Notifications if Published
-      if (exam.status === 'published') {
-        try {
-          let studentsQuery = supabase.from('students').select('id');
-          if (exam.section_ids && exam.section_ids.length > 0) {
-            studentsQuery = studentsQuery.in('section_id', exam.section_ids);
-          }
-          const { data: students } = await studentsQuery;
+      const examPayload = {
+        ...exam,
+        teacher_id: userRole === 'teacher' ? user?.id : finalTeacherId,
+        max_score: exam.max_score || 100,
+        total_marks: exam.max_score || 100
+      };
 
-          if (students && students.length > 0) {
-            const subjectName = subjects.find(s => s.id === exam.subject_id)?.name || 'المادة';
-            const notificationPayloads = students.map(student => ({
-              user_id: student.id,
-              title: 'اختبار جديد متاح',
-              content: `تم نشر اختبار جديد في مادة ${subjectName}: ${exam.title}`,
-              type: 'exam',
-              link: `/exams/take/${examId}`
-            }));
-            await supabase.from('notifications').insert(notificationPayloads);
-          }
-        } catch (notifErr) {
-          console.error('Error sending exam notifications:', notifErr);
-          // Don't fail the whole save if notifications fail
-        }
-      }
+      await saveExam(examPayload, questions, isNew);
 
+      showNotification('success', exam.status === 'published' ? 'تم نشر الاختبار بنجاح' : 'تم حفظ الاختبار بنجاح');
       router.push('/exams');
     } catch (err: any) {
       console.error('Error saving quiz:', err);
-      // If err is an object, try to stringify it, otherwise use message
       const errorMessage = (err && typeof err === 'object') ? JSON.stringify(err, Object.getOwnPropertyNames(err)) : String(err);
       console.error('Full error details:', errorMessage);
       showNotification('error', `حدث خطأ أثناء حفظ الاختبار: ${err.message || errorMessage}`);

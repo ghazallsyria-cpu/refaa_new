@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Users, 
   GraduationCap, 
@@ -25,6 +24,7 @@ import {
   Pie, 
   Cell 
 } from 'recharts';
+import { useReportsSystem } from '@/hooks/useReportsSystem';
 
 // No mock data
 
@@ -42,40 +42,24 @@ export default function ReportsPage() {
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
   const [distributionData, setDistributionData] = useState<any[]>([]);
   const [gradesData, setGradesData] = useState<any[]>([]);
+  const { fetchReportsData } = useReportsSystem();
 
-  useEffect(() => {
-    setMounted(true);
-    fetchBasicStats();
-  }, []);
-
-  const fetchBasicStats = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [
-        studentsRes, 
-        teachersRes, 
-        classesRes, 
-        attendanceRes,
-        classDistributionRes
-      ] = await Promise.all([
-        supabase.from('students').select('id', { count: 'exact', head: true }),
-        supabase.from('teachers').select('id', { count: 'exact', head: true }),
-        supabase.from('classes').select('id', { count: 'exact', head: true }),
-        supabase.from('daily_attendance_summary').select('daily_status, date').gte('date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-        supabase.from('classes').select('level, sections(students(id))')
-      ]);
-
+      const data = await fetchReportsData();
+      
       // Calculate average attendance
       let avgAttendance = 0;
-      if (attendanceRes.data && attendanceRes.data.length > 0) {
-        const presentCount = attendanceRes.data.filter(a => a.daily_status === 'present').length;
-        avgAttendance = Math.round((presentCount / attendanceRes.data.length) * 100);
+      if (data.attendanceData && data.attendanceData.length > 0) {
+        const presentCount = data.attendanceData.filter((a: any) => a.daily_status === 'present').length;
+        avgAttendance = Math.round((presentCount / data.attendanceData.length) * 100);
       }
 
       setStats({
-        totalStudents: studentsRes.count || 0,
-        totalTeachers: teachersRes.count || 0,
-        totalClasses: classesRes.count || 0,
+        totalStudents: data.studentsCount,
+        totalTeachers: data.teachersCount,
+        totalClasses: data.classesCount,
         avgAttendance: avgAttendance,
       });
 
@@ -87,10 +71,10 @@ export default function ReportsPage() {
       }).reverse();
 
       const chartData = last7Days.map(date => {
-        const dayData = attendanceRes.data?.filter(a => a.date === date) || [];
-        const present = dayData.filter(a => a.daily_status === 'present').length;
-        const absent = dayData.filter(a => a.daily_status === 'full_absent').length;
-        const partial = dayData.filter(a => a.daily_status === 'partial_absent').length;
+        const dayData = data.attendanceData?.filter((a: any) => a.date === date) || [];
+        const present = dayData.filter((a: any) => a.daily_status === 'present').length;
+        const absent = dayData.filter((a: any) => a.daily_status === 'full_absent').length;
+        const partial = dayData.filter((a: any) => a.daily_status === 'partial_absent').length;
         const dayName = new Date(date).toLocaleDateString('ar-SA', { weekday: 'short' });
         return { name: dayName, present, absent, partial };
       }).filter(d => d.present > 0 || d.absent > 0 || d.partial > 0);
@@ -98,9 +82,9 @@ export default function ReportsPage() {
       setAttendanceData(chartData);
 
       // Process distribution data
-      if (classDistributionRes.data) {
+      if (data.classDistribution) {
         const levelCounts: Record<number, number> = {};
-        classDistributionRes.data.forEach(cls => {
+        data.classDistribution.forEach((cls: any) => {
           const studentCount = cls.sections?.reduce((acc: number, sec: any) => acc + (sec.students?.length || 0), 0) || 0;
           levelCounts[cls.level] = (levelCounts[cls.level] || 0) + studentCount;
         });
@@ -113,15 +97,11 @@ export default function ReportsPage() {
         setDistributionData(distData);
       }
 
-      // Fetch grades data
-      const { data: attemptsData } = await supabase
-        .from('exam_attempts')
-        .select('score, exam:exams(subject:subjects(name))');
-
-      if (attemptsData && attemptsData.length > 0) {
+      // Process grades data
+      if (data.attemptsData && data.attemptsData.length > 0) {
         const subjectGrades: Record<string, { total: number, count: number }> = {};
         
-        attemptsData.forEach((attempt: any) => {
+        data.attemptsData.forEach((attempt: any) => {
           const subjectName = attempt.exam?.subject?.name || 'غير محدد';
           if (!subjectGrades[subjectName]) {
             subjectGrades[subjectName] = { total: 0, count: 0 };
@@ -141,11 +121,16 @@ export default function ReportsPage() {
       }
 
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Error fetching reports data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchReportsData]);
+
+  useEffect(() => {
+    setMounted(true);
+    fetchData();
+  }, [fetchData]);
 
   const StatCard = ({ title, value, icon: Icon, colorClass, delay }: any) => (
     <div className={`glass-card p-8 rounded-4xl border border-slate-200/60 shadow-2xl shadow-slate-200/50 flex items-center gap-6 hover:-translate-y-1 transition-all duration-500 group animate-in fade-in slide-in-from-bottom-4 fill-mode-both`} style={{ animationDelay: `${delay}ms` }}>
