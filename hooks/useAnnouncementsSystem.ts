@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { normalizeString } from '@/lib/utils';
 
 export interface Announcement {
   id: string;
@@ -9,7 +10,7 @@ export interface Announcement {
   target_role: string | null;
   created_at: string;
   author_id?: string;
-  image_url?: string | null;
+  image_url?: string;
   users?: { full_name: string };
 }
 
@@ -45,8 +46,14 @@ export function useAnnouncementsSystem() {
       const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
-      setAnnouncements((data as unknown) as Announcement[] || []);
-      return (data as unknown) as Announcement[];
+
+      const normalizedData = (data || []).map((a: any) => ({
+        ...a,
+        image_url: normalizeString(a.image_url)
+      }));
+
+      setAnnouncements(normalizedData as Announcement[]);
+      return normalizedData as Announcement[];
     } catch (err: any) {
       console.error('Error fetching announcements:', err);
       setError(err.message);

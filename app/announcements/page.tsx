@@ -516,7 +516,7 @@ export default function AnnouncementsPage() {
                 <div className="space-y-4">
                   <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] px-2">صورة الإعلان (اختياري)</label>
                   <ImageUpload 
-                    initialImageUrl={currentAnnouncement.image_url}
+                    initialImageUrl={currentAnnouncement.image_url ?? undefined}
                     onUploadSuccess={(url) => setCurrentAnnouncement({...currentAnnouncement, image_url: url || undefined})}
                     label="إرفاق صورة مع الإعلان"
                   />

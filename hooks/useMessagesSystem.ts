@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
+import { normalizeString } from '@/lib/utils';
 
 export interface Message {
   id: string;
@@ -23,6 +24,7 @@ export interface Announcement {
   content: string;
   target_role?: string;
   created_at: string;
+  image_url?: string;
   author?: any;
 }
 
@@ -76,7 +78,13 @@ export function useMessagesSystem() {
 
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
-      setAnnouncements(data || []);
+
+      const normalizedData = (data || []).map((a: any) => ({
+        ...a,
+        image_url: normalizeString(a.image_url)
+      }));
+
+      setAnnouncements(normalizedData as Announcement[]);
     } catch (err: any) {
       console.error('Error fetching announcements:', err);
       setError(err.message);
