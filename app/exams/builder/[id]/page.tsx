@@ -6,7 +6,8 @@ import {
   Plus, Save, Trash2, Copy, GripVertical, 
   ArrowRight, Check, X, Image as ImageIcon,
   Clock, Target, FileText, Calendar, Layout, 
-  Settings as SettingsIcon, ShieldCheck, Shuffle, Eye
+  Settings as SettingsIcon, ShieldCheck, Shuffle, Eye,
+  List // تم إضافة الاستيراد المفقود هنا
 } from 'lucide-react';
 import { motion, Reorder, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -240,7 +241,7 @@ export default function QuizBuilder() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
-      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl">
+      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl shadow-slate-200/20">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <button onClick={() => router.back()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 transition-all active:scale-95"><ArrowRight className="h-5 w-5" /></button>
@@ -248,7 +249,6 @@ export default function QuizBuilder() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* زر الإعدادات */}
             <Dialog.Root>
               <Dialog.Trigger asChild>
                 <button className="h-12 px-5 flex items-center gap-3 rounded-2xl bg-white border border-slate-200 text-slate-600 font-black hover:text-indigo-600 hover:border-indigo-100 transition-all active:scale-95 shadow-sm">
@@ -292,7 +292,7 @@ export default function QuizBuilder() {
                   </div>
 
                   <div className="mt-10">
-                    <Dialog.Close className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all">تم حفظ الإعدادات</Dialog.Close>
+                    <Dialog.Close className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all text-center">تم حفظ الإعدادات</Dialog.Close>
                   </div>
                 </Dialog.Content>
               </Dialog.Portal>
@@ -310,7 +310,6 @@ export default function QuizBuilder() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-12 space-y-10">
-        {/* إعدادات الاختبار الرئيسية */}
         <div className="glass-card rounded-[40px] border-t-[16px] border-t-indigo-600 p-10 space-y-8 shadow-2xl shadow-slate-200/50">
           <div className="space-y-6">
             <input 
