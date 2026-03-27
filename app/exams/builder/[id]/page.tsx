@@ -64,7 +64,7 @@ type ClassData = {
 export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
-  const { user, userRole } = useAuth();
+  const { user } = useAuth();
   const { fetchExamDetails, saveExam } = useExamsSystem();
 
   const isNew = params.id === 'new';
@@ -95,19 +95,12 @@ export default function QuizBuilder() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [notification, setNotification] =
-    useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const subjects = formData?.subjects || [];
   const sections = (formData?.sections || []).map(s => ({
     id: s.id,
     name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name
   }));
-
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
 
   const addQuestion = useCallback((type: QuestionType) => {
     const newQuestion: Question = {
@@ -134,7 +127,9 @@ export default function QuizBuilder() {
   }, []);
 
   const updateQuestion = (id: string, updates: Partial<Question>) => {
-    setQuestions(prev => prev.map(q => (q.id === id ? { ...q, ...updates } : q)));
+    setQuestions(prev =>
+      prev.map(q => (q.id === id ? { ...q, ...updates } : q))
+    );
   };
 
   const updateOption = (qid: string, oid: string, updates: Partial<Option>) => {
@@ -144,7 +139,10 @@ export default function QuizBuilder() {
 
         const options = q.options.map(o => {
           if (o.id === oid) return { ...o, ...updates };
-          return updates.is_correct ? { ...o, is_correct: false } : o;
+
+          if (updates.is_correct) return { ...o, is_correct: false };
+
+          return o;
         });
 
         return { ...q, options };
@@ -158,12 +156,6 @@ export default function QuizBuilder() {
 
   const handleSave = async () => {
     if (!exam.title || !exam.subject_id) return;
-
-    const total = questions.reduce((s, q) => s + Number(q.points || 0), 0);
-    if (total !== Number(exam.max_score)) {
-      showNotification('error', 'مجموع الدرجات غير مطابق');
-      return;
-    }
 
     setSaving(true);
 
@@ -188,17 +180,12 @@ export default function QuizBuilder() {
     };
 
     load();
-  }, [isNew, params.id]);
+  }, [isNew, params.id, fetchExamDetails, addQuestion]);
 
   if (loading) return <div className="p-10">Loading...</div>;
 
   return (
     <div className="p-6 space-y-10">
-      {notification && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-white shadow p-4 rounded">
-          {notification.message}
-        </div>
-      )}
 
       <input
         value={exam.title}
@@ -229,13 +216,6 @@ export default function QuizBuilder() {
                     updateOption(q.id, o.id, { content: e.target.value })
                   }
                 />
-                <button
-                  onClick={() =>
-                    updateOption(q.id, o.id, { is_correct: !o.is_correct })
-                  }
-                >
-                  ✓
-                </button>
               </div>
             ))}
 
