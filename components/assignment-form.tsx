@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, Circle, Square, Type, AlignLeft, AlertCircle, Send } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Question, QuestionType } from './assignment-builder';
+// 1. تحديث مسار الاستيراد ليكون من ملف الـ Types المخصص
+import { Question, QuestionType } from '@/types/question';
 
 interface AssignmentFormProps {
   questions: Question[];
@@ -43,14 +44,14 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     }
   };
 
-  const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
+  const handleCheckboxChange = (questionId: string, optionContent: string, checked: boolean) => {
     if (readOnly) return;
     const currentAnswers = (answers[questionId] as string[]) || [];
     let newAnswers: string[];
     if (checked) {
-      newAnswers = [...currentAnswers, option];
+      newAnswers = [...currentAnswers, optionContent];
     } else {
-      newAnswers = currentAnswers.filter(a => a !== option);
+      newAnswers = currentAnswers.filter(a => a !== optionContent);
     }
     handleAnswerChange(questionId, newAnswers);
   };
@@ -91,7 +92,8 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
-                  {question.text}
+                  {/* 2. تغيير text إلى content */}
+                  {question.content}
                   {question.isRequired && <span className="text-red-500 mr-1">*</span>}
                 </h3>
               </div>
@@ -125,35 +127,36 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
 
               {question.type === 'multiple_choice' && (
                 <div className="space-y-3">
-                  {question.options?.map((option, optIndex) => (
+                  {/* 3. التعامل مع option ككائن يحتوي على content */}
+                  {question.options?.map((option) => (
                     <label
-                      key={optIndex}
+                      key={option.id}
                       className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer group ${
-                        answers[question.id] === option 
+                        answers[question.id] === option.content 
                           ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-100' 
                           : 'bg-white border-slate-100 hover:bg-slate-50'
                       } ${readOnly ? 'cursor-default' : ''}`}
                     >
                       <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                        answers[question.id] === option 
+                        answers[question.id] === option.content 
                           ? 'border-indigo-600 bg-indigo-600' 
                           : 'border-slate-300 group-hover:border-indigo-400'
                       }`}>
-                        {answers[question.id] === option && <div className="h-2 w-2 bg-white rounded-full" />}
+                        {answers[question.id] === option.content && <div className="h-2 w-2 bg-white rounded-full" />}
                       </div>
                       <input
                         type="radio"
                         className="hidden"
                         name={question.id}
-                        value={option}
-                        checked={answers[question.id] === option}
-                        onChange={() => handleAnswerChange(question.id, option)}
+                        value={option.content}
+                        checked={answers[question.id] === option.content}
+                        onChange={() => handleAnswerChange(question.id, option.content)}
                         disabled={readOnly}
                       />
                       <span className={`text-sm font-bold transition-colors ${
-                        answers[question.id] === option ? 'text-indigo-900' : 'text-slate-600'
+                        answers[question.id] === option.content ? 'text-indigo-900' : 'text-slate-600'
                       }`}>
-                        {option}
+                        {option.content}
                       </span>
                     </label>
                   ))}
@@ -162,11 +165,12 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
 
               {question.type === 'checkbox' && (
                 <div className="space-y-3">
-                  {question.options?.map((option, optIndex) => {
-                    const isChecked = (answers[question.id] as string[] || []).includes(option);
+                  {/* 3. التعامل مع option ككائن يحتوي على content */}
+                  {question.options?.map((option) => {
+                    const isChecked = (answers[question.id] as string[] || []).includes(option.content);
                     return (
                       <label
-                        key={optIndex}
+                        key={option.id}
                         className={`flex items-center gap-4 p-4 rounded-2xl border transition-all cursor-pointer group ${
                           isChecked 
                             ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-100' 
@@ -183,15 +187,15 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         <input
                           type="checkbox"
                           className="hidden"
-                          value={option}
+                          value={option.content}
                           checked={isChecked}
-                          onChange={(e) => handleCheckboxChange(question.id, option, e.target.checked)}
+                          onChange={(e) => handleCheckboxChange(question.id, option.content, e.target.checked)}
                           disabled={readOnly}
                         />
                         <span className={`text-sm font-bold transition-colors ${
                           isChecked ? 'text-indigo-900' : 'text-slate-600'
                         }`}>
-                          {option}
+                          {option.content}
                         </span>
                       </label>
                     );
@@ -231,3 +235,4 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     </form>
   );
 }
+
