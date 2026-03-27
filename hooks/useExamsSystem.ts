@@ -81,7 +81,6 @@ export function useExamsSystem() {
           submission_status: studentAttempt ? 'submitted' : 'pending'
         };
       });
-
       setData(mappedData);
     } catch (err: any) {
       setError(err.message);
@@ -139,6 +138,51 @@ export function useExamsSystem() {
     fetchExams();
   }, [fetchExams]);
 
+  // --- دالة نتائج الاختبار المصلحة لحل خطأ الـ Build ---
+  const fetchExamResults = useCallback(async (examId: string) => {
+    // 1. جلب الاختبار
+    const { data: exam } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single();
+    
+    // 2. جلب المحاولات مع بيانات الطالب
+    const { data: attempts } = await supabase
+      .from('exam_attempts')
+      .select(`
+        *, 
+        student:students(
+          id, 
+          users:id(full_name), 
+          section:sections(name)
+        )
+      `)
+      .eq('exam_id', examId);
+
+    // 3. جلب الصفوف المسند لها الاختبار لجلب قائمة الطلاب كاملة
+    const { data: assignedSections } = await supabase.from('exam_sections').select('section_id').eq('exam_id', examId);
+    const sectionIds = assignedSections?.map(s => s.section_id) || [];
+
+    let studentsData: any[] = [];
+    if (sectionIds.length > 0) {
+      const { data: students } = await supabase
+        .from('students')
+        .select(`id, users:id(full_name), section:sections(name)`)
+        .in('section_id', sectionIds);
+      
+      studentsData = students?.map((s: any) => ({
+        id: s.id,
+        full_name: Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name,
+        section_name: s.section?.name
+      })) || [];
+    }
+
+    return { 
+      exam: { ...exam, subject_name: exam?.subject?.name }, 
+      students: studentsData, // الحقل الذي كان يسبب الخطأ
+      attempts: attempts || [], 
+      questions: [], 
+      answers: [] 
+    };
+  }, []);
+
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
     const [eRes, sRes, aRes] = await Promise.all([
       supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single(),
@@ -152,12 +196,6 @@ export function useExamsSystem() {
     }
     const fullName = Array.isArray(sRes.data?.users) ? sRes.data.users[0]?.full_name : sRes.data?.users?.full_name;
     return { exam: { ...eRes.data, subject_name: eRes.data?.subject?.name }, student: { ...sRes.data, full_name: fullName }, attempt: aRes.data, answers };
-  }, []);
-
-  const fetchExamResults = useCallback(async (examId: string) => {
-    const { data: exam } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single();
-    const { data: attempts } = await supabase.from('exam_attempts').select(`*, student:students(id, users(full_name), section:sections(name))`).eq('exam_id', examId);
-    return { exam, attempts: attempts || [], questions: [], answers: [] };
   }, []);
 
   const deleteAttempt = useCallback(async (id: string) => {
