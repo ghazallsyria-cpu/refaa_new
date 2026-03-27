@@ -15,29 +15,42 @@ import { useAuth } from '@/context/auth-context';
 
 export default function ExamsDashboard() {
   const { user, userRole, isChecking: authLoading } = useAuth();
-  const { data: exams, loading: contentLoading, error: contentError, refetch: refresh, deleteExamWithMedia } = useExamsSystem();
+  
+  // استدعاء الهوك مع التأكد من جلب الدالة الجديدة
+  const { 
+    data: exams, 
+    loading: contentLoading, 
+    error: contentError, 
+    refetch: refresh, 
+    deleteExamWithMedia 
+  } = useExamsSystem();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 0);
-    return () => clearTimeout(timer);
+    setMounted(true);
   }, []);
 
-  const filteredExams = exams.filter(exam => {
-    const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
+  // الحماية من الأخطاء في حال كانت المصفوفة غير موجودة
+  const filteredExams = (exams || []).filter(exam => {
+    const titleMatch = exam.title?.toLowerCase().includes(searchTerm.toLowerCase());
+    const subjectMatch = exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = titleMatch || subjectMatch;
     const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const handleDelete = async (examId: string) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) return;
+    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار نهائياً مع كافة ملفاته؟')) return;
     
     try {
-      await deleteExamWithMedia(examId);
+      if (deleteExamWithMedia) {
+        await deleteExamWithMedia(examId);
+        // تحديث القائمة بعد الحذف
+        if (refresh) refresh();
+      }
     } catch (err) {
       console.error('Error deleting exam:', err);
     }
@@ -83,10 +96,10 @@ export default function ExamsDashboard() {
     return 'available';
   };
 
-  if (!mounted || authLoading) {
+  if (!mounted || authLoading || contentLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
@@ -132,17 +145,15 @@ export default function ExamsDashboard() {
         {isTeacherOrAdmin && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
-              { label: 'إجمالي الاختبارات', value: exams.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', shadow: 'shadow-blue-100' },
-              { label: 'اختبارات منشورة', value: exams.filter(e => e.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
-              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
+              { label: 'إجمالي الاختبارات', value: (exams || []).length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', shadow: 'shadow-blue-100' },
+              { label: 'اختبارات منشورة', value: (exams || []).filter(e => e.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
+              { label: 'إجمالي المحاولات', value: (exams || []).reduce((acc, e) => acc + (e.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
               { 
                 label: 'متوسط النجاح', 
                 value: (() => {
-                  const totalAttempts = exams.reduce((acc, e) => acc + (e.submission_count || 0), 0);
+                  const totalAttempts = (exams || []).reduce((acc, e) => acc + (e.submission_count || 0), 0);
                   if (totalAttempts === 0) return '0%';
-                  const totalScore = exams.reduce((acc, e) => {
-                    return acc + (e.avg_score || 0) * (e.submission_count || 0);
-                  }, 0);
+                  const totalScore = (exams || []).reduce((acc, e) => acc + (e.avg_score || 0) * (e.submission_count || 0), 0);
                   return `${Math.round(totalScore / totalAttempts)}%`;
                 })(), 
                 icon: TrendingUp, 
@@ -212,11 +223,7 @@ export default function ExamsDashboard() {
 
         {/* Exams List */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-          {contentLoading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="glass-card rounded-[3rem] border border-white/60 h-[450px] animate-pulse bg-slate-50/50"></div>
-            ))
-          ) : filteredExams.length > 0 ? (
+          {filteredExams.length > 0 ? (
             <AnimatePresence mode="popLayout">
               {filteredExams.map((exam, index) => (
                 <motion.div
@@ -305,7 +312,7 @@ export default function ExamsDashboard() {
                         <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center">
                           <BookOpen className="h-5 w-5 text-indigo-500" />
                         </div>
-                        <span className="truncate">{exam.subject_name}</span>
+                        <span className="truncate">{exam.subject_name || 'مادة عامة'}</span>
                       </div>
                       <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
                         <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center">
@@ -319,13 +326,13 @@ export default function ExamsDashboard() {
                             <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
                               <FileText className="h-5 w-5 text-blue-500" />
                             </div>
-                            <span>{exam.question_count} سؤال</span>
+                            <span>{exam.question_count || 0} سؤال</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
                             <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
                               <Users className="h-5 w-5 text-emerald-500" />
                             </div>
-                            <span>{exam.submission_count} محاولة</span>
+                            <span>{exam.submission_count || 0} محاولة</span>
                           </div>
                         </>
                       )}
@@ -341,7 +348,7 @@ export default function ExamsDashboard() {
                           </div>
                           <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">متوسط الأداء</p>
-                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score}%</p>
+                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score || 0}%</p>
                           </div>
                         </div>
                         <Link href={`/exams/results/${exam.id}`}>
@@ -423,3 +430,4 @@ export default function ExamsDashboard() {
     </div>
   );
 }
+
