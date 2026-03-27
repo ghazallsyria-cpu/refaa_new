@@ -7,12 +7,13 @@ import Image from 'next/image';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 interface Props {
-  initialImageUrl?: string;
+  initialImageUrl?: string | null;
   onUploadSuccess: (url: string | null) => void;
+  onRemove?: () => void; // تم إضافة هذا السطر لحل مشكلة الـ Build
   label?: string;
 }
 
-export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = "اختر صورة" }: Props) {
+export default function ImageUpload({ initialImageUrl, onUploadSuccess, onRemove, label = "اختر صورة" }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(initialImageUrl || null);
@@ -35,14 +36,8 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
     setError(null);
     setUploading(true);
 
-    if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME === 'YOUR_CLOUDINARY_CLOUD_NAME') {
-      setError('يرجى إعداد Cloudinary Cloud Name في المتغيرات البيئية (Settings -> Secrets)');
-      setUploading(false);
-      return;
-    }
-
-    if (!process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET === 'YOUR_CLOUDINARY_UPLOAD_PRESET') {
-      setError('يرجى إعداد Cloudinary Upload Preset في المتغيرات البيئية (Settings -> Secrets)');
+    if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) {
+      setError('يرجى إعداد Cloudinary Cloud Name');
       setUploading(false);
       return;
     }
@@ -65,17 +60,11 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
       );
 
       const data = await res.json();
-      if (!res.ok) {
-        if (data.error?.message?.includes('disabled')) {
-          throw new Error('حساب Cloudinary الخاص بك معطل أو اسم السحابة غير صحيح. يرجى التحقق من إعدادات Cloudinary.');
-        }
-        throw new Error(data.error?.message || 'فشل الرفع');
-      }
+      if (!res.ok) throw new Error(data.error?.message || 'فشل الرفع');
 
       setImageUrl(data.secure_url);
       onUploadSuccess(data.secure_url);
       
-      // Delete old image if it exists and is different
       if (imageUrl && imageUrl !== data.secure_url) {
         await deleteFromCloudinary(imageUrl);
       }
@@ -89,34 +78,44 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
   return (
     <div className="space-y-4">
       {!imageUrl ? (
-        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50">
+        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
           {uploading ? (
             <Loader2 className="animate-spin text-indigo-600" />
           ) : (
             <>
-              <Upload className="text-slate-400" />
-              <span className="text-sm text-slate-500 mt-2">{label}</span>
+              <Upload className="text-slate-400 mb-2" size={24} />
+              <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{label}</span>
             </>
           )}
           <input type="file" className="hidden" accept="image/*" onChange={handleUpload} disabled={uploading} />
         </label>
       ) : (
-        <div className="relative w-full h-48">
-          <Image src={imageUrl} alt="Uploaded" fill className="object-contain rounded-lg" referrerPolicy="no-referrer" />
+        <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+          <Image 
+            src={imageUrl} 
+            alt="Uploaded" 
+            fill 
+            className="object-contain" 
+            unoptimized 
+          />
           <button 
-            onClick={async () => { 
+            type="button"
+            onClick={async (e) => { 
+              e.preventDefault();
               const oldUrl = imageUrl;
               setImageUrl(null); 
               onUploadSuccess(null); 
+              if (onRemove) onRemove(); // استدعاء دالة الحذف من الأب
               if (oldUrl) await deleteFromCloudinary(oldUrl);
             }} 
-            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full z-10"
+            className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-all z-10"
           >
             <X size={16} />
           </button>
         </div>
       )}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-xs font-bold text-red-500">{error}</p>}
     </div>
   );
 }
+
