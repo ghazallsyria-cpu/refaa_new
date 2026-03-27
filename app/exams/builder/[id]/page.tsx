@@ -3,49 +3,59 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
-  Plus, Save, Eye, Settings, Trash2, Copy, GripVertical, 
-  Image as ImageIcon, Video, Check, X, HelpCircle, 
-  AlertCircle, ArrowRight, Type, List, CheckSquare, 
-  AlignLeft, Hash, Clock, CheckCircle
+  Plus, Save, Trash2, Copy, GripVertical, 
+  ArrowRight, Check, X, Image as ImageIcon
 } from 'lucide-react';
 import { motion, Reorder, AnimatePresence } from 'motion/react';
-import * as Dialog from '@radix-ui/react-dialog';
-import * as Switch from '@radix-ui/react-switch';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
-import { useSchoolFormData } from '@/hooks/use-school-form-data';
 import ImageUpload from '@/components/ImageUpload';
-import { Question, QuestionType, Option, newQuestion as createNewQuestion } from '@/types/question';
+import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { Question, QuestionType, newQuestion as createNewQuestion } from '@/types/question';
 
+// مكون السؤال المنفصل لمنع البطء أثناء الكتابة
 const QuestionCard = memo(({ 
   q, index, updateQuestion, deleteQuestion, duplicateQuestion, addOption, updateOption, deleteOption 
 }: any) => {
   return (
     <Reorder.Item 
       value={q}
-      className="glass-card rounded-[40px] border border-white/60 shadow-2xl group relative overflow-hidden mb-10"
+      className="glass-card rounded-[40px] border border-white/60 shadow-2xl group relative overflow-hidden mb-10 transition-all hover:shadow-indigo-100"
     >
       <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10">
         <GripVertical className="h-6 w-6 text-slate-300" />
       </div>
 
       <div className="p-10 space-y-10">
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="flex-1 space-y-3">
-            <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
-            <input 
-              type="text"
-              value={q.content}
-              onChange={(e) => updateQuestion(q.id, { content: e.target.value })}
-              className="w-full bg-slate-50/50 px-6 py-5 rounded-3xl border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 text-xl font-black transition-all outline-none"
-              placeholder="اكتب سؤالك هنا..."
-            />
-            <ImageUpload
-              initialImageUrl={q.media_url}
-              onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url || undefined, media_type: url ? 'image' : undefined })}
-            />
+        <div className="flex flex-col md:flex-row gap-10">
+          <div className="flex-1 space-y-6">
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
+              <textarea 
+                value={q.content}
+                onChange={(e) => updateQuestion(q.id, { content: e.target.value })}
+                className="w-full bg-slate-50/50 px-6 py-5 rounded-3xl border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 text-xl font-black transition-all outline-none resize-none"
+                placeholder="اكتب سؤالك هنا..."
+                rows={2}
+              />
+            </div>
+
+            {/* قسم الصور المدمج */}
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex items-center gap-2">
+                <ImageIcon className="h-3 w-3" /> صورة توضيحية (اختياري)
+              </label>
+              <ImageUpload 
+                initialImageUrl={q.media_url}
+                onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url, media_type: 'image' })}
+                onRemove={() => {
+                  if (q.media_url) deleteFromCloudinary(q.media_url);
+                  updateQuestion(q.id, { media_url: undefined, media_type: undefined });
+                }}
+              />
+            </div>
           </div>
+
           <div className="w-full md:w-64 space-y-3">
             <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نوع السؤال</label>
             <select 
@@ -61,13 +71,14 @@ const QuestionCard = memo(({
           </div>
         </div>
 
-        {(q.type !== 'essay') && (
+        {q.type !== 'essay' && (
           <div className="space-y-4">
+            <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">خيارات الإجابة</label>
             {q.options?.map((opt: any, optIdx: number) => (
               <div key={opt.id} className="flex items-center gap-5 p-4 rounded-3xl bg-slate-50/50 border border-slate-100 group/opt hover:bg-white hover:shadow-lg transition-all">
                 <button 
                   onClick={() => updateOption(q.id, opt.id, { is_correct: !opt.is_correct })}
-                  className={`h-10 w-10 rounded-2xl border-2 flex items-center justify-center transition-all ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-200' : 'border-slate-200 bg-white hover:border-indigo-500'}`}
+                  className={`h-10 w-10 rounded-2xl border-2 flex items-center justify-center transition-all ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg' : 'border-slate-200 bg-white hover:border-indigo-500'}`}
                 >
                   {opt.is_correct && <Check className="h-6 w-6" />}
                 </button>
@@ -78,12 +89,12 @@ const QuestionCard = memo(({
                   className="flex-1 bg-transparent border-none focus:ring-0 text-lg font-bold text-slate-700"
                   placeholder={`الخيار ${optIdx + 1}`}
                 />
-                <button onClick={() => deleteOption(q.id, opt.id)} className="h-10 w-10 opacity-0 group-hover/opt:opacity-100 text-slate-400 hover:text-red-600 transition-all"><X /></button>
+                <button onClick={() => deleteOption(q.id, opt.id)} className="h-10 w-10 opacity-0 group-hover/opt:opacity-100 text-slate-400 hover:text-red-600 transition-all"><X size={18} /></button>
               </div>
             ))}
             {q.type !== 'true_false' && (
-              <button onClick={() => addOption(q.id)} className="flex items-center gap-3 px-6 py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all font-black">
-                <Plus className="h-5 w-5" /> إضافة خيار
+              <button onClick={() => addOption(q.id)} className="flex items-center gap-3 px-6 py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-indigo-500 hover:text-indigo-600 hover:bg-white transition-all font-black text-sm">
+                <Plus className="h-5 w-5" /> إضافة خيار جديد
               </button>
             )}
           </div>
@@ -96,12 +107,12 @@ const QuestionCard = memo(({
               type="number" 
               value={q.points} 
               onChange={(e) => updateQuestion(q.id, { points: parseFloat(e.target.value) || 0 })}
-              className="w-16 bg-transparent border-none text-xl font-black text-slate-900 text-center"
+              className="w-16 bg-transparent border-none text-xl font-black text-slate-900 text-center focus:ring-0"
             />
           </div>
-          <div className="flex gap-3">
-            <button onClick={() => duplicateQuestion(q.id)} className="p-3 text-slate-400 hover:text-indigo-600 transition-all"><Copy /></button>
-            <button onClick={() => deleteQuestion(q.id)} className="p-3 text-red-400 hover:text-red-600 transition-all"><Trash2 /></button>
+          <div className="flex gap-2">
+            <button onClick={() => duplicateQuestion(q.id)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-white transition-all"><Copy className="h-5 w-5" /></button>
+            <button onClick={() => deleteQuestion(q.id)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-red-50 text-red-400 hover:text-red-600 hover:bg-white transition-all"><Trash2 className="h-5 w-5" /></button>
           </div>
         </div>
       </div>
@@ -114,7 +125,6 @@ QuestionCard.displayName = 'QuestionCard';
 export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth();
   const { fetchExamDetails, saveExam } = useExamsSystem();
   
   const [exam, setExam] = useState<any>({ title: '', status: 'draft', max_score: 100, duration: 30, exam_date: new Date().toISOString().split('T')[0] });
@@ -122,17 +132,13 @@ export default function QuizBuilder() {
   const [loading, setLoading] = useState(params.id !== 'new');
   const [saving, setSaving] = useState(false);
 
-  // تم إضافة fetchExamDetails إلى التبعيات لحل تحذير ESLint
   useEffect(() => {
     if (params.id !== 'new') {
       fetchExamDetails(params.id as string).then(res => {
         setExam(res.exam);
         setQuestions(res.questions);
         setLoading(false);
-      }).catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
+      }).catch(() => setLoading(false));
     } else {
       setQuestions([createNewQuestion('multiple_choice')]);
       setLoading(false);
@@ -143,9 +149,7 @@ export default function QuizBuilder() {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
   }, []);
 
-  const deleteQuestion = useCallback((id: string) => {
-    setQuestions(prev => prev.filter(q => q.id !== id));
-  }, []);
+  const deleteQuestion = useCallback((id: string) => setQuestions(prev => prev.filter(q => q.id !== id)), []);
   
   const duplicateQuestion = useCallback((id: string) => {
     setQuestions(prev => {
@@ -183,7 +187,6 @@ export default function QuizBuilder() {
       await saveExam(exam, questions, params.id === 'new');
       router.push('/exams');
     } catch (err) {
-      console.error(err);
       alert('حدث خطأ أثناء الحفظ');
     } finally {
       setSaving(false);
@@ -197,15 +200,15 @@ export default function QuizBuilder() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24">
-      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl shadow-slate-200/20">
+    <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
+      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
-          <button onClick={() => router.back()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 transition-all"><ArrowRight /></button>
+          <button onClick={() => router.back()} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 transition-all active:scale-95"><ArrowRight className="h-5 w-5" /></button>
           <h1 className="text-xl font-black truncate max-w-[300px] text-slate-900">{exam.title || 'اختبار جديد'}</h1>
           <button 
             onClick={handleSave} 
             disabled={saving} 
-            className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+            className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-4 rounded-[20px] font-black disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95"
           >
             {saving ? 'جاري الحفظ...' : 'حفظ الاختبار'}
           </button>
@@ -255,9 +258,9 @@ export default function QuizBuilder() {
 
         <button 
           onClick={() => setQuestions(prev => [...prev, createNewQuestion('multiple_choice')])}
-          className="w-full py-12 rounded-[40px] border-4 border-dashed border-slate-200 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all font-black text-2xl"
+          className="w-full py-16 rounded-[40px] border-4 border-dashed border-slate-200 text-slate-300 hover:border-indigo-400 hover:text-indigo-600 hover:bg-white transition-all font-black text-3xl group"
         >
-          + إضافة سؤال جديد
+          <span className="group-hover:scale-110 inline-block transition-transform">+ إضافة سؤال جديد</span>
         </button>
       </main>
     </div>
