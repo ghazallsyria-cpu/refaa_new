@@ -1,76 +1,98 @@
 'use client';
 
+import { useState } from 'react';
 import { Question } from '@/types/question';
 
-type Props = {
+interface Props {
   questions: Question[];
-  onChange: (value: Question[]) => void;
-};
+  onChange: (questions: Question[]) => void;
+}
 
 export default function AssignmentBuilder({ questions, onChange }: Props) {
   const addQuestion = () => {
     const newQuestion: Question = {
       id: crypto.randomUUID(),
-
-      // حقول مطلوبة حسب type الحقيقي في المشروع
+      type: 'mcq',
       title: '',
-      type: 'text',
       content: '',
-      points: 0,
+      points: 1,
       isRequired: false,
-
-      // إذا النظام يدعم options
-      options: [],
+      options: []
     };
 
     onChange([...questions, newQuestion]);
   };
 
   const updateQuestion = (id: string, data: Partial<Question>) => {
-    onChange(
-      questions.map((q) => (q.id === id ? { ...q, ...data } : q))
+    const updated = questions.map((q) =>
+      q.id === id ? { ...q, ...data } : q
     );
+
+    onChange(updated);
   };
 
-  const addOption = (questionId: string) => {
-    const q = questions.find((x) => x.id === questionId);
-    if (!q) return;
+  const removeQuestion = (id: string) => {
+    const filtered = questions.filter((q) => q.id !== id);
+    onChange(filtered);
+  };
 
-    const newOption = {
-      id: crypto.randomUUID(),
-      text: `خيار ${(q as any).options?.length + 1 || 1}`,
-    };
-
-    onChange(
-      questions.map((q) =>
-        q.id === questionId
-          ? {
-              ...q,
-              options: [...(q as any).options, newOption],
+  return (
+    <div className="space-y-4">
+      {questions.map((q) => (
+        <div key={q.id} className="border p-4 rounded">
+          <input
+            value={q.title}
+            onChange={(e) =>
+              updateQuestion(q.id, { title: e.target.value })
             }
-          : q
-      )
-    );
-  };
+            placeholder="Question title"
+            className="w-full border p-2 mb-2"
+          />
 
-  const updateOption = (
-    questionId: string,
-    optionId: string,
-    value: string
-  ) => {
-    onChange(
-      questions.map((q) => {
-        if (q.id !== questionId) return q;
+          <textarea
+            value={q.content}
+            onChange={(e) =>
+              updateQuestion(q.id, { content: e.target.value })
+            }
+            placeholder="Question content"
+            className="w-full border p-2 mb-2"
+          />
 
-        return {
-          ...q,
-          options: (q as any).options.map((opt: any) =>
-            opt.id === optionId ? { ...opt, text: value } : opt
-          ),
-        };
-      })
-    );
-  };
+          <input
+            type="number"
+            value={q.points}
+            onChange={(e) =>
+              updateQuestion(q.id, { points: Number(e.target.value) })
+            }
+            className="w-full border p-2 mb-2"
+          />
 
-  return null;
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={q.isRequired}
+              onChange={(e) =>
+                updateQuestion(q.id, { isRequired: e.target.checked })
+              }
+            />
+            Required
+          </label>
+
+          <button
+            onClick={() => removeQuestion(q.id)}
+            className="text-red-500 mt-2"
+          >
+            Delete
+          </button>
+        </div>
+      ))}
+
+      <button
+        onClick={addQuestion}
+        className="px-4 py-2 bg-black text-white"
+      >
+        Add Question
+      </button>
+    </div>
+  );
 }
