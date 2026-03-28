@@ -434,7 +434,8 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                 <div className="grid grid-cols-2 gap-4 relative z-10">
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">الوظيفة</span>
-                    <span className="text-sm font-bold text-slate-900">{parent.job_title || '-'}</span>
+<span className="text-sm font-bold text-slate-900">{(parent as { job_title?: string }).job_title || '-'}</span>
+
                   </div>
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">رقم الهاتف</span>
