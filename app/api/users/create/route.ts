@@ -15,10 +15,7 @@ export async function POST(request: Request) {
   });
 
   try {
-    const body = await request.json();
-    const validation = validateRequest(CreateUserRequestSchema, body);
-    if (!validation.success) return validation.response;
-
+    const validatedData = await validateRequest(request, CreateUserRequestSchema);
     const { 
       email, 
       password, 
@@ -31,7 +28,7 @@ export async function POST(request: Request) {
       address, 
       job_title, 
       zoom_link 
-    } = validation.data;
+    } = validatedData;
 
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {

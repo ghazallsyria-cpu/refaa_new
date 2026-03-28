@@ -10,11 +10,8 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const body = await req.json();
-    const validation = validateRequest(SendMessageRequestSchema, body);
-    if (!validation.success) return validation.response;
-
-    const { receiverId, subject, content, userId } = validation.data;
+    const validatedData = await validateRequest(req, SendMessageRequestSchema);
+    const { receiverId, subject, content, userId } = validatedData;
 
     const { error } = await adminSupabase
       .from('messages')

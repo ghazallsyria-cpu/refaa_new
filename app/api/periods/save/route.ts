@@ -10,13 +10,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const body = await req.json();
-    const validation = validateRequest(SavePeriodRequestSchema, body);
-    if (!validation.success) return validation.response;
+    const validatedData = await validateRequest(req, SavePeriodRequestSchema);
 
     const { data, error } = await adminSupabase
       .from('class_periods')
-      .insert([validation.data])
+      .insert([validatedData])
       .select()
       .single();
 

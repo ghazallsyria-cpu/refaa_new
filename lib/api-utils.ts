@@ -1,28 +1,40 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-export function validateRequest<T>(schema: z.Schema<T>, data: unknown): { success: true; data: T } | { success: false; response: NextResponse } {
-  const result = schema.safeParse(data);
-  
-  if (!result.success) {
-    console.error('Validation Error:', result.error.format());
-    return {
-      success: false,
-      response: NextResponse.json(
-        { 
-          error: 'Validation failed', 
-          details: result.error.format() 
-        }, 
-        { status: 400 }
-      ),
-    };
+export async function validateRequest<T>(req: Request, schema: z.Schema<T>): Promise<T> {
+  let body;
+  try {
+    body = await req.json();
+  } catch (error) {
+    throw new Error('Invalid JSON body');
   }
-
-  return { success: true, data: result.data };
+  
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    throw result.error;
+  }
+  
+  return result.data;
 }
 
 export function handleApiError(error: unknown, context: string) {
   console.error(`${context} Error:`, error);
+  
+  if (error instanceof z.ZodError) {
+    return NextResponse.json(
+      { 
+        error: 'Validation failed', 
+        details: error.format() 
+      }, 
+      { status: 400 }
+    );
+  }
+
   const message = error instanceof Error ? error.message : 'Unknown error';
+  
+  if (message === 'Invalid JSON body') {
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+
   return NextResponse.json({ error: message }, { status: 500 });
 }

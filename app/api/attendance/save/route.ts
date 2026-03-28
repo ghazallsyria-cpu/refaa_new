@@ -10,9 +10,7 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const body = await req.json();
-    const validation = validateRequest(SaveAttendanceRequestSchema, body);
-    if (!validation.success) return validation.response;
+    const validatedData = await validateRequest(req, SaveAttendanceRequestSchema);
     
     const { 
       selectedSection, 
@@ -22,7 +20,7 @@ export async function POST(req: Request) {
       attendance, 
       students, 
       userId 
-    } = validation.data;
+    } = validatedData;
 
     let sessionId: string;
     const { data: existingSession, error: sessionFetchError } = await adminSupabase

@@ -10,11 +10,8 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const body = await req.json();
-    const validation = validateRequest(SubmitExamRequestSchema, body);
-    if (!validation.success) return validation.response;
-    
-    const { attemptId, answers } = validation.data;
+    const validatedData = await validateRequest(req, SubmitExamRequestSchema);
+    const { attemptId, answers } = validatedData;
 
     // 1. Get the attempt and exam details
     const { data: attempt, error: attemptError } = await adminSupabase

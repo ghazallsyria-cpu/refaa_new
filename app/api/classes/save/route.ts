@@ -10,11 +10,8 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const body = await req.json();
-    const validation = validateRequest(SaveClassRequestSchema, body);
-    if (!validation.success) return validation.response;
-
-    const { id, name, level } = validation.data;
+    const validatedData = await validateRequest(req, SaveClassRequestSchema);
+    const { id, name, level } = validatedData;
 
     if (id) {
       // Update

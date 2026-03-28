@@ -95,7 +95,7 @@ graph TD
     *   يُمنع استخدام نوع `any` نهائياً؛ ويُستبدل بـ `unknown` عند الضرورة مع التحقق من النوع (Type Guarding).
 
 2.  **طبقة التحقق المركزية (`lib/api-utils.ts`):**
-    *   `validateRequest(schema, body)`: أداة موحدة لفحص وتدقيق البيانات الواردة لـ API Routes، تعيد استجابة خطأ موحدة في حال فشل التحقق.
+    *   `validateRequest(req, schema)`: أداة موحدة لفحص وتدقيق البيانات الواردة لـ API Routes. تقوم بتحليل جسم الطلب (Request body) والتحقق منه باستخدام مخطط Zod. في حال الفشل، ترمي خطأ يتم التعامل معه بواسطة `handleApiError` لتقديم استجابة 400 موحدة.
     *   `handleApiError(error, context)`: معالج أخطاء مركزي يقوم بتسجيل الأخطاء وإعادة استجابة JSON متسقة مع رموز الحالة (Status Codes) المناسبة.
 
 3.  **تطبيع البيانات (Payload Normalization):**
