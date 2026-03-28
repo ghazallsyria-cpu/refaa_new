@@ -19,13 +19,13 @@ const QuestionCard = memo(({ q, index, updateQuestion, deleteQuestion, duplicate
     <div className="flex flex-col md:flex-row gap-10">
       <div className="flex-1 space-y-6">
         <div className="space-y-3">
-          <label className="text-xs font-black text-slate-400 uppercase">نص السؤال {index + 1}</label>
+          <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
           <textarea value={q.content} onChange={(e) => updateQuestion(q.id, { content: e.target.value })} className="w-full bg-slate-50/50 px-6 py-5 rounded-3xl border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-indigo-600 text-xl font-black outline-none resize-none" rows={2} />
         </div>
         <ImageUpload initialImageUrl={q.media_url} onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url, media_type: 'image' })} onRemove={() => { if (q.media_url) deleteFromCloudinary(q.media_url); updateQuestion(q.id, { media_url: undefined, media_type: undefined }); }} />
       </div>
       <div className="w-full md:w-64 space-y-3">
-        <label className="text-xs font-black text-slate-400 uppercase">نوع السؤال</label>
+        <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نوع السؤال</label>
         <select value={q.type} onChange={(e) => updateQuestion(q.id, { type: e.target.value as QuestionType })} className="w-full px-6 py-5 rounded-3xl bg-white border-0 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-600 font-black appearance-none cursor-pointer">
           <option value="multiple_choice">اختيار من متعدد</option><option value="true_false">صح أو خطأ</option><option value="multi_select">اختيار متعدد</option><option value="essay">سؤال مقالي</option>
         </select>
@@ -67,7 +67,6 @@ export default function QuizBuilder() {
   const [loading, setLoading] = useState(params.id !== 'new');
   const [saving, setSaving] = useState(false);
 
-  // إغلاق القائمة المنسدلة عند النقر خارجها
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -78,28 +77,29 @@ export default function QuizBuilder() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // جلب المواد (الكل) والصفوف (الخاصة بالمعلم فقط)
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchTeacherSpecificData = async () => {
       if (!user || !userRole) return;
       try {
         setFormLoading(true);
         let fetchedSubjects: any[] = [];
         let fetchedSections: any[] = [];
 
-        // 1. جلب جميع المواد دائماً (لأن المدارس تشترك في المواد غالباً)
-        const { data: allSubjs } = await supabase.from('subjects').select('id, name').order('name');
-        fetchedSubjects = allSubjs || [];
-
-        // 2. جلب الصفوف بناءً على الصلاحية
         if (userRole === 'admin' || userRole === 'management') {
-          const { data: secRes } = await supabase.from('sections').select('id, name, classes(name)');
-          fetchedSections = (secRes || []).map((s: any) => {
+          // الإدارة ترى كل المواد وكل الصفوف
+          const [subjRes, secRes] = await Promise.all([
+            supabase.from('subjects').select('id, name').order('name'),
+            supabase.from('sections').select('id, name, classes(name)')
+          ]);
+          fetchedSubjects = subjRes.data || [];
+          fetchedSections = (secRes.data || []).map((s: any) => {
              const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
              return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           });
         } else {
-          // جلب صفوف المعلم فقط
+          // المعلم يرى صفوفه ومواده فقط (صارم)
+          
+          // 1. جلب الصفوف الخاصة بالمعلم
           const { data: teacherSecs } = await supabase
             .from('teacher_sections')
             .select('section:sections(id, name, classes(name))')
@@ -111,17 +111,43 @@ export default function QuizBuilder() {
             const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
             return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           }).filter(Boolean);
+
+          // 2. جلب المواد الخاصة بالمعلم
+          let combinedSubjs: any[] = [];
+          
+          // المحاولة الأولى: من جدول الربط teacher_subjects
+          const { data: tsData, error: tsErr } = await supabase
+            .from('teacher_subjects')
+            .select('subject:subjects(id, name)')
+            .eq('teacher_id', user.id);
+            
+          if (!tsErr && tsData) {
+            combinedSubjs = [...combinedSubjs, ...tsData.map((ts: any) => ts.subject).filter(Boolean)];
+          }
+
+          // المحاولة الثانية: من جدول subjects مباشرة إذا كان هناك حقل teacher_id
+          const { data: dirData, error: dirErr } = await supabase
+            .from('subjects')
+            .select('id, name')
+            .eq('teacher_id', user.id);
+            
+          if (!dirErr && dirData) {
+            combinedSubjs = [...combinedSubjs, ...dirData];
+          }
+
+          // إزالة التكرارات إن وجدت
+          fetchedSubjects = Array.from(new Map(combinedSubjs.map(item => [item.id, item])).values());
         }
 
         setFormData({ subjects: fetchedSubjects, sections: fetchedSections });
       } catch (e) {
-        console.error("Error fetching data:", e);
+        console.error("Error fetching specific teacher data:", e);
       } finally {
         setFormLoading(false);
       }
     };
     
-    fetchData();
+    fetchTeacherSpecificData();
   }, [user, userRole]);
 
   useEffect(() => {
@@ -179,7 +205,7 @@ export default function QuizBuilder() {
               <label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><BookOpen size={14} className="text-slate-400"/> المادة الدراسية</label>
               <select value={exam.subject_id} onChange={(e) => setExam({ ...exam, subject_id: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold appearance-none cursor-pointer hover:bg-white transition-all">
                 <option value="">{formLoading ? 'جاري التحميل...' : 'اختر المادة'}</option>
-                {formData.subjects.length > 0 ? formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>)) : <option disabled>لا توجد مواد متاحة</option>}
+                {formData.subjects.length > 0 ? formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>)) : <option disabled>لا توجد مواد مسندة لك</option>}
               </select>
             </div>
             
