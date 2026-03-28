@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, BookOpen, User, Plus, Trash2, LayoutGrid, Save, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { 
+  Calendar, Clock, BookOpen, User, Plus, 
+  Trash2, LayoutGrid, Save, X, AlertCircle 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSchedulesSystem, type ScheduleEntry } from '@/hooks/useSchedulesSystem';
 
@@ -27,39 +30,44 @@ export default function SchedulesPage() {
   const [editingSlot, setEditingSlot] = useState<{day: number, period: number} | null>(null);
   const [form, setForm] = useState({ subject_id: '', teacher_id: '' });
 
-  // 1. تحميل البيانات الأولية عند فتح الصفحة
+  // مرجع لمنع التحديثات غير الضرورية
+  const isInitialMount = useRef(true);
+
+  // 1. تحميل البيانات التعريفية (صفوف، مواد، معلمين)
   useEffect(() => {
-    let isMounted = true;
-    const loadInit = async () => {
+    let active = true;
+    const loadMetadata = async () => {
       const data = await fetchInitialScheduleData();
-      if (isMounted) {
+      if (active) {
         setSections(data.sections || []);
         setSubjects(data.subjects || []);
         setTeachers(data.teachers || []);
         setPeriods(data.periods || []);
       }
     };
-    loadInit();
-    return () => { isMounted = false; };
+    loadMetadata();
+    return () => { active = false; };
   }, [fetchInitialScheduleData]);
 
-  // 2. جلب الجدول عند تغيير الفصل الدراسي (تم الإصلاح لمنع Cascading Renders)
+  // 2. جلب الجدول عند تغيير الفصل الدراسي (تم الإصلاح ليتوافق مع Next.js 15)
   useEffect(() => {
-    if (!selectedSection) {
-      setSchedules([]);
-      return;
-    }
+    let active = true;
 
-    let isMounted = true;
     const loadData = async () => {
+      if (!selectedSection) {
+        // نستخدم شرطاً لمنع تحديث الحالة إذا كانت فارغة بالفعل لتجنب "cascading renders"
+        setSchedules((prev) => (prev.length > 0 ? [] : prev));
+        return;
+      }
+
       const data = await fetchSchedules({ sectionId: selectedSection });
-      if (isMounted) {
+      if (active) {
         setSchedules(data || []);
       }
     };
-    
+
     loadData();
-    return () => { isMounted = false; };
+    return () => { active = false; };
   }, [selectedSection, fetchSchedules]);
 
   const handleOpenModal = (day: number, period: number, existing?: any) => {
@@ -82,22 +90,23 @@ export default function SchedulesPage() {
         teacher_id: form.teacher_id,
       });
       
-      // تحديث البيانات بعد الحفظ مباشرة
+      // إعادة جلب البيانات فوراً بعد الحفظ
       const updated = await fetchSchedules({ sectionId: selectedSection });
       setSchedules(updated);
       setIsModalOpen(false);
     } catch (e) {
-      console.error("Save error:", e);
+      console.error("Save Error:", e);
     }
   };
 
   const handleDelete = async (id: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذه الحصة؟")) return;
     try {
       await deleteSchedule(id);
       const updated = await fetchSchedules({ sectionId: selectedSection });
       setSchedules(updated);
     } catch (e) {
-      console.error("Delete error:", e);
+      console.error("Delete Error:", e);
     }
   };
 
@@ -105,19 +114,19 @@ export default function SchedulesPage() {
     <div className="min-h-screen bg-slate-50/50 pb-20 px-4 md:px-8" dir="rtl">
       <div className="max-w-7xl mx-auto py-10 space-y-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight italic">إدارة الجداول</h1>
-            <p className="text-slate-500 mt-2 font-medium">نظام توزيع الحصص والمواد الدراسية</p>
+          <div className="space-y-1">
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">إدارة الجداول الدراسية</h1>
+            <p className="text-slate-500 font-medium">نظام توزيع الحصص الذكي لمدرسة الرفعة</p>
           </div>
           
           <div className="w-full md:w-80 space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase mr-2 tracking-widest">اختر الفصل الدراسي</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mr-2">تحديد الفصل الدراسي</label>
             <select 
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
               className="w-full h-14 bg-white border-0 ring-1 ring-slate-200 rounded-2xl px-5 font-bold focus:ring-2 focus:ring-indigo-600 transition-all shadow-sm"
             >
-              <option value="">-- اختر الفصل --</option>
+              <option value="">-- اختر الفصل لعرض الجدول --</option>
               {sections.map(s => <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>)}
             </select>
           </div>
@@ -128,12 +137,12 @@ export default function SchedulesPage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 backdrop-blur-md">
-                    <th className="p-8 text-xs font-black text-slate-400 uppercase w-32 border-b border-slate-100">اليوم</th>
+                  <tr className="bg-slate-50/80 backdrop-blur-md border-b border-slate-100">
+                    <th className="p-8 text-xs font-black text-slate-400 uppercase w-32">اليوم</th>
                     {periods.map(p => (
-                      <th key={p.id} className="p-6 text-center border-b border-slate-100 min-w-[200px]">
+                      <th key={p.id} className="p-6 text-center min-w-[200px]">
                         <span className="text-sm font-black text-slate-900 block mb-1">الحصة {p.period_number}</span>
-                        <span className="text-[10px] text-slate-400 font-bold" dir="ltr">{p.start_time?.substring(0, 5)}</span>
+                        <span className="text-[10px] text-slate-400 font-bold tracking-tighter" dir="ltr">{p.start_time?.substring(0, 5)} - {p.end_time?.substring(0, 5)}</span>
                       </th>
                     ))}
                   </tr>
@@ -145,12 +154,12 @@ export default function SchedulesPage() {
                       {periods.map(period => {
                         const cell = schedules.find(s => s.day_of_week === day.id && s.period === period.period_number);
                         return (
-                          <td key={period.id} className="p-3 align-top group-hover:bg-slate-50/50 transition-colors">
+                          <td key={period.id} className="p-4 align-top group-hover:bg-slate-50/50 transition-colors">
                             {cell ? (
-                              <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm relative group/card hover:shadow-xl hover:border-indigo-100 transition-all">
+                              <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm relative group/card hover:shadow-xl hover:border-indigo-200 transition-all">
                                 <button 
                                   onClick={() => handleDelete(cell.id!)}
-                                  className="absolute -top-2 -left-2 h-8 w-8 bg-red-50 text-red-500 rounded-xl flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-10"
+                                  className="absolute -top-2 -left-2 h-8 w-8 bg-red-50 text-red-500 rounded-xl flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-20"
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -159,7 +168,7 @@ export default function SchedulesPage() {
                                   <div className="flex items-center gap-2">
                                     <div className="h-6 w-6 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400"><User size={12}/></div>
                                     <p className="text-xs font-bold text-slate-600 line-clamp-1">
-                                      {Array.isArray(cell.teachers?.users) ? cell.teachers?.users[0]?.full_name : (cell.teachers?.users as any)?.full_name}
+                                      {Array.isArray(cell.teachers?.users) ? (cell.teachers?.users[0] as any)?.full_name : (cell.teachers?.users as any)?.full_name || 'معلم المادة'}
                                     </p>
                                   </div>
                                 </div>
@@ -169,7 +178,7 @@ export default function SchedulesPage() {
                                 onClick={() => handleOpenModal(day.id, period.period_number)}
                                 className="w-full h-24 rounded-3xl border-2 border-dashed border-slate-100 flex items-center justify-center text-slate-300 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all"
                               >
-                                <Plus size={20} />
+                                <Plus size={24} />
                               </button>
                             )}
                           </td>
@@ -182,10 +191,12 @@ export default function SchedulesPage() {
             </div>
           </motion.div>
         ) : (
-          <div className="bg-white rounded-[40px] p-20 text-center border border-slate-100 shadow-xl space-y-4">
-            <div className="h-20 w-20 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto"><LayoutGrid size={40}/></div>
-            <h2 className="text-2xl font-black text-slate-900">بانتظار اختيار الفصل</h2>
-            <p className="text-slate-400 font-medium">اختر الفصل الدراسي من القائمة أعلاه للبدء في إدارة الحصص</p>
+          <div className="bg-white rounded-[40px] p-24 text-center border border-slate-100 shadow-xl space-y-6">
+            <div className="h-24 w-24 bg-indigo-50 text-indigo-600 rounded-[30px] flex items-center justify-center mx-auto shadow-inner"><LayoutGrid size={48}/></div>
+            <div className="space-y-2">
+               <h2 className="text-2xl font-black text-slate-900">بانتظار اختيار الفصل</h2>
+               <p className="text-slate-400 font-medium">قم باختيار الفصل الدراسي من القائمة المنسدلة للبدء في تنظيم الجدول</p>
+            </div>
           </div>
         )}
       </div>
@@ -194,33 +205,36 @@ export default function SchedulesPage() {
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl p-8 border border-white">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white rounded-[3rem] w-full max-w-md shadow-2xl p-10 border border-white">
               <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-black text-slate-900 italic">تعديل الحصة</h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl"><X size={20}/></button>
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">إسناد حصة</h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{DAYS.find(d => d.id === editingSlot?.day)?.name} - الحصة {editingSlot?.period}</p>
+                </div>
+                <button onClick={() => setIsModalOpen(false)} className="p-3 text-slate-400 hover:bg-slate-50 rounded-2xl transition-all"><X size={24}/></button>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase mr-1">المادة</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">المادة الدراسية</label>
                   <select 
                     value={form.subject_id}
                     onChange={(e) => setForm({...form, subject_id: e.target.value})}
-                    className="w-full h-12 bg-slate-50 border-0 ring-1 ring-slate-100 rounded-xl px-4 font-bold"
+                    className="w-full h-14 bg-slate-50 border-0 ring-1 ring-slate-100 rounded-2xl px-5 font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
                   >
-                    <option value="">اختر المادة</option>
+                    <option value="">-- اختر المادة --</option>
                     {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase mr-1">المعلم</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">المعلم المسند</label>
                   <select 
                     value={form.teacher_id}
                     onChange={(e) => setForm({...form, teacher_id: e.target.value})}
-                    className="w-full h-12 bg-slate-50 border-0 ring-1 ring-slate-100 rounded-xl px-4 font-bold"
+                    className="w-full h-14 bg-slate-50 border-0 ring-1 ring-slate-100 rounded-2xl px-5 font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all"
                   >
-                    <option value="">اختر المعلم</option>
+                    <option value="">-- اختر المعلم --</option>
                     {teachers.map(t => (
                       <option key={t.id} value={t.id}>
                         {Array.isArray(t.users) ? t.users[0]?.full_name : t.users?.full_name}
@@ -232,10 +246,10 @@ export default function SchedulesPage() {
                 <button 
                   onClick={handleSave}
                   disabled={loading}
-                  className="w-full h-14 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  className="w-full h-16 bg-indigo-600 text-white font-black rounded-[20px] shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3 mt-4"
                 >
-                  <Save size={18} />
-                  {loading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+                  <Save size={20} />
+                  {loading ? 'جاري الحفظ...' : 'اعتماد البيانات'}
                 </button>
               </div>
             </motion.div>
