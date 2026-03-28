@@ -613,7 +613,7 @@ export default function ExamResults() {
                             <FileText className="h-5 w-5" />
                           </button>
                           <button 
-                            onClick={() => handleDeleteAttempt(attempt.id)}
+                            onClick={() => deleteAttempt(attempt.id)}
                             className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95"
                             title="حذف المحاولة"
                           >
