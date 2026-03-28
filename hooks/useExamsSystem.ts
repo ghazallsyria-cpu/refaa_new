@@ -106,10 +106,30 @@ export function useExamsSystem() {
     }
   }, []);
 
+  // --- تحديث نظام الحفظ مع التقاط دقيق للأخطاء ---
   const saveExam = useCallback(async (examData: any, questions: any[], isNew: boolean) => {
-    const res = await fetch('/api/exams/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examData, questions, isNew, userId: user?.id }) });
-    if (!res.ok) throw new Error('فشل الاتصال بالخادم أثناء الحفظ');
-    await fetchExams();
+    try {
+      const res = await fetch('/api/exams/save', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ examData, questions, isNew, userId: user?.id }) 
+      });
+      
+      if (!res.ok) {
+        let errorMessage = 'فشل الاتصال بالخادم أثناء الحفظ';
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch(e) {
+          errorMessage = `خطأ في الخادم (الكود: ${res.status})`;
+        }
+        throw new Error(errorMessage);
+      }
+      await fetchExams();
+    } catch (err: any) {
+      console.error("Hook Error Details:", err);
+      throw err;
+    }
   }, [user, fetchExams]);
 
   const fetchExamDetails = useCallback(async (id: string) => {
@@ -133,7 +153,6 @@ export function useExamsSystem() {
     await fetchExams();
   }, [user, fetchExams]);
 
-  // --- دالة استعراض الطالب الفردي: مع خطة دمج الأسئلة يدوياً في حال فشل الـ Join ---
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
     try {
       const [eRes, sRes, aRes] = await Promise.all([
@@ -150,14 +169,12 @@ export function useExamsSystem() {
       
       let finalAnswers: any[] = [];
       if (aRes.data?.id) {
-        // المحاولة 1: جلب الإجابات والأسئلة معاً
         const { data: ansData } = await supabase.from('student_answers')
           .select('*, question:questions(*, options:question_options(*))')
           .eq('attempt_id', aRes.data.id);
         
         finalAnswers = ansData || [];
 
-        // الخطة البديلة (Stitching): إذا تم جلب الإجابات ولكن الأسئلة مفقودة (فشل الـ Join)
         if (finalAnswers.length > 0 && !finalAnswers[0].question) {
            console.warn("Join failed for questions, fetching manually...");
            const questionIds = finalAnswers.map(a => a.question_id).filter(Boolean);
