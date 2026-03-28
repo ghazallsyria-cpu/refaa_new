@@ -1,108 +1,157 @@
-import { useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth-context';
+'use client';
 
-// --- تعريفات الأنواع المحدثة لتتوافق مع الواجهة والـ Build ---
-export type StudentDashboardData = {
-  student: any;
-  assignments: any[];
-  exams: any[];
-  attendanceRate: number;
-  presentCount: number;
-  absentCount: number;
-  partialCount: number;
-  incompleteCount: number;
-  grades: any[];
-  todaysSchedule: any[];
-  periods: any[];
-};
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  BookOpen, Calendar, CheckCircle2, Clock, 
+  FileText, GraduationCap, TrendingUp, Bell, 
+  Award, Target, BarChart2
+} from 'lucide-react';
+import { motion } from 'motion/react';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer
+} from 'recharts';
+import Link from 'next/link';
+import { format, isValid } from 'date-fns';
+import { arSA } from 'date-fns/locale';
+import AnnouncementsWidget from '@/components/AnnouncementsWidget';
+import { useDashboardSystem, type StudentDashboardData } from '@/hooks/useDashboardSystem';
 
-export function useDashboardSystem() {
-  const { user } = useAuth();
+// ملاحظة لـ Netlify: تم إزالة أي صادرات (exports) إضافية من هنا لمنع أخطاء الـ Build
+export default function StudentDashboard() {
+  const [data, setData] = useState<StudentDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
-  // --- 1. الطالب (Student) - تم التحديث لدعم الإحصائيات التفصيلية ---
-  const fetchStudentDashboardData = useCallback(async (): Promise<StudentDashboardData | null> => {
-    if (!user) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const { fetchStudentDashboardData } = useDashboardSystem();
+
+  const fetchData = useCallback(async () => {
     try {
-      const { data: student } = await supabase
-        .from('students')
-        .select('*, sections(name, classes(name))')
-        .eq('id', user.id)
-        .single();
-      
-      if (!student) return null;
-
-      const [
-        { data: assignmentSections },
-        { data: examSections }
-      ] = await Promise.all([
-        supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id),
-        supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id)
-      ]);
-
-      const assignmentIds = (assignmentSections || []).map(a => (a as any).assignment_id);
-      const examIds = (examSections || []).map(e => (e as any).exam_id);
-
-      const [
-        { data: assignments },
-        { data: exams },
-        { data: attendance },
-        { data: grades },
-        { data: todaysSchedule },
-        { data: periods }
-      ] = await Promise.all([
-        assignmentIds.length > 0 
-          ? supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(3)
-          : Promise.resolve({ data: [] }),
-        examIds.length > 0 
-          ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('created_at', { ascending: false }).limit(3)
-          : Promise.resolve({ data: [] }),
-        supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id),
-        supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, subject:subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5),
-        supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))').eq('section_id', student.section_id).eq('day_of_week', new Date().getDay() + 1).order('period'),
-        supabase.from('class_periods').select('*').order('period_number')
-      ]);
-
-      // --- حساب الإحصائيات التفصيلية للحضور ---
-      const attendanceData = (attendance || []) as { daily_status: string }[];
-      const totalDays = attendanceData.length;
-      
-      const presentCount = attendanceData.filter(a => a.daily_status === 'present').length;
-      const absentCount = attendanceData.filter(a => a.daily_status === 'absent').length;
-      const partialCount = attendanceData.filter(a => a.daily_status === 'late' || a.daily_status === 'partial').length;
-      const incompleteCount = attendanceData.filter(a => !['present', 'absent', 'late', 'partial'].includes(a.daily_status)).length;
-
-      const attendanceRate = totalDays > 0 ? Math.round((presentCount / totalDays) * 100) : 100;
-
-      return {
-        student,
-        assignments: assignments || [],
-        exams: exams || [],
-        attendanceRate,
-        presentCount,
-        absentCount,
-        partialCount,
-        incompleteCount,
-        grades: grades || [],
-        todaysSchedule: todaysSchedule || [],
-        periods: periods || []
-      };
+      setLoading(true);
+      const res = await fetchStudentDashboardData();
+      if (res) setData(res);
     } catch (error) {
-      console.error('Error fetching student dashboard data:', error);
-      throw error;
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [user]);
+  }, [fetchStudentDashboardData]);
 
-  // --- بقية الدوال (Admin, Teacher, Parent) تبقى كما هي ولكن يمكن تحديثها لاحقاً ---
-  
-  return {
-    fetchAdminDashboardStats: useCallback(async () => { /* ... */ return {}; }, []), 
-    fetchAdminRecentActivities: useCallback(async () => { return []; }, []),
-    fetchStudentDashboardData,
-    fetchStudentSchedule: useCallback(async () => { return null; }, []),
-    fetchParentDashboardData: useCallback(async () => { return null; }, []),
-    fetchTeacherDashboardData: useCallback(async () => { return null; }, []),
-    fetchTeacherSchedule: useCallback(async () => { return null; }, [])
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const safeFormat = (dateStr: any, formatStr: string) => {
+    if (!mounted || !dateStr) return '...';
+    try {
+      const dateObj = new Date(dateStr);
+      return isValid(dateObj) ? format(dateObj, formatStr, { locale: arSA }) : 'غير محدد';
+    } catch (e) { return 'خطأ في التاريخ'; }
   };
+
+  const avgScore = useMemo(() => {
+    const grades = data?.grades || [];
+    if (grades.length === 0) return 0;
+    return Math.round(grades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / grades.length);
+  }, [data?.grades]);
+
+  if (loading) return (
+    <div className="flex h-[80vh] items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-indigo-600"></div>
+    </div>
+  );
+
+  const student = data?.student;
+  const sectionName = student?.sections?.name || 'غير محدد';
+  const className = student?.sections?.classes?.name || 'صف دراسي';
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-8 max-w-7xl mx-auto px-4">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-[40px] bg-gradient-to-br from-indigo-700 to-violet-700 p-10 text-white shadow-2xl">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+          <div>
+            <h1 className="text-4xl font-black mb-4">مرحباً، {student?.users?.full_name || 'عزيزي الطالب'} 👋</h1>
+            <p className="text-xl flex items-center gap-2 opacity-90"><GraduationCap /> {className} - {sectionName}</p>
+          </div>
+          <div className="flex gap-4">
+            <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 text-center min-w-[140px]">
+              <p className="text-[10px] font-black uppercase mb-1">نسبة الحضور</p>
+              <p className="text-4xl font-black">{data?.attendanceRate || 0}%</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 text-center min-w-[140px]">
+              <p className="text-[10px] font-black uppercase mb-1">المتوسط</p>
+              <p className="text-4xl font-black">{avgScore}%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-8">
+          <div className="bg-white p-8 rounded-[32px] shadow-xl border border-slate-50">
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><TrendingUp className="text-indigo-600" /> تطور المستوى</h2>
+            <div className="h-[300px]">
+              {data?.grades && data.grades.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={[...data.grades].reverse()}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="exam.title" hide />
+                    <YAxis domain={[0, 100]} hide />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="score" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.1} strokeWidth={4} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <div className="h-full flex items-center justify-center bg-slate-50 rounded-2xl text-slate-400 font-bold">لا توجد درجات حالياً</div>}
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[32px] shadow-xl border border-slate-50">
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2"><Award className="text-emerald-500" /> آخر النتائج</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(data?.grades || []).map((grade: any) => (
+                <div key={grade.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex justify-between items-center">
+                  <div>
+                    <p className="font-black text-slate-900 truncate max-w-[150px]">{grade.exam?.title}</p>
+                    <p className="text-[10px] text-slate-400 font-bold">{grade.exam?.subject?.name}</p>
+                  </div>
+                  <p className={`text-2xl font-black ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>{grade.score}%</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <div className="bg-white p-6 rounded-[32px] shadow-xl border border-slate-50">
+            <h2 className="text-lg font-black mb-6 flex items-center gap-2"><Calendar className="text-emerald-600" /> ملخص الحضور</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-emerald-50 p-4 rounded-2xl text-center">
+                <p className="text-[9px] font-black text-emerald-600 uppercase">حضور</p>
+                <p className="text-2xl font-black text-emerald-700">{data?.presentCount || 0}</p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-2xl text-center">
+                <p className="text-[9px] font-black text-red-600 uppercase">غياب</p>
+                <p className="text-2xl font-black text-red-700">{data?.absentCount || 0}</p>
+              </div>
+              <div className="bg-amber-50 p-4 rounded-2xl text-center">
+                <p className="text-[9px] font-black text-amber-600 uppercase">تأخير</p>
+                <p className="text-2xl font-black text-amber-700">{data?.partialCount || 0}</p>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl text-center">
+                <p className="text-[9px] font-black text-slate-500 uppercase">غير مكتمل</p>
+                <p className="text-2xl font-black text-slate-700">{data?.incompleteCount || 0}</p>
+              </div>
+            </div>
+          </div>
+          <AnnouncementsWidget role="student" />
+        </div>
+      </div>
+    </motion.div>
+  );
 }
 
