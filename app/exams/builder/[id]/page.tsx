@@ -77,7 +77,6 @@ export default function QuizBuilder() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // --- الخوارزمية الذكية المستنتجة من ملف الحضور والغياب ---
   useEffect(() => {
     const fetchTeacherSpecificData = async () => {
       if (!user || !userRole) return;
@@ -97,52 +96,32 @@ export default function QuizBuilder() {
              return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           });
         } else {
-          // استخراج شامل (جلب علاقات المعلم بالصفوف بأمان تام)
-          const { data: teacherSecs } = await supabase
-            .from('teacher_sections')
-            .select('*') // استخراج كل الحقول لضمان عدم حدوث Crash
-            .eq('teacher_id', user.id);
-
+          const { data: teacherSecs } = await supabase.from('teacher_sections').select('*').eq('teacher_id', user.id);
           const sectionIds = teacherSecs?.map(ts => ts.section_id).filter(Boolean) || [];
           let possibleSubjectIds: string[] = teacherSecs?.map(ts => ts.subject_id).filter(Boolean) || [];
 
-          // استخراج بيانات الصفوف واسم الفصل الدراسي
           if (sectionIds.length > 0) {
-            const { data: sectionsData } = await supabase
-              .from('sections')
-              .select('*, classes(name)')
-              .in('id', sectionIds);
-
+            const { data: sectionsData } = await supabase.from('sections').select('*, classes(name)').in('id', sectionIds);
             if (sectionsData) {
               fetchedSections = sectionsData.map((s: any) => {
                 const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
-                if (s.subject_id) possibleSubjectIds.push(s.subject_id); // إذا كانت المادة بداخل جدول الصفوف
+                if (s.subject_id) possibleSubjectIds.push(s.subject_id);
                 return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
               });
             }
           }
 
-          // البحث في جدول teacher_subjects كاحتياط إضافي
           const { data: teacherSubjs } = await supabase.from('teacher_subjects').select('*').eq('teacher_id', user.id);
           if (teacherSubjs) {
             possibleSubjectIds = [...possibleSubjectIds, ...teacherSubjs.map(ts => ts.subject_id).filter(Boolean)];
           }
 
-          // جلب أسماء المواد بناءً على الأرقام (IDs) التي تم جمعها من المعلم حصراً
-          possibleSubjectIds = Array.from(new Set(possibleSubjectIds)); // إزالة الأرقام المكررة
-          
+          possibleSubjectIds = Array.from(new Set(possibleSubjectIds));
           if (possibleSubjectIds.length > 0) {
-            const { data: subjectsData } = await supabase
-              .from('subjects')
-              .select('id, name')
-              .in('id', possibleSubjectIds);
-            
-            if (subjectsData) {
-              fetchedSubjects = subjectsData;
-            }
+            const { data: subjectsData } = await supabase.from('subjects').select('id, name').in('id', possibleSubjectIds);
+            if (subjectsData) fetchedSubjects = subjectsData;
           }
         }
-
         setFormData({ subjects: fetchedSubjects, sections: fetchedSections });
       } catch (e) {
         console.error("Error fetching specific teacher data:", e);
@@ -150,7 +129,6 @@ export default function QuizBuilder() {
         setFormLoading(false);
       }
     };
-    
     fetchTeacherSpecificData();
   }, [user, userRole]);
 
@@ -178,9 +156,31 @@ export default function QuizBuilder() {
   };
 
   const handleSave = async () => {
-    if (!exam.title || !exam.subject_id || !exam.section_ids || exam.section_ids.length === 0) return alert('يرجى التأكد من إدخال العنوان، اختيار المادة، واختيار صف واحد على الأقل');
+    if (!exam.title || !exam.subject_id || !exam.section_ids || exam.section_ids.length === 0) {
+      return alert('يرجى التأكد من إدخال العنوان، اختيار المادة، واختيار صف واحد على الأقل');
+    }
+    if (questions.length === 0) {
+      return alert('يجب إضافة سؤال واحد على الأقل للاختبار');
+    }
+
     setSaving(true);
-    try { await saveExam(exam, questions, params.id === 'new'); router.push('/exams'); } catch (err) { alert('حدث خطأ في عملية الحفظ'); console.error(err); } finally { setSaving(false); }
+    try {
+      const calculatedMaxScore = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
+      const finalExamData = {
+        ...exam,
+        status: 'published',
+        max_score: calculatedMaxScore > 0 ? calculatedMaxScore : 100
+      };
+      const finalQuestions = questions.map((q, idx) => ({ ...q, order_index: idx }));
+
+      await saveExam(finalExamData, finalQuestions, params.id === 'new'); 
+      router.push('/exams'); 
+    } catch (err: any) { 
+      alert(`حدث خطأ أثناء الحفظ: ${err.message}`); 
+      console.error(err); 
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-12 w-12 border-t-4 border-indigo-600 rounded-full"></div></div>;
