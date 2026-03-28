@@ -28,13 +28,38 @@ export interface Exam {
   question_count?: number;
 }
 
+export interface ExamDetails {
+  exam: Exam & { section_ids: string[] };
+  questions: Question[];
+}
+
+export interface ExamForStudent {
+  exam: Exam;
+  questions: Question[];
+}
+
+export interface ExamResults {
+  exam: Exam;
+  students: { id: string, full_name: string, email: string, section_name: string }[];
+  attempts: any[];
+  questions: Question[];
+  answers: any[];
+}
+
+export interface StudentExamResult {
+  exam: Exam;
+  student: { id: string, users: { full_name: string } };
+  attempt: any | null;
+  answers: any[];
+}
+
 export function useExamsSystem() {
   const { user, userRole } = useAuth();
   const [data, setData] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchExams = useCallback(async () => {
+  const fetchExams = useCallback(async (): Promise<void> => {
     if (!user || !userRole) return;
     setLoading(true);
     setError(null);
@@ -88,7 +113,7 @@ export function useExamsSystem() {
       const { data: examsData, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
-      let mappedData = (examsData || []).map((e: any) => ({
+      let mappedData: Exam[] = (examsData || []).map((e: any) => ({
         ...e,
         subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name,
         teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
@@ -137,9 +162,10 @@ export function useExamsSystem() {
       }
 
       setData(mappedData);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error fetching exams';
       console.error("Error fetching exams:", err);
-      setError(err.message || 'Failed to load exams');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -149,7 +175,7 @@ export function useExamsSystem() {
     fetchExams();
   }, [fetchExams]);
 
-  const fetchExamDetails = useCallback(async (examId: string) => {
+  const fetchExamDetails = useCallback(async (examId: string): Promise<ExamDetails> => {
     try {
       const { data: examData, error: examError } = await supabase
         .from('exams')
@@ -190,7 +216,7 @@ export function useExamsSystem() {
     }
   }, []);
 
-  const saveExam = useCallback(async (examData: any, questions: Question[], isNew: boolean) => {
+  const saveExam = useCallback(async (examData: any, questions: Question[], isNew: boolean): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -216,7 +242,7 @@ export function useExamsSystem() {
     }
   }, [user, fetchExams]);
 
-  const fetchExamForStudent = useCallback(async (examId: string) => {
+  const fetchExamForStudent = useCallback(async (examId: string): Promise<ExamForStudent> => {
     try {
       const { data: examData, error: examError } = await supabase
         .from('exams')
@@ -255,7 +281,7 @@ export function useExamsSystem() {
     }
   }, []);
 
-  const submitExam = useCallback(async (examId: string, answers: any, score: number, status: string, timeSpent: number) => {
+  const submitExam = useCallback(async (examId: string, answers: any, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
 
     try {
@@ -282,7 +308,8 @@ export function useExamsSystem() {
       throw err;
     }
   }, [user, fetchExams]);
-  const deleteExam = useCallback(async (examId: string) => {
+
+  const deleteExam = useCallback(async (examId: string): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -305,7 +332,7 @@ export function useExamsSystem() {
     }
   }, [user, fetchExams]);
 
-  const deleteExamWithMedia = useCallback(async (examId: string) => {
+  const deleteExamWithMedia = useCallback(async (examId: string): Promise<{ success: boolean }> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -344,13 +371,13 @@ export function useExamsSystem() {
 
       await fetchExams();
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting exam:', err);
       throw err;
     }
   }, [user, fetchExams]);
 
-  const fetchExamResults = useCallback(async (examId: string) => {
+  const fetchExamResults = useCallback(async (examId: string): Promise<ExamResults> => {
     try {
       // 1. Fetch exam details
       const { data: examData, error: examError } = await supabase
@@ -413,7 +440,7 @@ export function useExamsSystem() {
       if (qError) throw qError;
 
       // 5. Fetch answers
-      let aData = [];
+      let aData: any[] = [];
       if (attemptsData && attemptsData.length > 0) {
         const attemptIds = attemptsData.map(a => a.id);
         const { data: answers, error: aError } = await supabase
@@ -439,7 +466,7 @@ export function useExamsSystem() {
     }
   }, []);
 
-  const deleteAttempt = useCallback(async (attemptId: string) => {
+  const deleteAttempt = useCallback(async (attemptId: string): Promise<{ success: boolean }> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -462,7 +489,7 @@ export function useExamsSystem() {
     }
   }, [user]);
 
-  const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
+  const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
       // 1. Fetch exam details
       const { data: examData, error: examError } = await supabase
@@ -498,7 +525,7 @@ export function useExamsSystem() {
       }
 
       // 4. Fetch answers if attempt exists
-      let answersData = [];
+      let answersData: any[] = [];
       if (attemptData) {
         const { data: answers, error: answersError } = await supabase
           .from('student_answers')

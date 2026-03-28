@@ -1,12 +1,53 @@
-'use client';
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+
+export interface TeacherMonitorData {
+  teachersData: {
+    id: string;
+    specialization: string;
+    users: { full_name: string } | { full_name: string }[];
+  }[];
+  allSchedules: {
+    teacher_id: string;
+    section_id: string;
+    period: number;
+  }[];
+  allAttendance: {
+    teacher_id: string;
+    section_id: string;
+    period_number: number;
+    date: string;
+  }[];
+  allAssignments: {
+    teacher_id: string;
+  }[];
+  allExams: {
+    teacher_id: string;
+  }[];
+}
+
+export interface TeacherReportResult {
+  teacher: {
+    id: string;
+    specialization: string;
+    users: { full_name: string } | { full_name: string }[];
+  };
+  scheduleData: {
+    section_id: string;
+    day_of_week: number;
+    period: number;
+  }[];
+  attendanceData: {
+    date: string;
+    section_id: string;
+    period_number: number;
+  }[];
+}
 
 export function useTeachersSystem() {
   const [loading, setLoading] = useState(false);
 
-  const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string) => {
+  const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
       // 1. Fetch all teachers
@@ -49,11 +90,11 @@ export function useTeachersSystem() {
       if (examsError) throw examsError;
 
       return {
-        teachersData,
-        allSchedules,
-        allAttendance,
-        allAssignments,
-        allExams
+        teachersData: teachersData || [],
+        allSchedules: allSchedules || [],
+        allAttendance: allAttendance || [],
+        allAssignments: allAssignments || [],
+        allExams: allExams || []
       };
     } catch (error) {
       console.error('Error fetching teachers monitor data:', error);
@@ -63,7 +104,7 @@ export function useTeachersSystem() {
     }
   }, []);
 
-  const fetchTeachersReportData = useCallback(async (reportType: "day" | "week", todayStr: string, dbDay: number, weekAgoStr: string) => {
+  const fetchTeachersReportData = useCallback(async (reportType: "day" | "week", todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherReportResult[]> => {
     setLoading(true);
     try {
       const fromDate = reportType === "day" ? todayStr : weekAgoStr;
@@ -76,7 +117,7 @@ export function useTeachersSystem() {
       if (teachersError) throw teachersError;
 
       const results = await Promise.all(
-        (teachersData as any[]).map(async (teacher: any) => {
+        (teachersData || []).map(async (teacher: any) => {
           const { data: scheduleData, error: scheduleError } = await supabase
             .from("schedules")
             .select("section_id, day_of_week, period")
@@ -95,8 +136,8 @@ export function useTeachersSystem() {
 
           return {
             teacher,
-            scheduleData,
-            attendanceData
+            scheduleData: scheduleData || [],
+            attendanceData: attendanceData || []
           };
         })
       );
@@ -110,7 +151,7 @@ export function useTeachersSystem() {
     }
   }, []);
 
-  const sendTeacherWarning = useCallback(async (teacherId: string) => {
+  const sendTeacherWarning = useCallback(async (teacherId: string): Promise<void> => {
     try {
       const response = await fetch('/api/notifications/send', {
         method: 'POST',

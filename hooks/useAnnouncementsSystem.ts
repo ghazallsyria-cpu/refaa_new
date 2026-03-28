@@ -47,16 +47,17 @@ export function useAnnouncementsSystem() {
 
       if (fetchError) throw fetchError;
 
-      const normalizedData = (data || []).map((a: any) => ({
+      const normalizedData: Announcement[] = (data || []).map((a) => ({
         ...a,
         image_url: normalizeString(a.image_url)
       }));
 
-      setAnnouncements(normalizedData as Announcement[]);
-      return normalizedData as Announcement[];
-    } catch (err: any) {
+      setAnnouncements(normalizedData);
+      return normalizedData;
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
       console.error('Error fetching announcements:', err);
-      setError(err.message);
+      setError(errorMessage);
       return [];
     } finally {
       setLoading(false);
@@ -74,9 +75,10 @@ export function useAnnouncementsSystem() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to save announcement');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
       console.error('Error saving announcement:', err);
-      setError(err.message);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -96,9 +98,10 @@ export function useAnnouncementsSystem() {
       if (imageUrl) {
         await deleteFromCloudinary(imageUrl);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
       console.error('Error deleting announcement:', err);
-      setError(err.message);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);

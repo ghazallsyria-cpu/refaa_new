@@ -4,9 +4,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
+import { User as SupabaseUser } from '@supabase/supabase-js';
+import { User, UserRole } from '@/types';
+
 interface AuthContextType {
-  user: any;
-  userRole: string | null;
+  user: SupabaseUser | null;
+  userRole: UserRole | null;
   userName: string;
   mustResetPassword: boolean;
   isChecking: boolean;
@@ -23,8 +26,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [userName, setUserName] = useState<string>('');
   const [mustResetPassword, setMustResetPassword] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
@@ -50,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (studentData && studentData.users) {
-        authEmail = (studentData.users as any).email;
+        authEmail = (studentData.users as { email: string }).email;
       } else {
         // Try to find teacher
         const { data: teacherData } = await supabase
@@ -60,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (teacherData && teacherData.users) {
-          authEmail = (teacherData.users as any).email;
+          authEmail = (teacherData.users as { email: string }).email;
         } else {
           // Try to find parent
           const { data: parentData } = await supabase
@@ -70,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .maybeSingle();
             
           if (parentData && parentData.users) {
-            authEmail = (parentData.users as any).email;
+            authEmail = (parentData.users as { email: string }).email;
           } else {
             // Default fallback
             authEmail = `${civilId}@alrefaa.edu`;
@@ -119,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
       
     if (studentData && studentData.users) {
-      authEmail = (studentData.users as any).email;
+      authEmail = (studentData.users as { email: string }).email;
     } else {
       // Check teachers
       const { data: teacherData } = await supabase
@@ -129,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (teacherData && teacherData.users) {
-        authEmail = (teacherData.users as any).email;
+        authEmail = (teacherData.users as { email: string }).email;
       } else {
         // Check parents
         const { data: parentData } = await supabase
@@ -139,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (parentData && parentData.users) {
-          authEmail = (parentData.users as any).email;
+          authEmail = (parentData.users as { email: string }).email;
         }
       }
     }

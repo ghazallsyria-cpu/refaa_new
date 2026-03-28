@@ -1,10 +1,42 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
+export interface ScheduleInitialData {
+  sections: any[];
+  subjects: any[];
+  teachers: any[];
+  assignments: any[];
+  periods: any[];
+}
+
+export interface Schedule {
+  id: string;
+  day_of_week: number;
+  period: number;
+  start_time: string;
+  end_time: string;
+  teacher_id: string;
+  section_id: string;
+  subject_id: string;
+  subjects?: { name: string };
+  teachers?: { users: { full_name: string } };
+  sections?: { name: string, classes: { name: string } };
+}
+
+export interface ScheduleConflict {
+  id: string;
+  teacher_id: string;
+  section_id: string;
+  day_of_week: number;
+  period: number;
+  subjects?: { name: string };
+  sections?: { name: string, classes: { name: string } };
+}
+
 export function useSchedulesSystem() {
   const [loading, setLoading] = useState(false);
 
-  const fetchInitialScheduleData = useCallback(async () => {
+  const fetchInitialScheduleData = useCallback(async (): Promise<ScheduleInitialData> => {
     setLoading(true);
     try {
       const [sections, subjects, teachers, assignments, periods] = await Promise.all([
@@ -30,7 +62,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const fetchSchedules = useCallback(async (filters: { sectionId?: string, teacherId?: string }) => {
+  const fetchSchedules = useCallback(async (filters: { sectionId?: string, teacherId?: string }): Promise<Schedule[]> => {
     setLoading(true);
     try {
       let query = supabase.from('schedules').select(`
@@ -56,7 +88,12 @@ export function useSchedulesSystem() {
 
       const { data, error } = await query.order('day_of_week').order('period');
       if (error) throw error;
-      return data || [];
+      return (data as any[] || []).map(d => ({
+        ...d,
+        subjects: Array.isArray(d.subjects) ? d.subjects[0] : d.subjects,
+        teachers: Array.isArray(d.teachers) ? d.teachers[0] : d.teachers,
+        sections: Array.isArray(d.sections) ? d.sections[0] : d.sections
+      })) as Schedule[];
     } catch (error) {
       console.error('Error fetching schedules:', error);
       throw error;
@@ -65,7 +102,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const addSchedule = useCallback(async (schedule: any) => {
+  const addSchedule = useCallback(async (schedule: Partial<Schedule>): Promise<any> => {
     setLoading(true);
     try {
       const response = await fetch('/api/schedules/save', {
@@ -85,7 +122,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const updateSchedule = useCallback(async (id: string, updates: any) => {
+  const updateSchedule = useCallback(async (id: string, updates: Partial<Schedule>): Promise<any> => {
     setLoading(true);
     try {
       const response = await fetch('/api/schedules/save', {
@@ -105,7 +142,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const deleteSchedule = useCallback(async (id: string) => {
+  const deleteSchedule = useCallback(async (id: string): Promise<void> => {
     setLoading(true);
     try {
       const response = await fetch(`/api/schedules/delete?id=${id}`, {
@@ -122,7 +159,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const fetchUserRole = useCallback(async (userId: string) => {
+  const fetchUserRole = useCallback(async (userId: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase.from('users').select('role').eq('id', userId).single();
       if (error) throw error;
@@ -133,7 +170,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const fetchStudentSection = useCallback(async (studentId: string) => {
+  const fetchStudentSection = useCallback(async (studentId: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase.from('students').select('section_id').eq('id', studentId).single();
       if (error) throw error;
@@ -144,7 +181,7 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const checkConflicts = useCallback(async (day: number, period: number, teacherId: string, sectionId: string, excludeId?: string) => {
+  const checkConflicts = useCallback(async (day: number, period: number, teacherId: string, sectionId: string, excludeId?: string): Promise<ScheduleConflict[]> => {
     try {
       let query = supabase
         .from('schedules')
@@ -159,14 +196,18 @@ export function useSchedulesSystem() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data || [];
+      return (data as any[] || []).map(d => ({
+        ...d,
+        subjects: Array.isArray(d.subjects) ? d.subjects[0] : d.subjects,
+        sections: Array.isArray(d.sections) ? d.sections[0] : d.sections
+      })) as ScheduleConflict[];
     } catch (error) {
       console.error('Error checking conflicts:', error);
       throw error;
     }
   }, []);
 
-  const swapSchedules = useCallback(async (sourceId: string, sourceDay: number, sourcePeriod: number, targetId: string | null, targetDay: number, targetPeriod: number) => {
+  const swapSchedules = useCallback(async (sourceId: string, sourceDay: number, sourcePeriod: number, targetId: string | null, targetDay: number, targetPeriod: number): Promise<void> => {
     try {
       const response = await fetch('/api/schedules/swap', {
         method: 'POST',
@@ -189,12 +230,12 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const notifyScheduleChange = useCallback(async (lesson: any, newDay: number, newPeriod: number, days: any[]) => {
+  const notifyScheduleChange = useCallback(async (lesson: Schedule, newDay: number, newPeriod: number, days: any[]): Promise<void> => {
     try {
       const dayName = days.find(d => d.id === newDay)?.name || '';
       const msg = `تم تغيير موعد حصة ${lesson.subjects?.name} إلى يوم ${dayName} الحصة ${newPeriod}`;
       
-      const notifications = [];
+      const notifications: any[] = [];
 
       // Add teacher notification
       notifications.push({

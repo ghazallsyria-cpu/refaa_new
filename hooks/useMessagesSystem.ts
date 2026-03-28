@@ -1,30 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-
-export interface Message {
-  id: string;
-  sender_id: string;
-  receiver_id: string;
-  section_id?: string;
-  subject: string;
-  content: string;
-  created_at: string;
-  is_read: boolean;
-  sender?: any;
-  receiver?: any;
-  section?: any;
-}
+import { Message, User, Section } from '@/types';
 
 export function useMessagesSystem() {
   const { user, userRole } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [teacherSections, setTeacherSections] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [teacherSections, setTeacherSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
       const { data, error: fetchError } = await supabase
@@ -39,14 +26,15 @@ export function useMessagesSystem() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setMessages(data || []);
-    } catch (err: any) {
+      setMessages((data as unknown) as Message[] || []);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load messages';
       console.error("Error fetching messages:", err);
-      setError(err.message || 'Failed to load messages');
+      setError(errorMessage);
     }
   }, [user]);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
       if (userRole === 'student') {
@@ -71,14 +59,15 @@ export function useMessagesSystem() {
               .or(`id.in.(${teacherIds.join(',')}),role.in.(admin,management)`)
               .order('full_name');
             if (error) throw error;
-            setUsers(data || []);
+            setUsers((data as unknown) as User[] || []);
           } else {
             const { data, error } = await supabase
               .from('users')
               .select('id, full_name, role')
               .in('role', ['admin', 'management'])
               .order('full_name');
-            setUsers(data || []);
+            if (error) throw error;
+            setUsers((data as unknown) as User[] || []);
           }
         } else {
           const { data, error } = await supabase
@@ -86,7 +75,8 @@ export function useMessagesSystem() {
             .select('id, full_name, role')
             .in('role', ['admin', 'management'])
             .order('full_name');
-          setUsers(data || []);
+          if (error) throw error;
+          setUsers((data as unknown) as User[] || []);
         }
       } else {
         const { data, error } = await supabase
@@ -94,15 +84,16 @@ export function useMessagesSystem() {
           .select('id, full_name, role')
           .order('full_name');
         if (error) throw error;
-        setUsers(data || []);
+        setUsers((data as unknown) as User[] || []);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error fetching users';
       console.error('Error fetching users:', err);
-      setError(err.message);
+      setError(errorMessage);
     }
   }, [user, userRole]);
 
-  const fetchTeacherSections = useCallback(async () => {
+  const fetchTeacherSections = useCallback(async (): Promise<void> => {
     if (!user || userRole !== 'teacher') return;
     try {
       const { data: sectionsData } = await supabase
@@ -123,16 +114,16 @@ export function useMessagesSystem() {
             id: section.id,
             name: section.name,
             classes: classes
-          };
+          } as Section;
         });
       
-      setTeacherSections(uniqueSections.filter(Boolean));
-    } catch (err: any) {
+      setTeacherSections(uniqueSections.filter((s): s is Section => s !== null));
+    } catch (err: unknown) {
       console.error('Error fetching teacher sections:', err);
     }
   }, [user, userRole]);
 
-  const loadInitialData = useCallback(async () => {
+  const loadInitialData = useCallback(async (): Promise<void> => {
     setLoading(true);
     await Promise.all([
       fetchMessages(),
@@ -146,7 +137,7 @@ export function useMessagesSystem() {
     loadInitialData();
   }, [loadInitialData]);
 
-  const fetchStudentsBySection = useCallback(async (sectionId: string) => {
+  const fetchStudentsBySection = useCallback(async (sectionId: string): Promise<User[]> => {
     try {
       const { data, error } = await supabase
         .from('students')
@@ -160,15 +151,15 @@ export function useMessagesSystem() {
       
       return data?.map(s => {
         const u = Array.isArray(s.users) ? s.users[0] : s.users;
-        return u;
-      }).filter(Boolean) || [];
+        return u as User;
+      }).filter((u): u is User => u !== null) || [];
     } catch (error) {
       console.error('Error fetching students by section:', error);
       return [];
     }
   }, []);
 
-  const sendMessage = useCallback(async (receiverId: string, subject: string, content: string) => {
+  const sendMessage = useCallback(async (receiverId: string, subject: string, content: string): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -193,7 +184,7 @@ export function useMessagesSystem() {
     }
   }, [user, fetchMessages]);
 
-  const sendGroupMessage = useCallback(async (sectionId: string, subject: string, content: string) => {
+  const sendGroupMessage = useCallback(async (sectionId: string, subject: string, content: string): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     
     const response = await fetch('/api/messages/send-group', {
@@ -213,7 +204,7 @@ export function useMessagesSystem() {
     await fetchMessages();
   }, [user, fetchMessages]);
 
-  const markAsRead = useCallback(async (messageIds: string[]) => {
+  const markAsRead = useCallback(async (messageIds: string[]): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -236,7 +227,7 @@ export function useMessagesSystem() {
     }
   }, [user, fetchMessages]);
 
-  const deleteMessages = useCallback(async (messageIds: string[]) => {
+  const deleteMessages = useCallback(async (messageIds: string[]): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -259,7 +250,7 @@ export function useMessagesSystem() {
     }
   }, [user, fetchMessages]);
 
-  const updateMessage = useCallback(async (messageId: string, content: string) => {
+  const updateMessage = useCallback(async (messageId: string, content: string): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -296,5 +287,5 @@ export function useMessagesSystem() {
     markAsRead,
     deleteMessages,
     updateMessage
-  };
+  } as const;
 }

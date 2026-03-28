@@ -53,7 +53,7 @@ export function useDashboardSystem() {
         supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
       ]);
 
-      const activities: any[] = [
+      const activities: { title: string; time: string; type: string; color: string }[] = [
         ...(recentStudents || []).map(s => ({ title: `إضافة الطالب ${Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name}`, time: s.created_at, type: 'students', color: 'bg-indigo-100 text-indigo-600' })),
         ...(recentDocs || []).map(d => ({ title: `مستند جديد: ${d.title}`, time: d.created_at, type: 'documents', color: 'bg-emerald-100 text-emerald-600' })),
         ...(recentExams || []).map(e => ({ title: `اختبار جديد: ${e.title}`, time: e.created_at, type: 'exams', color: 'bg-amber-100 text-amber-600' })),

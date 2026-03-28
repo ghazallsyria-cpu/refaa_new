@@ -2,13 +2,38 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/auth-context";
 
+export interface TeacherAssignment {
+  teacher_id: string;
+  section_id: string;
+  subject_id: string;
+  teacher?: { users: { full_name: string } };
+  section?: { name: string, classes: { name: string } };
+  subject?: { name: string };
+}
+
+export interface TeacherData {
+  id: string;
+  users: { full_name: string };
+}
+
+export interface SectionData {
+  id: string;
+  name: string;
+  classes: { name: string };
+}
+
+export interface SubjectData {
+  id: string;
+  name: string;
+}
+
 export function useTeacherAssignmentsSystem() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [assignments, setAssignments] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<TeacherData[]>([]);
+  const [sections, setSections] = useState<SectionData[]>([]);
+  const [subjects, setSubjects] = useState<SubjectData[]>([]);
+  const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -27,10 +52,24 @@ export function useTeacherAssignmentsSystem() {
       if (subRes.error) throw subRes.error;
       if (aRes.error) throw aRes.error;
 
-      setTeachers(tRes.data || []);
-      setSections(sRes.data || []);
+      setTeachers((tRes.data as any[] || []).map(t => ({
+        ...t,
+        users: Array.isArray(t.users) ? t.users[0] : t.users
+      })) as TeacherData[]);
+
+      setSections((sRes.data as any[] || []).map(s => ({
+        ...s,
+        classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
+      })) as SectionData[]);
+
       setSubjects(subRes.data || []);
-      setAssignments(aRes.data || []);
+
+      setAssignments((aRes.data as any[] || []).map(a => ({
+        ...a,
+        teacher: Array.isArray(a.teacher) ? a.teacher[0] : a.teacher,
+        section: Array.isArray(a.section) ? a.section[0] : a.section,
+        subject: Array.isArray(a.subject) ? a.subject[0] : a.subject
+      })) as TeacherAssignment[]);
     } catch (err: any) {
       console.error('Error fetching assignments data:', err);
       setError(err.message || 'حدث خطأ أثناء جلب البيانات');
@@ -137,7 +176,7 @@ export function useTeacherAssignmentsSystem() {
     }
   }, [fetchData, user]);
 
-  const fetchTeacherAssignments = useCallback(async (teacherId: string) => {
+  const fetchTeacherAssignments = useCallback(async (teacherId: string): Promise<TeacherAssignment[]> => {
     setLoading(true);
     setError(null);
     try {
@@ -146,7 +185,12 @@ export function useTeacherAssignmentsSystem() {
         .select('teacher_id, section_id, subject_id, teacher:teachers(users(full_name)), section:sections(name, classes(name)), subject:subjects(name)')
         .eq('teacher_id', teacherId);
       if (error) throw error;
-      return data || [];
+      return (data as any[] || []).map(a => ({
+        ...a,
+        teacher: Array.isArray(a.teacher) ? a.teacher[0] : a.teacher,
+        section: Array.isArray(a.section) ? a.section[0] : a.section,
+        subject: Array.isArray(a.subject) ? a.subject[0] : a.subject
+      })) as TeacherAssignment[];
     } catch (err: any) {
       console.error('Error fetching teacher assignments:', err);
       setError(err.message || 'حدث خطأ أثناء جلب تعيينات المعلم');

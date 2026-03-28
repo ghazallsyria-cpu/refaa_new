@@ -1,24 +1,26 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
+import { OrganizedClass, OrganizedSection, OrganizedStudent } from '@/types';
 
 export function useClassesSystem() {
   const { user, userRole } = useAuth();
-  const [classes, setClasses] = useState<any[]>([]);
+  const [classes, setClasses] = useState<OrganizedClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchClassesData = useCallback(async () => {
+  const fetchClassesData = useCallback(async (): Promise<void> => {
     if (!user) return;
     setLoading(true);
     setError(null);
     try {
       const isTeacher = userRole === 'teacher';
-      const isAdminOrManagement = ['admin', 'management'].includes(userRole || '');
 
       // Fetch classes
-      let classesQuery = supabase.from('classes').select('*').order('level');
-      const { data: classesData, error: classesError } = await classesQuery;
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('*')
+        .order('level');
         
       if (classesError) throw classesError;
 
@@ -35,7 +37,6 @@ export function useClassesSystem() {
         if (sectionIds.length > 0) {
           sectionsQuery = sectionsQuery.in('id', sectionIds);
         } else {
-          // If teacher has no sections, return empty sections
           sectionsQuery = sectionsQuery.in('id', ['none']);
         }
       }
@@ -60,20 +61,23 @@ export function useClassesSystem() {
       if (studentsError) throw studentsError;
 
       // Organize data
-      const organizedData = classesData.map((cls: any) => {
-        const classSections = sectionsData
-          .filter((sec: any) => sec.class_id === cls.id)
-          .map((sec: any) => {
-            const sectionStudents = studentsData
-              .filter((stu: any) => stu.section_id === sec.id)
-              .map((stu: any) => ({
-                id: stu.id,
-                national_id: stu.national_id,
-                user: {
-                  full_name: Array.isArray(stu.users) ? stu.users[0]?.full_name : stu.users?.full_name,
-                  email: Array.isArray(stu.users) ? stu.users[0]?.email : stu.users?.email,
-                }
-              }))
+      const organizedData: OrganizedClass[] = (classesData || []).map((cls) => {
+        const classSections: OrganizedSection[] = (sectionsData || [])
+          .filter((sec) => sec.class_id === cls.id)
+          .map((sec) => {
+            const sectionStudents: OrganizedStudent[] = (studentsData || [])
+              .filter((stu) => stu.section_id === sec.id)
+              .map((stu) => {
+                const userData = Array.isArray(stu.users) ? stu.users[0] : stu.users;
+                return {
+                  id: stu.id,
+                  national_id: stu.national_id,
+                  user: {
+                    full_name: userData?.full_name || '',
+                    email: userData?.email || '',
+                  }
+                };
+              })
               .sort((a, b) => a.user.full_name.localeCompare(b.user.full_name, 'ar'));
 
             return {
@@ -94,73 +98,74 @@ export function useClassesSystem() {
         : organizedData;
 
       setClasses(finalData);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch classes';
       console.error('Error fetching classes:', err);
-      setError(err.message || 'Failed to fetch classes');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, [user, userRole]);
 
-  const addClass = useCallback(async (name: string, level: number) => {
+  const addClass = useCallback(async (name: string, level: number): Promise<void> => {
     const response = await fetch('/api/classes/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, level }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to add class');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to add class');
     await fetchClassesData();
   }, [fetchClassesData]);
 
-  const updateClass = useCallback(async (id: string, name: string, level: number) => {
+  const updateClass = useCallback(async (id: string, name: string, level: number): Promise<void> => {
     const response = await fetch('/api/classes/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, name, level }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to update class');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to update class');
     await fetchClassesData();
   }, [fetchClassesData]);
 
-  const deleteClass = useCallback(async (id: string) => {
+  const deleteClass = useCallback(async (id: string): Promise<void> => {
     const response = await fetch(`/api/classes/delete?id=${id}`, {
       method: 'DELETE',
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to delete class');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to delete class');
     await fetchClassesData();
   }, [fetchClassesData]);
 
-  const addSection = useCallback(async (name: string, classId: string) => {
+  const addSection = useCallback(async (name: string, classId: string): Promise<void> => {
     const response = await fetch('/api/sections/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, classId }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to add section');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to add section');
     await fetchClassesData();
   }, [fetchClassesData]);
 
-  const updateSection = useCallback(async (id: string, name: string) => {
+  const updateSection = useCallback(async (id: string, name: string): Promise<void> => {
     const response = await fetch('/api/sections/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, name }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to update section');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to update section');
     await fetchClassesData();
   }, [fetchClassesData]);
 
-  const deleteSection = useCallback(async (id: string) => {
+  const deleteSection = useCallback(async (id: string): Promise<void> => {
     const response = await fetch(`/api/sections/delete?id=${id}`, {
       method: 'DELETE',
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to delete section');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to delete section');
     await fetchClassesData();
   }, [fetchClassesData]);
 

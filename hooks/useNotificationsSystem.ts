@@ -19,7 +19,7 @@ export function useNotificationsSystem() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (): Promise<void> => {
     if (!user) return;
     setLoading(true);
     setError(null);
@@ -31,10 +31,11 @@ export function useNotificationsSystem() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setData(notifData || []);
-    } catch (err: any) {
+      setData((notifData as Notification[]) || []);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load notifications';
       console.error("Error fetching notifications:", err);
-      setError(err.message || 'Failed to load notifications');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -44,7 +45,7 @@ export function useNotificationsSystem() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  const markAsRead = useCallback(async (notificationId: string) => {
+  const markAsRead = useCallback(async (notificationId: string): Promise<void> => {
     if (!user) return;
     try {
       const response = await fetch('/api/notifications/mark-read', {
@@ -52,16 +53,16 @@ export function useNotificationsSystem() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationId, userId: user.id }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to mark as read');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to mark as read');
       await fetchNotifications();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error marking as read:', err);
       throw err;
     }
   }, [user, fetchNotifications]);
 
-  const markAllAsRead = useCallback(async () => {
+  const markAllAsRead = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
       const response = await fetch('/api/notifications/mark-read', {
@@ -69,10 +70,10 @@ export function useNotificationsSystem() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, all: true }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to mark all as read');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to mark all as read');
       await fetchNotifications();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error marking all as read:', err);
       throw err;
     }

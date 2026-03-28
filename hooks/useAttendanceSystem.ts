@@ -19,9 +19,29 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
 }
 
+export interface SectionData {
+  id: string;
+  name: string;
+  classes: { name: string };
+  subject_id?: string;
+  subject_name?: string;
+}
+
+export interface StudentData {
+  id: string;
+  users: { full_name: string };
+}
+
+export interface AttendanceStats {
+  daily: { present: number, absent: number, partial: number, incomplete: number, total: number, rate: number };
+  weekly: { present: number, absent: number, late: number, excused: number, total: number, rate: number };
+  monthly: { present: number, absent: number, late: number, excused: number, total: number, rate: number };
+  students: Record<string, any>;
+}
+
 export function useAttendanceSystem() {
   const { user, userRole } = useAuth();
-  const [sections, setSections] = useState<any[]>([]);
+  const [sections, setSections] = useState<SectionData[]>([]);
   const [daySchedule, setDaySchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,10 +69,10 @@ export function useAttendanceSystem() {
     }
   }, [user, userRole]);
 
-  const fetchSections = useCallback(async (targetDate: string, targetPeriod: number) => {
+  const fetchSections = useCallback(async (targetDate: string, targetPeriod: number): Promise<SectionData[]> => {
     if (!user) return [];
     try {
-      let sectionsData: any[] = [];
+      let sectionsData: SectionData[] = [];
       const isTeacher = userRole === 'teacher' || (typeof userRole === 'string' && userRole.includes('teacher'));
       const isAdmin = userRole === 'admin' || (typeof userRole === 'string' && userRole.includes('admin'));
 
@@ -68,16 +88,20 @@ export function useAttendanceSystem() {
           .eq('day_of_week', dbDay)
           .eq('period', targetPeriod);
         
-        sectionsData = (scheduledClasses?.map(sc => ({
-          ...(Array.isArray(sc.section) ? sc.section[0] : sc.section),
-          subject_id: sc.subject_id,
-          subject_name: Array.isArray(sc.subject) ? sc.subject[0]?.name : (sc as any).subject?.name
-        })) || []) as any[];
+        sectionsData = (scheduledClasses?.map(sc => {
+          const section = Array.isArray(sc.section) ? sc.section[0] : sc.section;
+          const subject = Array.isArray(sc.subject) ? sc.subject[0] : sc.subject;
+          return {
+            ...section,
+            subject_id: sc.subject_id,
+            subject_name: subject?.name
+          };
+        }) || []) as SectionData[];
       } else if (isAdmin) {
         const { data: allSections } = await supabase
           .from('sections')
           .select('id, name, classes(name)');
-        sectionsData = allSections || [];
+        sectionsData = (allSections || []) as SectionData[];
       }
       
       setSections(sectionsData);
@@ -116,7 +140,7 @@ export function useAttendanceSystem() {
       if (sessionError) throw sessionError;
 
       const newAttendance: Record<string, AttendanceStatus> = {};
-      studentsData?.forEach(s => {
+      (studentsData as any[] || [])?.forEach(s => {
         newAttendance[s.id] = 'present';
       });
 
@@ -139,21 +163,21 @@ export function useAttendanceSystem() {
         .select('*')
         .eq('date', date);
 
-      let stats = null;
+      let stats: AttendanceStats | null = null;
       if (!statsError && dailyStats) {
         stats = {
           daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
           weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
           monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-          students: {} as Record<string, any>
+          students: {}
         };
 
         dailyStats.forEach(s => {
-          if (s.daily_status === 'present') stats.daily.present++;
-          else if (s.daily_status === 'full_absent') stats.daily.absent++;
-          else if (s.daily_status === 'partial_absent') stats.daily.partial++;
-          else if (s.daily_status === 'incomplete') stats.daily.incomplete++;
-          stats.daily.total++;
+          if (s.daily_status === 'present') stats!.daily.present++;
+          else if (s.daily_status === 'full_absent') stats!.daily.absent++;
+          else if (s.daily_status === 'partial_absent') stats!.daily.partial++;
+          else if (s.daily_status === 'incomplete') stats!.daily.incomplete++;
+          stats!.daily.total++;
         });
 
         if (stats.daily.total > 0) {
@@ -161,7 +185,11 @@ export function useAttendanceSystem() {
         }
       }
 
-      return { students: studentsData || [], attendance: newAttendance, stats };
+      return { 
+        students: (studentsData as any[] || []) as StudentData[], 
+        attendance: newAttendance, 
+        stats 
+      };
     } catch (err: any) {
       console.error('Error fetching students and attendance:', err);
       setError(err.message);
@@ -177,7 +205,7 @@ export function useAttendanceSystem() {
     date: string, 
     period: number, 
     attendance: Record<string, AttendanceStatus>,
-    students: any[]
+    students: StudentData[]
   ) => {
     if (!user) throw new Error('User not found');
     

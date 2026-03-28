@@ -1,34 +1,47 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { Subject, Section, Teacher } from '@/types';
+import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
 
-export interface Assignment {
-  id: string;
-  title: string;
-  description: string;
-  due_date: string;
-  subject_id: string;
-  teacher_id: string;
-  file_url?: string;
-  status?: string;
-  created_at: string;
+export interface AssignmentWithMeta extends Assignment {
   subject_name?: string;
   teacher_name?: string;
-  assignment_sections?: any[];
   submission_count?: number;
   graded_count?: number;
 }
 
+export interface SubmissionWithMeta extends AssignmentSubmission {
+  student?: {
+    users: {
+      full_name: string;
+      email: string;
+    };
+    section: {
+      name: string;
+      classes: {
+        name: string;
+      };
+    };
+  };
+}
+
+export interface AssignmentDetails {
+  assignment: Assignment;
+  questions: Question[];
+  submission: AssignmentSubmission | null;
+  answers: AssignmentAnswer[];
+  allSubmissions: SubmissionWithMeta[];
+}
+
 export function useAssignmentsSystem() {
   const { user, userRole } = useAuth();
-  const [data, setData] = useState<Assignment[]>([]);
+  const [data, setData] = useState<AssignmentWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [studentSubmissions, setStudentSubmissions] = useState<Record<string, any>>({});
+  const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
-  const fetchAssignments = useCallback(async () => {
+  const fetchAssignments = useCallback(async (): Promise<void> => {
     if (!user || !userRole) return;
     setLoading(true);
     setError(null);
@@ -58,13 +71,11 @@ export function useAssignmentsSystem() {
         if (studentData?.section_id) {
           query = query.eq('assignment_sections.section_id', studentData.section_id);
         } else {
-          // If student has no section, return empty
           setData([]);
           setLoading(false);
           return;
         }
       } else if (userRole === 'teacher') {
-        // Teacher sees assignments they created OR assignments for their sections
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
           .select('section_id')
@@ -83,8 +94,7 @@ export function useAssignmentsSystem() {
 
       if (fetchError) throw fetchError;
 
-      // Map data to match UI expectations
-      const mappedData = (assignmentsData || []).map((a: any) => ({
+      const mappedData: AssignmentWithMeta[] = (assignmentsData as any[] || []).map((a) => ({
         ...a,
         subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
         teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
@@ -96,14 +106,14 @@ export function useAssignmentsSystem() {
       if (userRole === 'student') {
         const { data: subData, error: subError } = await supabase
           .from('assignment_submissions')
-          .select('assignment_id, status, grade')
+          .select('assignment_id, status, grade, id, student_id, submitted_at')
           .eq('student_id', user.id);
         
         if (subError) throw subError;
         
-        const submissionMap: Record<string, any> = {};
-        (subData || []).forEach(s => {
-          submissionMap[s.assignment_id] = s;
+        const submissionMap: Record<string, AssignmentSubmission> = {};
+        (subData as any[] || []).forEach((s) => {
+          submissionMap[s.assignment_id] = s as AssignmentSubmission;
         });
         setStudentSubmissions(submissionMap);
       }
@@ -127,9 +137,10 @@ export function useAssignmentsSystem() {
         }
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load assignments';
       console.error("Error fetching assignments:", err);
-      setError(err.message || 'Failed to load assignments');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -164,12 +175,12 @@ export function useAssignmentsSystem() {
   }, []);
 
   const saveAssignment = useCallback(async (
-    payload: any, 
+    payload: Partial<Assignment>, 
     assignmentId: string | null, 
     questions: Question[], 
     sectionIds: string[],
     subjects: Subject[]
-  ) => {
+  ): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
 
     const response = await fetch('/api/assignments/save', {
@@ -191,16 +202,16 @@ export function useAssignmentsSystem() {
     return result.id;
   }, [user, fetchAssignments]);
 
-  const deleteAssignment = useCallback(async (assignmentId: string) => {
+  const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
     const response = await fetch(`/api/assignments/delete?id=${assignmentId}`, {
       method: 'DELETE',
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Failed to delete assignment');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to delete assignment');
     await fetchAssignments();
   }, [fetchAssignments]);
 
-  const fetchAssignmentDetails = useCallback(async (assignmentId: string) => {
+  const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
     try {
       const { data: assignmentData, error: assignmentError } = await supabase
         .from('assignments')
@@ -223,25 +234,25 @@ export function useAssignmentsSystem() {
 
       if (qError) throw qError;
 
-      let submissionData = null;
-      let answersData = [];
-      let allSubmissionsData = [];
+      let submissionData: AssignmentSubmission | null = null;
+      let answersData: AssignmentAnswer[] = [];
+      let allSubmissionsData: SubmissionWithMeta[] = [];
 
       if (userRole === 'student' && user) {
-        const { data: subData, error: subError } = await supabase
+        const { data: subData } = await supabase
           .from('assignment_submissions')
           .select('*')
           .eq('assignment_id', assignmentId)
           .eq('student_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (subData) {
-          submissionData = subData;
+          submissionData = subData as AssignmentSubmission;
           const { data: aData } = await supabase
             .from('assignment_answers')
             .select('*')
             .eq('submission_id', subData.id);
-          answersData = aData || [];
+          answersData = (aData as AssignmentAnswer[]) || [];
         }
       } else if (['teacher', 'admin', 'management'].includes(userRole || '')) {
         const { data: subsData, error: subsError } = await supabase
@@ -254,12 +265,12 @@ export function useAssignmentsSystem() {
           .order('submitted_at', { ascending: false });
 
         if (!subsError && subsData) {
-          allSubmissionsData = subsData;
+          allSubmissionsData = subsData as unknown as SubmissionWithMeta[];
         }
       }
 
       return {
-        assignment: assignmentData,
+        assignment: assignmentData as Assignment,
         questions: (qData || []).map(q => normalizeQuestion({
           id: q.id,
           content: q.question_text,
@@ -278,7 +289,7 @@ export function useAssignmentsSystem() {
     }
   }, [user, userRole]);
 
-  const submitAssignment = useCallback(async (assignmentId: string, answersPayload: any[], submissionId?: string) => {
+  const submitAssignment = useCallback(async (assignmentId: string, answersPayload: any[], submissionId?: string): Promise<string> => {
     if (!user) throw new Error('Not authenticated');
 
     const studentName = user.user_metadata?.full_name || 'طالب';
@@ -338,8 +349,8 @@ export function useAssignmentsSystem() {
       if (aError) throw aError;
 
       return {
-        submission: submissionData,
-        assignment: assignmentData,
+        submission: submissionData as unknown as SubmissionWithMeta,
+        assignment: assignmentData as Assignment,
         questions: (qData || []).map(q => normalizeQuestion({
           id: q.id,
           content: q.question_text,
@@ -348,7 +359,7 @@ export function useAssignmentsSystem() {
           points: q.points,
           isRequired: q.is_required
         })),
-        answers: answersData || []
+        answers: (answersData as AssignmentAnswer[]) || []
       };
     } catch (err) {
       console.error('Error fetching submission details:', err);
@@ -356,7 +367,7 @@ export function useAssignmentsSystem() {
     }
   }, []);
 
-  const updateSubmissionGrade = useCallback(async (submissionId: string, grade: number, feedback: string, studentId: string, assignmentTitle: string) => {
+  const updateSubmissionGrade = useCallback(async (submissionId: string, grade: number, feedback: string, studentId: string, assignmentTitle: string): Promise<void> => {
     const response = await fetch('/api/assignments/grade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

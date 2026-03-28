@@ -1,20 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-
-export interface PlatformSettings {
-  id: string;
-  is_open: boolean;
-  open_date: string;
-  close_date: string;
-  message: string;
-  school_name: string;
-  academic_year: string;
-  semester: string;
-  address: string;
-  phone: string;
-  email: string;
-}
+import { PlatformSettings } from '@/types';
 
 export interface ProfileSettings {
   full_name: string;
@@ -29,7 +16,7 @@ export function useSettingsSystem() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProfile = useCallback(async () => {
+  const fetchProfile = useCallback(async (): Promise<ProfileSettings | null> => {
     if (!user) return null;
     try {
       const { data: userData, error: userError } = await supabase
@@ -59,14 +46,15 @@ export function useSettingsSystem() {
         role: userData.role || '',
         zoom_link: zoomLink
       } as ProfileSettings;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error fetching profile';
       console.error('Error fetching profile:', err);
-      setError(err.message);
+      setError(errorMessage);
       return null;
     }
   }, [user]);
 
-  const fetchPlatformSettings = useCallback(async () => {
+  const fetchPlatformSettings = useCallback(async (): Promise<PlatformSettings | null> => {
     try {
       const { data, error } = await supabase
         .from('platform_settings')
@@ -92,14 +80,15 @@ export function useSettingsSystem() {
         } as PlatformSettings;
       }
       return null;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error fetching platform settings';
       console.error('Error fetching platform settings:', err);
-      setError(err.message);
+      setError(errorMessage);
       return null;
     }
   }, []);
 
-  const updateProfile = useCallback(async (profile: ProfileSettings) => {
+  const updateProfile = useCallback(async (profile: ProfileSettings): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     setLoading(true);
     try {
@@ -113,16 +102,17 @@ export function useSettingsSystem() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to update profile');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error updating profile';
       console.error('Error updating profile:', err);
-      setError(err.message);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  const updatePlatformSettings = useCallback(async (settings: Partial<PlatformSettings>) => {
+  const updatePlatformSettings = useCallback(async (settings: Partial<PlatformSettings>): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
     setLoading(true);
     try {
@@ -136,16 +126,17 @@ export function useSettingsSystem() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to update platform settings');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error updating platform settings';
       console.error('Error updating platform settings:', err);
-      setError(err.message);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  const updatePassword = useCallback(async (newPassword: string) => {
+  const updatePassword = useCallback(async (newPassword: string): Promise<void> => {
     const { error } = await supabase.auth.updateUser({
       password: newPassword
     });

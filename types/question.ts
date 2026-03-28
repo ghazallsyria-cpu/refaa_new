@@ -18,7 +18,7 @@ export interface Question {
   isRequired: boolean;
 }
 
-export const normalizeQuestion = (raw: any): Question => {
+export const normalizeQuestion = (raw: Partial<Question> & { text?: string }): Question => {
   return {
     id: raw.id || crypto.randomUUID(),
     type: raw.type || 'text',
@@ -26,7 +26,7 @@ export const normalizeQuestion = (raw: any): Question => {
     points: raw.points || 0,
     explanation: raw.explanation,
     options: Array.isArray(raw.options) 
-      ? raw.options.map((o: any) => typeof o === 'string' 
+      ? raw.options.map((o) => typeof o === 'string' 
           ? { id: crypto.randomUUID(), content: o, is_correct: false } 
           : o) 
       : [],

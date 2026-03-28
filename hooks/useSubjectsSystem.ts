@@ -1,12 +1,20 @@
-'use client';
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Subject, Teacher, User } from '@/types';
+
+export interface TeacherWithUser extends Partial<Teacher> {
+  id: string;
+  user: Partial<User>;
+}
+
+export interface SubjectWithTeachers extends Subject {
+  teachers: TeacherWithUser[];
+}
 
 export function useSubjectsSystem() {
   const [loading, setLoading] = useState(false);
 
-  const fetchSubjectsData = useCallback(async () => {
+  const fetchSubjectsData = useCallback(async (): Promise<{ subjects: SubjectWithTeachers[], allTeachers: TeacherWithUser[] }> => {
     setLoading(true);
     try {
       // Fetch subjects
@@ -40,18 +48,18 @@ export function useSubjectsSystem() {
       if (mappingsError) throw mappingsError;
 
       // Format teachers
-      const formattedTeachers = (teachersData as any[]).map((t: any) => ({
+      const formattedTeachers: TeacherWithUser[] = (teachersData as any[] || []).map((t) => ({
         id: t.id,
         national_id: t.national_id,
         specialization: t.specialization,
-        user: t.users
+        user: Array.isArray(t.users) ? t.users[0] : t.users
       }));
       
       // Organize subjects with their teachers
-      const organizedSubjects = (subjectsData as any[]).map((sub: any) => {
-        const assignedTeacherIds = mappingsData
-          .filter((m: any) => m.subject_id === sub.id)
-          .map((m: any) => m.teacher_id);
+      const organizedSubjects: SubjectWithTeachers[] = (subjectsData as any[] || []).map((sub) => {
+        const assignedTeacherIds = (mappingsData as any[] || [])
+          .filter((m) => m.subject_id === sub.id)
+          .map((m) => m.teacher_id);
           
         const assignedTeachers = formattedTeachers.filter(t => assignedTeacherIds.includes(t.id));
           
@@ -73,7 +81,7 @@ export function useSubjectsSystem() {
     }
   }, []);
 
-  const addSubject = useCallback(async (name: string, code: string) => {
+  const addSubject = useCallback(async (name: string, code: string): Promise<any> => {
     try {
       const response = await fetch('/api/subjects/save', {
         method: 'POST',
@@ -89,7 +97,7 @@ export function useSubjectsSystem() {
     }
   }, []);
 
-  const updateSubject = useCallback(async (id: string, name: string, code: string) => {
+  const updateSubject = useCallback(async (id: string, name: string, code: string): Promise<void> => {
     try {
       const response = await fetch('/api/subjects/save', {
         method: 'POST',
@@ -104,7 +112,7 @@ export function useSubjectsSystem() {
     }
   }, []);
 
-  const deleteSubject = useCallback(async (id: string) => {
+  const deleteSubject = useCallback(async (id: string): Promise<void> => {
     try {
       const response = await fetch(`/api/subjects/delete?id=${id}`, {
         method: 'DELETE',
@@ -117,7 +125,7 @@ export function useSubjectsSystem() {
     }
   }, []);
 
-  const saveTeacherAssignments = useCallback(async (subjectId: string, teacherIds: string[]) => {
+  const saveTeacherAssignments = useCallback(async (subjectId: string, teacherIds: string[]): Promise<void> => {
     try {
       const response = await fetch('/api/subjects/save-assignments', {
         method: 'POST',

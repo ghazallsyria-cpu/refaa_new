@@ -26,16 +26,17 @@ export function useDocumentsSystem() {
 
       if (error) throw error;
       return (data as unknown) as Document[] || [];
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error fetching documents';
       console.error('Error fetching documents:', err);
-      setError(err.message);
+      setError(errorMessage);
       return [];
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const saveDocument = useCallback(async (document: Partial<Document>, file?: File) => {
+  const saveDocument = useCallback(async (document: Partial<Document>, file?: File): Promise<Document> => {
     setLoading(true);
     setError(null);
     try {
@@ -79,17 +80,18 @@ export function useDocumentsSystem() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to save document');
-      return data.data;
-    } catch (err: any) {
+      return data.data as Document;
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error saving document';
       console.error('Error saving document:', err);
-      setError(err.message);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const deleteDocument = useCallback(async (id: string, fileUrl?: string) => {
+  const deleteDocument = useCallback(async (id: string, fileUrl?: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -102,9 +104,10 @@ export function useDocumentsSystem() {
       if (fileUrl) {
         await deleteFromCloudinary(fileUrl, 'raw');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error deleting document';
       console.error('Error deleting document:', err);
-      setError(err.message);
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);

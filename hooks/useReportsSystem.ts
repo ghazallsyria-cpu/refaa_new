@@ -1,10 +1,19 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
+export interface ReportsData {
+  studentsCount: number;
+  teachersCount: number;
+  classesCount: number;
+  attendanceData: { daily_status: string, date: string }[];
+  classDistribution: { level: string, sections: { students: { id: string }[] }[] }[];
+  attemptsData: { score: number, exam: { subject: { name: string } } }[];
+}
+
 export function useReportsSystem() {
   const [loading, setLoading] = useState(false);
 
-  const fetchReportsData = useCallback(async () => {
+  const fetchReportsData = useCallback(async (): Promise<ReportsData> => {
     setLoading(true);
     try {
       const [
@@ -27,9 +36,9 @@ export function useReportsSystem() {
         studentsCount: studentsRes.count || 0,
         teachersCount: teachersRes.count || 0,
         classesCount: classesRes.count || 0,
-        attendanceData: attendanceRes.data || [],
-        classDistribution: classDistributionRes.data || [],
-        attemptsData: attemptsRes.data || []
+        attendanceData: (attendanceRes.data as any[] || []) as { daily_status: string, date: string }[],
+        classDistribution: (classDistributionRes.data as any[] || []) as { level: string, sections: { students: { id: string }[] }[] }[],
+        attemptsData: (attemptsRes.data as any[] || []) as { score: number, exam: { subject: { name: string } } }[]
       };
     } catch (error) {
       console.error('Error fetching reports data:', error);

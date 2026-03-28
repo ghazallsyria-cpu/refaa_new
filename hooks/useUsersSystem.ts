@@ -1,15 +1,29 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Student, Teacher, Parent, Section, Subject } from '@/types';
+
+export interface StudentProfile {
+  student: Student;
+  attendanceStats: {
+    total: number;
+    present: number;
+    partial: number;
+    absent: number;
+    rate: number;
+  } | null;
+  absentDates: string[];
+  recentGrades: any[];
+}
 
 export function useUsersSystem() {
-  const [students, setStudents] = useState<any[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [parents, setParents] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [parents, setParents] = useState<Parent[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStudents = useCallback(async () => {
+  const fetchStudents = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -26,16 +40,17 @@ export function useUsersSystem() {
         `);
 
       if (error) throw error;
-      setStudents(data || []);
-    } catch (err: any) {
+      setStudents((data as unknown) as Student[] || []);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب الطلاب';
       console.error('Error fetching students:', err);
-      setError(err.message || 'حدث خطأ أثناء جلب الطلاب');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchTeachers = useCallback(async () => {
+  const fetchTeachers = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -48,16 +63,17 @@ export function useUsersSystem() {
         `);
 
       if (error) throw error;
-      setTeachers(data || []);
-    } catch (err: any) {
+      setTeachers((data as unknown) as Teacher[] || []);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب المعلمين';
       console.error('Error fetching teachers:', err);
-      setError(err.message || 'حدث خطأ أثناء جلب المعلمين');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchParents = useCallback(async () => {
+  const fetchParents = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -69,42 +85,43 @@ export function useUsersSystem() {
         `);
 
       if (error) throw error;
-      setParents(data || []);
-    } catch (err: any) {
+      setParents((data as unknown) as Parent[] || []);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب أولياء الأمور';
       console.error('Error fetching parents:', err);
-      setError(err.message || 'حدث خطأ أثناء جلب أولياء الأمور');
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchSections = useCallback(async () => {
+  const fetchSections = useCallback(async (): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('sections')
         .select('id, name, classes(name)');
       if (error) throw error;
-      setSections(data || []);
-    } catch (err: any) {
+      setSections((data as unknown) as Section[] || []);
+    } catch (err: unknown) {
       console.error('Error fetching sections:', err);
     }
   }, []);
 
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
 
-  const fetchSubjects = useCallback(async () => {
+  const fetchSubjects = useCallback(async (): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('subjects')
         .select('id, name');
       if (error) throw error;
-      setSubjects(data || []);
-    } catch (err: any) {
+      setSubjects((data as unknown) as Subject[] || []);
+    } catch (err: unknown) {
       console.error('Error fetching subjects:', err);
     }
   }, []);
 
-  const addStudent = useCallback(async (studentData: any) => {
+  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string }>): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -134,13 +151,13 @@ export function useUsersSystem() {
 
       await fetchStudents();
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding student:', err);
       throw err;
     }
   }, [fetchStudents]);
 
-  const updateStudent = useCallback(async (studentId: string, oldNationalId: string, updateData: any) => {
+  const updateStudent = useCallback(async (studentId: string, oldNationalId: string, updateData: Partial<Student & { email: string }>): Promise<{ success: boolean }> => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -178,13 +195,13 @@ export function useUsersSystem() {
 
       await fetchStudents();
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating student:', err);
       throw err;
     }
   }, [fetchStudents]);
 
-  const addTeacher = useCallback(async (teacherData: any) => {
+  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link: string }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -218,13 +235,13 @@ export function useUsersSystem() {
 
       await fetchTeachers();
       return { success: true, password: data.password };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding teacher:', err);
       throw err;
     }
   }, [fetchTeachers]);
 
-  const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, updateData: any) => {
+  const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, updateData: Partial<Teacher & { email: string }>): Promise<{ success: boolean }> => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -262,13 +279,13 @@ export function useUsersSystem() {
 
       await fetchTeachers();
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating teacher:', err);
       throw err;
     }
   }, [fetchTeachers]);
 
-  const addParent = useCallback(async (parentData: any) => {
+  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title: string, workplace: string, student_ids: string[] }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -313,13 +330,13 @@ export function useUsersSystem() {
 
       await fetchParents();
       return { success: true, password: data.password };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error adding parent:', err);
       throw err;
     }
   }, [fetchParents]);
 
-  const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
+  const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: Partial<Parent & { email: string }>): Promise<{ success: boolean }> => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -357,13 +374,13 @@ export function useUsersSystem() {
 
       await fetchParents();
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating parent:', err);
       throw err;
     }
   }, [fetchParents]);
 
-  const deleteUser = useCallback(async (userId: string) => {
+  const deleteUser = useCallback(async (userId: string): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -382,13 +399,13 @@ export function useUsersSystem() {
       }
       
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting user:', err);
       throw err;
     }
   }, []);
 
-  const resetPassword = useCallback(async (userId: string, newPassword?: string) => {
+  const resetPassword = useCallback(async (userId: string, newPassword?: string): Promise<{ success: boolean, newPassword?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/users/reset-password', {
@@ -405,13 +422,13 @@ export function useUsersSystem() {
       if (!response.ok) throw new Error(data.error || 'فشل تغيير كلمة المرور');
       
       return { success: true, newPassword: data.newPassword || newPassword };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resetting password:', err);
       throw err;
     }
   }, []);
 
-  const fetchStudentProfile = useCallback(async (studentId: string) => {
+  const fetchStudentProfile = useCallback(async (studentId: string): Promise<{ student: Student, attendanceStats: any, absentDates: string[], recentGrades: any[] }> => {
     try {
       // Fetch student profile
       const { data: student, error: studentError } = await supabase
@@ -464,12 +481,12 @@ export function useUsersSystem() {
       }
 
       return {
-        student,
+        student: student as unknown as Student,
         attendanceStats,
         absentDates,
         recentGrades
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching student profile:', err);
       throw err;
     }
