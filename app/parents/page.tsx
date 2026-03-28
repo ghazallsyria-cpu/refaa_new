@@ -322,7 +322,8 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                           <Phone className="h-3 w-3 text-slate-400" />
-                          {parent.users?.phone || '-'}
+{(parent.users as { phone?: string })?.phone || '-'}
+
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
                           <MapPin className="h-3 w-3" />
