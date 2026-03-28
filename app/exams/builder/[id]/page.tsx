@@ -90,7 +90,7 @@ export default function QuizBuilder() {
   }));
   const teachers = (formData?.teachers || []).map(t => ({
     id: t.id,
-    full_name: t.users?.full_name || ''
+    full_name: t.user?.full_name || ''
   }));
 
   const showNotification = (type: 'success' | 'error', message: string) => {
