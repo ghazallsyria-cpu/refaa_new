@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { 
   BarChart2, Users, CheckCircle, AlertCircle, ArrowRight, Download,
   Search, Filter, TrendingUp, FileSpreadsheet, Trash2, Eye,
-  ChevronLeft, ChevronRight, XCircle, MinusCircle, GraduationCap
+  ChevronLeft, ChevronRight, XCircle, MinusCircle, GraduationCap, Archive, Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
@@ -36,11 +36,12 @@ type ExamStats = {
 export default function ExamResults() {
   const params = useParams();
   const router = useRouter();
-  const { fetchExamResults, deleteAttempt } = useExamsSystem();
+  const { fetchExamResults, deleteAttempt, archiveExam } = useExamsSystem();
   
   const [exam, setExam] = useState<any>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [stats, setStats] = useState<ExamStats | null>(null);
   const [questionAnalytics, setQuestionAnalytics] = useState<any[]>([]);
   const [scoreDistribution, setScoreDistribution] = useState<any[]>([]);
@@ -113,6 +114,26 @@ export default function ExamResults() {
     } catch (err) {
       console.error(err);
       alert('حدث خطأ أثناء محاولة حذف بيانات الطالب.');
+    }
+  };
+
+  const handleArchive = async () => {
+    if (exam?.status === 'archived') return alert('هذا الاختبار مؤرشف بالفعل.');
+    
+    const confirmMessage = "هل أنت متأكد أنك تريد إغلاق الاختبار وأرشفته؟\n\n- سيتم إغلاق الاختبار ولن يتمكن الطلاب من الدخول إليه.\n- سيتم حذف جميع الصور والمرفقات من السيرفر لتوفير المساحة.\n- ستبقى أسماء الطلاب ودرجاتهم محفوظة في دفتر أعمالك.\n\nهذا الإجراء لا يمكن التراجع عنه.";
+    
+    if (!window.confirm(confirmMessage)) return;
+
+    setIsArchiving(true);
+    try {
+      await archiveExam(exam.id);
+      alert('تمت الأرشفة وتفريغ المساحة بنجاح!');
+      setExam({ ...exam, status: 'archived' });
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ أثناء الأرشفة.');
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -246,7 +267,7 @@ export default function ExamResults() {
       
       <div className="hidden print:block w-full">
         <div className="text-center mb-8 border-b-2 border-slate-200 pb-6">
-          <h1 className="text-3xl font-black text-slate-900 mb-2">{exam?.title}</h1>
+          <h1 className="text-3xl font-black text-slate-900 mb-2">{exam?.title} {exam?.status === 'archived' && '(مؤرشف)'}</h1>
           <p className="text-lg text-slate-600 font-bold">{exam?.subject_name}</p>
           <p className="text-sm text-slate-500 mt-2">الفصل: {selectedSection === 'all' ? 'جميع الفصول' : selectedSection} | تاريخ التقرير: {new Date().toLocaleDateString('ar-SA')}</p>
         </div>
@@ -282,11 +303,20 @@ export default function ExamResults() {
           <div className="flex items-center gap-6">
             <button onClick={() => router.back()} className="h-14 w-14 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ArrowRight size={24} /></button>
             <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">{exam?.title}</h1>
-              <p className="text-slate-500 font-bold mt-1 text-sm">{exam?.subject_name} • الدرجة الكلية: {exam?.max_score || 100}</p>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight">{exam?.title}</h1>
+                {exam?.status === 'archived' && <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-black rounded-lg flex items-center gap-1"><Lock size={12} /> مؤرشف ومغلق</span>}
+              </div>
+              <p className="text-slate-500 font-bold mt-1 text-sm">{exam?.subject_name} • {exam?.max_score} درجة</p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {exam?.status !== 'archived' && (
+              <button onClick={handleArchive} disabled={isArchiving} className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-50 text-amber-700 font-black hover:bg-amber-100 transition-all disabled:opacity-50">
+                {isArchiving ? <div className="animate-spin h-4 w-4 border-2 border-amber-700 border-t-transparent rounded-full" /> : <Archive size={18} />} 
+                إغلاق وأرشفة
+              </button>
+            )}
             <button onClick={exportToExcel} className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-50 text-emerald-700 font-black hover:bg-emerald-100 transition-all"><FileSpreadsheet size={18} /> Excel</button>
             <button onClick={exportToPDF} className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 text-white font-black hover:bg-indigo-700 transition-all"><Download size={18} /> PDF</button>
           </div>
