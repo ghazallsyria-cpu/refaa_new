@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-// --- تعريف الأنواع (Interfaces) لضمان نجاح الـ Build ---
+// --- تعريف الأنواع (Interfaces) لضمان نجاح الـ Build في Netlify ---
 
 export interface AdminDashboardData {
   studentsCount: number;
@@ -23,6 +23,11 @@ export interface StudentDashboardData {
   grades: any[];
   todaysSchedule: any[];
   periods: any[];
+}
+
+export interface ParentDashboardData {
+  children: any[];
+  notifications: any[];
 }
 
 export interface TeacherDashboardData {
@@ -141,7 +146,25 @@ export function useDashboardSystem() {
     } catch (e) { console.error(e); throw e; }
   }, [user]);
 
-  // --- 3. المعلم (Teacher) ---
+  // --- 3. ولي الأمر (Parent) - تم إصلاح الأنواع هنا ---
+  const fetchParentDashboardData = useCallback(async (): Promise<ParentDashboardData | null> => {
+    if (!user) return null;
+    try {
+      const [ { data: children }, { data: notifications } ] = await Promise.all([
+        supabase.from('students').select('*, users(full_name), sections(name, classes(name))').eq('parent_id', user.id),
+        supabase.from('notifications').select('*').eq('type', 'announcement').order('created_at', { ascending: false }).limit(5)
+      ]);
+      return { 
+        children: children || [], 
+        notifications: notifications || [] 
+      };
+    } catch (error) {
+      console.error('Error fetching parent dashboard data:', error);
+      throw error;
+    }
+  }, [user]);
+
+  // --- 4. المعلم (Teacher) ---
   const fetchTeacherDashboardData = useCallback(async (): Promise<TeacherDashboardData | null> => {
     if (!user) return null;
     try {
@@ -170,9 +193,9 @@ export function useDashboardSystem() {
     fetchAdminDashboardStats,
     fetchAdminRecentActivities,
     fetchStudentDashboardData,
+    fetchParentDashboardData,
     fetchTeacherDashboardData,
     fetchStudentSchedule: useCallback(async () => null, []),
-    fetchParentDashboardData: useCallback(async () => null, []),
     fetchTeacherSchedule: useCallback(async () => null, [])
   };
 }
