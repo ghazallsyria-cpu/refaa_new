@@ -16,11 +16,13 @@ export async function POST(req: Request) {
 
     let finalExamId = examData.id;
 
+    // --- تم الإصلاح هنا: تضمين section_id لإرضاء قاعدة البيانات (Not-Null Constraint) ---
     const examPayload = {
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: examData.teacher_id,
+      teacher_id: examData.teacher_id || userId, // لضمان وجود المعلم دائماً
+      section_id: examData.section_id || (examData.section_ids && examData.section_ids[0]) || null, // الحل الجذري
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
       if (error) throw error;
     }
 
-    // Handle sections
+    // Handle sections (هنا يتم حفظ تعدد الصفوف بشكل سليم)
     if (!isNew) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
     }
@@ -66,9 +68,7 @@ export async function POST(req: Request) {
 
     // Handle questions
     if (!isNew) {
-      // Delete old options first due to foreign key constraints if any, 
-      // but usually cascading delete handles this if configured.
-      // In our case, we delete questions, and we should delete options too.
+      // Delete old options first due to foreign key constraints
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
         const oldQuestionIds = oldQuestions.map(q => q.id);
@@ -140,3 +140,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
