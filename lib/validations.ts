@@ -61,7 +61,7 @@ export const AssignmentSchema = z.object({
   teacher_id: z.string().uuid(),
   due_date: z.string(),
   status: z.enum(['draft', 'published', 'archived']),
-  created_at: z.string().optional(),
+  created_at: z.string(),
   file_url: nullableString,
 });
 

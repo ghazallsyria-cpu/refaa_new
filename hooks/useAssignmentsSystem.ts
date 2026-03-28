@@ -78,6 +78,7 @@ export function useAssignmentsSystem() {
 
       const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => ({
         ...a,
+        created_at: a.created_at || new Date().toISOString(),
         subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
         teacher_name: Array.isArray(a.teacher?.user) ? a.teacher.user[0]?.full_name : a.teacher?.user?.full_name,
       }));
