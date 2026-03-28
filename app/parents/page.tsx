@@ -327,7 +327,8 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
                           <MapPin className="h-3 w-3" />
-                          {parent.address || 'العنوان غير مسجل'}
+{(parent as { address?: string }).address || 'العنوان غير مسجل'}
+
                         </div>
                       </div>
                     </td>
