@@ -78,7 +78,10 @@ export default function TakeQuiz() {
         return;
       }
 
-      setExam(examData);
+      setExam({
+        ...examData,
+        description: examData.description ?? ""
+      });
       setQuestions(questionsData || []);
 
       if (examData.duration) {
