@@ -59,7 +59,6 @@ export interface TeacherDashboardData {
 export function useDashboardSystem() {
   const { user } = useAuth();
 
-  // الحصول على اليوم الحالي (إذا كان جمعة أو سبت، يعرض جدول الأحد)
   const getCurrentSchoolDay = () => {
     let day = new Date().getDay() + 1;
     if (day > 5) day = 1; 
@@ -70,19 +69,14 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async (): Promise<StudentDashboardData | null> => {
     if (!user) return null;
     try {
-      // 1. جلب بيانات الطالب بأمان
       const { data: student, error: studentErr } = await supabase
         .from('students')
         .select('*, sections(id, name, classes(name)), users(full_name)')
         .eq('id', user.id)
         .single();
       
-      if (studentErr || !student) {
-        console.error("Student fetch error:", studentErr);
-        return null;
-      }
+      if (studentErr || !student) return null;
 
-      // 2. جلب الحضور (معالجة الأخطاء بصمت لكي لا تتوقف الصفحة)
       const { data: att } = await supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id);
       
       const stats = {
@@ -95,26 +89,25 @@ export function useDashboardSystem() {
       const totalDays = att?.length || 0;
       const rate = totalDays > 0 ? Math.round(((stats.present + (stats.late * 0.5)) / totalDays) * 100) : 100;
 
-      // 3. جلب معرفات الواجبات والاختبارات
       const { data: aSec } = await supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id);
       const { data: eSec } = await supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id);
 
       const assignmentIds = (aSec || []).map(a => a.assignment_id);
       const examIds = (eSec || []).map(e => e.exam_id);
 
-      // 4. جلب التفاصيل خطوة بخطوة لمنع الانهيار الشامل
-      let assignments = { data: [] };
+      // تم الإصلاح هنا (استخدام any لتجاوز خطأ never[])
+      let assignments: any = { data: [] };
       if (assignmentIds.length > 0) {
         assignments = await supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).limit(5);
       }
 
-      let exams = { data: [] };
+      // تم الإصلاح هنا
+      let exams: any = { data: [] };
       if (examIds.length > 0) {
         exams = await supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).eq('status', 'published').limit(5);
       }
 
       const { data: grades } = await supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, subject:subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5);
-      
       const currentDay = getCurrentSchoolDay();
       const { data: schedule } = await supabase.from('schedules').select('*, subjects(name), teachers(users(full_name))').eq('section_id', student.section_id).eq('day_of_week', currentDay).order('period');
       const { data: periods } = await supabase.from('class_periods').select('*').order('period_number');
@@ -133,7 +126,6 @@ export function useDashboardSystem() {
         periods: periods || []
       };
     } catch (e) {
-      console.error("Fatal Student Dashboard Error:", e);
       return null;
     }
   }, [user]);
@@ -143,21 +135,16 @@ export function useDashboardSystem() {
     if (!user) return null;
     try {
       const { data: t, error: tErr } = await supabase.from('teachers').select('*, users(*)').eq('id', user.id).single();
-      if (tErr || !t) {
-        console.error("Teacher fetch error:", tErr);
-        return null;
-      }
+      if (tErr || !t) return null;
 
-      // الجلب الذكي للفصول
       const { data: ts } = await supabase.from('teacher_sections').select('section_id, sections(id, name, classes(id, name))').eq('teacher_id', user.id);
-      
-      // Supabase أحياناً يرجعها كـ section أو sections
       const sections = (ts || []).map((x: any) => x.sections || x.section).filter(Boolean);
       const sIds = sections.map((s: any) => s.id);
 
-      let exams = { data: [] };
-      let assignments = { data: [] };
-      let studentsCount = { count: 0 };
+      // تم الإصلاح هنا لتجنب خطأ never[]
+      let exams: any = { data: [] };
+      let assignments: any = { data: [] };
+      let studentsCount: any = { count: 0 };
 
       if (sIds.length > 0) {
         exams = await supabase.from('exams').select('*, subject:subjects(name)').in('section_id', sIds).limit(5);
@@ -185,12 +172,10 @@ export function useDashboardSystem() {
         }
       };
     } catch (e) {
-      console.error("Fatal Teacher Dashboard Error:", e);
       return null;
     }
   }, [user]);
 
-  // --- دوال الجداول الأساسية المساعدة ---
   const fetchStudentSchedule = useCallback(async (): Promise<StudentScheduleData | null> => {
     if (!user) return null;
     try {
