@@ -98,7 +98,8 @@ export default function ParentsPage() {
 
   const handleEditSubmit = async () => {
     try {
-await updateParent(editingParent.id, editingParent.national_id, { ...editForm, students: selectedStudents });
+await updateParent(editingParent.id, editingParent.national_id, editForm);
+
 
       showNotification('success', 'تم تحديث بيانات ولي الأمر بنجاح');
       setShowEditModal(false);
