@@ -155,7 +155,6 @@ export default function QuizBuilder() {
     });
   };
 
-  // --- التحديث العبقري: تنظيف البيانات الصارم قبل الإرسال لمنع أخطاء السيرفر ---
   const handleSave = async () => {
     if (!exam.title || !exam.subject_id || !exam.section_ids || exam.section_ids.length === 0) {
       return alert('يرجى التأكد من إدخال العنوان، اختيار المادة، واختيار صف واحد على الأقل');
@@ -168,7 +167,6 @@ export default function QuizBuilder() {
     try {
       const calculatedMaxScore = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
       
-      // تنظيف (Sanitize) كائن الاختبار ليطابق أعمدة قاعدة البيانات فقط
       const cleanExamData = {
         id: exam.id, 
         title: exam.title,
@@ -182,10 +180,11 @@ export default function QuizBuilder() {
         end_time: exam.end_time,
         subject_id: exam.subject_id,
         settings: exam.settings || {},
-        section_ids: exam.section_ids // يتم التعامل معها في السيرفر لفصلها
+        section_ids: exam.section_ids,
+        section_id: exam.section_ids[0]
       };
 
-      // تنظيف مصفوفة الأسئلة وإزالة أي دمج (Joins) غير مرغوب فيه
+      // --- تم الإصلاح هنا: إضافة order_index لكل خيار (Option) لتجنب خطأ الـ Null في قاعدة البيانات ---
       const cleanQuestions = questions.map((q, idx) => ({
         id: q.id,
         content: q.content,
@@ -194,10 +193,11 @@ export default function QuizBuilder() {
         media_url: q.media_url || null,
         media_type: q.media_type || null,
         order_index: idx,
-        options: q.options?.map(opt => ({
+        options: q.options?.map((opt, optIdx) => ({
            id: opt.id,
            content: opt.content,
-           is_correct: opt.is_correct
+           is_correct: opt.is_correct,
+           order_index: optIdx // الترتيب الصريح للخيار
         }))
       }));
 
@@ -329,5 +329,4 @@ export default function QuizBuilder() {
     </div>
   );
 }
-
 
