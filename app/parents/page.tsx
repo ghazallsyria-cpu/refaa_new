@@ -462,7 +462,8 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                       <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center">
                         <MapPin className="h-4 w-4 text-slate-400" />
                       </div>
-                      <span className="text-sm font-bold text-slate-900">{parent.address || 'غير مسجل'}</span>
+<span className="text-sm font-bold text-slate-900">{(parent as { address?: string }).address || 'غير مسجل'}</span>
+
                     </div>
                   </div>
                 </div>
