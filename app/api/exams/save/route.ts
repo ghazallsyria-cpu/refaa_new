@@ -20,8 +20,7 @@ export async function POST(req: Request) {
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: examData.teacher_id || userId,
-      section_id: examData.section_id || (examData.section_ids && examData.section_ids[0]) || null,
+      teacher_id: examData.teacher_id,
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
@@ -67,6 +66,9 @@ export async function POST(req: Request) {
 
     // Handle questions
     if (!isNew) {
+      // Delete old options first due to foreign key constraints if any, 
+      // but usually cascading delete handles this if configured.
+      // In our case, we delete questions, and we should delete options too.
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
         const oldQuestionIds = oldQuestions.map(q => q.id);
@@ -96,13 +98,11 @@ export async function POST(req: Request) {
 
       if (qError) throw qError;
 
-      // --- تم الإصلاح هنا: إضافة order_index للخيارات لضمان عدم حدوث خطأ ---
       if (q.options && q.options.length > 0) {
-        const optionsPayload = q.options.map((opt: any, optIdx: number) => ({
+        const optionsPayload = q.options.map((opt: any) => ({
           question_id: newQ.id,
           content: opt.content,
-          is_correct: opt.is_correct,
-          order_index: opt.order_index ?? optIdx // استخدام الترتيب القادم أو ترتيب الحلقة
+          is_correct: opt.is_correct
         }));
         const { error: optError } = await adminSupabase.from('question_options').insert(optionsPayload);
         if (optError) throw optError;
@@ -112,7 +112,12 @@ export async function POST(req: Request) {
     // Send notifications if published
     if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0) {
       try {
-        const { data: students } = await adminSupabase.from('students').select('id').in('section_id', examData.section_ids);
+        let studentsQuery = adminSupabase.from('students').select('id');
+        if (examData.section_ids.length > 0) {
+          studentsQuery = studentsQuery.in('section_id', examData.section_ids);
+        }
+        const { data: students } = await studentsQuery;
+
         if (students && students.length > 0) {
           const notificationPayloads = students.map(student => ({
             user_id: student.id,
@@ -135,4 +140,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

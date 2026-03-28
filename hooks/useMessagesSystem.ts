@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { normalizeString } from '@/lib/utils';
 
 export interface Message {
   id: string;
@@ -17,21 +16,9 @@ export interface Message {
   section?: any;
 }
 
-export interface Announcement {
-  id: string;
-  author_id: string;
-  title: string;
-  content: string;
-  target_role?: string;
-  created_at: string;
-  image_url?: string;
-  author?: any;
-}
-
 export function useMessagesSystem() {
   const { user, userRole } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [teacherSections, setTeacherSections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,38 +45,6 @@ export function useMessagesSystem() {
       setError(err.message || 'Failed to load messages');
     }
   }, [user]);
-
-  const fetchAnnouncements = useCallback(async () => {
-    if (!user) return;
-    try {
-      let query = supabase
-        .from('announcements')
-        .select(`
-          *,
-          author:author_id(full_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (userRole === 'student') {
-        query = query.or(`target_role.eq.student,target_role.is.null`);
-      } else if (userRole === 'parent') {
-        query = query.or(`target_role.eq.parent,target_role.is.null`);
-      }
-
-      const { data, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-
-      const normalizedData = (data || []).map((a: any) => ({
-        ...a,
-        image_url: normalizeString(a.image_url)
-      }));
-
-      setAnnouncements(normalizedData as Announcement[]);
-    } catch (err: any) {
-      console.error('Error fetching announcements:', err);
-      setError(err.message);
-    }
-  }, [user, userRole]);
 
   const fetchUsers = useCallback(async () => {
     if (!user) return;
@@ -181,12 +136,11 @@ export function useMessagesSystem() {
     setLoading(true);
     await Promise.all([
       fetchMessages(),
-      fetchAnnouncements(),
       fetchUsers(),
       fetchTeacherSections()
     ]);
     setLoading(false);
-  }, [fetchMessages, fetchAnnouncements, fetchUsers, fetchTeacherSections]);
+  }, [fetchMessages, fetchUsers, fetchTeacherSections]);
 
   useEffect(() => {
     loadInitialData();
@@ -214,7 +168,7 @@ export function useMessagesSystem() {
     }
   }, []);
 
-  const sendMessage = async (receiverId: string, subject: string, content: string) => {
+  const sendMessage = useCallback(async (receiverId: string, subject: string, content: string) => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -237,9 +191,9 @@ export function useMessagesSystem() {
       console.error('Error sending message:', err);
       throw err;
     }
-  };
+  }, [user, fetchMessages]);
 
-  const sendGroupMessage = async (sectionId: string, subject: string, content: string) => {
+  const sendGroupMessage = useCallback(async (sectionId: string, subject: string, content: string) => {
     if (!user) throw new Error('User not authenticated');
     
     const response = await fetch('/api/messages/send-group', {
@@ -257,34 +211,9 @@ export function useMessagesSystem() {
     if (!response.ok) throw new Error(result.error || 'حدث خطأ أثناء إرسال الرسالة الجماعية');
     
     await fetchMessages();
-  };
+  }, [user, fetchMessages]);
 
-  const sendAnnouncement = async (title: string, content: string, targetRole: string) => {
-    if (!user) throw new Error('User not authenticated');
-
-    try {
-      const response = await fetch('/api/messages/announcement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          content,
-          targetRole,
-          userId: user.id
-        }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to send announcement');
-
-      await fetchAnnouncements();
-    } catch (err) {
-      console.error('Error sending announcement:', err);
-      throw err;
-    }
-  };
-
-  const markAsRead = async (messageIds: string[]) => {
+  const markAsRead = useCallback(async (messageIds: string[]) => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -305,9 +234,9 @@ export function useMessagesSystem() {
       console.error('Error marking messages as read:', err);
       throw err;
     }
-  };
+  }, [user, fetchMessages]);
 
-  const deleteMessages = async (messageIds: string[]) => {
+  const deleteMessages = useCallback(async (messageIds: string[]) => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -328,9 +257,9 @@ export function useMessagesSystem() {
       console.error('Error deleting messages:', err);
       throw err;
     }
-  };
+  }, [user, fetchMessages]);
 
-  const updateMessage = async (messageId: string, content: string) => {
+  const updateMessage = useCallback(async (messageId: string, content: string) => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -352,21 +281,18 @@ export function useMessagesSystem() {
       console.error('Error updating message:', err);
       throw err;
     }
-  };
+  }, [user, fetchMessages]);
 
   return { 
     messages, 
-    announcements, 
     users, 
     teacherSections, 
     loading, 
     error, 
     fetchMessages, 
-    fetchAnnouncements,
     fetchStudentsBySection,
     sendMessage, 
     sendGroupMessage,
-    sendAnnouncement,
     markAsRead,
     deleteMessages,
     updateMessage

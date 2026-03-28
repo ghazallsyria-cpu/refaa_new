@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, ChevronDown, ChevronUp, X } from 'lucide-react';
-import { Reorder } from 'motion/react';
-// تم إضافة newQuestion و Option من ملف الأنواع الخاص بك
-import { Question, QuestionType, newQuestion, Option } from '@/types/question';
+import { motion, Reorder } from 'motion/react';
+import { Question, QuestionType } from '@/types/question';
 
 interface AssignmentBuilderProps {
   questions: Question[];
@@ -13,11 +12,14 @@ interface AssignmentBuilderProps {
 
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
   const addQuestion = () => {
-    // نستخدم الدالة الذكية من ملف الـ Types الخاص بك للحصول على سؤال مهيأ بالكامل
-    const createdQuestion = newQuestion('text');
-    createdQuestion.points = 5; // جعل النقاط الافتراضية 5 كما كان في كودك
-    
-    onChange([...questions, createdQuestion]);
+    const newQuestion: Question = {
+      id: crypto.randomUUID(),
+      text: '',
+      type: 'text',
+      points: 5,
+      isRequired: true,
+    };
+    onChange([...questions, newQuestion]);
   };
 
   const updateQuestion = (id: string, updates: Partial<Question>) => {
@@ -31,13 +33,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
   const addOption = (questionId: string) => {
     const question = questions.find(q => q.id === questionId);
     if (question) {
-      // تعريف الخيار كـ Object ليتوافق مع Option Interface
-      const newOpt: Option = {
-        id: crypto.randomUUID(),
-        content: `خيار جديد ${(question.options?.length || 0) + 1}`,
-        is_correct: false,
-      };
-      const options = [...(question.options || []), newOpt];
+      const options = [...(question.options || []), `خيار جديد ${ (question.options?.length || 0) + 1 }` ];
       updateQuestion(questionId, { options });
     }
   };
@@ -46,8 +42,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     const question = questions.find(q => q.id === questionId);
     if (question && question.options) {
       const options = [...question.options];
-      // تحديث محتوى (content) الخيار بدلاً من النص المباشر
-      options[index] = { ...options[index], content: value };
+      options[index] = value;
       updateQuestion(questionId, { options });
     }
   };
@@ -75,7 +70,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
       </div>
 
       <Reorder.Group axis="y" values={questions} onReorder={onChange} className="space-y-4">
-        {questions.map((question) => (
+        {questions.map((question, index) => (
           <Reorder.Item
             key={question.id}
             value={question}
@@ -92,8 +87,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     type="text"
                     placeholder="نص السؤال..."
                     className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
-                    value={question.content} // تم تغيير text إلى content
-                    onChange={(e) => updateQuestion(question.id, { content: e.target.value })} // تم تغيير text إلى content
+                    value={question.text}
+                    onChange={(e) => updateQuestion(question.id, { text: e.target.value })}
                   />
                 </div>
                 <div className="w-full md:w-48">
@@ -102,12 +97,11 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     value={question.type}
                     onChange={(e) => {
                       const type = e.target.value as QuestionType;
-                      // نستخدم الدالة لإنشاء خيارات افتراضية صحيحة حسب نوع السؤال المختار
-                      const defaultQuestionObj = newQuestion(type);
-                      updateQuestion(question.id, { 
-                        type, 
-                        options: defaultQuestionObj.options 
-                      });
+                      const updates: Partial<Question> = { type };
+                      if ((type === 'multiple_choice' || type === 'checkbox') && !question.options) {
+                        updates.options = ['خيار 1'];
+                      }
+                      updateQuestion(question.id, updates);
                     }}
                   >
                     <option value="text">إجابة قصيرة</option>
@@ -122,7 +116,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
               {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                 <div className="space-y-3 pr-4 border-r-2 border-slate-100">
                   {question.options?.map((option, optIndex) => (
-                    <div key={option.id} className="flex items-center gap-3 group/option">
+                    <div key={optIndex} className="flex items-center gap-3 group/option">
                       {question.type === 'multiple_choice' ? (
                         <Circle className="h-4 w-4 text-slate-300" />
                       ) : (
@@ -131,7 +125,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       <input
                         type="text"
                         className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-indigo-600 focus:ring-0 p-1 text-sm font-medium text-slate-700 transition-all"
-                        value={option.content} // عرض الـ content الخاص بالـ Option
+                        value={option}
                         onChange={(e) => updateOption(question.id, optIndex, e.target.value)}
                       />
                       <button
@@ -210,4 +204,3 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     </div>
   );
 }
-

@@ -102,7 +102,7 @@ export function useClassesSystem() {
     }
   }, [user, userRole]);
 
-  const addClass = async (name: string, level: number) => {
+  const addClass = useCallback(async (name: string, level: number) => {
     const response = await fetch('/api/classes/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,9 +111,9 @@ export function useClassesSystem() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to add class');
     await fetchClassesData();
-  };
+  }, [fetchClassesData]);
 
-  const updateClass = async (id: string, name: string, level: number) => {
+  const updateClass = useCallback(async (id: string, name: string, level: number) => {
     const response = await fetch('/api/classes/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -122,18 +122,18 @@ export function useClassesSystem() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to update class');
     await fetchClassesData();
-  };
+  }, [fetchClassesData]);
 
-  const deleteClass = async (id: string) => {
+  const deleteClass = useCallback(async (id: string) => {
     const response = await fetch(`/api/classes/delete?id=${id}`, {
       method: 'DELETE',
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to delete class');
     await fetchClassesData();
-  };
+  }, [fetchClassesData]);
 
-  const addSection = async (name: string, classId: string) => {
+  const addSection = useCallback(async (name: string, classId: string) => {
     const response = await fetch('/api/sections/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -142,9 +142,9 @@ export function useClassesSystem() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to add section');
     await fetchClassesData();
-  };
+  }, [fetchClassesData]);
 
-  const updateSection = async (id: string, name: string) => {
+  const updateSection = useCallback(async (id: string, name: string) => {
     const response = await fetch('/api/sections/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -153,16 +153,16 @@ export function useClassesSystem() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to update section');
     await fetchClassesData();
-  };
+  }, [fetchClassesData]);
 
-  const deleteSection = async (id: string) => {
+  const deleteSection = useCallback(async (id: string) => {
     const response = await fetch(`/api/sections/delete?id=${id}`, {
       method: 'DELETE',
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to delete section');
     await fetchClassesData();
-  };
+  }, [fetchClassesData]);
 
   return {
     classes,

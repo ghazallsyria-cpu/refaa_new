@@ -30,10 +30,25 @@ export function useSchoolFormData() {
           }))
         };
       } else if (userRole === 'teacher') {
-        // Teacher specific logic...
-        // For now, let's keep it simple or implement the complex logic here.
-        // The complex logic is already in page.tsx, I should move it here.
-        return { subjects: [], sections: [], teachers: [] }; // Placeholder
+        const [subjectsRes, sectionsRes, teacherSectionsRes] = await Promise.all([
+          supabase.from('subjects').select('*').order('name'),
+          supabase.from('sections').select('*, classes(name)').order('name'),
+          supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id)
+        ]);
+
+        const assignedSectionIds = teacherSectionsRes.data?.map(ts => ts.section_id) || [];
+        const assignedSections = (sectionsRes.data || [])
+          .filter(s => assignedSectionIds.includes(s.id))
+          .map((s: any) => ({
+            ...s,
+            classes: Array.isArray(s.classes) ? s.classes[0] : s.classes
+          }));
+
+        return {
+          subjects: subjectsRes.data || [],
+          sections: assignedSections,
+          teachers: [{ id: user.id, users: { full_name: user.user_metadata?.full_name || 'أنا' } }]
+        };
       }
       
       return { subjects: [], sections: [], teachers: [] };

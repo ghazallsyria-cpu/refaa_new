@@ -104,7 +104,7 @@ export function useUsersSystem() {
     }
   }, []);
 
-  const addStudent = async (studentData: any) => {
+  const addStudent = useCallback(async (studentData: any) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -138,9 +138,9 @@ export function useUsersSystem() {
       console.error('Error adding student:', err);
       throw err;
     }
-  };
+  }, [fetchStudents]);
 
-  const updateStudent = async (studentId: string, oldNationalId: string, updateData: any) => {
+  const updateStudent = useCallback(async (studentId: string, oldNationalId: string, updateData: any) => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -182,9 +182,9 @@ export function useUsersSystem() {
       console.error('Error updating student:', err);
       throw err;
     }
-  };
+  }, [fetchStudents]);
 
-  const addTeacher = async (teacherData: any) => {
+  const addTeacher = useCallback(async (teacherData: any) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -222,9 +222,9 @@ export function useUsersSystem() {
       console.error('Error adding teacher:', err);
       throw err;
     }
-  };
+  }, [fetchTeachers]);
 
-  const updateTeacher = async (teacherId: string, oldNationalId: string, updateData: any) => {
+  const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, updateData: any) => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -266,9 +266,9 @@ export function useUsersSystem() {
       console.error('Error updating teacher:', err);
       throw err;
     }
-  };
+  }, [fetchTeachers]);
 
-  const addParent = async (parentData: any) => {
+  const addParent = useCallback(async (parentData: any) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -317,9 +317,9 @@ export function useUsersSystem() {
       console.error('Error adding parent:', err);
       throw err;
     }
-  };
+  }, [fetchParents]);
 
-  const updateParent = async (parentId: string, oldNationalId: string, updateData: any) => {
+  const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -361,9 +361,9 @@ export function useUsersSystem() {
       console.error('Error updating parent:', err);
       throw err;
     }
-  };
+  }, [fetchParents]);
 
-  const deleteUser = async (userId: string) => {
+  const deleteUser = useCallback(async (userId: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -386,9 +386,9 @@ export function useUsersSystem() {
       console.error('Error deleting user:', err);
       throw err;
     }
-  };
+  }, []);
 
-  const resetPassword = async (userId: string, newPassword?: string) => {
+  const resetPassword = useCallback(async (userId: string, newPassword?: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/users/reset-password', {
@@ -409,7 +409,7 @@ export function useUsersSystem() {
       console.error('Error resetting password:', err);
       throw err;
     }
-  };
+  }, []);
 
   const fetchStudentProfile = useCallback(async (studentId: string) => {
     try {

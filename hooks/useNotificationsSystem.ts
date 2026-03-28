@@ -44,7 +44,7 @@ export function useNotificationsSystem() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  const markAsRead = async (notificationId: string) => {
+  const markAsRead = useCallback(async (notificationId: string) => {
     if (!user) return;
     try {
       const response = await fetch('/api/notifications/mark-read', {
@@ -59,9 +59,9 @@ export function useNotificationsSystem() {
       console.error('Error marking as read:', err);
       throw err;
     }
-  };
+  }, [user, fetchNotifications]);
 
-  const markAllAsRead = async () => {
+  const markAllAsRead = useCallback(async () => {
     if (!user) return;
     try {
       const response = await fetch('/api/notifications/mark-read', {
@@ -76,7 +76,7 @@ export function useNotificationsSystem() {
       console.error('Error marking all as read:', err);
       throw err;
     }
-  };
+  }, [user, fetchNotifications]);
 
   return { data, loading, error, refetch: fetchNotifications, markAsRead, markAllAsRead };
 }

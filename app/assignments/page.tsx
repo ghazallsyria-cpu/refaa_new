@@ -5,10 +5,10 @@ import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIco
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
-import { Question, toAssignmentQuestion } from '@/types/question';
+import { Question } from '@/types/question';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
-import { useSchoolFormData } from '@/hooks/use-school-form-data';
+import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { Teacher, Subject, Section } from '@/types';
@@ -65,7 +65,7 @@ export default function AssignmentsPage() {
       await saveAssignment(
         payload, 
         currentAssignment.id || null, 
-        questions,
+        questions, 
         currentAssignment.section_ids || [],
         subjects
       );

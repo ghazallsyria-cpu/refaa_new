@@ -99,7 +99,7 @@ export function useSettingsSystem() {
     }
   }, []);
 
-  const updateProfile = async (profile: ProfileSettings) => {
+  const updateProfile = useCallback(async (profile: ProfileSettings) => {
     if (!user) throw new Error('User not authenticated');
     setLoading(true);
     try {
@@ -120,9 +120,9 @@ export function useSettingsSystem() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  const updatePlatformSettings = async (settings: Partial<PlatformSettings>) => {
+  const updatePlatformSettings = useCallback(async (settings: Partial<PlatformSettings>) => {
     if (!user) throw new Error('User not authenticated');
     setLoading(true);
     try {
@@ -143,14 +143,14 @@ export function useSettingsSystem() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  const updatePassword = async (newPassword: string) => {
+  const updatePassword = useCallback(async (newPassword: string) => {
     const { error } = await supabase.auth.updateUser({
       password: newPassword
     });
     if (error) throw error;
-  };
+  }, []);
 
   return {
     loading,

@@ -54,15 +54,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
       if (details.assignment) setAssignment(details.assignment as any);
 
       if (details.questions) {
-        setQuestions(details.questions.map((q: any) => ({
-          id: q.id,
-          content: q.question_text || '',
-          text: q.question_text,
-          type: q.question_type as any,
-          options: Array.isArray(q.options) ? q.options.map((opt: any) => typeof opt === 'string' ? { id: crypto.randomUUID(), content: opt, is_correct: false } : opt) : [],
-          points: q.points || 0,
-          isRequired: q.is_required || false
-        })));
+        setQuestions(details.questions);
       }
 
       if (details.submission) {

@@ -55,25 +55,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // Save Questions (تم تعديل هذا القسم ليتوافق مع الـ Types الجديدة)
-    if (questions && questions.length > 0) {
-      const questionsPayload = questions.map((q: any, index: number) => {
-        // تحويل الخيارات من مصفوفة كائنات (Option[]) إلى مصفوفة نصوص (string[]) لقاعدة البيانات
-        const formattedOptions = q.options && q.options.length > 0 
-          ? q.options.map((opt: any) => typeof opt === 'string' ? opt : opt.content) 
-          : null;
-
-        return {
-          assignment_id: finalAssignmentId,
-          question_text: q.content, // استخدام content بدلاً من text
-          question_type: q.type,
-          options: formattedOptions, // تمرير الخيارات كنصوص
-          points: q.points || 0,
-          is_required: q.isRequired || false,
-          order: index
-        };
-      });
-
+    // Save Questions
+    if (questions.length > 0) {
+      const questionsPayload = questions.map((q: any, index: number) => ({
+        assignment_id: finalAssignmentId,
+        question_text: q.content,
+        question_type: q.type,
+        options: q.options || null,
+        points: q.points || 0,
+        is_required: q.isRequired || false,
+        order: index
+      }));
       const { error: qError } = await adminSupabase.from('assignment_questions').insert(questionsPayload);
       if (qError) throw qError;
     }
@@ -96,4 +88,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

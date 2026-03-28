@@ -2,213 +2,349 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-export interface AdminDashboardData {
-  studentsCount: number;
-  teachersCount: number;
-  sectionsCount: number;
-  attendanceRate: number;
-}
-
-export interface StudentDashboardData {
-  student: any;
-  assignments: any[];
-  exams: any[];
-  attendanceRate: number;
-  presentCount: number;
-  absentCount: number;
-  lateCount: number;
-  partialCount: number;
-  grades: any[];
-  todaysSchedule: any[];
-  periods: any[];
-}
-
-export interface ParentDashboardData {
-  children: any[];
-  notifications: any[];
-}
-
-export interface StudentScheduleData {
-  student: any;
-  schedule: any[];
-  periods: any[];
-}
-
-export interface TeacherScheduleData {
-  schedule: any[];
-  periods: any[];
-}
-
-export interface TeacherDashboardData {
-  teacher: any;
-  sections: any[];
-  recentExams: any[];
-  recentAssignments: any[];
-  schedule: any[];
-  periods: any[];
-  messages: any[];
-  stats: {
-    totalStudents: number;
-    totalExams: number;
-    totalAssignments: number;
-    avgAttendance: number;
-    absenceRate: number;
-  };
-}
-
 export function useDashboardSystem() {
   const { user } = useAuth();
 
-  const getCurrentSchoolDay = () => {
-    let day = new Date().getDay() + 1;
-    if (day > 5) day = 1; 
-    return day;
-  };
+  const fetchAdminDashboardStats = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const [
+        { count: studentsCount },
+        { count: teachersCount },
+        { count: sectionsCount },
+        attendanceRes
+      ] = await Promise.all([
+        supabase.from('students').select('id', { count: 'exact', head: true }),
+        supabase.from('teachers').select('id', { count: 'exact', head: true }),
+        supabase.from('sections').select('id', { count: 'exact', head: true }),
+        supabase.from('daily_attendance_summary').select('daily_status').eq('date', today)
+      ]);
 
-  // --- 1. الطالب (Student) ---
-  const fetchStudentDashboardData = useCallback(async (): Promise<StudentDashboardData | null> => {
+      const totalAttendanceCount = attendanceRes.data?.length || 0;
+      const presentAttendanceCount = attendanceRes.data?.filter(a => a.daily_status === 'present').length || 0;
+
+      const attendanceRate = totalAttendanceCount > 0
+        ? Math.round((presentAttendanceCount / totalAttendanceCount) * 100)
+        : 0;
+
+      return {
+        studentsCount: studentsCount || 0,
+        teachersCount: teachersCount || 0,
+        sectionsCount: sectionsCount || 0,
+        attendanceRate
+      };
+    } catch (error) {
+      console.error('Error fetching admin dashboard stats:', error);
+      throw error;
+    }
+  }, []);
+
+  const fetchAdminRecentActivities = useCallback(async () => {
+    try {
+      const [
+        { data: recentStudents },
+        { data: recentDocs },
+        { data: recentExams },
+        { data: recentNotifs }
+      ] = await Promise.all([
+        supabase.from('students').select('users(full_name), created_at').order('created_at', { ascending: false }).limit(2),
+        supabase.from('documents').select('title, created_at').order('created_at', { ascending: false }).limit(2),
+        supabase.from('exams').select('title, created_at').order('created_at', { ascending: false }).limit(2),
+        supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
+      ]);
+
+      const activities: any[] = [
+        ...(recentStudents || []).map(s => ({ title: `إضافة الطالب ${Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name}`, time: s.created_at, type: 'students', color: 'bg-indigo-100 text-indigo-600' })),
+        ...(recentDocs || []).map(d => ({ title: `مستند جديد: ${d.title}`, time: d.created_at, type: 'documents', color: 'bg-emerald-100 text-emerald-600' })),
+        ...(recentExams || []).map(e => ({ title: `اختبار جديد: ${e.title}`, time: e.created_at, type: 'exams', color: 'bg-amber-100 text-amber-600' })),
+        ...(recentNotifs || []).map(n => ({ title: `إعلان جديد: ${n.title}`, time: n.created_at, type: 'notifications', color: 'bg-sky-100 text-sky-600' }))
+      ];
+
+      return activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 5);
+    } catch (error) {
+      console.error('Error fetching admin recent activities:', error);
+      throw error;
+    }
+  }, []);
+
+  const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: student, error: studentErr } = await supabase
+      const { data: student } = await supabase
         .from('students')
-        .select('*, sections(id, name, classes(name)), users(full_name)')
+        .select('*, sections(name, classes(name))')
         .eq('id', user.id)
         .single();
       
-      if (studentErr || !student) return null;
+      if (!student) return null;
 
-      const { data: att } = await supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id);
-      
-      const stats = {
-        present: att?.filter(a => a.daily_status === 'present').length || 0,
-        absent: att?.filter(a => a.daily_status === 'absent').length || 0,
-        late: att?.filter(a => a.daily_status === 'late').length || 0,
-        partial: att?.filter(a => a.daily_status === 'partial').length || 0,
-      };
+      const [
+        { data: assignmentSections },
+        { data: examSections }
+      ] = await Promise.all([
+        supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id),
+        supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id)
+      ]);
 
-      const totalDays = att?.length || 0;
-      const rate = totalDays > 0 ? Math.round(((stats.present + (stats.late * 0.5)) / totalDays) * 100) : 100;
+      const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
+      const examIds = examSections?.map(e => e.exam_id) || [];
 
-      const { data: aSec } = await supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id);
-      const { data: eSec } = await supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id);
+      const [
+        { data: assignments },
+        { data: exams },
+        { data: attendance },
+        { data: grades },
+        { data: todaysSchedule },
+        { data: periods }
+      ] = await Promise.all([
+        supabase
+          .from('assignments')
+          .select('*, subject:subjects(name)')
+          .in('id', assignmentIds)
+          .order('due_date', { ascending: true })
+          .limit(3),
+        supabase
+          .from('exams')
+          .select('*, subject:subjects(name)')
+          .in('id', examIds)
+          .order('start_time', { ascending: true })
+          .limit(3),
+        supabase
+          .from('daily_attendance_summary')
+          .select('daily_status')
+          .eq('student_id', student.id),
+        supabase
+          .from('exam_attempts')
+          .select('score, exam:exams(title, total_points)')
+          .eq('student_id', student.id)
+          .order('completed_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('schedules')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))')
+          .eq('section_id', student.section_id)
+          .eq('day_of_week', new Date().getDay() + 1)
+          .order('period'),
+        supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number')
+      ]);
 
-      const assignmentIds = (aSec || []).map(a => a.assignment_id);
-      const examIds = (eSec || []).map(e => e.exam_id);
-
-      // تم الإصلاح هنا (استخدام any لتجاوز خطأ never[])
-      let assignments: any = { data: [] };
-      if (assignmentIds.length > 0) {
-        assignments = await supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).limit(5);
-      }
-
-      // تم الإصلاح هنا
-      let exams: any = { data: [] };
-      if (examIds.length > 0) {
-        exams = await supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).eq('status', 'published').limit(5);
-      }
-
-      const { data: grades } = await supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, subject:subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5);
-      const currentDay = getCurrentSchoolDay();
-      const { data: schedule } = await supabase.from('schedules').select('*, subjects(name), teachers(users(full_name))').eq('section_id', student.section_id).eq('day_of_week', currentDay).order('period');
-      const { data: periods } = await supabase.from('class_periods').select('*').order('period_number');
+      const totalDays = attendance?.length || 0;
+      const presentDays = attendance?.filter(a => a.daily_status === 'present').length || 0;
+      const attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100;
 
       return {
-        student: student,
-        assignments: assignments.data || [],
-        exams: exams.data || [],
-        attendanceRate: rate,
-        presentCount: stats.present,
-        absentCount: stats.absent,
-        lateCount: stats.late,
-        partialCount: stats.partial,
+        student,
+        assignments: assignments || [],
+        exams: exams || [],
+        attendanceRate,
         grades: grades || [],
-        todaysSchedule: schedule || [],
+        todaysSchedule: todaysSchedule || [],
         periods: periods || []
       };
-    } catch (e) {
-      return null;
+    } catch (error) {
+      console.error('Error fetching student dashboard data:', error);
+      throw error;
     }
   }, [user]);
 
-  // --- 2. المعلم (Teacher) ---
-  const fetchTeacherDashboardData = useCallback(async (): Promise<TeacherDashboardData | null> => {
+  const fetchStudentSchedule = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: t, error: tErr } = await supabase.from('teachers').select('*, users(*)').eq('id', user.id).single();
-      if (tErr || !t) return null;
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('section_id, sections(name, classes(name))')
+        .eq('id', user.id)
+        .single();
 
-      const { data: ts } = await supabase.from('teacher_sections').select('section_id, sections(id, name, classes(id, name))').eq('teacher_id', user.id);
-      const sections = (ts || []).map((x: any) => x.sections || x.section).filter(Boolean);
-      const sIds = sections.map((s: any) => s.id);
+      if (studentError) throw studentError;
+      if (!student) return null;
 
-      // تم الإصلاح هنا لتجنب خطأ never[]
-      let exams: any = { data: [] };
-      let assignments: any = { data: [] };
-      let studentsCount: any = { count: 0 };
-
-      if (sIds.length > 0) {
-        exams = await supabase.from('exams').select('*, subject:subjects(name)').in('section_id', sIds).limit(5);
-        assignments = await supabase.from('assignments').select('*, subjects(name), sections(name, classes(name))').in('section_id', sIds).limit(5);
-        studentsCount = await supabase.from('students').select('id', { count: 'exact', head: true }).in('section_id', sIds);
-      }
-
-      const { data: sch } = await supabase.from('schedules').select('*, subjects(name), sections(name, classes(name))').eq('teacher_id', user.id);
-      const { data: per } = await supabase.from('class_periods').select('*').order('period_number');
+      const [
+        { data: schedule },
+        { data: periods }
+      ] = await Promise.all([
+        supabase
+          .from('schedules')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
+          .eq('section_id', student.section_id)
+          .order('day_of_week')
+          .order('period'),
+        supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number')
+      ]);
 
       return {
-        teacher: t,
-        sections: sections,
-        recentExams: exams.data || [],
-        recentAssignments: assignments.data || [],
-        schedule: sch || [],
-        periods: per || [],
-        messages: [],
-        stats: {
-          totalStudents: studentsCount.count || 0,
-          totalExams: (exams.data || []).length,
-          totalAssignments: (assignments.data || []).length,
-          avgAttendance: 95, 
-          absenceRate: 5
-        }
+        student,
+        schedule: schedule || [],
+        periods: periods || []
       };
-    } catch (e) {
-      return null;
+    } catch (error) {
+      console.error('Error fetching student schedule:', error);
+      throw error;
     }
   }, [user]);
 
-  const fetchStudentSchedule = useCallback(async (): Promise<StudentScheduleData | null> => {
+  const fetchParentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: st } = await supabase.from('students').select('section_id, sections(name, classes(name))').eq('id', user.id).single();
-      if (!st) return null;
-      const [ { data: sch }, { data: per } ] = await Promise.all([
-        supabase.from('schedules').select('*, subjects(name), teachers(zoom_link, users:teacher_id(full_name))').eq('section_id', st.section_id).order('day_of_week').order('period'),
-        supabase.from('class_periods').select('*').order('period_number')
+      const [
+        { data: children },
+        { data: notifications }
+      ] = await Promise.all([
+        supabase
+          .from('students')
+          .select('*, users(full_name), sections(name, classes(name))')
+          .eq('parent_id', user.id),
+        supabase
+          .from('notifications')
+          .select('*')
+          .eq('type', 'announcement')
+          .order('created_at', { ascending: false })
+          .limit(5)
       ]);
-      return { student: st, schedule: sch || [], periods: per || [] };
-    } catch (e) { return null; }
+
+      return {
+        children: children || [],
+        notifications: notifications || []
+      };
+    } catch (error) {
+      console.error('Error fetching parent dashboard data:', error);
+      throw error;
+    }
   }, [user]);
 
-  const fetchTeacherSchedule = useCallback(async (): Promise<TeacherScheduleData | null> => {
+  const fetchTeacherDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const [ { data: sch }, { data: per } ] = await Promise.all([
-        supabase.from('schedules').select('*, subjects(name), sections(id, name, classes(name))').eq('teacher_id', user.id).order('day_of_week').order('period'),
-        supabase.from('class_periods').select('*').order('period_number')
+      const { data: teacher } = await supabase
+        .from('teachers')
+        .select('*, users(*)')
+        .eq('id', user.id)
+        .single();
+      
+      if (!teacher) return null;
+
+      const { data: teacherSections } = await supabase
+        .from('teacher_sections')
+        .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
+        .eq('teacher_id', user.id);
+      
+      const sections = teacherSections?.map(ts => ts.section) || [];
+      const sectionIds = sections.map((s: any) => s.id);
+
+      const [
+        { data: recentExams },
+        { data: recentAssignments },
+        { data: schedule },
+        { data: periods },
+        { data: messages },
+        { count: studentsCount },
+        { count: examsCount },
+        { count: assignmentsCount }
+      ] = await Promise.all([
+        sectionIds.length > 0 ? supabase
+          .from('exams')
+          .select('id, title, created_at, start_time, subject:subjects(name), section:sections(name)')
+          .in('section_id', sectionIds)
+          .order('created_at', { ascending: false })
+          .limit(5) : Promise.resolve({ data: [] }),
+        sectionIds.length > 0 ? supabase
+          .from('assignments')
+          .select('id, title, section_id, due_date, subjects(name), sections(name, classes(name))')
+          .in('section_id', sectionIds)
+          .order('created_at', { ascending: false })
+          .limit(5) : Promise.resolve({ data: [] }),
+        supabase
+          .from('schedules')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(name, classes(name))')
+          .eq('teacher_id', user.id)
+          .order('day_of_week')
+          .order('period'),
+        supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number'),
+        supabase
+          .from('messages')
+          .select('id, subject, content, created_at, sender:sender_id(full_name)')
+          .eq('receiver_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        sectionIds.length > 0 ? supabase
+          .from('students')
+          .select('id', { count: 'exact', head: true })
+          .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
+        sectionIds.length > 0 ? supabase
+          .from('exams')
+          .select('id', { count: 'exact', head: true })
+          .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
+        sectionIds.length > 0 ? supabase
+          .from('assignments')
+          .select('id', { count: 'exact', head: true })
+          .in('section_id', sectionIds) : Promise.resolve({ count: 0 })
       ]);
-      return { schedule: sch || [], periods: per || [] };
-    } catch (e) { return null; }
+
+      return {
+        teacher,
+        sections,
+        recentExams: recentExams || [],
+        recentAssignments: recentAssignments || [],
+        schedule: schedule || [],
+        periods: periods || [],
+        messages: messages || [],
+        stats: {
+          totalStudents: studentsCount || 0,
+          totalExams: examsCount || 0,
+          totalAssignments: assignmentsCount || 0
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching teacher dashboard data:', error);
+      throw error;
+    }
+  }, [user]);
+
+  const fetchTeacherSchedule = useCallback(async () => {
+    if (!user) return null;
+    try {
+      const [
+        { data: schedule },
+        { data: periods }
+      ] = await Promise.all([
+        supabase
+          .from('schedules')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
+          .eq('teacher_id', user.id)
+          .order('day_of_week')
+          .order('period'),
+        supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number')
+      ]);
+
+      return {
+        schedule: schedule || [],
+        periods: periods || []
+      };
+    } catch (error) {
+      console.error('Error fetching teacher schedule:', error);
+      throw error;
+    }
   }, [user]);
 
   return {
+    fetchAdminDashboardStats,
+    fetchAdminRecentActivities,
     fetchStudentDashboardData,
-    fetchTeacherDashboardData,
     fetchStudentSchedule,
-    fetchTeacherSchedule,
-    fetchAdminDashboardStats: useCallback(async () => ({ studentsCount: 0, teachersCount: 0, sectionsCount: 0, attendanceRate: 0 }), []),
-    fetchAdminRecentActivities: useCallback(async () => [], []),
-    fetchParentDashboardData: useCallback(async () => null, [])
+    fetchParentDashboardData,
+    fetchTeacherDashboardData,
+    fetchTeacherSchedule
   };
 }
-
-

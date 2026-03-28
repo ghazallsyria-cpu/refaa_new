@@ -34,18 +34,52 @@ export function useAssignmentsSystem() {
     setError(null);
     try {
       // 1. Fetch assignments with joins
-      const { data: assignmentsData, error: fetchError } = await supabase
+      let query = supabase
         .from('assignments')
         .select(`
           *,
           subject:subjects(name),
           teacher:teachers(users(full_name)),
-          assignment_sections(
+          assignment_sections!inner(
             section_id,
             sections(name, classes(name))
           )
         `)
         .order('due_date', { ascending: true });
+
+      if (userRole === 'student') {
+        // Fetch student's section
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('section_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (studentData?.section_id) {
+          query = query.eq('assignment_sections.section_id', studentData.section_id);
+        } else {
+          // If student has no section, return empty
+          setData([]);
+          setLoading(false);
+          return;
+        }
+      } else if (userRole === 'teacher') {
+        // Teacher sees assignments they created OR assignments for their sections
+        const { data: teacherSections } = await supabase
+          .from('teacher_sections')
+          .select('section_id')
+          .eq('teacher_id', user.id);
+          
+        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+        
+        if (sectionIds.length > 0) {
+          query = query.or(`teacher_id.eq.${user.id},assignment_sections.section_id.in.(${sectionIds.join(',')})`);
+        } else {
+          query = query.eq('teacher_id', user.id);
+        }
+      }
+
+      const { data: assignmentsData, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
 
@@ -129,7 +163,7 @@ export function useAssignmentsSystem() {
     }
   }, []);
 
-  const saveAssignment = async (
+  const saveAssignment = useCallback(async (
     payload: any, 
     assignmentId: string | null, 
     questions: Question[], 
@@ -155,16 +189,16 @@ export function useAssignmentsSystem() {
 
     await fetchAssignments();
     return result.id;
-  };
+  }, [user, fetchAssignments]);
 
-  const deleteAssignment = async (assignmentId: string) => {
+  const deleteAssignment = useCallback(async (assignmentId: string) => {
     const response = await fetch(`/api/assignments/delete?id=${assignmentId}`, {
       method: 'DELETE',
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Failed to delete assignment');
     await fetchAssignments();
-  };
+  }, [fetchAssignments]);
 
   const fetchAssignmentDetails = useCallback(async (assignmentId: string) => {
     try {
@@ -244,7 +278,7 @@ export function useAssignmentsSystem() {
     }
   }, [user, userRole]);
 
-  const submitAssignment = async (assignmentId: string, answersPayload: any[], submissionId?: string) => {
+  const submitAssignment = useCallback(async (assignmentId: string, answersPayload: any[], submissionId?: string) => {
     if (!user) throw new Error('Not authenticated');
 
     const studentName = user.user_metadata?.full_name || 'طالب';
@@ -265,7 +299,7 @@ export function useAssignmentsSystem() {
     if (!response.ok) throw new Error(result.error || 'Failed to submit assignment');
 
     return result.id;
-  };
+  }, [user]);
 
   const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
     try {
@@ -322,7 +356,7 @@ export function useAssignmentsSystem() {
     }
   }, []);
 
-  const updateSubmissionGrade = async (submissionId: string, grade: number, feedback: string, studentId: string, assignmentTitle: string) => {
+  const updateSubmissionGrade = useCallback(async (submissionId: string, grade: number, feedback: string, studentId: string, assignmentTitle: string) => {
     const response = await fetch('/api/assignments/grade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -337,7 +371,7 @@ export function useAssignmentsSystem() {
 
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Failed to update grade');
-  };
+  }, []);
 
   return { 
     data, 

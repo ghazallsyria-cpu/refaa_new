@@ -63,7 +63,7 @@ export function useAnnouncementsSystem() {
     }
   }, []);
 
-  const saveAnnouncement = async (announcement: Partial<Announcement>) => {
+  const saveAnnouncement = useCallback(async (announcement: Partial<Announcement>) => {
     setLoading(true);
     setError(null);
     try {
@@ -81,9 +81,9 @@ export function useAnnouncementsSystem() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const deleteAnnouncement = async (id: string, imageUrl?: string | null) => {
+  const deleteAnnouncement = useCallback(async (id: string, imageUrl?: string | null) => {
     setLoading(true);
     setError(null);
     try {
@@ -103,7 +103,7 @@ export function useAnnouncementsSystem() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   return {
     announcements,
