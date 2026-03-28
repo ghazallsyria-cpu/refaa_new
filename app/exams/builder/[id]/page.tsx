@@ -67,7 +67,6 @@ export default function QuizBuilder() {
   const [loading, setLoading] = useState(params.id !== 'new');
   const [saving, setSaving] = useState(false);
 
-  // إغلاق القائمة المنسدلة عند النقر خارجها
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -97,7 +96,7 @@ export default function QuizBuilder() {
              return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           });
         } else {
-          // جلب صفوف المعلم فقط (مع دمج اسم الصف والمجموعة)
+          // جلب صفوف المعلم فقط
           const { data: teacherSecs } = await supabase
             .from('teacher_sections')
             .select('section:sections(id, name, classes(name))')
@@ -107,25 +106,34 @@ export default function QuizBuilder() {
             const s = ts.section;
             if (!s) return null;
             const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
-            return {
-              id: s.id,
-              name: className ? `${className} - ${s.name}` : s.name
-            };
+            return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           }).filter(Boolean);
 
-          // جلب مواد المعلم مع الخطة البديلة (Fallback)
-          const { data: teacherSubjs, error: subjErr } = await supabase
+          // جلب مواد المعلم فقط (بشكل صارم ومباشر بدون خطط بديلة مزعجة)
+          let combinedSubjs: any[] = [];
+          
+          // المحاولة 1: من جدول الربط teacher_subjects
+          const { data: tsData, error: tsErr } = await supabase
             .from('teacher_subjects')
             .select('subject:subjects(id, name)')
             .eq('teacher_id', user.id);
-
-          if (!subjErr && teacherSubjs && teacherSubjs.length > 0) {
-            fetchedSubjects = teacherSubjs.map((ts: any) => ts.subject).filter(Boolean);
-          } else {
-            // الخطة البديلة: إذا لم يكن هناك مواد مسندة للمعلم تحديداً، يتم جلب كل المواد
-            const { data: allSubjs } = await supabase.from('subjects').select('id, name');
-            fetchedSubjects = allSubjs || [];
+            
+          if (!tsErr && tsData) {
+            combinedSubjs = [...combinedSubjs, ...tsData.map((ts: any) => ts.subject).filter(Boolean)];
           }
+
+          // المحاولة 2: مباشرة من جدول subjects في حال كان يحوي teacher_id
+          const { data: dirData, error: dirErr } = await supabase
+            .from('subjects')
+            .select('id, name')
+            .eq('teacher_id', user.id);
+            
+          if (!dirErr && dirData) {
+            combinedSubjs = [...combinedSubjs, ...dirData];
+          }
+
+          // تصفية التكرارات إن وجدت
+          fetchedSubjects = Array.from(new Map(combinedSubjs.map(item => [item.id, item])).values());
         }
 
         setFormData({ subjects: fetchedSubjects, sections: fetchedSections });
@@ -194,7 +202,7 @@ export default function QuizBuilder() {
               <label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><BookOpen size={14} className="text-slate-400"/> المادة الدراسية</label>
               <select value={exam.subject_id} onChange={(e) => setExam({ ...exam, subject_id: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold appearance-none cursor-pointer hover:bg-white transition-all">
                 <option value="">{formLoading ? 'جاري التحميل...' : 'اختر المادة'}</option>
-                {formData.subjects.length > 0 ? formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>)) : <option disabled>لا توجد مواد متاحة</option>}
+                {formData.subjects.length > 0 ? formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>)) : <option disabled>لا توجد مواد مسندة لك</option>}
               </select>
             </div>
             
@@ -204,7 +212,6 @@ export default function QuizBuilder() {
             </div>
           </div>
 
-          {/* القائمة المنسدلة للصفوف الدراسية (Multi-Select Dropdown) */}
           <div className="space-y-3 relative border-t border-slate-100 pt-10" ref={dropdownRef}>
             <label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Users size={14} className="text-slate-400"/> الصفوف المستهدفة</label>
             
