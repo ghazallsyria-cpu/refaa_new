@@ -375,7 +375,13 @@ export default function QuizBuilder() {
                             </div>
                             <Switch.Root 
                               checked={(exam.settings as any)[setting.key]}
-                              onCheckedChange={(val) => setExam({...exam, settings: {...exam.settings, [setting.key]: val}})}
+                              onCheckedChange={(val) => setExam({
+                                ...exam, 
+                                settings: { 
+                                  ...exam.settings, 
+                                  [setting.key]: val 
+                                } as NonNullable<typeof exam.settings>
+                              })}
                               className="w-14 h-8 bg-slate-200 rounded-full relative data-[state=checked]:bg-indigo-600 transition-all outline-none cursor-pointer shadow-inner"
                             >
                               <Switch.Thumb className="block w-6 h-6 bg-white rounded-full shadow-xl transition-transform duration-200 translate-x-1 will-change-transform data-[state=checked]:translate-x-[26px]" />
