@@ -80,7 +80,14 @@ export default function TakeQuiz() {
 
       setExam({
         ...examData,
-        description: examData.description ?? ""
+        description: examData.description ?? "",
+        // إضافة إعدادات افتراضية كاملة لإرضاء النوع (Type) المطلوب
+        settings: {
+          shuffle_questions: examData.settings?.shuffle_questions ?? false,
+          shuffle_options: examData.settings?.shuffle_options ?? false,
+          show_results_immediately: examData.settings?.show_results_immediately ?? true,
+          allow_backtracking: examData.settings?.allow_backtracking ?? true,
+        }
       });
       setQuestions(questionsData || []);
 
