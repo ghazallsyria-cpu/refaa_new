@@ -6,29 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useClassesSystem } from '@/hooks/useClassesSystem';
 import { useAuth } from '@/context/auth-context';
-
-type Student = {
-  id: string;
-  national_id: string;
-  user: {
-    full_name: string;
-    email: string;
-  };
-};
-
-type Section = {
-  id: string;
-  name: string;
-  class_id: string;
-  students: Student[];
-};
-
-type ClassData = {
-  id: string;
-  name: string;
-  level: number;
-  sections: Section[];
-};
+import { OrganizedClass, OrganizedSection, OrganizedStudent } from '@/types';
 
 export default function ClassesPage() {
   const { userRole } = useAuth();
@@ -142,7 +120,7 @@ export default function ClassesPage() {
     if (!searchTerm) return cls;
     
     // Filter sections and students based on search term
-    const filteredSections = cls.sections.map((sec: any) => {
+    const filteredSections = cls.sections.map((sec: OrganizedSection) => {
       const filteredStudents = sec.students.filter(stu => 
         stu.user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         stu.national_id.includes(searchTerm)

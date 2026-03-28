@@ -30,6 +30,13 @@ export const SectionSchema = z.object({
   created_at: z.string().optional(),
 });
 
+export const ClassSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  level: z.number().int().min(1).max(12),
+  created_at: z.string().optional(),
+});
+
 export const StudentSchema = z.object({
   id: z.string().uuid(),
   user_id: z.string().uuid(),
@@ -348,6 +355,7 @@ export type Teacher = z.infer<typeof TeacherSchema>;
 export type Student = z.infer<typeof StudentSchema>;
 export type Parent = z.infer<typeof ParentSchema>;
 export type Subject = z.infer<typeof SubjectSchema>;
+export type Class = z.infer<typeof ClassSchema>;
 export type Section = z.infer<typeof SectionSchema>;
 export type Assignment = z.infer<typeof AssignmentSchema>;
 export type AssignmentSubmission = z.infer<typeof AssignmentSubmissionSchema>;

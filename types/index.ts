@@ -6,7 +6,7 @@ export * from '../lib/validations';
 
 // Derived types that include relations or specific organization
 export interface OrganizedSection extends validations.Section {
-  students: validations.Student[];
+  students: OrganizedStudent[];
 }
 
 export interface OrganizedClass extends validations.Class {
