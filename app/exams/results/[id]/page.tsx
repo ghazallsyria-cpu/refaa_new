@@ -48,7 +48,6 @@ export default function ExamResults() {
   const [questionsData, setQuestionsData] = useState<any[]>([]);
   const [answersData, setAnswersData] = useState<any[]>([]);
 
-  // States for Smart Grid
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'attempted' | 'not_attempted' | 'passed' | 'failed'>('all');
@@ -117,7 +116,6 @@ export default function ExamResults() {
     }
   };
 
-  // --- نظام الفلترة الذكي ---
   const filteredAttempts = useMemo(() => {
     return attempts.filter(a => {
       const maxScore = exam?.max_score || 100;
@@ -138,14 +136,11 @@ export default function ExamResults() {
     });
   }, [attempts, selectedSection, searchQuery, statusFilter, exam]);
 
-  // إرجاع الصفحة الأولى عند تغيير أي فلتر
   useEffect(() => { setCurrentPage(1); }, [selectedSection, searchQuery, statusFilter]);
 
-  // --- حساب الإحصائيات (تتحدث بناءً على الفصل المختار فقط) ---
   useEffect(() => {
     if (!exam) return;
 
-    // الإحصائيات تعتمد على الفصل المحدد (بدون فلتر البحث أو الحالة لتظل الإحصائيات دقيقة للفصل)
     const sectionAttempts = attempts.filter(a => selectedSection === 'all' || a.student.section_name === selectedSection);
     const completedAttempts = sectionAttempts.filter(a => a.status !== 'not_attempted');
     const absentCount = sectionAttempts.length - completedAttempts.length;
@@ -196,7 +191,6 @@ export default function ExamResults() {
     }
   }, [attempts, selectedSection, exam, questionsData, answersData]);
 
-  // حساب الترقيم للجدول
   const totalPages = Math.ceil(filteredAttempts.length / itemsPerPage);
   const paginatedAttempts = filteredAttempts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -216,7 +210,6 @@ export default function ExamResults() {
       ['م', 'اسم الطالب', 'الفصل الدراسي', 'تاريخ التقديم', 'الدرجة المكتسبة', 'النسبة المئوية', 'الحالة']
     ];
 
-    // يتم تصدير كل الطلاب الموجودين في الفلتر الحالي (وليس الصفحة الحالية فقط)
     const bodyData = filteredAttempts.map((a, index) => {
       if (a.status === 'not_attempted') return [index + 1, a.student.full_name, a.student.section_name, 'لم يتقدم', '-', '-', 'غائب'];
       const studentPercentage = (a.score / maxScore) * 100;
@@ -241,7 +234,6 @@ export default function ExamResults() {
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-8 space-y-8 pb-24 print:m-0 print:p-0" dir="rtl">
       
-      {/* إعدادات الطباعة للـ PDF */}
       <style jsx global>{`
         @media print {
           @page { size: A4 portrait; margin: 1cm; }
@@ -252,7 +244,6 @@ export default function ExamResults() {
         }
       `}</style>
       
-      {/* القسم المخفي للطباعة (PDF) يعرض كل البيانات المفلترة بدون ترقيم */}
       <div className="hidden print:block w-full">
         <div className="text-center mb-8 border-b-2 border-slate-200 pb-6">
           <h1 className="text-3xl font-black text-slate-900 mb-2">{exam?.title}</h1>
@@ -286,16 +277,13 @@ export default function ExamResults() {
         </table>
       </div>
 
-      {/* --- الواجهة التفاعلية (للمعلم) --- */}
-      
-      {/* 1. الهيدر وشريط الفلترة العلوية */}
       <div className="glass-card p-6 rounded-[40px] shadow-2xl border border-white/60 bg-white print:hidden space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-6">
             <button onClick={() => router.back()} className="h-14 w-14 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all"><ArrowRight size={24} /></button>
             <div>
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">{exam?.title}</h1>
-              <p className="text-slate-500 font-bold mt-1 text-sm">{exam?.subject_name} • {exam?.max_score} درجة</p>
+              <p className="text-slate-500 font-bold mt-1 text-sm">{exam?.subject_name} • الدرجة الكلية: {exam?.max_score || 100}</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -319,7 +307,6 @@ export default function ExamResults() {
         </div>
       </div>
 
-      {/* 2. بطاقات الإحصائيات (تتحدث بناءً على الفصل المختار أعلاه) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 print:hidden">
         {[
           { label: 'متوسط الأداء', value: `${stats?.avg_score || 0}%`, icon: BarChart2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -339,7 +326,6 @@ export default function ExamResults() {
         ))}
       </div>
 
-      {/* 3. الرسوم البيانية */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
         <div className="lg:col-span-2 glass-card p-8 rounded-3xl border border-white/60 shadow-xl bg-white h-[400px] flex flex-col">
           <h3 className="text-xl font-black text-slate-900 mb-6">أداء الأسئلة (نسبة الإجابات الصحيحة)</h3>
@@ -377,9 +363,7 @@ export default function ExamResults() {
         </div>
       </div>
 
-      {/* 4. شبكة البيانات الذكية (الجدول المحسن مع الترقيم) */}
       <div className="glass-card rounded-[40px] border border-white/60 shadow-2xl overflow-hidden bg-white print:hidden flex flex-col">
-        {/* أزرار الفلترة السريعة (الحالة) */}
         <div className="p-6 border-b border-slate-100 flex flex-wrap gap-3 bg-slate-50/50">
           {[
             { id: 'all', label: 'الجميع', icon: Users },
@@ -402,7 +386,6 @@ export default function ExamResults() {
           ))}
         </div>
 
-        {/* الجدول */}
         <div className="overflow-x-auto min-h-[400px]">
           <table className="w-full text-right">
             <thead>
@@ -480,7 +463,6 @@ export default function ExamResults() {
           </table>
         </div>
 
-        {/* أزرار الترقيم (Pagination) */}
         {totalPages > 1 && (
           <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
             <span className="text-sm font-bold text-slate-500">
