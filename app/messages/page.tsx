@@ -156,7 +156,8 @@ if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
 const date = new Date(msg.created_at || 0);
 
           const timeKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
-          const key = `${msg.content}-${msg.subject}-${timeKey}`;
+const key = `${msg.content}-${timeKey}`;
+
           if (!seenContents.has(key)) {
             seenContents.add(key);
             uniqueMessages.push(msg);
