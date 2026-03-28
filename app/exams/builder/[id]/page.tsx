@@ -155,6 +155,7 @@ export default function QuizBuilder() {
     });
   };
 
+  // --- التحديث العبقري: تنظيف البيانات الصارم قبل الإرسال لمنع أخطاء السيرفر ---
   const handleSave = async () => {
     if (!exam.title || !exam.subject_id || !exam.section_ids || exam.section_ids.length === 0) {
       return alert('يرجى التأكد من إدخال العنوان، اختيار المادة، واختيار صف واحد على الأقل');
@@ -166,14 +167,41 @@ export default function QuizBuilder() {
     setSaving(true);
     try {
       const calculatedMaxScore = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
-      const finalExamData = {
-        ...exam,
+      
+      // تنظيف (Sanitize) كائن الاختبار ليطابق أعمدة قاعدة البيانات فقط
+      const cleanExamData = {
+        id: exam.id, 
+        title: exam.title,
+        description: exam.description,
         status: 'published',
-        max_score: calculatedMaxScore > 0 ? calculatedMaxScore : 100
+        max_score: calculatedMaxScore > 0 ? calculatedMaxScore : 100,
+        passing_score: exam.passing_score,
+        duration: exam.duration,
+        exam_date: exam.exam_date,
+        start_time: exam.start_time,
+        end_time: exam.end_time,
+        subject_id: exam.subject_id,
+        settings: exam.settings || {},
+        section_ids: exam.section_ids // يتم التعامل معها في السيرفر لفصلها
       };
-      const finalQuestions = questions.map((q, idx) => ({ ...q, order_index: idx }));
 
-      await saveExam(finalExamData, finalQuestions, params.id === 'new'); 
+      // تنظيف مصفوفة الأسئلة وإزالة أي دمج (Joins) غير مرغوب فيه
+      const cleanQuestions = questions.map((q, idx) => ({
+        id: q.id,
+        content: q.content,
+        type: q.type,
+        points: Number(q.points) || 0,
+        media_url: q.media_url || null,
+        media_type: q.media_type || null,
+        order_index: idx,
+        options: q.options?.map(opt => ({
+           id: opt.id,
+           content: opt.content,
+           is_correct: opt.is_correct
+        }))
+      }));
+
+      await saveExam(cleanExamData, cleanQuestions, params.id === 'new'); 
       router.push('/exams'); 
     } catch (err: any) { 
       alert(`حدث خطأ أثناء الحفظ: ${err.message}`); 
