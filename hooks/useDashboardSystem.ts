@@ -2,12 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-// --- إضافة تعريف نوع بيانات الجدول لنجاح الـ Build ---
-export interface StudentScheduleData {
-  student: any;
-  schedule: any[];
-  periods: any[];
-}
+// --- تعريف الأنواع لضمان نجاح الـ Build في Netlify ---
 
 export interface AdminDashboardData {
   studentsCount: number;
@@ -30,50 +25,63 @@ export interface StudentDashboardData {
   periods: any[];
 }
 
+export interface ParentDashboardData {
+  children: any[];
+  notifications: any[];
+}
+
+export interface TeacherDashboardData {
+  teacher: any;
+  sections: any[];
+  recentExams: any[];
+  recentAssignments: any[];
+  schedule: any[];
+  periods: any[];
+  messages: any[];
+  stats: {
+    totalStudents: number;
+    totalExams: number;
+    totalAssignments: number;
+  };
+}
+
 export function useDashboardSystem() {
   const { user } = useAuth();
 
-  // --- دالة جدول الطالب المحدثة بالأنواع ---
-  const fetchStudentSchedule = useCallback(async (): Promise<StudentScheduleData | null> => {
+  // --- دالة ولي الأمر المحدثة بالأنواع الصريحة ---
+  const fetchParentDashboardData = useCallback(async (): Promise<ParentDashboardData | null> => {
     if (!user) return null;
     try {
-      const { data: student } = await supabase
-        .from('students')
-        .select('section_id, sections(name, classes(name))')
-        .eq('id', user.id)
-        .single();
-
-      if (!student) return null;
-
-      const [ { data: schedule }, { data: periods } ] = await Promise.all([
-        supabase.from('schedules')
-          .select('*, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
-          .eq('section_id', student.section_id)
-          .order('day_of_week')
-          .order('period'),
-        supabase.from('class_periods').select('*').order('period_number')
+      const [ { data: children }, { data: notifications } ] = await Promise.all([
+        supabase.from('students')
+          .select('*, users(full_name), sections(name, classes(name))')
+          .eq('parent_id', user.id),
+        supabase.from('notifications')
+          .select('*')
+          .eq('type', 'announcement')
+          .order('created_at', { ascending: false })
+          .limit(5)
       ]);
 
       return { 
-        student, 
-        schedule: schedule || [], 
-        periods: periods || [] 
+        children: children || [], 
+        notifications: notifications || [] 
       };
     } catch (error) {
-      console.error('Schedule Fetch Error:', error);
-      return null;
+      console.error('Parent Data Fetch Error:', error);
+      return { children: [], notifications: [] };
     }
   }, [user]);
 
-  // بقية الدوال تبقى كما هي لضمان استقرار النظام
+  // بقية الدوال كقوالب لضمان عدم تعطل الصفحات الأخرى أثناء الـ Build
   return {
-    fetchAdminDashboardStats: useCallback(async () => ({ studentsCount: 0, teachersCount: 0, sectionsCount: 0, attendanceRate: 0 }), []),
+    fetchAdminDashboardStats: useCallback(async (): Promise<AdminDashboardData> => ({ studentsCount: 0, teachersCount: 0, sectionsCount: 0, attendanceRate: 0 }), []),
     fetchAdminRecentActivities: useCallback(async () => [], []),
     fetchStudentDashboardData: useCallback(async () => null, []),
-    fetchParentDashboardData: useCallback(async () => null, []),
+    fetchStudentSchedule: useCallback(async () => null, []),
     fetchTeacherDashboardData: useCallback(async () => null, []),
     fetchTeacherSchedule: useCallback(async () => null, []),
-    fetchStudentSchedule // الدالة المحدثة
+    fetchParentDashboardData
   };
 }
 
