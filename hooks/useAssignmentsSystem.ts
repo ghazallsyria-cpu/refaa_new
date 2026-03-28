@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
+import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
 import { normalizePayload } from '@/lib/utils';
 
@@ -268,7 +268,7 @@ export function useAssignmentsSystem() {
     }
   }, [user, userRole]);
 
-  const submitAssignment = useCallback(async (assignmentId: string, answersPayload: Omit<AssignmentAnswer, 'id' | 'submission_id'>[], submissionId?: string): Promise<string> => {
+  const submitAssignment = useCallback(async (assignmentId: string, answers: RawAssignmentAnswer[], submissionId?: string): Promise<string> => {
     if (!user) throw new Error('Not authenticated');
 
     const studentName = user.user_metadata?.full_name || 'طالب';
@@ -280,7 +280,7 @@ export function useAssignmentsSystem() {
         assignmentId,
         studentId: user.id,
         studentName,
-        answersPayload,
+        answers,
         submissionId
       }),
     });

@@ -241,16 +241,29 @@ export const SaveAssignmentRequestSchema = z.object({
   subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
 });
 
-export const AssignmentAnswerSchema = z.object({
-  id: z.string().uuid(),
-  submission_id: z.string().uuid(),
+export const RawAssignmentAnswerSchema = z.object({
   question_id: z.string().uuid(),
   answer_text: nullableString,
   selected_options: z.array(z.string()).optional().nullable(),
+}).strict();
+
+export const FinalAssignmentAnswerSchema = RawAssignmentAnswerSchema.extend({
+  id: z.string().uuid(),
+  submission_id: z.string().uuid(),
   is_correct: nullableBoolean,
   points_earned: nullableNumber,
   feedback: nullableString,
-});
+}).strict();
+
+export const AssignmentAnswerSchema = FinalAssignmentAnswerSchema;
+
+export const SubmitAssignmentRequestSchema = z.object({
+  assignmentId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  studentName: z.string(),
+  answers: z.array(RawAssignmentAnswerSchema),
+  submissionId: z.string().uuid().optional().nullable(),
+}).strict();
 
 export const SaveTeacherAssignmentsRequestSchema = z.object({
   teacherId: z.string().uuid(),
@@ -348,6 +361,9 @@ export type ExamAttempt = z.infer<typeof ExamAttemptSchema>;
 export type Schedule = z.infer<typeof ScheduleSchema>;
 export type AssignmentQuestion = z.infer<typeof AssignmentQuestionSchema>;
 export type AssignmentAnswer = z.infer<typeof AssignmentAnswerSchema>;
+export type RawAssignmentAnswer = z.infer<typeof RawAssignmentAnswerSchema>;
+export type FinalAssignmentAnswer = z.infer<typeof FinalAssignmentAnswerSchema>;
+export type SubmitAssignmentRequest = z.infer<typeof SubmitAssignmentRequestSchema>;
 export type SaveExamRequest = z.infer<typeof SaveExamRequestSchema>;
 export type SaveAssignmentRequest = z.infer<typeof SaveAssignmentRequestSchema>;
 export type SaveAttendanceRequest = z.infer<typeof SaveAttendanceRequestSchema>;

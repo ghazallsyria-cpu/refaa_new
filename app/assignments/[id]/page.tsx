@@ -18,6 +18,7 @@ import 'jspdf-autotable';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
+import { RawAssignmentAnswer } from '@/types';
 
 type Assignment = {
   id: string;
@@ -55,7 +56,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [questions, setQuestions] = useState<Question[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [mySubmission, setMySubmission] = useState<Submission | null>(null);
-  const [myAnswers, setMyAnswers] = useState<Record<string, any>>({});
+  const [myAnswers, setMyAnswers] = useState<Record<string, string | string[] | null>>({});
   const [loading, setLoading] = useState(true);
   const [studentId, setStudentId] = useState<string | null>(null);
 
@@ -164,8 +165,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           setFileUrl(details.submission.file_url || '');
 
           if (details.answers) {
-            const answersMap: Record<string, any> = {};
-            details.answers.forEach((a: any) => {
+            const answersMap: Record<string, string | string[] | null> = {};
+            details.answers.forEach((a) => {
               answersMap[a.question_id] = a.selected_options || a.answer_text;
             });
             setMyAnswers(answersMap);
@@ -187,16 +188,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     fetchData();
   }, [fetchData]);
 
-  const handleSubmitAnswers = async (answers: Record<string, any>) => {
+  const handleSubmitAnswers = async (answers: Record<string, string | string[] | null>) => {
     setIsSubmitting(true);
     try {
-      const answersPayload = Object.entries(answers).map(([qId, value]) => {
+      const answersPayload: RawAssignmentAnswer[] = Object.entries(answers).map(([qId, value]) => {
         const question = questions.find(q => q.id === qId);
         const isMultiple = question?.type === 'multiple_choice' || question?.type === 'checkbox';
         return {
           question_id: qId,
-          answer_text: isMultiple ? null : value,
-          selected_options: isMultiple ? value : null
+          answer_text: isMultiple ? null : (value as string),
+          selected_options: isMultiple ? (value as string[]) : null
         };
       });
 
