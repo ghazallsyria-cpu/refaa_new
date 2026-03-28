@@ -60,6 +60,12 @@ export default function StudentExamResult() {
     </div>
   );
 
+  // حساب حالة النجاح والرسوب بصرياً
+  const maxScore = exam?.max_score || 100;
+  const passingScore = exam?.passing_score || 50;
+  const studentPercentage = attempt?.score !== undefined ? (attempt.score / maxScore) * 100 : 0;
+  const isPassed = studentPercentage >= passingScore;
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-10 pb-24" dir="rtl">
       <button onClick={() => router.back()} className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-white border border-slate-100 text-slate-500 font-black hover:text-indigo-600 transition-all shadow-sm active:scale-95">
@@ -78,17 +84,19 @@ export default function StudentExamResult() {
             <span className="text-[10px] text-slate-400 block font-black uppercase mb-1 flex items-center gap-2"><BookOpen size={12} /> المادة الدراسية</span>
             <span className="text-xl font-black text-slate-800">{exam?.subject_name || 'مادة عامة'}</span>
           </div>
-          <div className="bg-slate-50 p-6 rounded-[28px] border border-slate-100">
-            <span className="text-[10px] text-slate-400 block font-black uppercase mb-1 flex items-center gap-2"><Clock size={12} /> النتيجة</span>
-            <span className="text-xl font-black text-emerald-600">
-              {attempt?.score !== undefined ? `${attempt.score}%` : 'لم يُقيّم بعد'}
+          <div className={`p-6 rounded-[28px] border ${attempt ? (isPassed ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100') : 'bg-slate-50 border-slate-100'}`}>
+            <span className={`text-[10px] block font-black uppercase mb-1 flex items-center gap-2 ${attempt ? (isPassed ? 'text-emerald-500' : 'text-red-500') : 'text-slate-400'}`}>
+              <Clock size={12} /> الدرجة المكتسبة
+            </span>
+            <span className={`text-xl font-black ${attempt ? (isPassed ? 'text-emerald-600' : 'text-red-600') : 'text-slate-600'}`} dir="ltr">
+              {attempt?.score !== undefined ? `${attempt.score} / ${maxScore}` : 'لم يتقدم'}
             </span>
           </div>
         </div>
       </div>
 
       <div className="space-y-8">
-        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3"><CheckCircle className="text-emerald-500" /> إجابات الطالب بالتفصيل</h2>
+        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3"><CheckCircle className="text-indigo-500" /> إجابات الطالب بالتفصيل</h2>
         
         {(!answers || answers.length === 0) ? (
           <div className="text-center py-20 bg-white rounded-[40px] border border-dashed border-slate-200 text-slate-400 font-bold">
