@@ -153,7 +153,8 @@ if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
         if (msg.sender_id === currentUser?.id) {
           // Use a combination of content, subject, and timestamp (rounded to minute) to deduplicate
           // This ensures that if a teacher sends multiple group messages with same content at different times, they show up
-          const date = new Date(msg.created_at);
+const date = new Date(msg.created_at || 0);
+
           const timeKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
           const key = `${msg.content}-${msg.subject}-${timeKey}`;
           if (!seenContents.has(key)) {
