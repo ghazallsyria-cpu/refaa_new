@@ -22,7 +22,7 @@ import { Question, QuestionType, Option, createQuestion } from '@/types/question
 type ExamData = {
   id?: string;
   title: string;
-  description: string;
+  description: string | null;
   subject_id: string;
   section_id?: string;
   section_ids?: string[];
@@ -463,7 +463,7 @@ export default function QuizBuilder() {
             />
             <textarea 
               placeholder="وصف الاختبار (اختياري)"
-              value={exam.description}
+              value={exam.description || ''}
               onChange={(e) => setExam({...exam, description: e.target.value})}
               className="w-full text-xl text-slate-500 border-none focus:ring-0 placeholder:text-slate-200 p-0 resize-none h-16 bg-transparent font-bold leading-relaxed"
             />
