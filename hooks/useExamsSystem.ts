@@ -42,7 +42,6 @@ export function useExamsSystem() {
 
   useEffect(() => { fetchExams(); }, [fetchExams]);
 
-  // --- دالة جلب كافة النتائج مع ضمان ظهور الأسماء 100% ---
   const fetchExamResults = useCallback(async (examId: string) => {
     try {
       const { data: exam } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).maybeSingle();
@@ -52,7 +51,6 @@ export function useExamsSystem() {
       const sectionIds = sections?.map(s => s.section_id) || [];
       const attemptStudentIds = attempts?.map(a => a.student_id) || [];
       
-      // 1. تصحيح علاقة users بإزالة :id
       let studentsQuery = supabase.from('students').select(`id, users(full_name, email), section:sections(id, name, classes(name))`);
       
       if (sectionIds.length > 0) {
@@ -62,19 +60,19 @@ export function useExamsSystem() {
       }
 
       const { data: st } = await studentsQuery;
-      let rawStudents = st || [];
+      // تصحيح الخطأ هنا: إعطاء rawStudents النوع any[] صراحةً لمنع تعارض TypeScript
+      let rawStudents: any[] = st || [];
 
-      // جلب الطلاب المفقودين (الذين اختبروا ولكن ليسوا ضمن القائمة الأساسية)
-      const fetchedStudentIds = new Set(rawStudents.map(s => s.id));
+      const fetchedStudentIds = new Set(rawStudents.map((s: any) => s.id));
       const missingStudentIds = attemptStudentIds.filter(id => !fetchedStudentIds.has(id));
       
       if (missingStudentIds.length > 0) {
-         const { data: missingSt } = await supabase.from('students').select(`id, users(full_name, email), section:sections(id, name)`).in('id', missingStudentIds);
+         // تصحيح الخطأ هنا: توحيد الاستعلام ليكون مطابقاً تماماً للاستعلام الأول بإضافة classes(name)
+         const { data: missingSt } = await supabase.from('students').select(`id, users(full_name, email), section:sections(id, name, classes(name))`).in('id', missingStudentIds);
          rawStudents = [...rawStudents, ...(missingSt || [])];
       }
 
-      // 2. الخطة البديلة القاطعة (Absolute Fallback): جلب الأسماء مباشرة من جدول users إذا فشل الربط
-      const idsNeedNames = rawStudents.filter(s => !s.users).map(s => s.id);
+      const idsNeedNames = rawStudents.filter((s: any) => !s.users).map((s: any) => s.id);
       let manualUsers: any[] = [];
       if (idsNeedNames.length > 0) {
          const { data: mu } = await supabase.from('users').select('id, full_name, email').in('id', idsNeedNames);
@@ -96,11 +94,18 @@ export function useExamsSystem() {
           }
         }
 
+        // معالجة اسم الصف (في حال كان هناك اسم فصل من جدول classes)
+        let finalSectionName = s.section?.name || 'غير محدد';
+        const className = Array.isArray(s.section?.classes) ? s.section?.classes[0]?.name : s.section?.classes?.name;
+        if (className && s.section?.name) {
+            finalSectionName = `${className} - ${s.section.name}`;
+        }
+
         return {
           id: s.id,
           full_name: fName || 'طالب غير معروف',
           email: eMail || '',
-          section_name: s.section?.name || 'غير محدد'
+          section_name: finalSectionName
         };
       });
 
@@ -147,11 +152,9 @@ export function useExamsSystem() {
     await fetchExams();
   }, [user, fetchExams]);
 
-  // --- دالة استعراض إجابة الطالب (بشكل فردي) مع الخطة البديلة للأسماء ---
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
     const [eRes, sRes, aRes] = await Promise.all([
       supabase.from('exams').select('*').eq('id', examId).maybeSingle(),
-      // تصحيح علاقة users بإزالة :id
       supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle(),
       supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentId).maybeSingle()
     ]);
@@ -170,7 +173,6 @@ export function useExamsSystem() {
     
     let fullName = Array.isArray(sRes.data?.users) ? sRes.data?.users[0]?.full_name : sRes.data?.users?.full_name;
 
-    // الخطة البديلة القاطعة: إذا فشل استخراج الاسم من جدول الطلاب، اذهب لجدول المستخدمين مباشرة
     if (!fullName) {
       const { data: uRes } = await supabase.from('users').select('full_name').eq('id', studentId).maybeSingle();
       fullName = uRes?.full_name;
