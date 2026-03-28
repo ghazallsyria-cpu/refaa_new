@@ -7,7 +7,7 @@ import { Reorder } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Switch from '@radix-ui/react-switch';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { useSchoolFormData } from '@/hooks/use-school-form-data';
+import { supabase } from '@/lib/supabase';
 import ImageUpload from '@/components/ImageUpload';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { Question, QuestionType, newQuestion as createNewQuestion } from '@/types/question';
@@ -54,12 +54,31 @@ export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
   const { fetchExamDetails, saveExam } = useExamsSystem();
-  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   
+  const [formData, setFormData] = useState<{subjects: any[], sections: any[]}>({ subjects: [], sections: [] });
+  const [formLoading, setFormLoading] = useState(true);
+
   const [exam, setExam] = useState<any>({ title: '', description: '', status: 'draft', max_score: 100, passing_score: 50, duration: 30, exam_date: new Date().toISOString().split('T')[0], start_time: '08:00', end_time: '23:00', subject_id: '', section_ids: [], settings: { shuffle_questions: false, shuffle_options: false, show_results: true, allow_backtrack: true, browser_lock: false } });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(params.id !== 'new');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const fetchFormData = async () => {
+      try {
+        const [subj, sec] = await Promise.all([
+          supabase.from('subjects').select('id, name'),
+          supabase.from('sections').select('id, name')
+        ]);
+        setFormData({ subjects: subj.data || [], sections: sec.data || [] });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setFormLoading(false);
+      }
+    };
+    fetchFormData();
+  }, []);
 
   useEffect(() => {
     if (params.id !== 'new') {
@@ -77,7 +96,7 @@ export default function QuizBuilder() {
   const handleSave = async () => {
     if (!exam.title || !exam.subject_id || !exam.section_ids || exam.section_ids.length === 0) return alert('يرجى اختيار المادة والصفوف المستهدفة');
     setSaving(true);
-    try { await saveExam(exam, questions, params.id === 'new'); router.push('/exams'); } catch (err) { alert('حدث خطأ في عملية الحفظ، يرجى مراجعة Console'); console.error(err); } finally { setSaving(false); }
+    try { await saveExam(exam, questions, params.id === 'new'); router.push('/exams'); } catch (err) { alert('حدث خطأ في عملية الحفظ'); console.error(err); } finally { setSaving(false); }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-12 w-12 border-t-4 border-indigo-600 rounded-full"></div></div>;
@@ -94,12 +113,12 @@ export default function QuizBuilder() {
       <main className="max-w-4xl mx-auto px-6 py-12 space-y-10">
         <div className="glass-card rounded-[40px] border-t-[16px] border-t-indigo-600 p-10 space-y-10 shadow-2xl bg-white">
           <div className="space-y-6"><input type="text" value={exam.title} onChange={(e) => setExam({ ...exam, title: e.target.value })} className="w-full text-5xl font-black border-none focus:ring-0 bg-transparent placeholder:text-slate-200" placeholder="عنوان الاختبار" /><textarea value={exam.description} onChange={(e) => setExam({ ...exam, description: e.target.value })} className="w-full text-xl font-medium border-none focus:ring-0 bg-transparent resize-none placeholder:text-slate-200" placeholder="وصف الاختبار..." rows={2} /></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t pt-10"><div className="space-y-3"><label className="text-xs font-black uppercase text-slate-400"><BookOpen size={14} className="inline mr-1"/> المادة الدراسية</label><select value={exam.subject_id} onChange={(e) => setExam({ ...exam, subject_id: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold"><option value="">{formLoading ? 'جاري التحميل...' : 'اختر المادة'}</option>{(formData?.subjects || []).map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>))}</select></div><div className="space-y-3"><label className="text-xs font-black uppercase text-slate-400"><Target size={14} className="inline mr-1"/> درجة النجاح (%)</label><input type="number" value={exam.passing_score} onChange={(e) => setExam({ ...exam, passing_score: parseInt(e.target.value) })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold" /></div></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t pt-10"><div className="space-y-3"><label className="text-xs font-black uppercase text-slate-400"><BookOpen size={14} className="inline mr-1"/> المادة الدراسية</label><select value={exam.subject_id} onChange={(e) => setExam({ ...exam, subject_id: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold"><option value="">{formLoading ? 'جاري التحميل...' : 'اختر المادة'}</option>{formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>))}</select></div><div className="space-y-3"><label className="text-xs font-black uppercase text-slate-400"><Target size={14} className="inline mr-1"/> درجة النجاح (%)</label><input type="number" value={exam.passing_score} onChange={(e) => setExam({ ...exam, passing_score: parseInt(e.target.value) })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold" /></div></div>
           <div className="space-y-4 border-t pt-10"><label className="text-xs font-black uppercase text-slate-400"><Users size={14} className="inline mr-1"/> الصفوف المستهدفة</label><div className="flex flex-wrap gap-3">
-              {(formData?.sections || []).length > 0 ? formData?.sections?.map((s: any) => {
+              {formData.sections.length > 0 ? formData.sections.map((s: any) => {
                 const active = (exam.section_ids || []).includes(s.id);
                 return (<button key={s.id} type="button" onClick={() => setExam({...exam, section_ids: active ? exam.section_ids.filter((id: string) => id !== s.id) : [...(exam.section_ids || []), s.id]})} className={`px-6 py-3 rounded-2xl text-sm font-black border-2 ${active ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-500'}`}>{s.name}</button>)
-              }) : <span className="text-slate-400 font-bold text-sm">لم يتم العثور على صفوف. تأكد من إضافتها في الإعدادات.</span>}
+              }) : <span className="text-slate-400 font-bold text-sm">{formLoading ? 'جاري تحميل الصفوف...' : 'لم يتم العثور على صفوف.'}</span>}
             </div></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 border-t pt-10"><div className="space-y-2"><label className="text-xs font-black text-slate-400">المدة (دقيقة)</label><input type="number" value={exam.duration} onChange={(e) => setExam({...exam, duration: parseInt(e.target.value)})} className="w-full p-4 rounded-2xl bg-slate-50 border-0 font-bold" /></div><div className="space-y-2"><label className="text-xs font-black text-slate-400">التاريخ</label><input type="date" value={exam.exam_date} onChange={(e) => setExam({...exam, exam_date: e.target.value})} className="w-full p-4 rounded-2xl bg-slate-50 border-0 font-bold" /></div><div className="space-y-2"><label className="text-xs font-black text-slate-400">البدء - النهاية</label><div className="flex gap-2"><input type="time" value={exam.start_time} onChange={(e) => setExam({...exam, start_time: e.target.value})} className="w-1/2 p-4 rounded-2xl bg-slate-50 border-0 font-bold text-center" /><input type="time" value={exam.end_time} onChange={(e) => setExam({...exam, end_time: e.target.value})} className="w-1/2 p-4 rounded-2xl bg-slate-50 border-0 font-bold text-center" /></div></div></div>
         </div>
