@@ -338,7 +338,8 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                           <Briefcase className="h-3 w-3 text-slate-400" />
                         </div>
                         <span className="text-sm font-bold text-slate-600">
-                          {parent.job_title || '-'}
+{(parent as { job_title?: string }).job_title || '-'}
+
                         </span>
                       </div>
                     </td>
