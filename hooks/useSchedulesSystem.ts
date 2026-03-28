@@ -17,7 +17,6 @@ export interface ScheduleEntry {
 export function useSchedulesSystem() {
   const [loading, setLoading] = useState(false);
 
-  // 1. جلب البيانات الأولية (تم إعادة assignments لإرضاء الصفحة القديمة)
   const fetchInitialScheduleData = useCallback(async () => {
     setLoading(true);
     try {
@@ -25,7 +24,7 @@ export function useSchedulesSystem() {
         supabase.from('sections').select('id, name, classes(name)').order('name'),
         supabase.from('subjects').select('id, name').order('name'),
         supabase.from('teachers').select('id, specialization, users(full_name)'),
-        supabase.from('teacher_sections').select('teacher_id, section_id, subject_id'), // هذه هي الـ assignments المفقودة!
+        supabase.from('teacher_sections').select('teacher_id, section_id, subject_id'),
         supabase.from('class_periods').select('*').order('period_number')
       ]);
 
@@ -36,7 +35,7 @@ export function useSchedulesSystem() {
           ...t,
           users: Array.isArray(t.users) ? t.users : [t.users]
         })),
-        assignments: assignments.data || [], // إرجاعها لمنع خطأ Netlify
+        assignments: assignments.data || [],
         periods: periods.data || []
       };
     } catch (error) {
@@ -86,8 +85,13 @@ export function useSchedulesSystem() {
     }
   }, []);
 
+  // --- تم الإصلاح هنا ليتوافق مع الصفحات القديمة (تستقبل متغيراً واحداً) ---
   const addSchedule = saveSchedule;
-  const updateSchedule = saveSchedule;
+  
+  // --- تم الإصلاح هنا ليتوافق مع الصفحات القديمة (تستقبل متغيرين: ID و البيانات) ---
+  const updateSchedule = useCallback(async (id: string, updates: any) => {
+    return await saveSchedule({ id, ...updates });
+  }, [saveSchedule]);
 
   const deleteSchedule = useCallback(async (id: string) => {
     setLoading(true);
@@ -99,7 +103,6 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  // تم إعادة هذه الدالة لأن الصفحة القديمة كانت تستخدمها
   const fetchUserRole = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase.from('users').select('role').eq('id', userId).single();
@@ -148,10 +151,10 @@ export function useSchedulesSystem() {
     fetchInitialScheduleData,
     fetchSchedules,
     addSchedule,
-    updateSchedule,
+    updateSchedule, // الآن تقبل (id, updates) بدون أخطاء!
     saveSchedule,
     deleteSchedule,
-    fetchUserRole, // أضيفت هنا
+    fetchUserRole,
     fetchStudentSection,
     checkConflicts,
     swapSchedules,
