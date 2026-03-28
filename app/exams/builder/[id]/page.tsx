@@ -17,7 +17,7 @@ import * as Switch from '@radix-ui/react-switch';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
-import { Question, QuestionType, Option } from '@/types/question';
+import { Question, QuestionType, Option, createQuestion } from '@/types/question';
 
 type ExamData = {
   id?: string;
@@ -99,23 +99,7 @@ export default function QuizBuilder() {
   };
 
   const addQuestion = useCallback((type: QuestionType) => {
-    const newQuestion: Question = {
-      id: crypto.randomUUID(),
-      type,
-      content: '',
-      points: 1,
-      options: type === 'multiple_choice' || type === 'multi_select' 
-        ? [
-            { id: crypto.randomUUID(), content: 'الخيار الأول', is_correct: true },
-            { id: crypto.randomUUID(), content: 'الخيار الثاني', is_correct: false }
-          ]
-        : type === 'true_false'
-        ? [
-            { id: crypto.randomUUID(), content: 'صح', is_correct: true },
-            { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
-          ]
-        : []
-    };
+    const newQuestion = createQuestion(type);
     setQuestions(prev => [...prev, newQuestion]);
   }, []);
 

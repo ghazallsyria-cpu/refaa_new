@@ -35,3 +35,32 @@ export const normalizeQuestion = (raw: Partial<Question> & { text?: string }): Q
     isRequired: !!raw.isRequired,
   };
 };
+
+export const createQuestion = (type: QuestionType): Question => {
+  const base: Question = {
+    id: crypto.randomUUID(),
+    type,
+    content: '',
+    points: 1,
+    options: [],
+    isRequired: false,
+  };
+
+  switch (type) {
+    case 'multiple_choice':
+    case 'multi_select':
+      base.options = [
+        { id: crypto.randomUUID(), content: 'الخيار الأول', is_correct: true },
+        { id: crypto.randomUUID(), content: 'الخيار الثاني', is_correct: false },
+      ];
+      break;
+    case 'true_false':
+      base.options = [
+        { id: crypto.randomUUID(), content: 'صح', is_correct: true },
+        { id: crypto.randomUUID(), content: 'خطأ', is_correct: false },
+      ];
+      break;
+  }
+
+  return base;
+};
