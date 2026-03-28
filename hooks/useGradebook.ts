@@ -15,7 +15,7 @@ export function useGradebook() {
   const { user, userRole } = useAuth();
   const [loading, setLoading] = useState(true);
   const [performanceData, setPerformanceData] = useState<StudentPerformance[]>([]);
-  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
+  const [sections, setSections] = useState<{ id: string; name: string; }[]>([]);
 
   const fetchGradebook = useCallback(async () => {
     if (!user || userRole !== 'teacher') return;
@@ -28,12 +28,18 @@ export function useGradebook() {
         .select('section:sections(id, name, classes(name))')
         .eq('teacher_id', user.id);
 
-      const fetchedSections = (teacherSecs || []).map((ts: any) => {
-        const s = ts.section;
-        if (!s) return null;
-        const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
-        return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
-      }).filter(Boolean);
+      // تم الإصلاح هنا: استخدام Type Guard صريح لإرضاء TypeScript أثناء الـ Build
+      const fetchedSections = (teacherSecs || [])
+        .map((ts: any) => {
+          const s = ts.section;
+          if (!s) return null;
+          const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
+          return { 
+            id: String(s.id), 
+            name: className ? `${className} - ${s.name}` : String(s.name) 
+          };
+        })
+        .filter((item): item is { id: string; name: string } => item !== null);
       
       setSections(fetchedSections);
 
@@ -73,14 +79,12 @@ export function useGradebook() {
         const studentAttempts = attempts.filter(a => a.student_id === student.id);
         const examsTaken = studentAttempts.length;
         
-        // حساب المتوسط (بافتراض أن الدرجة من 100)
         let average = 0;
         if (examsTaken > 0) {
           const totalScore = studentAttempts.reduce((sum, att) => sum + (att.score || 0), 0);
           average = Math.round(totalScore / examsTaken);
         }
 
-        // تحديد الحالة الأكاديمية
         let status: 'excellent' | 'good' | 'warning' | 'danger' = 'danger';
         if (average >= 90) status = 'excellent';
         else if (average >= 75) status = 'good';
@@ -90,7 +94,9 @@ export function useGradebook() {
 
         return {
           student_id: student.id,
-          full_name: Array.isArray(student.users) ? student.users[0]?.full_name : student.users?.full_name || 'طالب غير معروف',
+          full_name: (student.users && Array.isArray(student.users)) 
+            ? student.users[0]?.full_name 
+            : (student.users?.full_name || 'طالب غير معروف'),
           section_name: sectionInfo?.name || 'غير محدد',
           exams_taken: examsTaken,
           exams_average: average,
@@ -98,7 +104,6 @@ export function useGradebook() {
         };
       });
 
-      // ترتيب الطلاب أبجدياً
       aggregatedData.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
       setPerformanceData(aggregatedData);
 
