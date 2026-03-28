@@ -1,5 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+const SubmitExamRequestSchema = z.object({
+  attemptId: z.string().uuid(),
+  answers: z.record(z.any()), // answers is a map of questionId -> answer
+});
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,11 +14,9 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { attemptId, answers } = await req.json();
-
-    if (!attemptId || !answers) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+    const body = await req.json();
+    const validatedData = SubmitExamRequestSchema.parse(body);
+    const { attemptId, answers } = validatedData;
 
     // 1. Get the attempt and exam details
     const { data: attempt, error: attemptError } = await adminSupabase
@@ -37,11 +41,13 @@ export async function POST(req: Request) {
       throw new Error('Attempt not found');
     }
 
-    if (attempt.status === 'completed' || attempt.status === 'graded') {
+    const typedAttempt = attempt as any; // Still need some casting for complex joins if not fully typed
+
+    if (typedAttempt.status === 'completed' || typedAttempt.status === 'graded') {
       return NextResponse.json({ error: 'Exam already submitted' }, { status: 400 });
     }
 
-    const questions = attempt.exam.questions;
+    const questions = typedAttempt.exam.questions;
     let totalPoints = 0;
     let earnedPoints = 0;
 
@@ -94,8 +100,9 @@ export async function POST(req: Request) {
       status: questions.some((q: any) => q.type === 'open') ? 'completed' : 'graded'
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Exam Submit Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

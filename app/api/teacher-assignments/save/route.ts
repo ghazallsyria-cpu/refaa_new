@@ -1,5 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+const SaveTeacherAssignmentsRequestSchema = z.object({
+  teacherId: z.string().uuid(),
+  assignments: z.array(z.object({
+    section_id: z.string().uuid(),
+    subject_id: z.string().uuid(),
+  })),
+  userId: z.string().uuid(),
+});
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,13 +18,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { teacherId, assignments, userId } = await req.json();
+    const body = await req.json();
+    const validatedData = SaveTeacherAssignmentsRequestSchema.parse(body);
+    const { teacherId, assignments, userId } = validatedData;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
-    }
-
-    const assignmentsToInsert = assignments.map((a: any) => ({
+    const assignmentsToInsert = assignments.map((a) => ({
       teacher_id: teacherId,
       section_id: a.section_id,
       subject_id: a.subject_id
@@ -28,8 +36,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Teacher Assignments Save Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

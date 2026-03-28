@@ -2,60 +2,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { ExamWithMeta, ExamDetails, ExamResults, Exam, ExamAttempt } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
 
-export interface Exam {
-  id: string;
-  title: string;
-  description?: string;
-  subject_id: string;
-  subject_name?: string;
-  teacher_id: string;
-  teacher_name?: string;
-  start_time?: string;
-  end_time?: string;
-  exam_date?: string;
-  duration?: number;
-  status: 'draft' | 'published' | 'archived';
-  section_id?: string;
-  section_name?: string;
-  created_at: string;
-  submission_status?: 'pending' | 'submitted' | 'graded';
-  score?: number;
-  submission_count?: number;
-  graded_count?: number;
-  avg_score?: number;
-  question_count?: number;
-}
-
-export interface ExamDetails {
-  exam: Exam & { section_ids: string[] };
-  questions: Question[];
-}
-
 export interface ExamForStudent {
-  exam: Exam;
+  exam: ExamWithMeta;
   questions: Question[];
-}
-
-export interface ExamResults {
-  exam: Exam;
-  students: { id: string, full_name: string, email: string, section_name: string }[];
-  attempts: any[];
-  questions: Question[];
-  answers: any[];
 }
 
 export interface StudentExamResult {
   exam: Exam;
   student: { id: string, users: { full_name: string } };
-  attempt: any | null;
+  attempt: ExamAttempt | null;
   answers: any[];
 }
 
 export function useExamsSystem() {
   const { user, userRole } = useAuth();
-  const [data, setData] = useState<Exam[]>([]);
+  const [data, setData] = useState<ExamWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,7 +77,7 @@ export function useExamsSystem() {
       const { data: examsData, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
-      let mappedData: Exam[] = (examsData || []).map((e: any) => ({
+      let mappedData: ExamWithMeta[] = (examsData || []).map((e: any) => ({
         ...e,
         subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name,
         teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
@@ -121,8 +85,8 @@ export function useExamsSystem() {
       }));
 
       // Fetch stats for teacher/admin
-      if (['teacher', 'admin', 'management'].includes(userRole)) {
-        const examsWithStats = await Promise.all(mappedData.map(async (e: any) => {
+      if (['teacher', 'admin', 'management'].includes(userRole || '')) {
+        const examsWithStats = await Promise.all(mappedData.map(async (e) => {
           const [attemptsRes, questionsRes] = await Promise.all([
             supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
             supabase.from('questions').select('id', { count: 'exact', head: true }).eq('exam_id', e.id)
@@ -216,7 +180,7 @@ export function useExamsSystem() {
     }
   }, []);
 
-  const saveExam = useCallback(async (examData: any, questions: Question[], isNew: boolean): Promise<string> => {
+  const saveExam = useCallback(async (examData: Partial<Exam> & { section_ids?: string[] }, questions: Question[], isNew: boolean): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
     
     try {
@@ -281,7 +245,7 @@ export function useExamsSystem() {
     }
   }, []);
 
-  const submitExam = useCallback(async (examId: string, answers: any, score: number, status: string, timeSpent: number): Promise<string> => {
+  const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
 
     try {
@@ -389,7 +353,7 @@ export function useExamsSystem() {
       if (examError) throw examError;
 
       // 2. Fetch all students in the assigned sections
-      let studentsData: any[] = [];
+      let studentsData: { id: string, full_name: string, email: string, section_name: string }[] = [];
       if (examData?.section_ids && examData.section_ids.length > 0) {
         const { data: students, error: studentsError } = await supabase
           .from('students')
@@ -401,15 +365,15 @@ export function useExamsSystem() {
           .in('section_id', examData.section_ids);
         
         if (!studentsError && students) {
-          studentsData = students.map(s => {
-            const sectionData = s.section as any;
+          studentsData = (students as any[]).map(s => {
+            const sectionData = s.section;
             const className = Array.isArray(sectionData?.classes) ? sectionData?.classes[0]?.name : sectionData?.classes?.name;
             const sectionName = sectionData?.name ? `${className ? className + ' - ' : ''}${sectionData.name}` : 'غير محدد';
             
             return {
               id: s.id,
-              full_name: (s.users as any)?.full_name || 'طالب غير معروف',
-              email: (s.users as any)?.email || '',
+              full_name: s.users?.full_name || 'طالب غير معروف',
+              email: s.users?.email || '',
               section_name: sectionName
             };
           });
@@ -454,10 +418,10 @@ export function useExamsSystem() {
       }
 
       return {
-        exam: examData,
+        exam: examData as Exam,
         students: studentsData,
-        attempts: attemptsData || [],
-        questions: (qData || []).map(normalizeQuestion),
+        attempts: (attemptsData || []) as ExamAttempt[],
+        questions: (qData || []).map((q: any) => normalizeQuestion(q)),
         answers: aData || []
       };
     } catch (err) {
@@ -540,9 +504,9 @@ export function useExamsSystem() {
       }
 
       return {
-        exam: examData,
-        student: studentData,
-        attempt: attemptData || null,
+        exam: examData as Exam,
+        student: studentData as { id: string, users: { full_name: string } },
+        attempt: (attemptData || null) as ExamAttempt | null,
         answers: answersData
       };
     } catch (err) {

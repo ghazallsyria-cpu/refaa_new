@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveExamRequestSchema } from '@/lib/validations';
+import { normalizePayload } from '@/lib/utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,15 +10,13 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { examData, questions, isNew, userId } = await req.json();
-
-    if (!userId) {
-      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
-    }
+    const body = await req.json();
+    const validatedData = SaveExamRequestSchema.parse(body);
+    const { examData, questions, isNew, userId } = validatedData;
 
     let finalExamId = examData.id;
 
-    const examPayload = {
+    const examPayload = normalizePayload({
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       end_time: examData.end_time,
       status: examData.status,
       settings: examData.settings
-    };
+    });
 
     if (isNew) {
       const { data: newExam, error } = await adminSupabase
@@ -51,11 +51,11 @@ export async function POST(req: Request) {
     }
 
     // Handle sections
-    if (!isNew) {
+    if (!isNew && finalExamId) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
     }
 
-    if (examData.section_ids && examData.section_ids.length > 0) {
+    if (examData.section_ids && examData.section_ids.length > 0 && finalExamId) {
       const sectionsToInsert = examData.section_ids.map((sectionId: string) => ({
         exam_id: finalExamId,
         section_id: sectionId
@@ -65,10 +65,7 @@ export async function POST(req: Request) {
     }
 
     // Handle questions
-    if (!isNew) {
-      // Delete old options first due to foreign key constraints if any, 
-      // but usually cascading delete handles this if configured.
-      // In our case, we delete questions, and we should delete options too.
+    if (!isNew && finalExamId) {
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
         const oldQuestionIds = oldQuestions.map(q => q.id);
@@ -79,7 +76,7 @@ export async function POST(req: Request) {
 
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      const questionPayload = {
+      const questionPayload = normalizePayload({
         exam_id: finalExamId,
         type: q.type,
         content: q.content,
@@ -88,7 +85,7 @@ export async function POST(req: Request) {
         media_url: q.media_url,
         media_type: q.media_type,
         order_index: i
-      };
+      });
 
       const { data: newQ, error: qError } = await adminSupabase
         .from('questions')
@@ -99,7 +96,7 @@ export async function POST(req: Request) {
       if (qError) throw qError;
 
       if (q.options && q.options.length > 0) {
-        const optionsPayload = q.options.map((opt: any) => ({
+        const optionsPayload = q.options.map((opt) => ({
           question_id: newQ.id,
           content: opt.content,
           is_correct: opt.is_correct
@@ -110,7 +107,7 @@ export async function POST(req: Request) {
     }
 
     // Send notifications if published
-    if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0) {
+    if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0 && finalExamId) {
       try {
         let studentsQuery = adminSupabase.from('students').select('id');
         if (examData.section_ids.length > 0) {
@@ -135,8 +132,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, examId: finalExamId });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Exam Save Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

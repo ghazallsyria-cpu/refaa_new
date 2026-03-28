@@ -1,5 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { AssignmentAnswerSchema } from '@/lib/validations';
+
+const SubmitAssignmentRequestSchema = z.object({
+  assignmentId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  studentName: z.string(),
+  answersPayload: z.array(AssignmentAnswerSchema.omit({ id: true, submission_id: true })),
+  submissionId: z.string().uuid().optional().nullable(),
+});
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,7 +18,9 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { assignmentId, studentId, studentName, answersPayload, submissionId } = await req.json();
+    const body = await req.json();
+    const validatedData = SubmitAssignmentRequestSchema.parse(body);
+    const { assignmentId, studentId, studentName, answersPayload, submissionId } = validatedData;
 
     let currentSubmissionId = submissionId;
 
@@ -39,11 +51,12 @@ export async function POST(req: Request) {
         .single();
         
       if (error) throw error;
+      if (!newSub) throw new Error('Failed to create submission');
       currentSubmissionId = newSub.id;
     }
 
     // Insert answers
-    const finalAnswersPayload = answersPayload.map((a: any) => ({
+    const finalAnswersPayload = answersPayload.map((a) => ({
       ...a,
       submission_id: currentSubmissionId
     }));
@@ -75,8 +88,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: currentSubmissionId });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Submit Assignment Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

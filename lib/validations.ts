@@ -1,0 +1,251 @@
+import { z } from 'zod';
+
+// Helper for nullable fields that might be undefined from forms
+const nullableString = z.string().nullable().optional().transform(v => v ?? null);
+const nullableNumber = z.number().nullable().optional().transform(v => v ?? null);
+const nullableBoolean = z.boolean().nullable().optional().transform(v => v ?? null);
+
+export const UserRoleSchema = z.enum(['admin', 'teacher', 'student', 'parent', 'management']);
+
+export const UserSchema = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  full_name: z.string().min(1),
+  role: UserRoleSchema,
+  must_reset_password: z.boolean().optional(),
+  created_at: z.string().optional(),
+});
+
+export const TeacherSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  national_id: z.string().min(1),
+  users: UserSchema.partial().optional(),
+});
+
+export const SectionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  class_id: z.string().uuid(),
+  created_at: z.string().optional(),
+});
+
+export const StudentSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  national_id: z.string().min(1),
+  section_id: z.string().uuid(),
+  users: UserSchema.partial().optional(),
+  sections: SectionSchema.partial().optional(),
+});
+
+export const ParentSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  national_id: z.string().min(1),
+  users: UserSchema.partial().optional(),
+  students: z.array(StudentSchema).optional(),
+});
+
+export const SubjectSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  created_at: z.string().optional(),
+});
+
+export const AssignmentSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1),
+  description: nullableString,
+  subject_id: z.string().uuid(),
+  teacher_id: z.string().uuid(),
+  due_date: z.string(),
+  status: z.enum(['draft', 'published', 'archived']),
+  created_at: z.string().optional(),
+  file_url: nullableString,
+});
+
+export const AssignmentSubmissionSchema = z.object({
+  id: z.string().uuid(),
+  assignment_id: z.string().uuid(),
+  student_id: z.string().uuid(),
+  content: nullableString,
+  file_url: nullableString,
+  status: z.enum(['submitted', 'graded']),
+  grade: nullableNumber,
+  feedback: nullableString,
+  submitted_at: z.string(),
+  graded_at: nullableString,
+  graded_by: nullableString,
+});
+
+export const NotificationSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  title: z.string().min(1),
+  content: z.string().min(1),
+  type: z.string(),
+  link: nullableString,
+  is_read: z.boolean().default(false),
+  created_at: z.string().optional(),
+});
+
+export const MessageSchema = z.object({
+  id: z.string().uuid(),
+  sender_id: z.string().uuid(),
+  receiver_id: nullableString,
+  section_id: nullableString,
+  content: z.string().min(1),
+  is_read: z.boolean().default(false),
+  created_at: z.string().optional(),
+});
+
+export const PlatformSettingsSchema = z.object({
+  id: z.string().uuid(),
+  is_open: z.boolean().default(true),
+  open_date: z.string(),
+  close_date: z.string(),
+  message: z.string(),
+  school_name: z.string(),
+  academic_year: z.string(),
+  semester: z.string(),
+  address: z.string(),
+  phone: z.string(),
+  email: z.string().email(),
+});
+
+export const AttendanceRecordSchema = z.object({
+  id: z.string().uuid(),
+  student_id: z.string().uuid(),
+  session_id: z.string().uuid(),
+  status: z.enum(['present', 'absent', 'late', 'excused']),
+  notes: nullableString,
+  created_at: z.string().optional(),
+});
+
+export const AttendanceSessionSchema = z.object({
+  id: z.string().uuid(),
+  teacher_id: z.string().uuid(),
+  section_id: z.string().uuid(),
+  subject_id: z.string().uuid(),
+  period_number: z.number().int().min(1),
+  date: z.string(),
+  created_at: z.string().optional(),
+});
+
+export const ExamSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1),
+  description: nullableString,
+  subject_id: z.string().uuid(),
+  teacher_id: z.string().uuid(),
+  duration: z.number().int().min(1),
+  max_attempts: z.number().int().min(1).default(1),
+  max_score: z.number().min(0),
+  exam_date: z.string(),
+  start_time: z.string(),
+  end_time: z.string(),
+  status: z.enum(['draft', 'published', 'archived']),
+  settings: z.record(z.any()).optional().nullable(),
+  created_at: z.string().optional(),
+});
+
+export const SaveExamRequestSchema = z.object({
+  examData: ExamSchema.partial().extend({
+    id: z.string().uuid().optional(),
+    section_ids: z.array(z.string().uuid()).optional(),
+  }),
+  questions: z.array(z.object({
+    id: z.string().uuid().optional(),
+    type: z.string(),
+    content: z.string(),
+    points: z.number().min(0),
+    explanation: z.string().optional().nullable(),
+    media_url: z.string().url().optional().nullable(),
+    media_type: z.string().optional().nullable(),
+    options: z.array(z.object({
+      content: z.string(),
+      is_correct: z.boolean()
+    })).optional()
+  })),
+  isNew: z.boolean(),
+  userId: z.string().uuid(),
+});
+
+export const SaveAttendanceRequestSchema = z.object({
+  selectedSection: z.string().uuid(),
+  selectedSubject: z.string().uuid(),
+  date: z.string(),
+  period: z.number().int().min(1),
+  attendance: z.record(z.enum(['present', 'absent', 'late', 'excused'])),
+  students: z.array(z.object({
+    id: z.string().uuid(),
+    full_name: z.string().optional()
+  })),
+  userId: z.string().uuid(),
+});
+
+export type SaveAttendanceRequest = z.infer<typeof SaveAttendanceRequestSchema>;
+
+export const ExamAttemptSchema = z.object({
+  id: z.string().uuid(),
+  exam_id: z.string().uuid(),
+  student_id: z.string().uuid(),
+  score: z.number().min(0).default(0),
+  status: z.enum(['started', 'submitted', 'graded']),
+  started_at: z.string(),
+  completed_at: nullableString,
+});
+
+export const ScheduleSchema = z.object({
+  id: z.string().uuid(),
+  section_id: z.string().uuid(),
+  teacher_id: z.string().uuid(),
+  subject_id: z.string().uuid(),
+  day_of_week: z.number().int().min(0).max(6),
+  period: z.number().int().min(1),
+  start_time: z.string(),
+  end_time: z.string(),
+});
+
+export const AssignmentQuestionSchema = z.object({
+  id: z.string().uuid(),
+  assignment_id: z.string().uuid(),
+  question_text: z.string().min(1),
+  question_type: z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox']),
+  options: z.array(z.string()).optional(),
+  points: z.number().min(0).default(1),
+  is_required: z.boolean().default(true),
+  order: z.number().int().min(0),
+});
+
+export const AssignmentAnswerSchema = z.object({
+  id: z.string().uuid(),
+  submission_id: z.string().uuid(),
+  question_id: z.string().uuid(),
+  answer_text: nullableString,
+  selected_options: z.array(z.string()).optional(),
+  is_correct: nullableBoolean,
+  points_earned: nullableNumber,
+  feedback: nullableString,
+});
+
+export type UserRole = z.infer<typeof UserRoleSchema>;
+export type User = z.infer<typeof UserSchema>;
+export type Teacher = z.infer<typeof TeacherSchema>;
+export type Student = z.infer<typeof StudentSchema>;
+export type Parent = z.infer<typeof ParentSchema>;
+export type Subject = z.infer<typeof SubjectSchema>;
+export type Section = z.infer<typeof SectionSchema>;
+export type Assignment = z.infer<typeof AssignmentSchema>;
+export type AssignmentSubmission = z.infer<typeof AssignmentSubmissionSchema>;
+export type Notification = z.infer<typeof NotificationSchema>;
+export type Message = z.infer<typeof MessageSchema>;
+export type PlatformSettings = z.infer<typeof PlatformSettingsSchema>;
+export type AttendanceRecord = z.infer<typeof AttendanceRecordSchema>;
+export type AttendanceSession = z.infer<typeof AttendanceSessionSchema>;
+export type Exam = z.infer<typeof ExamSchema>;
+export type ExamAttempt = z.infer<typeof ExamAttemptSchema>;
+export type Schedule = z.infer<typeof ScheduleSchema>;
+export type AssignmentQuestion = z.infer<typeof AssignmentQuestionSchema>;
+export type AssignmentAnswer = z.infer<typeof AssignmentAnswerSchema>;

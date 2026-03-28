@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveAttendanceRequestSchema } from '@/lib/validations';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,6 +9,8 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
+    const body = await req.json();
+    const validatedData = SaveAttendanceRequestSchema.parse(body);
     const { 
       selectedSection, 
       selectedSubject, 
@@ -16,15 +19,7 @@ export async function POST(req: Request) {
       attendance, 
       students, 
       userId 
-    } = await req.json();
-
-    if (!userId) {
-      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
-    }
-
-    if (!selectedSubject) {
-      return NextResponse.json({ error: 'يرجى اختيار المادة أولاً' }, { status: 400 });
-    }
+    } = validatedData;
 
     let sessionId: string;
     const { data: existingSession, error: sessionFetchError } = await adminSupabase
@@ -80,9 +75,9 @@ export async function POST(req: Request) {
     try {
       const absentLateRecords = records.filter(r => r.status === 'absent' || r.status === 'late');
       if (absentLateRecords.length > 0) {
-        const notificationPayloads: any[] = [];
+        const notificationPayloads: { user_id: string, title: string, content: string, type: string, link: string }[] = [];
         for (const record of absentLateRecords) {
-          const student = students.find((s: any) => s.id === record.student_id);
+          const student = students.find((s) => s.id === record.student_id);
           if (student) {
             const statusText = record.status === 'absent' ? 'غائب' : 'متأخر';
             notificationPayloads.push({
@@ -104,8 +99,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Attendance Save Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

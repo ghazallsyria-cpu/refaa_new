@@ -17,7 +17,7 @@ graph TD
 
     subgraph Backend [API Layer /app/api]
         RouteHandlers[Route Handlers]
-        Validation[Input Validation]
+        Validation[Zod Validation /lib/validations]
     end
 
     subgraph BaaS [Supabase]
@@ -58,8 +58,10 @@ graph TD
 │   └── shared/             # مكونات منطق الأعمال المشتركة
 ├── context/                # سياق التطبيق (AuthContext)
 ├── hooks/                  # منطق الأعمال (Business Logic) - المحرك الرئيسي للنظام
-├── lib/                    # المكتبات والإعدادات (supabase, cloudinary, utils)
-├── types/                  # تعريفات TypeScript (Interfaces, Enums)
+├── lib/                    # المكتبات والإعدادات (supabase, validations, utils)
+│   ├── validations.ts      # مصدر الحقيقة للبيانات (Zod Schemas)
+│   └── utils.ts            # أدوات معالجة البيانات (Normalization)
+├── types/                  # تعريفات TypeScript (Inferred from Zod)
 ├── supabase/               # ملفات التهجير (Migrations) والبيانات الأولية (Seed)
 └── public/                 # الملفات الثابتة والأيقونات
 ```
@@ -83,7 +85,26 @@ graph TD
 
 ---
 
-### 4. توثيق الـ Hooks (Core Hooks)
+### 4. نظام تعاقد البيانات (Data Contract & Type Safety)
+
+يعتمد المشروع نظاماً صارماً لضمان جودة البيانات وتوافقها عبر جميع الطبقات:
+
+1.  **مصدر الحقيقة الموحد (Single Source of Truth):**
+    *   يتم تعريف جميع هياكل البيانات (Entities) في `lib/validations.ts` باستخدام **Zod**.
+    *   يتم اشتقاق أنواع TypeScript تلقائياً من مخططات Zod لضمان التطابق التام.
+2.  **سياسة الأنواع الصارمة (Strict Typing Policy):**
+    *   يُمنع استخدام نوع `any` نهائياً في المشروع.
+    *   يتم استخدام `unknown` مع `Type Guarding` أو الأنواع الصريحة (Explicit Types).
+3.  **معالجة `null` و `undefined`:**
+    *   **Database (Supabase):** تتعامل مع `null` للقيم المفقودة.
+    *   **UI (React Forms):** تتعامل مع `undefined` للقيم غير المدخلة.
+    *   **الحل:** استخدام `normalizePayload` لتحويل `undefined` إلى `null` قبل الحفظ، و `cleanResponse` للعكس عند الجلب.
+4.  **التحقق في الـ API:**
+    *   كل مسار API (Route Handler) يقوم بعملية `Schema.parse(body)` قبل البدء بأي منطق برمجى، مما يمنع دخول بيانات ملوثة لقاعدة البيانات.
+
+---
+
+### 5. توثيق الـ Hooks (Core Hooks)
 
 | الـ Hook | المسؤولية | المخرجات الرئيسية |
 | :--- | :--- | :--- |
@@ -95,10 +116,11 @@ graph TD
 
 ---
 
-### 5. طبقة الـ API (Endpoints)
+### 6. طبقة الـ API (Endpoints)
 
 *   **Base URL:** `/api/`
 *   **Security:** جميع الـ APIs تتطلب `Authorization Header` (JWT) ويتم التحقق منها عبر `createServerClient`.
+*   **Validation:** يتم استخدام مخططات Zod للتحقق من صحة الطلبات (Request Payloads) في جميع العمليات الحساسة.
 *   **Endpoints الرئيسية:**
     *   `POST /api/assignments/save`: حفظ واجب جديد.
     *   `POST /api/attendance/save`: تسجيل الحضور.
@@ -107,7 +129,7 @@ graph TD
 
 ---
 
-### 6. قاعدة البيانات والـ RLS
+### 7. قاعدة البيانات والـ RLS
 
 **الجداول الرئيسية:** `users`, `students`, `teachers`, `sections`, `exams`, `assignments`.
 
@@ -127,7 +149,7 @@ graph TD
 
 ---
 
-### 7. نظام الصلاحيات (Permissions)
+### 8. نظام الصلاحيات (Permissions)
 
 *   **Admin:** صلاحيات كاملة عبر الـ UI وتجاوز RLS في الـ API باستخدام `Service Role`.
 *   **Teacher:** إدارة الطلاب والواجبات والاختبارات المرتبطة بفصوله فقط.
@@ -136,7 +158,7 @@ graph TD
 
 ---
 
-### 8. الإعداد والتشغيل (Setup Guide)
+### 9. الإعداد والتشغيل (Setup Guide)
 
 1.  **المتطلبات:** Node.js 22+, Supabase Account, Cloudinary Account.
 2.  **المتغيرات البيئية (`.env`):**
@@ -155,7 +177,7 @@ graph TD
 
 ---
 
-### 9. ملاحظات الأداء والمشاكل المعروفة
+### 10. ملاحظات الأداء والمشاكل المعروفة
 
 *   **التحميل المتوازي:** يتم استخدام `Promise.all` في الـ Hooks لتقليل وقت جلب البيانات.
 *   **إعادة التقديم (Re-rendering):** تم استخدام `useCallback` و `useMemo` بكثافة في الـ Hooks لضمان استقرار الواجهة.

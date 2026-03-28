@@ -1,5 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { AssignmentSchema, AssignmentQuestionSchema } from '@/lib/validations';
+import { normalizePayload } from '@/lib/utils';
+import { z } from 'zod';
+
+const SaveAssignmentRequestSchema = z.object({
+  payload: AssignmentSchema.partial(),
+  assignmentId: z.string().uuid().optional().nullable(),
+  questions: z.array(z.any()), // We'll validate questions individually
+  sectionIds: z.array(z.string().uuid()),
+  subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
+});
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,15 +19,19 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { payload, assignmentId, questions, sectionIds, subjects } = await req.json();
+    const body = await req.json();
+    const validatedData = SaveAssignmentRequestSchema.parse(body);
+    const { payload, assignmentId, questions, sectionIds, subjects } = validatedData;
 
     let finalAssignmentId = assignmentId;
+
+    const normalizedPayload = normalizePayload(payload);
 
     if (finalAssignmentId) {
       // Update
       const { error } = await adminSupabase
         .from('assignments')
-        .update(payload)
+        .update(normalizedPayload)
         .eq('id', finalAssignmentId);
       if (error) throw error;
 
@@ -25,7 +40,7 @@ export async function POST(req: Request) {
       // Insert
       const { data: newAssignment, error } = await adminSupabase
         .from('assignments')
-        .insert([payload])
+        .insert([normalizedPayload])
         .select()
         .single();
       if (error) throw error;
@@ -40,8 +55,8 @@ export async function POST(req: Request) {
           .in('section_id', sectionIds || []);
 
         if (students && students.length > 0) {
-          const subjectName = subjects.find((s: any) => s.id === payload.subject_id)?.name || 'المادة';
-          const notificationPayloads = students.map((student: any) => ({
+          const subjectName = subjects.find((s) => s.id === payload.subject_id)?.name || 'المادة';
+          const notificationPayloads = students.map((student) => ({
             user_id: student.id,
             title: 'واجب جديد',
             content: `تمت إضافة واجب جديد في مادة ${subjectName}: ${payload.title}`,
@@ -57,7 +72,7 @@ export async function POST(req: Request) {
 
     // Save Questions
     if (questions.length > 0) {
-      const questionsPayload = questions.map((q: any, index: number) => ({
+      const questionsPayload = questions.map((q, index: number) => ({
         assignment_id: finalAssignmentId,
         question_text: q.content,
         question_type: q.type,
@@ -83,8 +98,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: finalAssignmentId });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Save Assignment Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,5 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+const GradeAssignmentRequestSchema = z.object({
+  submissionId: z.string().uuid(),
+  grade: z.number().min(0),
+  feedback: z.string().optional().nullable(),
+  studentId: z.string().uuid(),
+  assignmentTitle: z.string(),
+});
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,13 +17,15 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { submissionId, grade, feedback, studentId, assignmentTitle } = await req.json();
+    const body = await req.json();
+    const validatedData = GradeAssignmentRequestSchema.parse(body);
+    const { submissionId, grade, feedback, studentId, assignmentTitle } = validatedData;
 
     const { error } = await adminSupabase
       .from('assignment_submissions')
       .update({
         grade,
-        feedback,
+        feedback: feedback || null,
         status: 'graded',
         graded_at: new Date().toISOString()
       })
@@ -38,8 +49,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Grade Assignment Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

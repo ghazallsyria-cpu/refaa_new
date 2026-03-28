@@ -1,37 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer } from '@/types';
+import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
-
-export interface AssignmentWithMeta extends Assignment {
-  subject_name?: string;
-  teacher_name?: string;
-  submission_count?: number;
-  graded_count?: number;
-}
-
-export interface SubmissionWithMeta extends AssignmentSubmission {
-  student?: {
-    users: {
-      full_name: string;
-      email: string;
-    };
-    section: {
-      name: string;
-      classes: {
-        name: string;
-      };
-    };
-  };
-}
+import { normalizePayload } from '@/lib/utils';
 
 export interface AssignmentDetails {
   assignment: Assignment;
   questions: Question[];
   submission: AssignmentSubmission | null;
   answers: AssignmentAnswer[];
-  allSubmissions: SubmissionWithMeta[];
+  allSubmissions: SubmissionWithStudent[];
 }
 
 export function useAssignmentsSystem() {
@@ -94,7 +73,7 @@ export function useAssignmentsSystem() {
 
       if (fetchError) throw fetchError;
 
-      const mappedData: AssignmentWithMeta[] = (assignmentsData as any[] || []).map((a) => ({
+      const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => ({
         ...a,
         subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
         teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
@@ -112,7 +91,7 @@ export function useAssignmentsSystem() {
         if (subError) throw subError;
         
         const submissionMap: Record<string, AssignmentSubmission> = {};
-        (subData as any[] || []).forEach((s) => {
+        (subData || []).forEach((s: any) => {
           submissionMap[s.assignment_id] = s as AssignmentSubmission;
         });
         setStudentSubmissions(submissionMap);
@@ -236,7 +215,7 @@ export function useAssignmentsSystem() {
 
       let submissionData: AssignmentSubmission | null = null;
       let answersData: AssignmentAnswer[] = [];
-      let allSubmissionsData: SubmissionWithMeta[] = [];
+      let allSubmissionsData: SubmissionWithStudent[] = [];
 
       if (userRole === 'student' && user) {
         const { data: subData } = await supabase
@@ -265,7 +244,7 @@ export function useAssignmentsSystem() {
           .order('submitted_at', { ascending: false });
 
         if (!subsError && subsData) {
-          allSubmissionsData = subsData as unknown as SubmissionWithMeta[];
+          allSubmissionsData = subsData as unknown as SubmissionWithStudent[];
         }
       }
 
@@ -289,7 +268,7 @@ export function useAssignmentsSystem() {
     }
   }, [user, userRole]);
 
-  const submitAssignment = useCallback(async (assignmentId: string, answersPayload: any[], submissionId?: string): Promise<string> => {
+  const submitAssignment = useCallback(async (assignmentId: string, answersPayload: Omit<AssignmentAnswer, 'id' | 'submission_id'>[], submissionId?: string): Promise<string> => {
     if (!user) throw new Error('Not authenticated');
 
     const studentName = user.user_metadata?.full_name || 'طالب';
@@ -349,9 +328,9 @@ export function useAssignmentsSystem() {
       if (aError) throw aError;
 
       return {
-        submission: submissionData as unknown as SubmissionWithMeta,
+        submission: submissionData as unknown as SubmissionWithStudent,
         assignment: assignmentData as Assignment,
-        questions: (qData || []).map(q => normalizeQuestion({
+        questions: (qData || []).map((q: any) => normalizeQuestion({
           id: q.id,
           content: q.question_text,
           type: q.question_type,
