@@ -142,7 +142,8 @@ if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
         const ids = [msg.sender_id, msg.receiver_id].sort();
         return `private-${ids.join('-')}` === convId;
       }
-    }).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+}).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+
     
     // Deduplicate group messages sent by the current user (teacher)
     if (convId.startsWith('group-')) {
