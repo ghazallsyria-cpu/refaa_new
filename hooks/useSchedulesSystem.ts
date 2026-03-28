@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// تعريف الأنواع لضمان نجاح الـ Build
+// تعريف الأنواع لضمان استقرار البناء
 export interface ScheduleEntry {
   id?: string;
   day_of_week: number;
@@ -18,6 +18,7 @@ export interface ScheduleEntry {
 export function useSchedulesSystem() {
   const [loading, setLoading] = useState(false);
 
+  // 1. جلب البيانات الأولية (الصفوف، المواد، المعلمين، الفترات)
   const fetchInitialScheduleData = useCallback(async () => {
     setLoading(true);
     try {
@@ -31,7 +32,10 @@ export function useSchedulesSystem() {
       return {
         sections: sections.data || [],
         subjects: subjects.data || [],
-        teachers: teachers.data || [],
+        teachers: (teachers.data || []).map((t: any) => ({
+          ...t,
+          users: Array.isArray(t.users) ? t.users : [t.users]
+        })),
         periods: periods.data || []
       };
     } catch (error) {
@@ -42,24 +46,24 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const fetchSchedules = useCallback(async (sectionId: string): Promise<ScheduleEntry[]> => {
-    if (!sectionId) return [];
+  // 2. جلب الجداول حسب الفلتر
+  const fetchSchedules = useCallback(async (filters: { sectionId?: string, teacherId?: string }): Promise<ScheduleEntry[]> => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('schedules')
-        .select(`
-          id, day_of_week, period, start_time, end_time, 
-          teacher_id, section_id, subject_id,
-          subjects(name), 
-          teachers(users(full_name))
-        `)
-        .eq('section_id', sectionId)
-        .order('day_of_week')
-        .order('period');
+      let query = supabase.from('schedules').select(`
+        id, day_of_week, period, start_time, end_time, 
+        teacher_id, section_id, subject_id,
+        subjects(name), 
+        teachers(users(full_name)),
+        sections(name, classes(name))
+      `);
 
+      if (filters.sectionId) query = query.eq('section_id', filters.sectionId);
+      if (filters.teacherId) query = query.eq('teacher_id', filters.teacherId);
+
+      const { data, error } = await query.order('day_of_week').order('period');
       if (error) throw error;
-      return (data || []) as any[];
+      return (data || []) as any;
     } catch (error) {
       console.error('Error fetching schedules:', error);
       return [];
@@ -68,22 +72,24 @@ export function useSchedulesSystem() {
     }
   }, []);
 
-  const saveSchedule = useCallback(async (entry: ScheduleEntry) => {
+  // 3. إضافة وتحديث الحصص (تستخدم في صفحة الإدارة)
+  const saveSchedule = useCallback(async (schedule: any) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('schedules')
-        .upsert([entry])
-        .select();
+      const { data, error } = await supabase.from('schedules').upsert([schedule]).select();
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Save error:', error);
+      console.error('Error saving schedule:', error);
       throw error;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // 4. الدوال المطلوبة لصفحة الطالب والجدول العام (لحل خطأ البناء)
+  const addSchedule = saveSchedule;
+  const updateSchedule = saveSchedule;
 
   const deleteSchedule = useCallback(async (id: string) => {
     setLoading(true);
@@ -95,12 +101,41 @@ export function useSchedulesSystem() {
     }
   }, []);
 
+  const fetchStudentSection = useCallback(async (studentId: string) => {
+    try {
+      const { data, error } = await supabase.from('students').select('section_id').eq('id', studentId).single();
+      if (error) throw error;
+      return data?.section_id || null;
+    } catch (error) {
+      console.error('Error fetching student section:', error);
+      return null;
+    }
+  }, []);
+
+  const checkConflicts = useCallback(async (day: number, period: number, teacherId: string, sectionId: string, excludeId?: string) => {
+    try {
+      let query = supabase.from('schedules')
+        .select('id, teacher_id, section_id, subjects(name)')
+        .eq('day_of_week', day)
+        .eq('period', period)
+        .or(`teacher_id.eq.${teacherId},section_id.eq.${sectionId}`);
+
+      if (excludeId) query = query.neq('id', excludeId);
+      const { data } = await query;
+      return data || [];
+    } catch (e) { return []; }
+  }, []);
+
   return {
     loading,
     fetchInitialScheduleData,
     fetchSchedules,
+    addSchedule,
+    updateSchedule,
     saveSchedule,
-    deleteSchedule
+    deleteSchedule,
+    fetchStudentSection,
+    checkConflicts
   };
 }
 
