@@ -24,7 +24,8 @@ import {
   Award,
   ChevronRight,
   ChevronLeft,
-  X
+  X,
+  ClipboardList
 } from 'lucide-react';
 
 const navigation = [
@@ -38,6 +39,8 @@ const navigation = [
   { name: 'الفصول', href: '/classes', icon: School },
   { name: 'المواد الدراسية', href: '/subjects', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
+  // --- الرابط الجديد لدفتر أعمال المعلم ---
+  { name: 'دفتر الأعمال', href: '/gradebook', icon: ClipboardList }, 
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
   { name: 'الحصص الحية', href: '/live', icon: Clock },
@@ -71,7 +74,8 @@ export function Sidebar({
     if (userRole === 'admin' || userRole === 'management') return true;
     
     if (userRole === 'teacher') {
-      return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
+      // --- تمت إضافة 'دفتر الأعمال' هنا ليراه المعلم ---
+      return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'دفتر الأعمال', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
     }
     
     if (userRole === 'student') {
@@ -250,3 +254,4 @@ export function Sidebar({
     </div>
   );
 }
+
