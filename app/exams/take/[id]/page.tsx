@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   ChevronLeft, ChevronRight, Send, 
-  CheckCircle2, Timer, BookOpen, AlertTriangle, ShieldAlert, AlignRight, CheckSquare
+  CheckCircle2, Timer, BookOpen, AlertTriangle, ShieldAlert, AlignRight, CheckSquare, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ import Image from 'next/image';
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth(); // لمعرفة الطالب الحالي
+  const { user } = useAuth();
   const { fetchExamForStudent, submitExam } = useExamsSystem();
   
   const [exam, setExam] = useState<any>(null);
@@ -31,7 +31,6 @@ export default function TakeQuiz() {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   
-  // مفتاح فريد لحفظ بيانات هذا الاختبار لهذا الطالب تحديداً
   const storageKey = `exam_progress_${params.id}_${user?.id || 'guest'}`;
 
   const shuffleArray = (array: any[]) => {
@@ -63,25 +62,22 @@ export default function TakeQuiz() {
 
       setQuestions(loadedQuestions);
 
-      // --- نظام الحفظ التلقائي (Auto-Save Recovery) ---
       if (typeof window !== 'undefined' && user?.id) {
         const savedDataStr = localStorage.getItem(storageKey);
         
         if (savedDataStr) {
           const savedData = JSON.parse(savedDataStr);
           
-          // استعادة الإجابات المحفوظة
           if (savedData.answers) {
             setAnswers(savedData.answers);
           }
 
-          // استعادة المؤقت الصارم (حتى لو أغلق الصفحة، الوقت مستمر)
           if (savedData.targetEndTime && res.exam?.duration) {
             const now = Date.now();
             const remainingSeconds = Math.floor((savedData.targetEndTime - now) / 1000);
             
             if (remainingSeconds <= 0) {
-              setTimeLeft(0); // انتهى الوقت أثناء إغلاقه للصفحة
+              setTimeLeft(0);
             } else {
               setTimeLeft(remainingSeconds);
             }
@@ -90,7 +86,6 @@ export default function TakeQuiz() {
           }
 
         } else if (res.exam?.duration) {
-          // أول مرة يدخل الاختبار
           setTimeLeft(res.exam.duration * 60);
           const targetEndTime = Date.now() + (res.exam.duration * 60 * 1000);
           localStorage.setItem(storageKey, JSON.stringify({ answers: {}, targetEndTime }));
@@ -107,7 +102,6 @@ export default function TakeQuiz() {
 
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
-  // --- حفظ الإجابات في الجهاز مع كل تغيير ---
   useEffect(() => {
     if (typeof window !== 'undefined' && user?.id && !isFinished && exam) {
       const existingDataStr = localStorage.getItem(storageKey);
@@ -127,8 +121,6 @@ export default function TakeQuiz() {
     }
   }, [answers, storageKey, user?.id, isFinished, exam]);
 
-
-  // تطبيق نظام حماية الغش
   useEffect(() => {
     if (!exam?.settings?.browser_lock || isFinished) return;
 
@@ -182,7 +174,6 @@ export default function TakeQuiz() {
       
       await submitExam(params.id as string, formattedAnswers, totalScore, 'completed', timeSpent);
       
-      // مسح البيانات المحفوظة من الجهاز بعد التسليم بنجاح
       if (typeof window !== 'undefined') {
          localStorage.removeItem(storageKey);
       }
@@ -196,7 +187,6 @@ export default function TakeQuiz() {
     }
   }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft, storageKey]);
 
-  // إدارة المؤقت بشكل دقيق والتسليم الإجباري عند 0
   useEffect(() => {
     if (timeLeft === null || isFinished) return;
     
