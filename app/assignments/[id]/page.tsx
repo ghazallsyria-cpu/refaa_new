@@ -18,31 +18,7 @@ import 'jspdf-autotable';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
-import { RawAssignmentAnswer } from '@/types';
-
-type Assignment = {
-  id: string;
-  title: string;
-  description: string;
-  due_date: string;
-  file_url: string;
-  subjects?: { name: string };
-  sections?: { name: string; classes?: { name: string } };
-  teachers?: { users?: { id: string; full_name: string } };
-};
-
-type Submission = {
-  id: string;
-  assignment_id: string;
-  student_id: string;
-  content: string;
-  file_url: string;
-  status: string;
-  grade: number;
-  feedback: string;
-  submitted_at: string;
-  students?: { users?: { full_name: string } };
-};
+import { RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -52,10 +28,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const { user, userRole } = useAuth();
   const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment } = useAssignmentsSystem();
   
-  const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [assignment, setAssignment] = useState<AssignmentWithMeta | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [mySubmission, setMySubmission] = useState<Submission | null>(null);
+  const [submissions, setSubmissions] = useState<SubmissionWithStudent[]>([]);
+  const [mySubmission, setMySubmission] = useState<SubmissionWithStudent | null>(null);
   const [myAnswers, setMyAnswers] = useState<Record<string, string | string[] | null>>({});
   const [loading, setLoading] = useState(true);
   const [studentId, setStudentId] = useState<string | null>(null);
@@ -65,7 +41,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'submissions' | 'preview'>('submissions');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
-  const [editData, setEditData] = useState<Partial<Assignment>>({});
+  const [editData, setEditData] = useState<Partial<AssignmentWithMeta>>({});
   const [subjects, setSubjects] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -85,9 +61,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (submissions.length === 0) return;
     
     const data = submissions.map(sub => {
-      const student = sub.students as any;
-      const section = student?.sections;
-      const className = section?.classes?.name || '';
+      const student = sub.student;
+      const section = student?.section;
+      const className = section?.class?.name || '';
       const sectionName = section?.name || '';
       
       return {
@@ -116,9 +92,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     doc.text(`الواجب: ${assignment?.title}`, 105, 20, { align: 'center' });
 
     const tableData = submissions.map(sub => {
-      const student = sub.students as any;
-      const section = student?.sections;
-      const className = section?.classes?.name || '';
+      const student = sub.student;
+      const section = student?.section;
+      const className = section?.class?.name || '';
       const sectionName = section?.name || '';
 
       return [
@@ -146,13 +122,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setLoading(true);
     try {
       if (userRole === 'student') {
-        setStudentId(user.id); // Assuming studentId is same as userId for now
+        setStudentId(user.id);
       }
 
       const details = await fetchAssignmentDetails(assignmentId);
       
-      setAssignment(details.assignment as any);
-      setEditData(details.assignment as any);
+      setAssignment(details.assignment);
+      setEditData(details.assignment);
       
       if (details.questions) {
         setQuestions(details.questions);
@@ -173,7 +149,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           }
         }
       } else if (['teacher', 'admin', 'management'].includes(userRole || '')) {
-        setSubmissions(details.allSubmissions as any);
+        setSubmissions(details.allSubmissions);
       }
 
     } catch (error: any) {
@@ -218,7 +194,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setIsSubmittingEdit(true);
     try {
       const payload = {
-        title: editData.title,
+        title: editData.title!,
         description: editData.description || null,
         due_date: new Date(editData.due_date!).toISOString(),
       };
@@ -285,6 +261,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const dueDateObj = new Date(assignment.due_date);
   const isOverdue = dueDateObj < new Date();
 
+  // Get first section info
+  const firstSection = assignment.assignment_sections?.[0]?.section;
+  const className = firstSection?.class?.name || '';
+  const sectionName = firstSection?.name || '';
+
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-24">
       {/* Notification Toast */}
@@ -314,7 +295,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-wider">نشط</span>
               )}
             </div>
-            <p className="text-slate-500 font-medium mt-1">{assignment.subjects?.name} - {assignment.sections?.classes?.name} {assignment.sections?.name}</p>
+            <p className="text-slate-500 font-medium mt-1">{assignment.subject?.name} - {className} {sectionName}</p>
           </div>
         </div>
 
@@ -359,7 +340,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 text-slate-600 border border-slate-100 text-sm font-bold">
               <User className="h-5 w-5 text-slate-400" />
-              <span>أ. {assignment.teachers?.users?.full_name}</span>
+              <span>أ. {assignment.teacher?.user?.full_name}</span>
             </div>
           </div>
 
@@ -572,7 +553,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               <User className="h-6 w-6" />
                             </div>
                             <div>
-                              <h3 className="font-bold text-slate-900 text-lg">{sub.students?.users?.full_name || 'طالب غير معروف'}</h3>
+                              <h3 className="font-bold text-slate-900 text-lg">{sub.student?.user?.full_name || 'طالب غير معروف'}</h3>
                               <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
                                 <Clock className="h-4 w-4" />
                                 {new Date(sub.submitted_at).toLocaleString('ar-EG')}

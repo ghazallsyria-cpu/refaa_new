@@ -9,26 +9,7 @@ import AssignmentForm from '@/components/assignment-form';
 import { Question } from '@/types/question';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
-
-type Assignment = {
-  id: string;
-  title: string;
-  points?: number;
-};
-
-type Submission = {
-  id: string;
-  student_id: string;
-  status: string;
-  submitted_at: string;
-  grade?: number;
-  feedback?: string;
-  students?: {
-    users?: {
-      full_name: string;
-    };
-  };
-};
+import { SubmissionWithStudent, Assignment } from '@/types';
 
 export default function GradingPage({ params }: { params: Promise<{ id: string, submissionId: string }> }) {
   const { id: assignmentId, submissionId } = use(params);
@@ -37,7 +18,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const { fetchSubmissionDetails, updateSubmissionGrade } = useAssignmentsSystem();
   
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [submission, setSubmission] = useState<Submission | null>(null);
+  const [submission, setSubmission] = useState<SubmissionWithStudent | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -51,23 +32,14 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     try {
       const details = await fetchSubmissionDetails(submissionId);
       
-      if (details.assignment) setAssignment(details.assignment as any);
+      if (details.assignment) setAssignment(details.assignment);
 
       if (details.questions) {
         setQuestions(details.questions);
       }
 
       if (details.submission) {
-        // Map student data to match existing UI expectations if needed
-        const mappedSubmission = {
-          ...details.submission,
-          students: {
-            users: {
-              full_name: details.submission.student?.users?.full_name || 'طالب غير معروف'
-            }
-          }
-        };
-        setSubmission(mappedSubmission as any);
+        setSubmission(details.submission);
         setGrade(details.submission.grade?.toString() || '');
         setFeedback(details.submission.feedback || '');
 
@@ -181,7 +153,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                 <User className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-slate-900">{submission?.students?.users?.full_name || 'طالب غير معروف'}</h2>
+                <h2 className="text-lg font-black text-slate-900">{submission?.student?.user?.full_name || 'طالب غير معروف'}</h2>
                 <div className="flex items-center gap-4 mt-1">
                   <span className="flex items-center gap-1 text-xs font-bold text-slate-400">
                     <Calendar className="h-3 w-3" />

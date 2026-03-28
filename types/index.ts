@@ -32,16 +32,30 @@ export interface AssignmentWithMeta extends validations.Assignment {
   teacher_name?: string;
   submission_count?: number;
   graded_count?: number;
-  subjects?: validations.Subject;
-  teachers?: validations.Teacher;
+  subject?: validations.Subject;
+  teacher?: validations.Teacher & {
+    user?: {
+      full_name: string;
+    };
+  };
   assignment_sections?: {
     section_id: string;
-    sections?: validations.Section;
+    section?: validations.Section & {
+      class?: validations.Class;
+    };
   }[];
 }
 
 export interface SubmissionWithStudent extends validations.AssignmentSubmission {
-  students?: validations.Student;
+  student?: validations.Student & {
+    user?: {
+      full_name: string;
+      email: string;
+    };
+    section?: validations.Section & {
+      class?: validations.Class;
+    };
+  };
 }
 
 export interface ExamWithMeta extends validations.Exam {

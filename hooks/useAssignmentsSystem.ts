@@ -6,7 +6,7 @@ import { Question, normalizeQuestion } from '@/types/question';
 import { normalizePayload } from '@/lib/utils';
 
 export interface AssignmentDetails {
-  assignment: Assignment;
+  assignment: AssignmentWithMeta;
   questions: Question[];
   submission: AssignmentSubmission | null;
   answers: AssignmentAnswer[];
@@ -31,10 +31,13 @@ export function useAssignmentsSystem() {
         .select(`
           *,
           subject:subjects(name),
-          teacher:teachers(users(full_name)),
+          teacher:teachers(user:users(full_name)),
           assignment_sections!inner(
             section_id,
-            sections(name, classes(name))
+            section:sections(
+              name,
+              class:classes(name)
+            )
           )
         `)
         .order('due_date', { ascending: true });
@@ -76,7 +79,7 @@ export function useAssignmentsSystem() {
       const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => ({
         ...a,
         subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
-        teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
+        teacher_name: Array.isArray(a.teacher?.user) ? a.teacher.user[0]?.full_name : a.teacher?.user?.full_name,
       }));
 
       setData(mappedData);
@@ -197,8 +200,14 @@ export function useAssignmentsSystem() {
         .select(`
           *,
           subject:subjects(name),
-          teacher:teachers(users(full_name)),
-          assignment_sections(section_id)
+          teacher:teachers(user:users(full_name)),
+          assignment_sections(
+            section_id,
+            section:sections(
+              name,
+              class:classes(name)
+            )
+          )
         `)
         .eq('id', assignmentId)
         .single();
@@ -238,7 +247,7 @@ export function useAssignmentsSystem() {
           .from('assignment_submissions')
           .select(`
             *,
-            student:students(users(full_name, email), section:sections(name, classes(name)))
+            student:students(user:users(full_name, email), section:sections(name, class:classes(name)))
           `)
           .eq('assignment_id', assignmentId)
           .order('submitted_at', { ascending: false });
@@ -297,7 +306,7 @@ export function useAssignmentsSystem() {
         .from('assignment_submissions')
         .select(`
           *,
-          student:students(users(full_name, email), section:sections(name, classes(name)))
+          student:students(user:users(full_name, email), section:sections(name, class:classes(name)))
         `)
         .eq('id', submissionId)
         .single();

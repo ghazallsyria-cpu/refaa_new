@@ -325,7 +325,7 @@ export default function AssignmentsPage() {
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <Users className="h-5 w-5 text-indigo-500" />
                       <span className="line-clamp-1">
-                        {assignment.assignment_sections?.map((as: any) => `${as.sections?.classes?.name} - ${as.sections?.name}`).join(', ') || 'لا يوجد فصول'}
+                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name} - ${as.section?.name}`).join(', ') || 'لا يوجد فصول'}
                       </span>
                     </div>
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
@@ -509,7 +509,7 @@ export default function AssignmentsPage() {
                               setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
                             }}
                           />
-                          <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">{s.classes?.name} - {s.name}</span>
+                          <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">{s.class?.name} - {s.name}</span>
                         </label>
                       ))}
                     </div>
@@ -530,7 +530,7 @@ export default function AssignmentsPage() {
                         >
                           <option value="">اختر المعلم</option>
                           {teachers.map(t => (
-                            <option key={t.id} value={t.id}>{t.users?.full_name}</option>
+                            <option key={t.id} value={t.id}>{t.user?.full_name}</option>
                           ))}
                         </select>
                       </div>
