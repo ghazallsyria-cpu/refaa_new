@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { SaveAttendanceRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -10,7 +11,9 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const validatedData = SaveAttendanceRequestSchema.parse(body);
+    const validation = validateRequest(SaveAttendanceRequestSchema, body);
+    if (!validation.success) return validation.response;
+    
     const { 
       selectedSection, 
       selectedSubject, 
@@ -19,7 +22,7 @@ export async function POST(req: Request) {
       attendance, 
       students, 
       userId 
-    } = validatedData;
+    } = validation.data;
 
     let sessionId: string;
     const { data: existingSession, error: sessionFetchError } = await adminSupabase
@@ -100,8 +103,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
 
   } catch (error: unknown) {
-    console.error('Attendance Save Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Save Attendance');
   }
 }

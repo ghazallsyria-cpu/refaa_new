@@ -1,23 +1,37 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { CreateUserRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(request: Request) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
   try {
-    const { email, password, full_name, national_id, phone, role, specialization, section_id, address, job_title, zoom_link } = await request.json();
+    const body = await request.json();
+    const validation = validateRequest(CreateUserRequestSchema, body);
+    if (!validation.success) return validation.response;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      return NextResponse.json({ error: 'Missing Supabase credentials' }, { status: 500 });
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    const { 
+      email, 
+      password, 
+      full_name, 
+      national_id, 
+      phone, 
+      role, 
+      specialization, 
+      section_id, 
+      address, 
+      job_title, 
+      zoom_link 
+    } = validation.data;
 
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {
@@ -39,7 +53,7 @@ export async function POST(request: Request) {
     const generatedPassword = password || `${national_id}123`;
     const generatedEmail = email || `${national_id}@alrefaa.edu`;
 
-    // Check if national_id already exists in teachers table
+    // Check if national_id already exists in specific tables
     if (role === 'teacher') {
       const { data: existingTeacher } = await supabaseAdmin
         .from('teachers')
@@ -52,7 +66,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Check if national_id already exists in students table
     if (role === 'student') {
       const { data: existingStudent } = await supabaseAdmin
         .from('students')
@@ -77,15 +90,13 @@ export async function POST(request: Request) {
     });
 
     if (authError) {
-      console.error('Auth creation error:', authError);
       return NextResponse.json({ error: authError.message }, { status: 400 });
     }
     if (!authData.user) throw new Error('Failed to create user');
 
     const userId = authData.user.id;
-    console.log('Auth user created:', userId);
 
-    // 2. Insert/Update into users table (Trigger might have already inserted it)
+    // 2. Insert/Update into users table
     const { error: userError } = await supabaseAdmin
       .from('users')
       .upsert({
@@ -98,13 +109,9 @@ export async function POST(request: Request) {
       }, { onConflict: 'id' });
 
     if (userError) {
-      console.error('Users table insertion error:', userError);
-      // Rollback auth user creation
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json({ error: `خطأ في قاعدة البيانات: ${userError.message}` }, { status: 500 });
     }
-
-    console.log('Users table insertion successful');
 
     // 3. Insert into specific role table
     if (role === 'student') {
@@ -116,7 +123,6 @@ export async function POST(request: Request) {
           section_id: section_id || null,
         });
       if (studentError) {
-        console.error('Students table insertion error:', studentError);
         await supabaseAdmin.auth.admin.deleteUser(userId);
         throw studentError;
       }
@@ -130,12 +136,10 @@ export async function POST(request: Request) {
           zoom_link,
         });
       if (teacherError) {
-        console.error('Teachers table insertion error:', teacherError);
         await supabaseAdmin.auth.admin.deleteUser(userId);
         throw teacherError;
       }
-    }
- else if (role === 'parent') {
+    } else if (role === 'parent') {
       const { error: parentError } = await supabaseAdmin
         .from('parents')
         .insert({
@@ -151,8 +155,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ user: authData.user, password: generatedPassword, message: 'User created successfully' });
-  } catch (error: any) {
-    console.error('Error creating user:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Create User');
   }
 }

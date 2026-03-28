@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveAnnouncementRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,7 +10,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { id, title, content, target_role, image_url } = await req.json();
+    const body = await req.json();
+    const validation = validateRequest(SaveAnnouncementRequestSchema, body);
+    if (!validation.success) return validation.response;
+
+    const { id, title, content, target_role, image_url } = validation.data;
 
     const payload = {
       title,
@@ -61,8 +67,7 @@ export async function POST(req: Request) {
       
       return NextResponse.json({ success: true, data: newAnn });
     }
-  } catch (error: any) {
-    console.error('Save Announcement Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Save Announcement');
   }
 }

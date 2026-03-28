@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveSectionRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,7 +10,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { id, name, classId } = await req.json();
+    const body = await req.json();
+    const validation = validateRequest(SaveSectionRequestSchema, body);
+    if (!validation.success) return validation.response;
+
+    const { id, name, classId } = validation.data;
 
     if (id) {
       // Update
@@ -20,6 +26,7 @@ export async function POST(req: Request) {
       if (error) throw error;
     } else {
       // Insert
+      if (!classId) throw new Error('Class ID is required for new sections');
       const { error } = await adminSupabase
         .from('sections')
         .insert([{ name, class_id: classId }]);
@@ -29,8 +36,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (error: any) {
-    console.error('Save Section Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Save Section');
   }
 }

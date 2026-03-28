@@ -1,16 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { AssignmentSchema, AssignmentQuestionSchema } from '@/lib/validations';
+import { SaveAssignmentRequestSchema } from '@/lib/validations';
 import { normalizePayload } from '@/lib/utils';
-import { z } from 'zod';
-
-const SaveAssignmentRequestSchema = z.object({
-  payload: AssignmentSchema.partial(),
-  assignmentId: z.string().uuid().optional().nullable(),
-  questions: z.array(z.any()), // We'll validate questions individually
-  sectionIds: z.array(z.string().uuid()),
-  subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
-});
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -20,8 +12,10 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const validatedData = SaveAssignmentRequestSchema.parse(body);
-    const { payload, assignmentId, questions, sectionIds, subjects } = validatedData;
+    const validation = validateRequest(SaveAssignmentRequestSchema, body);
+    if (!validation.success) return validation.response;
+    
+    const { payload, assignmentId, questions, sectionIds, subjects } = validation.data;
 
     let finalAssignmentId = assignmentId;
 
@@ -99,8 +93,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ id: finalAssignmentId });
 
   } catch (error: unknown) {
-    console.error('Save Assignment Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Save Assignment');
   }
 }

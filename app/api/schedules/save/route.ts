@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveScheduleRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,7 +10,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { id, ...scheduleData } = await req.json();
+    const body = await req.json();
+    const validation = validateRequest(SaveScheduleRequestSchema, body);
+    if (!validation.success) return validation.response;
+
+    const { id, ...scheduleData } = validation.data;
 
     if (id) {
       // Update
@@ -33,8 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json(data);
     }
 
-  } catch (error: any) {
-    console.error('Save Schedule Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Save Schedule');
   }
 }

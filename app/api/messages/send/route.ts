@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SendMessageRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,11 +10,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { receiverId, subject, content, userId } = await req.json();
+    const body = await req.json();
+    const validation = validateRequest(SendMessageRequestSchema, body);
+    if (!validation.success) return validation.response;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
-    }
+    const { receiverId, subject, content, userId } = validation.data;
 
     const { error } = await adminSupabase
       .from('messages')
@@ -37,8 +39,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (error: any) {
-    console.error('Message Send Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Send Message');
   }
 }

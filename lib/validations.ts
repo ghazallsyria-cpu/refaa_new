@@ -133,6 +133,13 @@ export const AttendanceSessionSchema = z.object({
   created_at: z.string().optional(),
 });
 
+export const ExamSettingsSchema = z.object({
+  shuffle_questions: z.boolean().optional(),
+  shuffle_options: z.boolean().optional(),
+  show_results_immediately: z.boolean().optional(),
+  allow_backtracking: z.boolean().optional(),
+}).strict();
+
 export const ExamSchema = z.object({
   id: z.string().uuid(),
   title: z.string().min(1),
@@ -146,9 +153,11 @@ export const ExamSchema = z.object({
   start_time: z.string(),
   end_time: z.string(),
   status: z.enum(['draft', 'published', 'archived']),
-  settings: z.record(z.any()).optional().nullable(),
+  settings: ExamSettingsSchema.optional().nullable(),
   created_at: z.string().optional(),
 });
+
+export const QuestionTypeSchema = z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox', 'true_false']);
 
 export const SaveExamRequestSchema = z.object({
   examData: ExamSchema.partial().extend({
@@ -157,12 +166,12 @@ export const SaveExamRequestSchema = z.object({
   }),
   questions: z.array(z.object({
     id: z.string().uuid().optional(),
-    type: z.string(),
+    type: QuestionTypeSchema,
     content: z.string(),
     points: z.number().min(0),
     explanation: z.string().optional().nullable(),
     media_url: z.string().url().optional().nullable(),
-    media_type: z.string().optional().nullable(),
+    media_type: z.enum(['image', 'video', 'audio']).optional().nullable(),
     options: z.array(z.object({
       content: z.string(),
       is_correct: z.boolean()
@@ -177,15 +186,13 @@ export const SaveAttendanceRequestSchema = z.object({
   selectedSubject: z.string().uuid(),
   date: z.string(),
   period: z.number().int().min(1),
-  attendance: z.record(z.enum(['present', 'absent', 'late', 'excused'])),
+  attendance: z.record(z.string().uuid(), z.enum(['present', 'absent', 'late', 'excused'])),
   students: z.array(z.object({
     id: z.string().uuid(),
     full_name: z.string().optional()
   })),
   userId: z.string().uuid(),
 });
-
-export type SaveAttendanceRequest = z.infer<typeof SaveAttendanceRequestSchema>;
 
 export const ExamAttemptSchema = z.object({
   id: z.string().uuid(),
@@ -212,11 +219,26 @@ export const AssignmentQuestionSchema = z.object({
   id: z.string().uuid(),
   assignment_id: z.string().uuid(),
   question_text: z.string().min(1),
-  question_type: z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox']),
-  options: z.array(z.string()).optional(),
+  question_type: QuestionTypeSchema,
+  options: z.array(z.string()).optional().nullable(),
   points: z.number().min(0).default(1),
   is_required: z.boolean().default(true),
   order: z.number().int().min(0),
+});
+
+export const SaveAssignmentRequestSchema = z.object({
+  payload: AssignmentSchema.partial(),
+  assignmentId: z.string().uuid().optional().nullable(),
+  questions: z.array(z.object({
+    id: z.string().uuid().optional(),
+    content: z.string().min(1),
+    type: QuestionTypeSchema,
+    options: z.array(z.string()).optional().nullable(),
+    points: z.number().min(0),
+    isRequired: z.boolean(),
+  })),
+  sectionIds: z.array(z.string().uuid()),
+  subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
 });
 
 export const AssignmentAnswerSchema = z.object({
@@ -224,10 +246,87 @@ export const AssignmentAnswerSchema = z.object({
   submission_id: z.string().uuid(),
   question_id: z.string().uuid(),
   answer_text: nullableString,
-  selected_options: z.array(z.string()).optional(),
+  selected_options: z.array(z.string()).optional().nullable(),
   is_correct: nullableBoolean,
   points_earned: nullableNumber,
   feedback: nullableString,
+});
+
+export const SaveTeacherAssignmentsRequestSchema = z.object({
+  teacherId: z.string().uuid(),
+  assignments: z.array(z.object({
+    section_id: z.string().uuid(),
+    subject_id: z.string().uuid(),
+  })),
+  userId: z.string().uuid(),
+});
+
+export const SendMessageRequestSchema = z.object({
+  receiverId: z.string().uuid(),
+  subject: z.string().min(1),
+  content: z.string().min(1),
+  userId: z.string().uuid(),
+});
+
+export const SaveScheduleRequestSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  section_id: z.string().uuid(),
+  subject_id: z.string().uuid(),
+  teacher_id: z.string().uuid(),
+  day_of_week: z.number().int().min(0).max(6),
+  period_number: z.number().int().min(1).max(12),
+  room_number: z.string().optional().nullable(),
+});
+
+export const SavePeriodRequestSchema = z.object({
+  period_number: z.number().int().min(1).max(12),
+  start_time: z.string().regex(/^\d{2}:\d{2}$/),
+  end_time: z.string().regex(/^\d{2}:\d{2}$/),
+});
+
+export const SaveAnnouncementRequestSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  title: z.string().min(3),
+  content: z.string().min(10),
+  target_role: z.enum(['all', 'student', 'teacher', 'parent', 'management', 'admin']),
+  image_url: z.string().url().optional().nullable().or(z.string().length(0)),
+});
+
+export const SaveClassRequestSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  name: z.string().min(1),
+  level: z.number().int().min(1).max(12),
+});
+
+export const SaveSectionRequestSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  name: z.string().min(1),
+  classId: z.string().uuid().optional().nullable(),
+});
+
+export const SaveSubjectRequestSchema = z.object({
+  id: z.string().uuid().optional().nullable(),
+  name: z.string().min(2),
+  code: z.string().min(1),
+});
+
+export const CreateUserRequestSchema = z.object({
+  email: z.string().email().optional().nullable(),
+  password: z.string().min(6).optional().nullable(),
+  full_name: z.string().min(3),
+  national_id: z.string().min(5),
+  phone: z.string().optional().nullable(),
+  role: UserRoleSchema,
+  specialization: z.string().optional().nullable(),
+  section_id: z.string().uuid().optional().nullable(),
+  address: z.string().optional().nullable(),
+  job_title: z.string().optional().nullable(),
+  zoom_link: z.string().url().optional().nullable().or(z.string().length(0)),
+});
+
+export const SubmitExamRequestSchema = z.object({
+  attemptId: z.string().uuid(),
+  answers: z.record(z.string().uuid(), z.union([z.string(), z.array(z.string()), z.number(), z.boolean()])),
 });
 
 export type UserRole = z.infer<typeof UserRoleSchema>;
@@ -249,3 +348,6 @@ export type ExamAttempt = z.infer<typeof ExamAttemptSchema>;
 export type Schedule = z.infer<typeof ScheduleSchema>;
 export type AssignmentQuestion = z.infer<typeof AssignmentQuestionSchema>;
 export type AssignmentAnswer = z.infer<typeof AssignmentAnswerSchema>;
+export type SaveExamRequest = z.infer<typeof SaveExamRequestSchema>;
+export type SaveAssignmentRequest = z.infer<typeof SaveAssignmentRequestSchema>;
+export type SaveAttendanceRequest = z.infer<typeof SaveAttendanceRequestSchema>;

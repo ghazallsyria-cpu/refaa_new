@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveSubjectRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,7 +10,11 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { id, name, code } = await req.json();
+    const body = await req.json();
+    const validation = validateRequest(SaveSubjectRequestSchema, body);
+    if (!validation.success) return validation.response;
+
+    const { id, name, code } = validation.data;
 
     if (id) {
       // Update
@@ -31,8 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json(data);
     }
 
-  } catch (error: any) {
-    console.error('Save Subject Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Save Subject');
   }
 }

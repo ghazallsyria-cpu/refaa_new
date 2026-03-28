@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { SaveExamRequestSchema } from '@/lib/validations';
 import { normalizePayload } from '@/lib/utils';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -11,8 +12,10 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const validatedData = SaveExamRequestSchema.parse(body);
-    const { examData, questions, isNew, userId } = validatedData;
+    const validation = validateRequest(SaveExamRequestSchema, body);
+    if (!validation.success) return validation.response;
+
+    const { examData, questions, isNew, userId } = validation.data;
 
     let finalExamId = examData.id;
 
@@ -20,7 +23,7 @@ export async function POST(req: Request) {
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: examData.teacher_id,
+      teacher_id: userId,
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
@@ -133,8 +136,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, examId: finalExamId });
 
   } catch (error: unknown) {
-    console.error('Exam Save Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Save Exam');
   }
 }

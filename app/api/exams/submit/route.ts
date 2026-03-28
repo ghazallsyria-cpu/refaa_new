@@ -1,11 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const SubmitExamRequestSchema = z.object({
-  attemptId: z.string().uuid(),
-  answers: z.record(z.any()), // answers is a map of questionId -> answer
-});
+import { SubmitExamRequestSchema } from '@/lib/validations';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -15,8 +11,10 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const validatedData = SubmitExamRequestSchema.parse(body);
-    const { attemptId, answers } = validatedData;
+    const validation = validateRequest(SubmitExamRequestSchema, body);
+    if (!validation.success) return validation.response;
+    
+    const { attemptId, answers } = validation.data;
 
     // 1. Get the attempt and exam details
     const { data: attempt, error: attemptError } = await adminSupabase
@@ -41,7 +39,7 @@ export async function POST(req: Request) {
       throw new Error('Attempt not found');
     }
 
-    const typedAttempt = attempt as any; // Still need some casting for complex joins if not fully typed
+    const typedAttempt = attempt as any; // Supabase join types are complex, casting to any for now but logic is safe
 
     if (typedAttempt.status === 'completed' || typedAttempt.status === 'graded') {
       return NextResponse.json({ error: 'Exam already submitted' }, { status: 400 });
@@ -83,10 +81,11 @@ export async function POST(req: Request) {
     const finalScore = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
 
     // 5. Update attempt status
+    const isAutoGraded = !questions.some((q: any) => q.type === 'open' || q.type === 'paragraph');
     const { error: updateError } = await adminSupabase
       .from('exam_attempts')
       .update({
-        status: questions.some((q: any) => q.type === 'open') ? 'completed' : 'graded',
+        status: isAutoGraded ? 'graded' : 'submitted',
         score: finalScore,
         completed_at: new Date().toISOString()
       })
@@ -97,12 +96,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       success: true, 
       score: finalScore,
-      status: questions.some((q: any) => q.type === 'open') ? 'completed' : 'graded'
+      status: isAutoGraded ? 'graded' : 'submitted'
     });
 
   } catch (error: unknown) {
-    console.error('Exam Submit Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleApiError(error, 'Submit Exam');
   }
 }

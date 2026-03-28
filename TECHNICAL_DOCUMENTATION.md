@@ -85,22 +85,33 @@ graph TD
 
 ---
 
-### 4. نظام تعاقد البيانات (Data Contract & Type Safety)
+### 4. نظام تعاقد البيانات (Data Contract & Validation Layer)
 
-يعتمد المشروع نظاماً صارماً لضمان جودة البيانات وتوافقها عبر جميع الطبقات:
+لضمان استقرار النظام وأمان البيانات، يتم فرض "عقد بيانات" (Data Contract) صارم وموحد عبر جميع طبقات المشروع:
 
 1.  **مصدر الحقيقة الموحد (Single Source of Truth):**
-    *   يتم تعريف جميع هياكل البيانات (Entities) في `lib/validations.ts` باستخدام **Zod**.
-    *   يتم اشتقاق أنواع TypeScript تلقائياً من مخططات Zod لضمان التطابق التام.
-2.  **سياسة الأنواع الصارمة (Strict Typing Policy):**
-    *   يُمنع استخدام نوع `any` نهائياً في المشروع.
-    *   يتم استخدام `unknown` مع `Type Guarding` أو الأنواع الصريحة (Explicit Types).
-3.  **معالجة `null` و `undefined`:**
-    *   **Database (Supabase):** تتعامل مع `null` للقيم المفقودة.
-    *   **UI (React Forms):** تتعامل مع `undefined` للقيم غير المدخلة.
-    *   **الحل:** استخدام `normalizePayload` لتحويل `undefined` إلى `null` قبل الحفظ، و `cleanResponse` للعكس عند الجلب.
-4.  **التحقق في الـ API:**
-    *   كل مسار API (Route Handler) يقوم بعملية `Schema.parse(body)` قبل البدء بأي منطق برمجى، مما يمنع دخول بيانات ملوثة لقاعدة البيانات.
+    *   يتم تعريف جميع هياكل البيانات في `lib/validations.ts` باستخدام مكتبة **Zod**.
+    *   يتم اشتقاق أنواع TypeScript تلقائياً من مخططات Zod باستخدام `z.infer`.
+    *   يُمنع استخدام نوع `any` نهائياً؛ ويُستبدل بـ `unknown` عند الضرورة مع التحقق من النوع (Type Guarding).
+
+2.  **طبقة التحقق المركزية (`lib/api-utils.ts`):**
+    *   `validateRequest(schema, body)`: أداة موحدة لفحص وتدقيق البيانات الواردة لـ API Routes، تعيد استجابة خطأ موحدة في حال فشل التحقق.
+    *   `handleApiError(error, context)`: معالج أخطاء مركزي يقوم بتسجيل الأخطاء وإعادة استجابة JSON متسقة مع رموز الحالة (Status Codes) المناسبة.
+
+3.  **تطبيع البيانات (Payload Normalization):**
+    *   `normalizePayload(data)`: أداة في `lib/utils.ts` تقوم بتحويل قيم `undefined` إلى `null` قبل إرسالها لقاعدة البيانات (Supabase/PostgreSQL) لضمان التوافق.
+
+4.  **نمط تنفيذ الـ API:**
+    كل مسار API (POST/PUT) يتبع النمط التالي:
+    1. استلام طلب JSON.
+    2. التحقق من صحة البيانات باستخدام `validateRequest` ومخطط Zod محدد.
+    3. استخراج البيانات المدققة وتنفيذ منطق الأعمال.
+    4. معالجة أي أخطاء ناتجة باستخدام `handleApiError`.
+
+5.  **معالجة `null` و `undefined`:**
+    *   **قاعدة البيانات:** الحقول القابلة للفراغ تُخزن كـ `null`.
+    *   **الواجهة/النماذج:** الحقول الاختيارية تكون `undefined` أو `null`. تقوم أداة `normalizePayload` بالتحويل التلقائي لـ `null` عند الحفظ.
+    *   **أدوات Zod المساعدة:** تم توفير `nullableString`, `nullableNumber`, و `nullableBoolean` في `lib/validations.ts` لتوحيد هذا التحويل.
 
 ---
 
