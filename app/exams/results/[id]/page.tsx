@@ -150,7 +150,7 @@ export default function ExamResults() {
     if (completedAttempts.length > 0) {
       const scores = completedAttempts.map(a => a.score);
       const maxPossibleScore = exam.max_score || 100;
-      const passingScore = exam.passing_score || (maxPossibleScore / 2);
+      const passingScorePercentage = exam.passing_score || 50;
       
       // نحسب النسبة المئوية للمتوسط والإحصائيات العامة فقط
       const percentageScores = scores.map(s => (s / maxPossibleScore) * 100);
@@ -160,7 +160,7 @@ export default function ExamResults() {
         avg_score: Math.round(avgPercentage), // كنسبة مئوية
         max_score: Math.max(...scores), // كدرجة خام
         min_score: Math.min(...scores), // كدرجة خام
-        pass_rate: Math.round((scores.filter(s => s >= passingScore).length / scores.length) * 100),
+        pass_rate: Math.round((percentageScores.filter(s => s >= passingScorePercentage).length / percentageScores.length) * 100),
         total_attempts: scores.length
       });
 
@@ -199,27 +199,65 @@ export default function ExamResults() {
   const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
   const filteredAttempts = attempts.filter(a => {
-    const matchesSection = selectedSection === 'all' || a.student.section_name === selectedSection;
-    const matchesSearch = !searchQuery || a.student.full_name.includes(searchQuery);
-    return matchesSection && matchesSearch;
+    return (selectedSection === 'all' || a.student.section_name === selectedSection) &&
+           (!searchQuery || a.student.full_name.includes(searchQuery));
   });
 
-  // دالة التصدير إلى إكسل المحدثة (بالدرجة الصحيحة)
+  // --- دالة التصدير إلى إكسل بتصميم احترافي ---
   const exportToExcel = () => {
-    const data = filteredAttempts.map(a => ({
-      'الطالب': a.student.full_name,
-      'الفصل': a.student.section_name,
-      'تاريخ التقديم': a.completed_at ? new Date(a.completed_at).toLocaleDateString('ar-SA') : 'لم يتقدم',
-      'الدرجة': a.status === 'not_attempted' ? '-' : `${a.score} من ${exam?.max_score || 100}`,
-      'الحالة': a.status === 'not_attempted' ? 'لم يتقدم' : a.score >= (exam?.passing_score || 50) ? 'ناجح' : 'راسب'
-    }));
+    const maxScore = exam?.max_score || 100;
+    const passingPercentage = exam?.passing_score || 50;
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    if (!ws['!cols']) ws['!cols'] = [];
+    // تجهيز الترويسة المنسقة للإكسل
+    const headerData = [
+      [`نتائج اختبار: ${exam?.title || 'غير محدد'}`],
+      [`المادة الدراسية: ${exam?.subject_name || 'غير محدد'}`],
+      [`الدرجة الكلية: ${maxScore}`],
+      [`نسبة النجاح المطلوبة: ${passingPercentage}%`],
+      [], // سطر فارغ للترتيب
+      ['م', 'اسم الطالب', 'الفصل الدراسي', 'تاريخ التقديم', 'الدرجة المكتسبة', 'النسبة المئوية', 'الحالة']
+    ];
+
+    // تجهيز بيانات الطلاب
+    const bodyData = filteredAttempts.map((a, index) => {
+      if (a.status === 'not_attempted') {
+        return [index + 1, a.student.full_name, a.student.section_name, 'لم يتقدم', '-', '-', 'لم يتقدم'];
+      }
+      
+      // الحساب الصحيح للنسبة والنجاح
+      const studentPercentage = (a.score / maxScore) * 100;
+      const isPassed = studentPercentage >= passingPercentage;
+
+      return [
+        index + 1,
+        a.student.full_name,
+        a.student.section_name,
+        new Date(a.completed_at).toLocaleDateString('ar-SA'),
+        `${a.score} من ${maxScore}`,
+        `${Math.round(studentPercentage)}%`,
+        isPassed ? 'ناجح' : 'راسب'
+      ];
+    });
+
+    // دمج الترويسة مع البيانات
+    const finalData = [...headerData, ...bodyData];
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+    
+    // ضبط اتجاه الشيت (يمين لليسار) وعرض الأعمدة
     ws['!dir'] = 'rtl';
+    ws['!cols'] = [
+      { wch: 5 },   // م
+      { wch: 30 },  // الطالب
+      { wch: 20 },  // الفصل
+      { wch: 15 },  // التاريخ
+      { wch: 15 },  // الدرجة
+      { wch: 12 },  // النسبة
+      { wch: 10 }   // الحالة
+    ];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'النتائج');
-    XLSX.writeFile(wb, `${exam?.title || 'نتائج_الاختبار'}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'النتائج التفصيلية');
+    XLSX.writeFile(wb, `نتائج_اختبار_${exam?.title || 'تصدير'}.xlsx`);
   };
 
   // دالة تصدير PDF
@@ -283,24 +321,34 @@ export default function ExamResults() {
               <th className="p-3 border border-slate-200">الطالب</th>
               <th className="p-3 border border-slate-200">الفصل</th>
               <th className="p-3 border border-slate-200">الدرجة</th>
+              <th className="p-3 border border-slate-200">النسبة</th>
               <th className="p-3 border border-slate-200">الحالة</th>
             </tr>
           </thead>
           <tbody>
-            {filteredAttempts.map((attempt) => (
-              <tr key={attempt.id} className="border-b border-slate-100">
-                <td className="p-3 text-sm font-bold text-slate-900 border border-slate-200">{attempt.student.full_name}</td>
-                <td className="p-3 text-sm text-slate-600 border border-slate-200">{attempt.student.section_name}</td>
-                <td className="p-3 text-sm font-black text-indigo-600 border border-slate-200" dir="ltr">
-                  {attempt.status === 'not_attempted' ? '-' : `${attempt.score} / ${exam?.max_score || 100}`}
-                </td>
-                <td className="p-3 text-sm font-bold border border-slate-200">
-                  <span className={attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= (exam?.passing_score || 50) ? 'text-emerald-600' : 'text-red-600'}>
-                    {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= (exam?.passing_score || 50) ? 'ناجح' : 'راسب'}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {filteredAttempts.map((attempt) => {
+              const maxScore = exam?.max_score || 100;
+              const studentPercentage = (attempt.score / maxScore) * 100;
+              const isPassed = studentPercentage >= (exam?.passing_score || 50);
+
+              return (
+                <tr key={attempt.id} className="border-b border-slate-100">
+                  <td className="p-3 text-sm font-bold text-slate-900 border border-slate-200">{attempt.student.full_name}</td>
+                  <td className="p-3 text-sm text-slate-600 border border-slate-200">{attempt.student.section_name}</td>
+                  <td className="p-3 text-sm font-black text-indigo-600 border border-slate-200" dir="ltr">
+                    {attempt.status === 'not_attempted' ? '-' : `${attempt.score} / ${maxScore}`}
+                  </td>
+                  <td className="p-3 text-sm font-bold border border-slate-200" dir="ltr">
+                    {attempt.status === 'not_attempted' ? '-' : `${Math.round(studentPercentage)}%`}
+                  </td>
+                  <td className="p-3 text-sm font-bold border border-slate-200">
+                    <span className={attempt.status === 'not_attempted' ? 'text-slate-400' : isPassed ? 'text-emerald-600' : 'text-red-600'}>
+                      {attempt.status === 'not_attempted' ? 'لم يتقدم' : isPassed ? 'ناجح' : 'راسب'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -481,74 +529,86 @@ export default function ExamResults() {
                   <tr className="bg-slate-50/50 text-slate-400 text-xs font-black uppercase tracking-widest">
                     <th className="px-8 py-6">الطالب</th>
                     <th className="px-8 py-6 text-center">الدرجة المكتسبة</th>
+                    <th className="px-8 py-6 text-center">النسبة المئوية</th>
                     <th className="px-8 py-6 text-center">الحالة</th>
                     <th className="px-8 py-6 text-left">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sectionAttempts.map((attempt) => (
-                    <tr key={attempt.id} className="hover:bg-slate-50/50 transition-all group">
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-lg">
-                            {attempt.student.full_name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="text-base font-black text-slate-900">{attempt.student.full_name}</p>
-                            <p className="text-xs text-slate-500 font-bold">{attempt.student.section_name}</p>
-                          </div>
-                        </div>
-                      </td>
-                      
-                      {/* عرض الدرجة بالشكل الجديد 7/10 بدلاً من النسبة */}
-                      <td className="px-8 py-6 text-center">
-                        {attempt.status === 'not_attempted' ? (
-                          <span className="text-slate-400 font-bold">-</span>
-                        ) : (
-                          <div className="inline-flex items-center justify-center gap-2 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100">
-                            <span className="text-xl font-black text-indigo-600">{attempt.score}</span>
-                            <span className="text-slate-400 font-bold">/</span>
-                            <span className="text-slate-500 font-black">{exam?.max_score || 100}</span>
-                          </div>
-                        )}
-                      </td>
+                  {sectionAttempts.map((attempt) => {
+                    const maxScore = exam?.max_score || 100;
+                    const studentPercentage = (attempt.score / maxScore) * 100;
+                    const isPassed = studentPercentage >= (exam?.passing_score || 50);
 
-                      <td className="px-8 py-6 text-center">
-                        <span className={`inline-flex px-4 py-1.5 rounded-xl text-xs font-black uppercase border ${
-                          attempt.status === 'not_attempted'
-                            ? 'bg-slate-50 text-slate-500 border-slate-100'
-                            : attempt.score >= (exam?.passing_score || 50) 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                              : 'bg-red-50 text-red-700 border-red-100'
-                        }`}>
-                          {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= (exam?.passing_score || 50) ? 'ناجح' : 'راسب'}
-                        </span>
-                      </td>
-                      
-                      <td className="px-8 py-6 text-left">
-                        <div className="flex items-center gap-2 justify-end">
-                          {attempt.status !== 'not_attempted' && (
-                            <>
-                              <button 
-                                onClick={() => router.push(`/exams/results/${params.id}/student/${attempt.student.id}`)}
-                                className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all"
-                                title="عرض ورقة الاختبار"
-                              >
-                                <Eye className="h-5 w-5" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteAttempt(attempt.id)}
-                                className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 transition-all"
-                                title="إعادة تعيين وحذف المحاولة"
-                              >
-                                <Trash2 className="h-5 w-5" />
-                              </button>
-                            </>
+                    return (
+                      <tr key={attempt.id} className="hover:bg-slate-50/50 transition-all group">
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-lg">
+                              {attempt.student.full_name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-base font-black text-slate-900">{attempt.student.full_name}</p>
+                              <p className="text-xs text-slate-500 font-bold">{attempt.student.section_name}</p>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        {/* الدرجة 7 / 10 */}
+                        <td className="px-8 py-6 text-center">
+                          {attempt.status === 'not_attempted' ? (
+                            <span className="text-slate-400 font-bold">-</span>
+                          ) : (
+                            <div className="inline-flex items-center justify-center gap-2 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100" dir="ltr">
+                              <span className="text-xl font-black text-indigo-600">{attempt.score}</span>
+                              <span className="text-slate-400 font-bold">/</span>
+                              <span className="text-slate-500 font-black">{maxScore}</span>
+                            </div>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+
+                        {/* النسبة المئوية */}
+                        <td className="px-8 py-6 text-center font-black text-slate-700" dir="ltr">
+                           {attempt.status === 'not_attempted' ? '-' : `${Math.round(studentPercentage)}%`}
+                        </td>
+
+                        <td className="px-8 py-6 text-center">
+                          <span className={`inline-flex px-4 py-1.5 rounded-xl text-xs font-black uppercase border ${
+                            attempt.status === 'not_attempted'
+                              ? 'bg-slate-50 text-slate-500 border-slate-100'
+                              : isPassed 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                : 'bg-red-50 text-red-700 border-red-100'
+                          }`}>
+                            {attempt.status === 'not_attempted' ? 'لم يتقدم' : isPassed ? 'ناجح' : 'راسب'}
+                          </span>
+                        </td>
+                        
+                        <td className="px-8 py-6 text-left">
+                          <div className="flex items-center gap-2 justify-end">
+                            {attempt.status !== 'not_attempted' && (
+                              <>
+                                <button 
+                                  onClick={() => router.push(`/exams/results/${params.id}/student/${attempt.student.id}`)}
+                                  className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-indigo-600 transition-all"
+                                  title="عرض ورقة الاختبار"
+                                >
+                                  <Eye className="h-5 w-5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteAttempt(attempt.id)}
+                                  className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 transition-all"
+                                  title="إعادة تعيين وحذف المحاولة"
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
