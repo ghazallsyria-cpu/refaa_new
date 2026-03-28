@@ -77,6 +77,7 @@ export default function QuizBuilder() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // --- الخوارزمية الذكية المستنتجة من ملف الحضور والغياب ---
   useEffect(() => {
     const fetchTeacherSpecificData = async () => {
       if (!user || !userRole) return;
@@ -86,7 +87,6 @@ export default function QuizBuilder() {
         let fetchedSections: any[] = [];
 
         if (userRole === 'admin' || userRole === 'management') {
-          // الإدارة ترى كل المواد وكل الصفوف
           const [subjRes, secRes] = await Promise.all([
             supabase.from('subjects').select('id, name').order('name'),
             supabase.from('sections').select('id, name, classes(name)')
@@ -97,46 +97,50 @@ export default function QuizBuilder() {
              return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           });
         } else {
-          // المعلم يرى صفوفه ومواده فقط (صارم)
-          
-          // 1. جلب الصفوف الخاصة بالمعلم
+          // استخراج شامل (جلب علاقات المعلم بالصفوف بأمان تام)
           const { data: teacherSecs } = await supabase
             .from('teacher_sections')
-            .select('section:sections(id, name, classes(name))')
+            .select('*') // استخراج كل الحقول لضمان عدم حدوث Crash
             .eq('teacher_id', user.id);
-          
-          fetchedSections = (teacherSecs || []).map((ts: any) => {
-            const s = ts.section;
-            if (!s) return null;
-            const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
-            return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
-          }).filter(Boolean);
 
-          // 2. جلب المواد الخاصة بالمعلم
-          let combinedSubjs: any[] = [];
-          
-          // المحاولة الأولى: من جدول الربط teacher_subjects
-          const { data: tsData, error: tsErr } = await supabase
-            .from('teacher_subjects')
-            .select('subject:subjects(id, name)')
-            .eq('teacher_id', user.id);
-            
-          if (!tsErr && tsData) {
-            combinedSubjs = [...combinedSubjs, ...tsData.map((ts: any) => ts.subject).filter(Boolean)];
+          const sectionIds = teacherSecs?.map(ts => ts.section_id).filter(Boolean) || [];
+          let possibleSubjectIds: string[] = teacherSecs?.map(ts => ts.subject_id).filter(Boolean) || [];
+
+          // استخراج بيانات الصفوف واسم الفصل الدراسي
+          if (sectionIds.length > 0) {
+            const { data: sectionsData } = await supabase
+              .from('sections')
+              .select('*, classes(name)')
+              .in('id', sectionIds);
+
+            if (sectionsData) {
+              fetchedSections = sectionsData.map((s: any) => {
+                const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
+                if (s.subject_id) possibleSubjectIds.push(s.subject_id); // إذا كانت المادة بداخل جدول الصفوف
+                return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
+              });
+            }
           }
 
-          // المحاولة الثانية: من جدول subjects مباشرة إذا كان هناك حقل teacher_id
-          const { data: dirData, error: dirErr } = await supabase
-            .from('subjects')
-            .select('id, name')
-            .eq('teacher_id', user.id);
-            
-          if (!dirErr && dirData) {
-            combinedSubjs = [...combinedSubjs, ...dirData];
+          // البحث في جدول teacher_subjects كاحتياط إضافي
+          const { data: teacherSubjs } = await supabase.from('teacher_subjects').select('*').eq('teacher_id', user.id);
+          if (teacherSubjs) {
+            possibleSubjectIds = [...possibleSubjectIds, ...teacherSubjs.map(ts => ts.subject_id).filter(Boolean)];
           }
 
-          // إزالة التكرارات إن وجدت
-          fetchedSubjects = Array.from(new Map(combinedSubjs.map(item => [item.id, item])).values());
+          // جلب أسماء المواد بناءً على الأرقام (IDs) التي تم جمعها من المعلم حصراً
+          possibleSubjectIds = Array.from(new Set(possibleSubjectIds)); // إزالة الأرقام المكررة
+          
+          if (possibleSubjectIds.length > 0) {
+            const { data: subjectsData } = await supabase
+              .from('subjects')
+              .select('id, name')
+              .in('id', possibleSubjectIds);
+            
+            if (subjectsData) {
+              fetchedSubjects = subjectsData;
+            }
+          }
         }
 
         setFormData({ subjects: fetchedSubjects, sections: fetchedSections });
