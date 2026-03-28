@@ -114,7 +114,14 @@ export default function QuizBuilder() {
         
         setExam({
           ...examData,
-          section_ids: examData.section_ids || []
+          section_ids: examData.section_ids || [],
+          // أضف هذا السطر لمعالجة الـ null وتوفير قيم افتراضية متوافقة مع الـ Type
+          settings: {
+            shuffle_questions: examData.settings?.shuffle_questions ?? false,
+            shuffle_options: examData.settings?.shuffle_options ?? false,
+            show_results_immediately: examData.settings?.show_results_immediately ?? true, // أو القيمة الافتراضية المناسبة لعملكم
+            allow_backtracking: examData.settings?.allow_backtracking ?? true,
+          }
         });
 
         setQuestions(questionsData || []);
