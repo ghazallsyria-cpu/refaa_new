@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-// --- تعريفات الأنواع المحدثة لتتوافق مع الواجهة والـ Build ---
+// --- تصدير الأنواع من هنا حصراً لضمان نجاح الـ Build ---
 export type StudentDashboardData = {
   student: any;
   assignments: any[];
@@ -20,7 +20,6 @@ export type StudentDashboardData = {
 export function useDashboardSystem() {
   const { user } = useAuth();
 
-  // --- 1. الطالب (Student) - تم التحديث لدعم الإحصائيات التفصيلية ---
   const fetchStudentDashboardData = useCallback(async (): Promise<StudentDashboardData | null> => {
     if (!user) return null;
     try {
@@ -63,7 +62,6 @@ export function useDashboardSystem() {
         supabase.from('class_periods').select('*').order('period_number')
       ]);
 
-      // --- حساب الإحصائيات التفصيلية للحضور ---
       const attendanceData = (attendance || []) as { daily_status: string }[];
       const totalDays = attendanceData.length;
       
@@ -93,16 +91,22 @@ export function useDashboardSystem() {
     }
   }, [user]);
 
-  // --- بقية الدوال (Admin, Teacher, Parent) تبقى كما هي ولكن يمكن تحديثها لاحقاً ---
-  
+  // دالات الإدارة والمعلم والوالدين (يمكن إضافة المنطق الخاص بها لاحقاً)
+  const fetchAdminDashboardStats = useCallback(async () => ({}), []);
+  const fetchAdminRecentActivities = useCallback(async () => [], []);
+  const fetchStudentSchedule = useCallback(async () => null, []);
+  const fetchParentDashboardData = useCallback(async () => null, []);
+  const fetchTeacherDashboardData = useCallback(async () => null, []);
+  const fetchTeacherSchedule = useCallback(async () => null, []);
+
   return {
-    fetchAdminDashboardStats: useCallback(async () => { /* ... */ return {}; }, []), 
-    fetchAdminRecentActivities: useCallback(async () => { return []; }, []),
+    fetchAdminDashboardStats,
+    fetchAdminRecentActivities,
     fetchStudentDashboardData,
-    fetchStudentSchedule: useCallback(async () => { return null; }, []),
-    fetchParentDashboardData: useCallback(async () => { return null; }, []),
-    fetchTeacherDashboardData: useCallback(async () => { return null; }, []),
-    fetchTeacherSchedule: useCallback(async () => { return null; }, [])
+    fetchStudentSchedule,
+    fetchParentDashboardData,
+    fetchTeacherDashboardData,
+    fetchTeacherSchedule
   };
 }
 
