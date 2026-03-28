@@ -67,6 +67,7 @@ export default function QuizBuilder() {
   const [loading, setLoading] = useState(params.id !== 'new');
   const [saving, setSaving] = useState(false);
 
+  // إغلاق القائمة المنسدلة عند النقر خارجها
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -77,21 +78,23 @@ export default function QuizBuilder() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // جلب المواد (الكل) والصفوف (الخاصة بالمعلم فقط)
   useEffect(() => {
-    const fetchTeacherSpecificData = async () => {
+    const fetchData = async () => {
       if (!user || !userRole) return;
       try {
         setFormLoading(true);
         let fetchedSubjects: any[] = [];
         let fetchedSections: any[] = [];
 
+        // 1. جلب جميع المواد دائماً (لأن المدارس تشترك في المواد غالباً)
+        const { data: allSubjs } = await supabase.from('subjects').select('id, name').order('name');
+        fetchedSubjects = allSubjs || [];
+
+        // 2. جلب الصفوف بناءً على الصلاحية
         if (userRole === 'admin' || userRole === 'management') {
-          const [subjRes, secRes] = await Promise.all([
-            supabase.from('subjects').select('id, name'),
-            supabase.from('sections').select('id, name, classes(name)')
-          ]);
-          fetchedSubjects = subjRes.data || [];
-          fetchedSections = (secRes.data || []).map((s: any) => {
+          const { data: secRes } = await supabase.from('sections').select('id, name, classes(name)');
+          fetchedSections = (secRes || []).map((s: any) => {
              const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
              return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           });
@@ -108,43 +111,17 @@ export default function QuizBuilder() {
             const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
             return { id: s.id, name: className ? `${className} - ${s.name}` : s.name };
           }).filter(Boolean);
-
-          // جلب مواد المعلم فقط (بشكل صارم ومباشر بدون خطط بديلة مزعجة)
-          let combinedSubjs: any[] = [];
-          
-          // المحاولة 1: من جدول الربط teacher_subjects
-          const { data: tsData, error: tsErr } = await supabase
-            .from('teacher_subjects')
-            .select('subject:subjects(id, name)')
-            .eq('teacher_id', user.id);
-            
-          if (!tsErr && tsData) {
-            combinedSubjs = [...combinedSubjs, ...tsData.map((ts: any) => ts.subject).filter(Boolean)];
-          }
-
-          // المحاولة 2: مباشرة من جدول subjects في حال كان يحوي teacher_id
-          const { data: dirData, error: dirErr } = await supabase
-            .from('subjects')
-            .select('id, name')
-            .eq('teacher_id', user.id);
-            
-          if (!dirErr && dirData) {
-            combinedSubjs = [...combinedSubjs, ...dirData];
-          }
-
-          // تصفية التكرارات إن وجدت
-          fetchedSubjects = Array.from(new Map(combinedSubjs.map(item => [item.id, item])).values());
         }
 
         setFormData({ subjects: fetchedSubjects, sections: fetchedSections });
       } catch (e) {
-        console.error("Error fetching specific teacher data:", e);
+        console.error("Error fetching data:", e);
       } finally {
         setFormLoading(false);
       }
     };
     
-    fetchTeacherSpecificData();
+    fetchData();
   }, [user, userRole]);
 
   useEffect(() => {
@@ -202,7 +179,7 @@ export default function QuizBuilder() {
               <label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><BookOpen size={14} className="text-slate-400"/> المادة الدراسية</label>
               <select value={exam.subject_id} onChange={(e) => setExam({ ...exam, subject_id: e.target.value })} className="w-full p-5 rounded-3xl bg-slate-50 border-0 ring-1 ring-slate-100 font-bold appearance-none cursor-pointer hover:bg-white transition-all">
                 <option value="">{formLoading ? 'جاري التحميل...' : 'اختر المادة'}</option>
-                {formData.subjects.length > 0 ? formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>)) : <option disabled>لا توجد مواد مسندة لك</option>}
+                {formData.subjects.length > 0 ? formData.subjects.map((s: any) => (<option key={s.id} value={s.id}>{s.name}</option>)) : <option disabled>لا توجد مواد متاحة</option>}
               </select>
             </div>
             
@@ -224,7 +201,7 @@ export default function QuizBuilder() {
                   ? 'جاري التحميل...' 
                   : exam.section_ids?.length > 0 
                     ? formData.sections.filter(s => exam.section_ids.includes(s.id)).map(s => s.name).join('، ')
-                    : 'اختر الصفوف (يمكنك اختيار أكثر من صف)'}
+                    : 'اختر الصفوف المستهدفة (يمكنك تحديد أكثر من صف)'}
               </span>
               <ChevronDown size={20} className={`text-slate-400 transition-transform ${isSectionDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
             </div>
