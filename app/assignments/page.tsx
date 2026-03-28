@@ -59,7 +59,7 @@ export default function AssignmentsPage() {
         teacher_id: userRole === 'teacher' ? user.id : currentAssignment.teacher_id,
         due_date: currentAssignment.due_date,
         file_url: currentAssignment.file_url,
-        status: 'published'
+        status: currentAssignment.status || 'draft'
       };
 
       await saveAssignment(
@@ -432,6 +432,20 @@ export default function AssignmentsPage() {
             <form onSubmit={handleSaveAssignment} className="space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">حالة الواجب <span className="text-red-500">*</span></label>
+                    <select 
+                      required
+                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
+                      value={currentAssignment.status || 'draft'}
+                      onChange={(e) => setCurrentAssignment({...currentAssignment, status: e.target.value})}
+                    >
+                      <option value="draft">مسودة</option>
+                      <option value="published">منشور</option>
+                      <option value="archived">مؤرشف</option>
+                    </select>
+                  </div>
+                  
                   <div>
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">عنوان الواجب <span className="text-red-500">*</span></label>
                     <input 
