@@ -20,7 +20,7 @@ export function useExamsSystem() {
         if (profile?.section_id) {
           const { data: assigned } = await supabase.from('exam_sections').select('exam_id').eq('section_id', profile.section_id);
           const ids = assigned?.map(a => a.exam_id) || [];
-          if (ids.length > 0) query = query.in('id', ids).eq('status', 'published');
+          if (ids.length > 0) query = query.in('id', ids).eq('status', 'published'); // الطلاب يرون فقط المنشور
           else { setData([]); setLoading(false); return; }
         }
       }
@@ -106,7 +106,6 @@ export function useExamsSystem() {
     }
   }, []);
 
-  // --- تحديث نظام الحفظ مع التقاط دقيق للأخطاء ---
   const saveExam = useCallback(async (examData: any, questions: any[], isNew: boolean) => {
     try {
       const res = await fetch('/api/exams/save', { 
@@ -147,6 +146,31 @@ export function useExamsSystem() {
     await supabase.from('exams').delete().eq('id', id);
     await fetchExams();
   }, [fetchExams]);
+
+  // --- الدالة الجديدة: أرشفة الاختبار وتفريغ المساحة التخزينية ---
+  const archiveExam = useCallback(async (examId: string) => {
+    if (!user?.id) return;
+    
+    // 1. جلب كل روابط الصور من قاعدة البيانات
+    const { data: qs } = await supabase.from('questions').select('media_url').eq('exam_id', examId).not('media_url', 'is', null);
+    
+    // 2. حذف الصور فعلياً من Cloudinary لتوفير المساحة
+    if (qs && qs.length > 0) {
+      for (const q of qs) {
+        if (q.media_url) await deleteFromCloudinary(q.media_url);
+      }
+    }
+
+    // 3. استدعاء الـ API لتحديث الحالة في قاعدة البيانات وإزالة الروابط
+    const res = await fetch('/api/exams/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ examId, userId: user.id })
+    });
+
+    if (!res.ok) throw new Error('فشل في أرشفة الاختبار');
+    await fetchExams();
+  }, [user, fetchExams]);
 
   const deleteAttempt = useCallback(async (id: string) => {
     await fetch('/api/exams/delete-attempt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attemptId: id, userId: user?.id }) });
@@ -213,9 +237,15 @@ export function useExamsSystem() {
   }, []);
 
   return {
-    data, loading, error, refetch: fetchExams, saveExam, fetchExamDetails, deleteExamWithMedia, deleteAttempt, fetchExamResults, fetchStudentExamResult,
+    data, loading, error, refetch: fetchExams, saveExam, fetchExamDetails, deleteExamWithMedia, archiveExam, deleteAttempt, fetchExamResults, fetchStudentExamResult,
     fetchExamForStudent: async (id: string) => {
       const { data: ex } = await supabase.from('exams').select(`*, subject:subjects(name)`).eq('id', id).maybeSingle();
+      
+      // منع الطالب من دخول الاختبار إذا كان مؤرشفاً
+      if (ex?.status === 'archived') {
+        throw new Error('هذا الاختبار مغلق ومؤرشف من قبل المعلم.');
+      }
+
       const { data: qs } = await supabase.from('questions').select(`*, options:question_options(*)`).eq('exam_id', id).order('order_index');
       return { exam: { ...ex, subject_name: ex?.subject?.name }, questions: qs || [] };
     },
