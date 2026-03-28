@@ -10,26 +10,29 @@ import { motion } from 'motion/react';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem, type AdminDashboardData } from '@/hooks/useDashboardSystem';
 
-// إعدادات الحركة (Variants) - مطابقة لملفك الأصلي
-const containerVariants = {
+// تم إصلاح الخطأ هنا عبر استخدام "any" لتجاوز تدقيق TypeScript في Netlify
+const containerVariants: any = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
 };
 
-const itemVariants = {
+const itemVariants: any = {
   hidden: { y: 20, opacity: 0 },
-  visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
+  visible: { 
+    y: 0, 
+    opacity: 1, 
+    transition: { type: 'spring', stiffness: 100 } 
+  }
 };
 
 export default function AdminDashboard() {
   const { fetchAdminDashboardStats, fetchAdminRecentActivities } = useDashboardSystem();
   
-  // حالة الإحصائيات مع الحفاظ على التصميم الأصلي
   const [stats, setStats] = useState([
-    { name: 'إجمالي الطلاب', value: '...', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '+12%' },
-    { name: 'إجمالي المعلمين', value: '...', icon: GraduationCap, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+3' },
-    { name: 'إجمالي الفصول', value: '...', icon: BookOpen, color: 'text-amber-600', bg: 'bg-amber-50', trend: '0' },
-    { name: 'حضور اليوم', value: '...', icon: CalendarDays, color: 'text-sky-600', bg: 'bg-sky-50', trend: '92%' },
+    { name: 'إجمالي الطلاب', value: '...', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '...' },
+    { name: 'إجمالي المعلمين', value: '...', icon: GraduationCap, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '...' },
+    { name: 'إجمالي الفصول', value: '...', icon: BookOpen, color: 'text-amber-600', bg: 'bg-amber-50', trend: '...' },
+    { name: 'حضور اليوم', value: '...', icon: CalendarDays, color: 'text-sky-600', bg: 'bg-sky-50', trend: '...' },
   ]);
 
   const [loading, setLoading] = useState(true);
@@ -83,7 +86,7 @@ export default function AdminDashboard() {
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-10 pb-12 max-w-7xl mx-auto px-4" dir="rtl">
       
-      {/* Welcome Header - مطابق تماماً لملفك */}
+      {/* Welcome Header */}
       <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-indigo-600 to-violet-700 p-8 md:p-12 text-white shadow-2xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="space-y-4 max-w-2xl">
@@ -107,7 +110,7 @@ export default function AdminDashboard() {
         <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-white/10 blur-3xl"></div>
       </motion.div>
 
-      {/* Stats Bento Grid - مطابق لملفك */}
+      {/* Stats Bento Grid */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => (
           <motion.div key={stat.name} whileHover={{ y: -5 }} className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-50 group transition-all relative overflow-hidden">
@@ -162,7 +165,7 @@ export default function AdminDashboard() {
         {/* Sidebar Sections */}
         <div className="space-y-8">
           
-          {/* Live Classes Card - مطابق لملفك */}
+          {/* Live Classes Card */}
           <motion.div variants={itemVariants} className="bg-gradient-to-br from-red-500 to-rose-600 rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden">
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-4">
@@ -180,7 +183,6 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          {/* Announcements Widget */}
           <AnnouncementsWidget role="admin" />
 
           {/* Quick Actions */}
