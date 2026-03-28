@@ -16,13 +16,12 @@ export async function POST(req: Request) {
 
     let finalExamId = examData.id;
 
-    // --- تم الإصلاح هنا: تضمين section_id لإرضاء قاعدة البيانات (Not-Null Constraint) ---
     const examPayload = {
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: examData.teacher_id || userId, // لضمان وجود المعلم دائماً
-      section_id: examData.section_id || (examData.section_ids && examData.section_ids[0]) || null, // الحل الجذري
+      teacher_id: examData.teacher_id || userId,
+      section_id: examData.section_id || (examData.section_ids && examData.section_ids[0]) || null,
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
@@ -52,7 +51,7 @@ export async function POST(req: Request) {
       if (error) throw error;
     }
 
-    // Handle sections (هنا يتم حفظ تعدد الصفوف بشكل سليم)
+    // Handle sections
     if (!isNew) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
     }
@@ -68,7 +67,6 @@ export async function POST(req: Request) {
 
     // Handle questions
     if (!isNew) {
-      // Delete old options first due to foreign key constraints
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
         const oldQuestionIds = oldQuestions.map(q => q.id);
@@ -98,11 +96,13 @@ export async function POST(req: Request) {
 
       if (qError) throw qError;
 
+      // --- تم الإصلاح هنا: إضافة order_index للخيارات لضمان عدم حدوث خطأ ---
       if (q.options && q.options.length > 0) {
-        const optionsPayload = q.options.map((opt: any) => ({
+        const optionsPayload = q.options.map((opt: any, optIdx: number) => ({
           question_id: newQ.id,
           content: opt.content,
-          is_correct: opt.is_correct
+          is_correct: opt.is_correct,
+          order_index: opt.order_index ?? optIdx // استخدام الترتيب القادم أو ترتيب الحلقة
         }));
         const { error: optError } = await adminSupabase.from('question_options').insert(optionsPayload);
         if (optError) throw optError;
@@ -112,12 +112,7 @@ export async function POST(req: Request) {
     // Send notifications if published
     if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0) {
       try {
-        let studentsQuery = adminSupabase.from('students').select('id');
-        if (examData.section_ids.length > 0) {
-          studentsQuery = studentsQuery.in('section_id', examData.section_ids);
-        }
-        const { data: students } = await studentsQuery;
-
+        const { data: students } = await adminSupabase.from('students').select('id').in('section_id', examData.section_ids);
         if (students && students.length > 0) {
           const notificationPayloads = students.map(student => ({
             user_id: student.id,
