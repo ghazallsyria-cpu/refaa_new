@@ -44,7 +44,8 @@ const navigation = [
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
-  { name: 'سجل الأداء', href: '/student/performance', icon: Award },
+  // تم تحديث المسار هنا ليكون المسار الجديد الذي أنشأناه
+  { name: 'سجل الأداء', href: '/gradebook', icon: Award },
   { name: 'الرسائل', href: '/messages', icon: MessageSquare },
   { name: 'الإعلانات', href: '/announcements', icon: Bell },
   { name: 'المستندات', href: '/documents', icon: FolderOpen },
@@ -66,12 +67,12 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
 
-  // Filter navigation based on user role
   const filteredNavigation = navigation.filter(item => {
     if (userRole === 'admin' || userRole === 'management') return true;
     
     if (userRole === 'teacher') {
-      return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
+      // تم إضافة 'سجل الأداء' هنا لكي يظهر في قائمة المعلم
+      return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
     }
     
     if (userRole === 'student') {
@@ -85,7 +86,6 @@ export function Sidebar({
     return false;
   });
 
-  // Map role to display name
   const roleDisplayNames: Record<string, string> = {
     'admin': 'المدير العام',
     'management': 'الإدارة',
@@ -101,13 +101,9 @@ export function Sidebar({
       isCollapsed ? "w-20" : "w-72",
       "group/sidebar"
     )}>
-      {/* Interactive Peek Handle (Only when hidden on desktop) */}
       <div className="absolute inset-y-0 right-0 w-1 bg-indigo-500/0 group-hover/sidebar:bg-indigo-500/20 transition-all duration-500" />
-
-      {/* Decorative background elements */}
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2 animate-pulse" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/2 animate-pulse" />
-      <div className="absolute top-1/2 left-0 w-48 h-48 bg-indigo-600/5 blur-[80px] rounded-full -translate-x-1/2" />
 
       <div className={cn(
         "flex h-24 shrink-0 items-center border-b border-slate-800/50 relative z-10 transition-all duration-700",
@@ -115,14 +111,10 @@ export function Sidebar({
       )}>
         <motion.div 
           initial={false}
-          animate={{ 
-            opacity: isCollapsed ? 0 : 1,
-            scale: isCollapsed ? 0.8 : 1,
-            x: isCollapsed ? 20 : 0
-          }}
+          animate={{ opacity: isCollapsed ? 0 : 1, scale: isCollapsed ? 0.8 : 1, x: isCollapsed ? 20 : 0 }}
           className={cn("flex items-center gap-3 transition-all duration-500", isCollapsed ? "pointer-events-none" : "")}
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20 group-hover:rotate-6 transition-transform">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20">
             <School className="h-6 w-6 text-white" />
           </div>
           <div className="flex flex-col">
@@ -131,31 +123,14 @@ export function Sidebar({
           </div>
         </motion.div>
         
-        {isCollapsed && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20"
-          >
-            <School className="h-6 w-6 text-white" />
-          </motion.div>
-        )}
-
         <div className="flex items-center gap-1">
           {onToggleCollapse && (
-            <button 
-              onClick={onToggleCollapse}
-              className="hidden lg:flex p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all active:scale-90"
-              title={isCollapsed ? "توسيع القائمة" : "طي القائمة"}
-            >
+            <button onClick={onToggleCollapse} className="hidden lg:flex p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all">
               {isCollapsed ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
             </button>
           )}
           {onClose && (
-            <button 
-              onClick={onClose}
-              className="lg:hidden p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all active:scale-90"
-            >
+            <button onClick={onClose} className="lg:hidden p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all">
               <X className="h-5 w-5" />
             </button>
           )}
@@ -165,7 +140,6 @@ export function Sidebar({
       <div className="flex flex-1 flex-col overflow-y-auto py-6 px-3 custom-scrollbar relative z-10">
         <nav className="space-y-1.5">
           {filteredNavigation.map((item, idx) => {
-            // Special handling for dashboard route based on role
             let itemHref = item.href;
             if (item.name === 'لوحة التحكم') {
               if (userRole === 'student') itemHref = '/dashboard/student';
@@ -176,50 +150,20 @@ export function Sidebar({
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
             return (
-              <motion.div
-                key={item.name}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.03 }}
-              >
+              <motion.div key={item.name} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.03 }}>
                 <Link
                   href={itemHref}
                   onClick={onClose}
-                  title={isCollapsed ? item.name : undefined}
                   className={cn(
                     "flex items-center rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden",
                     isCollapsed ? "justify-center p-3" : "px-4 py-3.5",
-                    isActive 
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" 
-                      : "hover:bg-white/5 hover:text-white text-slate-400"
+                    isActive ? "bg-indigo-600 text-white shadow-lg" : "hover:bg-white/5 text-slate-400"
                   )}
                 >
-                  {isActive && (
-                    <motion.div 
-                      layoutId="sidebar-active"
-                      className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 -z-10"
-                    />
-                  )}
-                  <item.icon
-                    className={cn(
-                      "h-5 w-5 shrink-0 transition-all duration-300",
-                      !isCollapsed && "ml-3.5",
-                      isActive ? "text-white scale-110" : "text-slate-500 group-hover:text-indigo-400 group-hover:scale-110"
-                    )}
-                    aria-hidden="true"
-                  />
-                  <span className={cn(
-                    "relative z-10 transition-all duration-500 whitespace-nowrap font-bold",
-                    isCollapsed ? "w-0 opacity-0 scale-0 overflow-hidden" : "w-auto opacity-100 scale-100"
-                  )}>
+                  <item.icon className={cn("h-5 w-5 shrink-0 ml-3.5", isActive ? "text-white scale-110" : "text-slate-500 group-hover:text-indigo-400")} />
+                  <span className={cn("relative z-10 transition-all duration-500 font-bold", isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
                     {item.name}
                   </span>
-                  {isActive && !isCollapsed && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-white rounded-l-full shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
-                  )}
-                  {isActive && isCollapsed && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-white rounded-l-full shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
-                  )}
                 </Link>
               </motion.div>
             );
@@ -227,26 +171,20 @@ export function Sidebar({
         </nav>
       </div>
       
-      <div className={cn("p-4 border-t border-slate-800/50 relative z-10 transition-all duration-700", isCollapsed ? "items-center" : "")}>
-        <div className={cn(
-          "bg-white/5 backdrop-blur-sm rounded-xl flex items-center border border-white/5 hover:bg-white/10 transition-all duration-500 cursor-pointer group overflow-hidden",
-          isCollapsed ? "justify-center p-2" : "gap-3 p-3"
-        )}>
-          <div className="relative shrink-0">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-xs shadow-lg ring-2 ring-white/10 group-hover:scale-105 transition-transform">
-              {roleDisplayName.substring(0, 2)}
+      <div className={cn("p-4 border-t border-slate-800/50 relative z-10", isCollapsed ? "items-center" : "")}>
+        <div className="bg-white/5 backdrop-blur-sm rounded-xl flex items-center p-3 gap-3">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-xs">
+            {roleDisplayName.substring(0, 2)}
+          </div>
+          {!isCollapsed && (
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white">{roleDisplayName}</span>
+              <span className="text-[9px] text-slate-500 font-bold uppercase">متصل الآن</span>
             </div>
-            <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-sm" />
-          </div>
-          <div className={cn(
-            "flex flex-col overflow-hidden transition-all duration-700",
-            isCollapsed ? "w-0 opacity-0 scale-0" : "w-auto opacity-100 scale-100"
-          )}>
-            <span className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">{roleDisplayName}</span>
-            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">لوحة التحكم</span>
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
