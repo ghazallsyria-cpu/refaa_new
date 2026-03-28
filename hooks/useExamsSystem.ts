@@ -60,14 +60,12 @@ export function useExamsSystem() {
       }
 
       const { data: st } = await studentsQuery;
-      // تصحيح الخطأ هنا: إعطاء rawStudents النوع any[] صراحةً لمنع تعارض TypeScript
       let rawStudents: any[] = st || [];
 
       const fetchedStudentIds = new Set(rawStudents.map((s: any) => s.id));
       const missingStudentIds = attemptStudentIds.filter(id => !fetchedStudentIds.has(id));
       
       if (missingStudentIds.length > 0) {
-         // تصحيح الخطأ هنا: توحيد الاستعلام ليكون مطابقاً تماماً للاستعلام الأول بإضافة classes(name)
          const { data: missingSt } = await supabase.from('students').select(`id, users(full_name, email), section:sections(id, name, classes(name))`).in('id', missingStudentIds);
          rawStudents = [...rawStudents, ...(missingSt || [])];
       }
@@ -88,37 +86,20 @@ export function useExamsSystem() {
           eMail = Array.isArray(s.users) ? s.users[0]?.email : s.users?.email;
         } else {
           const manual = manualUsers.find(u => u.id === s.id);
-          if (manual) {
-             fName = manual.full_name;
-             eMail = manual.email;
-          }
+          if (manual) { fName = manual.full_name; eMail = manual.email; }
         }
 
-        // معالجة اسم الصف (في حال كان هناك اسم فصل من جدول classes)
         let finalSectionName = s.section?.name || 'غير محدد';
         const className = Array.isArray(s.section?.classes) ? s.section?.classes[0]?.name : s.section?.classes?.name;
-        if (className && s.section?.name) {
-            finalSectionName = `${className} - ${s.section.name}`;
-        }
+        if (className && s.section?.name) finalSectionName = `${className} - ${s.section.name}`;
 
-        return {
-          id: s.id,
-          full_name: fName || 'طالب غير معروف',
-          email: eMail || '',
-          section_name: finalSectionName
-        };
+        return { id: s.id, full_name: fName || 'طالب غير معروف', email: eMail || '', section_name: finalSectionName };
       });
 
       const { data: qs } = await supabase.from('questions').select('*').eq('exam_id', examId);
       const { data: ans } = await supabase.from('student_answers').select('*').in('attempt_id', attempts?.map(a=>a.id) || []);
 
-      return { 
-        exam: { ...exam, subject_name: exam?.subject?.name }, 
-        students: finalStudentsData, 
-        attempts: attempts || [], 
-        questions: qs || [], 
-        answers: ans || [] 
-      };
+      return { exam: { ...exam, subject_name: exam?.subject?.name }, students: finalStudentsData, attempts: attempts || [], questions: qs || [], answers: ans || [] };
     } catch (err) {
       console.error(err);
       return { exam: null, students: [], attempts: [], questions: [], answers: [] };
@@ -126,8 +107,8 @@ export function useExamsSystem() {
   }, []);
 
   const saveExam = useCallback(async (examData: any, questions: any[], isNew: boolean) => {
-    const res = await fetch('/api/exams/save', { method: 'POST', body: JSON.stringify({ examData, questions, isNew, userId: user?.id }) });
-    if (!res.ok) throw new Error('Save failed');
+    const res = await fetch('/api/exams/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examData, questions, isNew, userId: user?.id }) });
+    if (!res.ok) throw new Error('فشل الاتصال بالخادم أثناء الحفظ');
     await fetchExams();
   }, [user, fetchExams]);
 
@@ -148,42 +129,70 @@ export function useExamsSystem() {
   }, [fetchExams]);
 
   const deleteAttempt = useCallback(async (id: string) => {
-    await fetch('/api/exams/delete-attempt', { method: 'POST', body: JSON.stringify({ attemptId: id, userId: user?.id }) });
+    await fetch('/api/exams/delete-attempt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attemptId: id, userId: user?.id }) });
     await fetchExams();
   }, [user, fetchExams]);
 
+  // --- دالة استعراض الطالب الفردي: مع خطة دمج الأسئلة يدوياً في حال فشل الـ Join ---
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string) => {
-    const [eRes, sRes, aRes] = await Promise.all([
-      supabase.from('exams').select('*').eq('id', examId).maybeSingle(),
-      supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle(),
-      supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentId).maybeSingle()
-    ]);
-    
-    let subjectName = 'مادة عامة';
-    if (eRes.data?.subject_id) {
-       const { data: subj } = await supabase.from('subjects').select('name').eq('id', eRes.data.subject_id).maybeSingle();
-       if (subj) subjectName = subj.name;
-    }
-    
-    let answers = [];
-    if (aRes.data?.id) {
-      const { data: ans } = await supabase.from('student_answers').select('*, question:questions(*, options:question_options(*))').eq('attempt_id', aRes.data.id);
-      answers = ans || [];
-    }
-    
-    let fullName = Array.isArray(sRes.data?.users) ? sRes.data?.users[0]?.full_name : sRes.data?.users?.full_name;
+    try {
+      const [eRes, sRes, aRes] = await Promise.all([
+        supabase.from('exams').select('*').eq('id', examId).maybeSingle(),
+        supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle(),
+        supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentId).maybeSingle()
+      ]);
+      
+      let subjectName = 'مادة عامة';
+      if (eRes.data?.subject_id) {
+         const { data: subj } = await supabase.from('subjects').select('name').eq('id', eRes.data.subject_id).maybeSingle();
+         if (subj) subjectName = subj.name;
+      }
+      
+      let finalAnswers: any[] = [];
+      if (aRes.data?.id) {
+        // المحاولة 1: جلب الإجابات والأسئلة معاً
+        const { data: ansData } = await supabase.from('student_answers')
+          .select('*, question:questions(*, options:question_options(*))')
+          .eq('attempt_id', aRes.data.id);
+        
+        finalAnswers = ansData || [];
 
-    if (!fullName) {
-      const { data: uRes } = await supabase.from('users').select('full_name').eq('id', studentId).maybeSingle();
-      fullName = uRes?.full_name;
-    }
+        // الخطة البديلة (Stitching): إذا تم جلب الإجابات ولكن الأسئلة مفقودة (فشل الـ Join)
+        if (finalAnswers.length > 0 && !finalAnswers[0].question) {
+           console.warn("Join failed for questions, fetching manually...");
+           const questionIds = finalAnswers.map(a => a.question_id).filter(Boolean);
+           
+           if (questionIds.length > 0) {
+             const { data: qsData } = await supabase.from('questions')
+               .select('*, options:question_options(*)')
+               .in('id', questionIds);
+               
+             if (qsData) {
+               finalAnswers = finalAnswers.map(a => ({
+                 ...a,
+                 question: qsData.find(q => q.id === a.question_id)
+               }));
+             }
+           }
+        }
+      }
+      
+      let fullName = Array.isArray(sRes.data?.users) ? sRes.data?.users[0]?.full_name : sRes.data?.users?.full_name;
+      if (!fullName) {
+        const { data: uRes } = await supabase.from('users').select('full_name').eq('id', studentId).maybeSingle();
+        fullName = uRes?.full_name;
+      }
 
-    return { 
-      exam: { ...eRes.data, subject_name: subjectName }, 
-      student: { ...sRes.data, full_name: fullName || 'طالب غير معروف' }, 
-      attempt: aRes.data, 
-      answers 
-    };
+      return { 
+        exam: { ...eRes.data, subject_name: subjectName }, 
+        student: { ...sRes.data, full_name: fullName || 'طالب غير معروف' }, 
+        attempt: aRes.data, 
+        answers: finalAnswers 
+      };
+    } catch (err) {
+      console.error("Hook Error (fetchStudentExamResult):", err);
+      throw err;
+    }
   }, []);
 
   return {
@@ -194,7 +203,7 @@ export function useExamsSystem() {
       return { exam: { ...ex, subject_name: ex?.subject?.name }, questions: qs || [] };
     },
     submitExam: async (eid: string, ans: any, score: string | number, status: string, time: number) => {
-      await fetch('/api/exams/submit-exam', { method: 'POST', body: JSON.stringify({ examId: eid, answers: ans, score, status, timeSpent: time, userId: user?.id }) });
+      await fetch('/api/exams/submit-exam', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId: eid, answers: ans, score, status, timeSpent: time, userId: user?.id }) });
       await fetchExams();
     }
   };
