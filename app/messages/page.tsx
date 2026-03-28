@@ -108,7 +108,8 @@ export default function MessagesPage() {
         };
       } else {
         // Keep the latest message as the representative
-        if (new Date(msg.created_at) > new Date(acc[convId].created_at)) {
+if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
+
           const allIds = [...acc[convId].allIds, msg.id];
           const msgCount = acc[convId].msgCount + 1;
           acc[convId] = { ...msg, allIds, msgCount, convId };
