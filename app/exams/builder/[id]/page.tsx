@@ -34,10 +34,10 @@ type ExamData = {
   start_time?: string;
   end_time?: string;
   status: 'draft' | 'published' | 'archived';
-  settings: {
+  settings?: {
     shuffle_questions: boolean;
     shuffle_options: boolean;
-    show_result_immediately: boolean;
+    show_results_immediately: boolean;
     allow_backtracking: boolean;
   };
 };
@@ -70,7 +70,7 @@ export default function QuizBuilder() {
     settings: {
       shuffle_questions: false,
       shuffle_options: false,
-      show_result_immediately: true,
+      show_results_immediately: true,
       allow_backtracking: true
     }
   });
@@ -359,7 +359,7 @@ export default function QuizBuilder() {
                         {[
                           { label: 'ترتيب الأسئلة عشوائياً', desc: 'تغيير ترتيب الأسئلة لكل طالب', key: 'shuffle_questions' },
                           { label: 'ترتيب الخيارات عشوائياً', desc: 'تغيير ترتيب خيارات الإجابة', key: 'shuffle_options' },
-                          { label: 'إظهار النتيجة فوراً', desc: 'عرض الدرجة للطالب بعد الإرسال', key: 'show_result_immediately' },
+                          { label: 'إظهار النتيجة فوراً', desc: 'عرض الدرجة للطالب بعد الإرسال', key: 'show_results_immediately' },
                         ].map((setting) => (
                           <div key={setting.key} className="flex items-center justify-between p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
                             <div>
