@@ -33,7 +33,7 @@ type ExamData = {
   exam_date: string;
   start_time?: string;
   end_time?: string;
-  status: 'draft' | 'published';
+  status: 'draft' | 'published' | 'archived';
   settings: {
     shuffle_questions: boolean;
     shuffle_options: boolean;
