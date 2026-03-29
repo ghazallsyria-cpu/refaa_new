@@ -123,7 +123,7 @@ export function useAttendanceSystem() {
       .eq('day_of_week', dbDay)
       .order('period');
 
-    const schedule = (data as ScheduleRow[]) ?? [];
+    const schedule = (data as unknown as ScheduleRow[]) ?? [];
     setDaySchedule(schedule);
     return schedule;
   }, [user, authRole]);
