@@ -55,6 +55,7 @@ export const StudentSchema = z.object({
   user_id: z.string().uuid(),
   national_id: z.string().min(1),
   section_id: z.string().uuid(),
+  parent_id: z.string().uuid().nullable().optional(),
   next_year_track: z.enum(['scientific', 'literary']).nullable().optional(),
   track_selection_date: z.string().optional().nullable(),
   users: UserSchema.partial().optional(),

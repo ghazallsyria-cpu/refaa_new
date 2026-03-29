@@ -34,7 +34,14 @@ export default function StudentsPage() {
     section_id: '',
     parent_id: ''
   });
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    full_name: string;
+    national_id: string;
+    email: string;
+    phone: string;
+    parent_id: string;
+    next_year_track: 'scientific' | 'literary' | '' | null;
+  }>({
     full_name: '',
     national_id: '',
     email: '',
@@ -83,7 +90,18 @@ export default function StudentsPage() {
 
   const handleEditSubmit = async () => {
     try {
-      await updateStudent(editingStudent.id, editingStudent.national_id, editForm);
+      if (!editingStudent) return;
+      
+      const updateData = {
+        full_name: editForm.full_name,
+        national_id: editForm.national_id,
+        email: editForm.email,
+        phone: editForm.phone,
+        parent_id: editForm.parent_id || null,
+        next_year_track: editForm.next_year_track === '' ? null : (editForm.next_year_track as 'scientific' | 'literary')
+      };
+      
+      await updateStudent(editingStudent.id, editingStudent.national_id, updateData);
       alert('تم تحديث بيانات الطالب بنجاح');
       setShowEditModal(false);
     } catch (error: any) {
