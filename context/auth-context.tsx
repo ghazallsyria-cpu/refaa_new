@@ -10,6 +10,7 @@ import { User, UserRole } from '@/types';
 interface AuthContextType {
   user: SupabaseUser | null;
   authRole: UserRole | null;
+  userRole: UserRole | null;
   userName: string;
   mustResetPassword: boolean;
   isChecking: boolean;
@@ -324,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{ 
       user, 
       authRole, 
+      userRole: authRole,
       userName, 
       mustResetPassword,
       isChecking, 
