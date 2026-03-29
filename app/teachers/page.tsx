@@ -178,7 +178,7 @@ export default function TeachersPage() {
     });
 
     try {
-      await assignTeacherToSections(selectedTeacher.id, newAssignments);
+      await assignTeacherToSections(newAssignments); // ← تم الإصلاح هنا: إزالة المُعامل الزائد
       const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
       setTeacherSections(refreshed);
       setBulkAssignData({ section_ids: [], subject_ids: [] });
@@ -973,7 +973,7 @@ export default function TeachersPage() {
                                 : 'bg-white text-amber-700 border border-amber-100 hover:border-amber-300'
                               }`}
                             >
-                              {section.classes?.name} - {section.name}
+                              {(section as { classes?: { name?: string } }).classes?.name} - {section.name} {/* ← التعديل الاستباقي هنا */}
                             </button>
                           ))}
                         </div>
@@ -1002,7 +1002,7 @@ export default function TeachersPage() {
                     <div key={section.id} className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
                       <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                        {section.classes?.name} - {section.name}
+                        {(section as { classes?: { name?: string } }).classes?.name} - {section.name} {/* ← التعديل الاستباقي هنا */}
                       </h4>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {subjects.map(subject => {
@@ -1090,3 +1090,4 @@ export default function TeachersPage() {
     </div>
   );
 }
+
