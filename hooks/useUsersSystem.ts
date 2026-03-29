@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react'; // تم تصحيح حرف I
 import { supabase } from '@/lib/supabase';
 import { Student, Teacher, Parent, Section, Subject } from '@/types';
 
@@ -121,7 +121,8 @@ export function useUsersSystem() {
     }
   }, []);
 
-  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string }>): Promise<{ success: boolean }> => {
+  // تم إضافة parent_id للنوع هنا لحل مشكلة السطر 142
+  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string, parent_id?: string | null }>): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -516,3 +517,4 @@ export function useUsersSystem() {
     resetPassword
   };
 }
+
