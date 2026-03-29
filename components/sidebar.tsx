@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { motion } from 'motion/react';
-import { cn } from '@/lib/utils';
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
   Users,
@@ -24,8 +22,16 @@ import {
   Award,
   ChevronRight,
   ChevronLeft,
-  X
+  X,
+  Compass
 } from 'lucide-react';
+
+// Helping utility for class names since we can't import cn from '@/lib/utils' in this environment
+const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+
+// Mocking usePathname and Link for the preview environment
+const usePathname = () => '/';
+const Link = ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>;
 
 const navigation = [
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
@@ -43,6 +49,7 @@ const navigation = [
   { name: 'الحصص الحية', href: '/live', icon: Clock },
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
+  { name: 'تحديد المسار', href: '/dashboard/student/track', icon: Compass }, 
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
   { name: 'الرسائل', href: '/messages', icon: MessageSquare },
@@ -53,20 +60,33 @@ const navigation = [
   { name: 'الإعدادات', href: '/settings', icon: Settings },
 ];
 
+export default function App() {
+  return (
+    <div className="h-screen w-full bg-slate-100 flex">
+      <Sidebar userRole="student" userGrade="10" />
+      <main className="flex-1 p-8 overflow-auto">
+        <h1 className="text-2xl font-bold text-slate-800">محتوى الصفحة الرئيسية</h1>
+        <p className="text-slate-500 mt-2">جرب القائمة الجانبية للتنقل بين الأقسام.</p>
+      </main>
+    </div>
+  );
+}
+
 export function Sidebar({ 
   onClose, 
   userRole = 'admin', 
+  userGrade = '10', 
   isCollapsed = false, 
   onToggleCollapse 
 }: { 
   onClose?: () => void, 
   userRole?: string,
+  userGrade?: string,
   isCollapsed?: boolean,
   onToggleCollapse?: () => void
 }) {
   const pathname = usePathname();
 
-  // Filter navigation based on user role
   const filteredNavigation = navigation.filter(item => {
     if (userRole === 'admin' || userRole === 'management') return true;
     
@@ -75,7 +95,11 @@ export function Sidebar({
     }
     
     if (userRole === 'student') {
-      return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
+      const studentItems = ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'];
+      if (userGrade === '10') {
+        studentItems.push('تحديد المسار');
+      }
+      return studentItems.includes(item.name);
     }
     
     if (userRole === 'parent') {
@@ -85,7 +109,6 @@ export function Sidebar({
     return false;
   });
 
-  // Map role to display name
   const roleDisplayNames: Record<string, string> = {
     'admin': 'المدير العام',
     'management': 'الإدارة',
@@ -97,32 +120,23 @@ export function Sidebar({
 
   return (
     <div className={cn(
-      "flex h-full flex-col bg-slate-900 text-slate-300 border-l border-slate-800/50 shadow-2xl relative overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.4,0,0.2,1)]",
-      isCollapsed ? "w-20" : "w-72",
-      "group/sidebar"
-    )}>
-      {/* Interactive Peek Handle (Only when hidden on desktop) */}
-      <div className="absolute inset-y-0 right-0 w-1 bg-indigo-500/0 group-hover/sidebar:bg-indigo-500/20 transition-all duration-500" />
-
+      "flex h-full flex-col bg-slate-900 text-slate-300 border-l border-slate-800/50 shadow-2xl relative overflow-hidden transition-all duration-700",
+      isCollapsed ? "w-20" : "w-72"
+    )} dir="rtl">
       {/* Decorative background elements */}
-      <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2 animate-pulse" />
-      <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/2 animate-pulse" />
-      <div className="absolute top-1/2 left-0 w-48 h-48 bg-indigo-600/5 blur-[80px] rounded-full -translate-x-1/2" />
+      <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2" />
+      <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/2" />
 
+      {/* Header (Logo) */}
       <div className={cn(
         "flex h-24 shrink-0 items-center border-b border-slate-800/50 relative z-10 transition-all duration-700",
         isCollapsed ? "justify-center px-0" : "justify-between px-6"
       )}>
         <motion.div 
-          initial={false}
-          animate={{ 
-            opacity: isCollapsed ? 0 : 1,
-            scale: isCollapsed ? 0.8 : 1,
-            x: isCollapsed ? 20 : 0
-          }}
-          className={cn("flex items-center gap-3 transition-all duration-500", isCollapsed ? "pointer-events-none" : "")}
+          animate={{ opacity: isCollapsed ? 0 : 1, x: isCollapsed ? 20 : 0 }}
+          className={cn("flex items-center gap-3", isCollapsed ? "pointer-events-none" : "")}
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20 group-hover:rotate-6 transition-transform">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20">
             <School className="h-6 w-6 text-white" />
           </div>
           <div className="flex flex-col">
@@ -132,40 +146,27 @@ export function Sidebar({
         </motion.div>
         
         {isCollapsed && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20"
-          >
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-white/20">
             <School className="h-6 w-6 text-white" />
-          </motion.div>
+          </div>
         )}
 
         <div className="flex items-center gap-1">
           {onToggleCollapse && (
             <button 
               onClick={onToggleCollapse}
-              className="hidden lg:flex p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all active:scale-90"
-              title={isCollapsed ? "توسيع القائمة" : "طي القائمة"}
+              className="hidden lg:flex p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all"
             >
               {isCollapsed ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-            </button>
-          )}
-          {onClose && (
-            <button 
-              onClick={onClose}
-              className="lg:hidden p-2 text-slate-500 hover:text-white rounded-xl hover:bg-white/5 transition-all active:scale-90"
-            >
-              <X className="h-5 w-5" />
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-y-auto py-6 px-3 custom-scrollbar relative z-10">
+      {/* Navigation List */}
+      <div className="flex flex-1 flex-col overflow-y-auto py-6 px-3 relative z-10">
         <nav className="space-y-1.5">
           {filteredNavigation.map((item, idx) => {
-            // Special handling for dashboard route based on role
             let itemHref = item.href;
             if (item.name === 'لوحة التحكم') {
               if (userRole === 'student') itemHref = '/dashboard/student';
@@ -174,7 +175,7 @@ export function Sidebar({
               else if (userRole === 'admin' || userRole === 'management') itemHref = '/dashboard';
             }
 
-            const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
+            const isActive = pathname === itemHref;
             return (
               <motion.div
                 key={item.name}
@@ -184,41 +185,33 @@ export function Sidebar({
               >
                 <Link
                   href={itemHref}
-                  onClick={onClose}
-                  title={isCollapsed ? item.name : undefined}
                   className={cn(
                     "flex items-center rounded-xl text-sm font-medium transition-all duration-300 group relative overflow-hidden",
                     isCollapsed ? "justify-center p-3" : "px-4 py-3.5",
                     isActive 
                       ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" 
-                      : "hover:bg-white/5 hover:text-white text-slate-400"
+                      : "hover:bg-white/5 hover:text-white text-slate-400",
+                    item.name === 'تحديد المسار' && !isActive && "text-emerald-400 hover:text-emerald-300"
                   )}
                 >
-                  {isActive && (
-                    <motion.div 
-                      layoutId="sidebar-active"
-                      className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 -z-10"
-                    />
-                  )}
                   <item.icon
                     className={cn(
                       "h-5 w-5 shrink-0 transition-all duration-300",
                       !isCollapsed && "ml-3.5",
-                      isActive ? "text-white scale-110" : "text-slate-500 group-hover:text-indigo-400 group-hover:scale-110"
+                      isActive ? "text-white scale-110" : "text-slate-500 group-hover:text-indigo-400 group-hover:scale-110",
+                      item.name === 'تحديد المسار' && !isActive && "text-emerald-500"
                     )}
-                    aria-hidden="true"
                   />
-                  <span className={cn(
-                    "relative z-10 transition-all duration-500 whitespace-nowrap font-bold",
-                    isCollapsed ? "w-0 opacity-0 scale-0 overflow-hidden" : "w-auto opacity-100 scale-100"
-                  )}>
-                    {item.name}
-                  </span>
-                  {isActive && !isCollapsed && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-white rounded-l-full shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
+                  {!isCollapsed && (
+                    <span className="relative z-10 whitespace-nowrap font-bold">
+                      {item.name}
+                    </span>
                   )}
-                  {isActive && isCollapsed && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-white rounded-l-full shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
+                  {isActive && (
+                    <div className={cn(
+                      "absolute right-0 top-1/2 -translate-y-1/2 w-1.5 bg-white rounded-l-full",
+                      isCollapsed ? "h-8" : "h-6"
+                    )} />
                   )}
                 </Link>
               </motion.div>
@@ -227,24 +220,28 @@ export function Sidebar({
         </nav>
       </div>
       
-      <div className={cn("p-4 border-t border-slate-800/50 relative z-10 transition-all duration-700", isCollapsed ? "items-center" : "")}>
+      {/* Footer Info */}
+      <div className={cn("p-4 border-t border-slate-800/50 relative z-10 transition-all duration-700", isCollapsed ? "flex justify-center" : "")}>
         <div className={cn(
-          "bg-white/5 backdrop-blur-sm rounded-xl flex items-center border border-white/5 hover:bg-white/10 transition-all duration-500 cursor-pointer group overflow-hidden",
-          isCollapsed ? "justify-center p-2" : "gap-3 p-3"
+          "bg-white/5 backdrop-blur-sm rounded-xl flex items-center border border-white/5 hover:bg-white/10 transition-all duration-500 cursor-pointer group overflow-hidden w-full",
+          isCollapsed ? "justify-center p-2 w-12" : "gap-3 p-3"
         )}>
           <div className="relative shrink-0">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-xs shadow-lg ring-2 ring-white/10 group-hover:scale-105 transition-transform">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-black text-xs shadow-lg ring-2 ring-white/10">
               {roleDisplayName.substring(0, 2)}
             </div>
-            <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-sm" />
+            {!isCollapsed && (
+              <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-sm" />
+            )}
           </div>
-          <div className={cn(
-            "flex flex-col overflow-hidden transition-all duration-700",
-            isCollapsed ? "w-0 opacity-0 scale-0" : "w-auto opacity-100 scale-100"
-          )}>
-            <span className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">{roleDisplayName}</span>
-            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">لوحة التحكم</span>
-          </div>
+          {!isCollapsed && (
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">{roleDisplayName}</span>
+              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                {userRole === 'student' ? `الصف ${userGrade}` : 'لوحة التحكم'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
