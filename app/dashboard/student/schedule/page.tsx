@@ -44,7 +44,7 @@ export default function StudentSchedulePage() {
 
         setSchedule(scheduleData || []);
 
-        // 3. جلب أوقات الحصص الرسمية المبرمجة من قبل الإدارة (الـ 5 حصص)
+        // 3. جلب أوقات الحصص الرسمية المبرمجة
         const { data: periodsData } = await supabase
           .from('class_periods')
           .select('*')
@@ -63,12 +63,11 @@ export default function StudentSchedulePage() {
     fetchScheduleData();
   }, [fetchScheduleData]);
 
-  // دالة المطابقة الآمنة (تقارن القيم كنصوص لتجنب أي أخطاء)
+  // دالة المطابقة الآمنة (تقارن القيم كنصوص)
   const getCellData = (day: number, period: number) => {
     return schedule.find(s => String(s.day_of_week) === String(day) && String(s.period) === String(period));
   };
 
-  // استخراج آمن لبيانات المادة والمعلم للحفاظ على نظافة الكود في الواجهة
   const getSubjectName = (cellData: any) => {
     if (!cellData?.subjects) return null;
     const subject = Array.isArray(cellData.subjects) ? cellData.subjects[0] : cellData.subjects;
@@ -93,7 +92,15 @@ export default function StudentSchedulePage() {
     );
   }
 
-  // استخراج اسم الصف والشعبة
+  // --- الفلتر الذكي للحصص ---
+  // حساب أقصى رقم حصة في جدول الطالب الفعلي، مع تعيين 5 كحد أدنى لتجنب شكل الجدول الصغير
+  const maxScheduledPeriod = schedule.length > 0 
+    ? Math.max(...schedule.map(s => Number(s.period) || 0)) 
+    : 5;
+
+  // قص وإخفاء أي حصص إضافية من الإدارة (مثل 6، 7، 8) إذا لم يكن الطالب يحتاجها
+  const displayPeriods = periods.filter(p => Number(p.period_number) <= Math.max(maxScheduledPeriod, 5));
+
   const sectionData = Array.isArray(studentInfo?.sections) ? studentInfo.sections[0] : studentInfo?.sections;
   const classData = Array.isArray(sectionData?.classes) ? sectionData.classes[0] : sectionData?.classes;
   const sectionName = sectionData?.name || '';
@@ -121,12 +128,11 @@ export default function StudentSchedulePage() {
 
       <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          {/* استعادة التصميم الأصلي للجدول: min-w-full و table-fixed */}
           <table className="min-w-full divide-y divide-slate-200 border-collapse table-fixed">
             <thead className="bg-slate-50">
               <tr>
                 <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50">اليوم / الحصة</th>
-                {periods.map(period => (
+                {displayPeriods.map(period => (
                   <th key={period.id} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200">
                     <div className="flex flex-col items-center gap-1">
                       <Clock className="h-4 w-4 text-indigo-500" />
@@ -145,8 +151,8 @@ export default function StudentSchedulePage() {
               {DAYS.map((day) => (
                 <tr key={day.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80">{day.name}</td>
-                  {periods.map(period => {
-                    const cellData = getCellData(day.id, period.period_number);
+                  {displayPeriods.map(period => {
+                    const cellData = getCellData(day.id, Number(period.period_number));
                     const subjectName = getSubjectName(cellData);
                     const { name: teacherName, zoom: zoomLink } = getTeacherData(cellData);
 
