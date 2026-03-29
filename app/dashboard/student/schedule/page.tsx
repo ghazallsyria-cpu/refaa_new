@@ -17,15 +17,15 @@ const DAYS = [
 export default function StudentSchedulePage() {
   const { user } = useAuth();
   const [schedule, setSchedule] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState<any>(null);
 
-  // جلب البيانات مباشرة بنفس طريقة الداشبورد الناجحة
-  const fetchDirectSchedule = useCallback(async () => {
+  const fetchScheduleData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // 1. جلب بيانات الطالب وشعبته
+      // 1. جلب بيانات الطالب للوصول إلى شعبته
       const { data: student, error: studentError } = await supabase
         .from('students')
         .select('section_id, sections(name, classes(name))')
@@ -33,69 +33,55 @@ export default function StudentSchedulePage() {
         .single();
 
       if (studentError) throw studentError;
-      if (!student || !student.section_id) {
-        setLoading(false);
-        return;
-      }
-
       setStudentInfo(student);
 
-      // 2. جلب جدول الحصص بناءً على الشعبة (باستخدام الاستعلام الصحيح)
-      const { data: scheduleData, error: scheduleError } = await supabase
-        .from('schedules')
-        .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
-        .eq('section_id', student.section_id)
-        .order('day_of_week')
-        .order('period');
+      if (student?.section_id) {
+        // 2. جلب الحصص المجدولة لهذه الشعبة
+        const { data: scheduleData } = await supabase
+          .from('schedules')
+          .select('id, day_of_week, period, subjects(name), teachers(zoom_link, users(full_name))')
+          .eq('section_id', student.section_id);
 
-      if (scheduleError) throw scheduleError;
-      
-      setSchedule(scheduleData || []);
+        setSchedule(scheduleData || []);
 
+        // 3. جلب أوقات الحصص الرسمية المبرمجة من قبل الإدارة (الـ 5 حصص)
+        const { data: periodsData } = await supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number');
+
+        setPeriods(periodsData || []);
+      }
     } catch (error) {
-      console.error('Error fetching direct schedule:', error);
+      console.error('Error fetching student schedule data:', error);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    fetchDirectSchedule();
-  }, [fetchDirectSchedule]);
+    fetchScheduleData();
+  }, [fetchScheduleData]);
 
-  // تحديد عدد أعمدة الحصص (7 افتراضي أو أقصى حصة مسجلة)
-  const maxPeriod = schedule.reduce((max, s) => Math.max(max, Number(s.period) || 0), 7);
-  const periodColumns = Array.from({ length: maxPeriod }, (_, i) => i + 1);
-
-  // استخراج أوقات الحصة
-  const getPeriodTime = (periodNum: number) => {
-    const session = schedule.find(s => Number(s.period) === periodNum && s.start_time);
-    if (session && session.start_time && session.end_time) {
-      return `${String(session.start_time).substring(0, 5)} - ${String(session.end_time).substring(0, 5)}`;
-    }
-    return null;
+  // دالة المطابقة الآمنة (تقارن القيم كنصوص لتجنب أي أخطاء)
+  const getCellData = (day: number, period: number) => {
+    return schedule.find(s => String(s.day_of_week) === String(day) && String(s.period) === String(period));
   };
 
-  // مطابقة الخلية (اليوم + الحصة)
-  const getCellData = (dayId: number, periodNum: number) => {
-    return schedule.find(s => Number(s.day_of_week) === dayId && Number(s.period) === periodNum);
+  // استخراج آمن لبيانات المادة والمعلم للحفاظ على نظافة الكود في الواجهة
+  const getSubjectName = (cellData: any) => {
+    if (!cellData?.subjects) return null;
+    const subject = Array.isArray(cellData.subjects) ? cellData.subjects[0] : cellData.subjects;
+    return subject?.name || null;
   };
 
-  // استخراج اسم المادة
-  const getSubjectName = (cell: any) => {
-    if (!cell || !cell.subjects) return 'بدون مادة';
-    const subj = Array.isArray(cell.subjects) ? cell.subjects[0] : cell.subjects;
-    return subj?.name || 'بدون مادة';
-  };
-
-  // استخراج بيانات المعلم والزووم
-  const getTeacherData = (cell: any) => {
-    if (!cell || !cell.teachers) return { name: 'غير محدد', zoom: '' };
-    const teacher = Array.isArray(cell.teachers) ? cell.teachers[0] : cell.teachers;
-    const userObj = Array.isArray(teacher?.users) ? teacher.users[0] : teacher?.users;
+  const getTeacherData = (cellData: any) => {
+    if (!cellData?.teachers) return { name: null, zoom: null };
+    const teacher = Array.isArray(cellData.teachers) ? cellData.teachers[0] : cellData.teachers;
+    const user = Array.isArray(teacher?.users) ? teacher.users[0] : teacher?.users;
     return {
-      name: userObj?.full_name || 'غير محدد',
-      zoom: teacher?.zoom_link || ''
+      name: user?.full_name || null,
+      zoom: teacher?.zoom_link || null
     };
   };
 
@@ -107,16 +93,17 @@ export default function StudentSchedulePage() {
     );
   }
 
+  // استخراج اسم الصف والشعبة
   const sectionData = Array.isArray(studentInfo?.sections) ? studentInfo.sections[0] : studentInfo?.sections;
   const classData = Array.isArray(sectionData?.classes) ? sectionData.classes[0] : sectionData?.classes;
-  const sectionName = sectionData?.name || 'غير محدد';
-  const className = classData?.name || 'غير محدد';
+  const sectionName = sectionData?.name || '';
+  const className = classData?.name || '';
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-8 max-w-7xl mx-auto w-full"
+      className="space-y-8 pb-8 max-w-7xl mx-auto"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
         <div>
@@ -132,99 +119,87 @@ export default function StudentSchedulePage() {
         </div>
       </div>
 
-      {schedule.length === 0 ? (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 text-center">
-          <Calendar className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-slate-700">لم يتم إضافة جدول دراسي بعد</h3>
-          <p className="text-slate-500 mt-2">لا توجد حصص مرتبطة بشعبتك الدراسية في الوقت الحالي.</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden w-full relative">
-          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-transparent">
-            <table className="w-full min-w-max divide-y divide-slate-200 border-collapse">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50 sticky right-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                    اليوم / الحصة
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          {/* استعادة التصميم الأصلي للجدول: min-w-full و table-fixed */}
+          <table className="min-w-full divide-y divide-slate-200 border-collapse table-fixed">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50">اليوم / الحصة</th>
+                {periods.map(period => (
+                  <th key={period.id} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200">
+                    <div className="flex flex-col items-center gap-1">
+                      <Clock className="h-4 w-4 text-indigo-500" />
+                      <span>الحصة {period.period_number}</span>
+                      {period.start_time && period.end_time && (
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
+                          {String(period.start_time).substring(0, 5)} - {String(period.end_time).substring(0, 5)}
+                        </span>
+                      )}
+                    </div>
                   </th>
-                  {periodColumns.map(periodNum => {
-                    const timeString = getPeriodTime(periodNum);
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {DAYS.map((day) => (
+                <tr key={day.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80">{day.name}</td>
+                  {periods.map(period => {
+                    const cellData = getCellData(day.id, period.period_number);
+                    const subjectName = getSubjectName(cellData);
+                    const { name: teacherName, zoom: zoomLink } = getTeacherData(cellData);
+
                     return (
-                      <th key={`header-${periodNum}`} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 min-w-[160px]">
-                        <div className="flex flex-col items-center gap-1">
-                          <Clock className="h-4 w-4 text-indigo-500" />
-                          <span>الحصة {periodNum}</span>
-                          {timeString && (
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
-                              {timeString}
-                            </span>
-                          )}
-                        </div>
-                      </th>
+                      <td key={`${day.id}-${period.id}`} className="p-3 border-l border-slate-200 h-32 align-top min-w-[140px]">
+                        {cellData && subjectName ? (
+                          <motion.div 
+                            whileHover={{ scale: 1.02 }}
+                            className="h-full flex flex-col justify-between bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-3 border border-indigo-100 shadow-sm"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 text-indigo-600 mb-1">
+                                <BookOpen className="h-3.5 w-3.5" />
+                                <span className="text-[10px] font-black uppercase tracking-wider">مادة</span>
+                              </div>
+                              <div className="font-black text-slate-900 text-sm leading-tight">{subjectName}</div>
+                            </div>
+                            <div className="mt-3 pt-2 border-t border-indigo-100/50 flex flex-col gap-2">
+                              {teacherName && (
+                                <div className="flex items-center gap-1.5 text-slate-400">
+                                  <User className="h-3 w-3" />
+                                  <div className="text-[11px] font-bold text-slate-600 truncate">{teacherName}</div>
+                                </div>
+                              )}
+                              {zoomLink && (
+                                <a 
+                                  href={zoomLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center justify-center gap-1.5 py-1 px-2 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors"
+                                >
+                                  <span>دخول الحصة (Zoom)</span>
+                                </a>
+                              )}
+                            </div>
+                          </motion.div>
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-slate-200">
+                            <div className="h-1 w-4 bg-slate-100 rounded-full" />
+                          </div>
+                        )}
+                      </td>
                     );
                   })}
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {DAYS.map((day) => (
-                  <tr key={`day-${day.id}`} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/90 sticky right-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                      {day.name}
-                    </td>
-                    {periodColumns.map(periodNum => {
-                      const cellData = getCellData(day.id, periodNum);
-                      const subjectName = getSubjectName(cellData);
-                      const { name: teacherName, zoom: zoomLink } = getTeacherData(cellData);
-
-                      return (
-                        <td key={`cell-${day.id}-${periodNum}`} className="p-3 border-l border-slate-200 h-36 align-top bg-white">
-                          {cellData ? (
-                            <motion.div 
-                              whileHover={{ scale: 1.02 }}
-                              className="h-full flex flex-col justify-between bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-4 border border-indigo-100 shadow-sm"
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1.5 text-indigo-600 mb-1">
-                                  <BookOpen className="h-4 w-4" />
-                                  <span className="text-[11px] font-black uppercase tracking-wider">مادة</span>
-                                </div>
-                                <div className="font-black text-slate-900 text-base leading-tight break-words">{subjectName}</div>
-                              </div>
-                              <div className="mt-4 pt-3 border-t border-indigo-100/50 flex flex-col gap-2">
-                                <div className="flex items-center gap-1.5 text-slate-500">
-                                  <User className="h-3.5 w-3.5" />
-                                  <div className="text-xs font-bold truncate" title={teacherName}>{teacherName}</div>
-                                </div>
-                                {zoomLink && zoomLink.trim() !== '' && (
-                                  <a 
-                                    href={zoomLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-1.5 py-1.5 px-2 mt-1 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-colors shadow-sm"
-                                  >
-                                    <span>دخول الحصة</span>
-                                  </a>
-                                )}
-                              </div>
-                            </motion.div>
-                          ) : (
-                            <div className="h-full w-full flex items-center justify-center text-slate-200">
-                              <div className="h-1 w-6 bg-slate-100 rounded-full" />
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-        <div className="p-2 bg-amber-100 rounded-lg shrink-0">
+        <div className="p-2 bg-amber-100 rounded-lg">
           <Clock className="h-5 w-5 text-amber-600" />
         </div>
         <div>
