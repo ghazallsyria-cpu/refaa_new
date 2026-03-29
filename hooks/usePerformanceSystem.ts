@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react'; // تم تصحيح حرف I
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
@@ -41,7 +41,7 @@ export function usePerformanceSystem() {
     setError(null);
     try {
       // Fetch student info
-      const { data: student, error: studentError } = await supabase
+      const { data: studentData, error: studentError } = await supabase
         .from('students')
         .select(`
           id,
@@ -53,7 +53,7 @@ export function usePerformanceSystem() {
       if (studentError) throw studentError;
 
       // Fetch exam attempts
-      const { data: attempts, error: attemptsError } = await supabase
+      const { data: attemptsData, error: attemptsError } = await supabase
         .from('exam_attempts')
         .select(`
           id,
@@ -68,7 +68,7 @@ export function usePerformanceSystem() {
       if (attemptsError) throw attemptsError;
 
       // Fetch assignment submissions
-      const { data: submissions, error: submissionsError } = await supabase
+      const { data: submissionsData, error: submissionsError } = await supabase
         .from('assignment_submissions')
         .select(`
           id,
@@ -83,28 +83,63 @@ export function usePerformanceSystem() {
 
       if (submissionsError) throw submissionsError;
 
+      // تنسيق بيانات الطالب (لتحويل المصفوفات العائدة من Supabase إلى كائنات مفردة)
+      const rawStudent = studentData as any; // نستخدم any هنا داخلياً فقط لتسهيل التحويل اليدوي للـ Interface
+      const section = Array.isArray(rawStudent.sections) ? rawStudent.sections[0] : rawStudent.sections;
+      const className = Array.isArray(section?.classes) ? section.classes[0] : section?.classes;
+
+      const formattedStudent = {
+        id: rawStudent.id,
+        sections: {
+          name: section?.name || '',
+          classes: { name: className?.name || '' }
+        }
+      };
+
+      // تنسيق بيانات الاختبارات
+      const formattedAttempts = (attemptsData || []).map(a => {
+        const rawA = a as any;
+        const exam = Array.isArray(rawA.exams) ? rawA.exams[0] : rawA.exams;
+        const subject = Array.isArray(exam?.subjects) ? exam.subjects[0] : exam?.subjects;
+        return {
+          ...rawA,
+          exams: { ...exam, subjects: subject }
+        };
+      });
+
+      // تنسيق بيانات الواجبات
+      const formattedSubmissions = (submissionsData || []).map(s => {
+        const rawS = s as any;
+        const assignment = Array.isArray(rawS.assignments) ? rawS.assignments[0] : rawS.assignments;
+        const subject = Array.isArray(assignment?.subjects) ? assignment.subjects[0] : assignment?.subjects;
+        return {
+          ...rawS,
+          assignments: { ...assignment, subjects: subject }
+        };
+      });
+
       // Calculate stats
-      const gradedExams = (attempts || []).filter(a => a.status === 'graded' || a.status === 'completed');
+      const gradedExams = formattedAttempts.filter(a => a.status === 'graded' || a.status === 'completed');
       const avgExam = gradedExams.length > 0 
         ? gradedExams.reduce((acc, curr) => acc + (curr.score || 0), 0) / gradedExams.length 
         : 0;
 
-      const gradedAssignments = (submissions || []).filter(s => s.status === 'graded');
+      const gradedAssignments = formattedSubmissions.filter(s => s.status === 'graded');
       const avgAssignment = gradedAssignments.length > 0
         ? gradedAssignments.reduce((acc, curr) => acc + (curr.grade || 0), 0) / gradedAssignments.length
         : 0;
 
       return {
-        student,
-        examAttempts: attempts || [],
-        assignmentSubmissions: submissions || [],
+        student: formattedStudent,
+        examAttempts: formattedAttempts,
+        assignmentSubmissions: formattedSubmissions,
         stats: {
           avgExamScore: Math.round(avgExam),
           avgAssignmentScore: Math.round(avgAssignment),
-          completedExams: attempts?.length || 0,
-          completedAssignments: submissions?.length || 0
+          completedExams: attemptsData?.length || 0,
+          completedAssignments: submissionsData?.length || 0
         }
-      };
+      } as PerformanceData;
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error fetching performance data';
       console.error('Error fetching performance data:', err);
@@ -121,3 +156,4 @@ export function usePerformanceSystem() {
     fetchPerformanceData
   };
 }
+
