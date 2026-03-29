@@ -2,8 +2,11 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video } from 'lucide-react';
-// إضافة استيراد motion المفقود هنا ✅
+// تم تصحيح قائمة الاستيراد لتشمل Trash2 و Video وكافة الأيقونات المستخدمة
+import { 
+  Printer, User, Users, Info, X, Plus, 
+  Calendar, AlertCircle, Clock, Video, Trash2 
+} from 'lucide-react';
 import { motion } from 'motion/react'; 
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -34,7 +37,6 @@ export default function SchedulePage() {
   const [selectedSlot, setSelectedSlot] = useState<{day: number, period: number} | null>(null);
   const [formData, setFormData] = useState({ teacher_id: '', section_id: '', subject_id: '' });
   const [assignments, setAssignments] = useState<any[]>([]);
-  const [copiedLesson, setCopiedLesson] = useState<any | null>(null);
   const [showAllSchedules, setShowAllSchedules] = useState(true);
   const [swappingFrom, setSwappingFrom] = useState<any | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,7 +50,6 @@ export default function SchedulePage() {
     deleteSchedule,
     checkConflicts,
     swapSchedules,
-    notifyScheduleChange,
     fetchStudentSection
   } = useSchedulesSystem();
 
@@ -238,7 +239,7 @@ export default function SchedulePage() {
           <table className="w-full min-w-max divide-y divide-slate-200 border-collapse">
             <thead className="bg-slate-50">
               <tr>
-                <th className="py-5 px-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-l border-slate-200 w-32 bg-slate-100/50 sticky right-0 z-10">اليوم / الحصة</th>
+                <th className="py-5 px-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-l border-slate-200 w-32 bg-slate-100/50 sticky right-0 z-10 shadow-sm">اليوم / الحصة</th>
                 {displayPeriods.map(p => (
                   <th key={p.id} className="py-5 px-4 text-center border-l border-slate-200 min-w-[170px]">
                     <div className="flex flex-col items-center">
@@ -298,7 +299,10 @@ export default function SchedulePage() {
                               )}
                               {isAdmin && (
                                 <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button onClick={(e) => { e.stopPropagation(); if(confirm('حذف؟')) deleteSchedule(displaySlot.id).then(() => fetchSchedule()); }} className="p-1.5 bg-red-500/20 hover:bg-red-500 text-white rounded-lg transition-colors">
+                                  <button onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    if(confirm('حذف؟')) deleteSchedule(displaySlot.id).then(() => fetchSchedule()); 
+                                  }} className="p-1.5 bg-red-500/20 hover:bg-red-500 text-white rounded-lg transition-colors">
                                     <Trash2 className="h-3 w-3" />
                                   </button>
                                 </div>
