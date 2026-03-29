@@ -26,7 +26,7 @@ type Track = 'scientific' | 'literary';
 export default function TrackPage() {
   const { user, userRole } = useAuth();
   const { fetchStudentProfile, selectTrack } = useUsersSystem();
-  const { showNotification } = useNotifications();
+  const { sendNotification } = useNotifications()!;
   const router = useRouter();
 
   const [step, setStep] = useState<Step>('selection');
