@@ -178,7 +178,7 @@ export default function TeachersPage() {
     });
 
     try {
-      await assignTeacherToSections(newAssignments); // ← تم الإصلاح هنا: إزالة المُعامل الزائد
+      await assignTeacherToSections(newAssignments); 
       const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
       setTeacherSections(refreshed);
       setBulkAssignData({ section_ids: [], subject_ids: [] });
@@ -247,27 +247,29 @@ export default function TeachersPage() {
     'التربية الإسلامية', 'الدراسات الاجتماعية', 'الحاسوب', 'التربية الفنية', 
     'التربية البدنية', 'الموسيقى'
   ];
+  
   const specializations = Array.from(new Set([
     'الكل',
     ...defaultSpecializations,
-    ...teachers.map(t => t.specialization).filter(Boolean)
+    ...teachers.map(t => (t as { specialization?: string }).specialization).filter(Boolean)
   ])) as string[];
 
-  const filteredTeachers = teachers.filter(teacher => 
-    (selectedFolder ? (teacher.specialization || 'غير محدد') === selectedFolder : (activeTab === 'الكل' || teacher.specialization === activeTab)) &&
+  const filteredTeachers = teachers.filter(teacher => {
+    const spec = (teacher as { specialization?: string }).specialization;
+    return (selectedFolder ? (spec || 'غير محدد') === selectedFolder : (activeTab === 'الكل' || spec === activeTab)) &&
     (teacher.users?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    teacher.national_id?.includes(searchQuery))
-  );
+    teacher.national_id?.includes(searchQuery));
+  });
 
   const groupedTeachers = filteredTeachers.reduce((acc, teacher) => {
-    const spec = teacher.specialization || 'غير محدد';
+    const spec = (teacher as { specialization?: string }).specialization || 'غير محدد';
     if (!acc[spec]) acc[spec] = [];
     acc[spec].push(teacher);
     return acc;
   }, {} as Record<string, any[]>);
 
   // Get all unique specializations from all teachers (not just filtered)
-  const allSpecializations = Array.from(new Set(teachers.map(t => t.specialization || 'غير محدد'))).sort();
+  const allSpecializations = Array.from(new Set(teachers.map(t => (t as { specialization?: string }).specialization || 'غير محدد'))).sort();
 
   return (
     <div className="space-y-10 relative pb-20">
@@ -385,7 +387,7 @@ export default function TeachersPage() {
       {!selectedFolder ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {allSpecializations.map((spec, idx) => {
-            const count = teachers.filter(t => (t.specialization || 'غير محدد') === spec).length;
+            const count = teachers.filter(t => ((t as { specialization?: string }).specialization || 'غير محدد') === spec).length;
             return (
               <motion.div
                 key={spec}
@@ -490,7 +492,7 @@ export default function TeachersPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-6">
                         <span className="inline-flex items-center px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 border border-slate-200">
-                          {teacher.specialization || 'غير محدد'}
+                          {(teacher as { specialization?: string }).specialization || 'غير محدد'}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-6">
@@ -499,7 +501,7 @@ export default function TeachersPage() {
                             <BookOpen className="h-4 w-4 text-indigo-500" />
                           </div>
                           <span className="text-sm font-black text-indigo-600">
-                            {teacher.teacher_sections?.length || 0} فصول
+                            {(teacher as { teacher_sections?: any[] }).teacher_sections?.length || 0} فصول
                           </span>
                         </div>
                       </td>
@@ -607,11 +609,11 @@ export default function TeachersPage() {
                   <div className="grid grid-cols-2 gap-4 relative z-10">
                     <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">التخصص</span>
-                      <span className="text-sm font-bold text-slate-900">{teacher.specialization || 'غير محدد'}</span>
+                      <span className="text-sm font-bold text-slate-900">{(teacher as { specialization?: string }).specialization || 'غير محدد'}</span>
                     </div>
                     <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">التعيينات</span>
-                      <span className="text-sm font-black text-indigo-600">{teacher.teacher_sections?.length || 0} فصول</span>
+                      <span className="text-sm font-black text-indigo-600">{(teacher as { teacher_sections?: any[] }).teacher_sections?.length || 0} فصول</span>
                     </div>
                     <div className="col-span-2 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">رقم الهاتف</span>
@@ -619,7 +621,7 @@ export default function TeachersPage() {
                         <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center">
                           <Users className="h-4 w-4 text-slate-400" />
                         </div>
-                        <span className="text-sm font-bold text-slate-900">{teacher.users?.phone || 'غير محدد'}</span>
+                        <span className="text-sm font-bold text-slate-900">{(teacher.users as { phone?: string })?.phone || 'غير محدد'}</span>
                       </div>
                     </div>
                   </div>
@@ -973,7 +975,7 @@ export default function TeachersPage() {
                                 : 'bg-white text-amber-700 border border-amber-100 hover:border-amber-300'
                               }`}
                             >
-                              {(section as { classes?: { name?: string } }).classes?.name} - {section.name} {/* ← التعديل الاستباقي هنا */}
+                              {(section as { classes?: { name?: string } }).classes?.name} - {section.name}
                             </button>
                           ))}
                         </div>
@@ -1002,7 +1004,7 @@ export default function TeachersPage() {
                     <div key={section.id} className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
                       <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                        {(section as { classes?: { name?: string } }).classes?.name} - {section.name} {/* ← التعديل الاستباقي هنا */}
+                        {(section as { classes?: { name?: string } }).classes?.name} - {section.name}
                       </h4>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {subjects.map(subject => {
@@ -1090,4 +1092,5 @@ export default function TeachersPage() {
     </div>
   );
 }
+
 
