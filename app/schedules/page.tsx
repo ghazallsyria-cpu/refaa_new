@@ -48,7 +48,6 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-// دالة مساعدة لفك التغليف الآمن للبيانات
 const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
 
 export default function SchedulesPage() {
@@ -59,7 +58,6 @@ export default function SchedulesPage() {
   const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   
-  // Modal Data
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,7 +73,6 @@ export default function SchedulesPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // Current Cell State
   const [currentCell, setCurrentCell] = useState<{
     day: number;
     period: number;
@@ -199,14 +196,12 @@ export default function SchedulesPage() {
     }
   };
 
-  // مطابقة آمنة بنسبة 100%
   const getCellData = (day: number, period: number) => {
     return schedules.find(s => String(s.day_of_week) === String(day) && String(s.period) === String(period));
   };
 
   return (
     <div className="space-y-6 relative">
-      {/* Notification Toast */}
       {notification && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-all ${
           notification.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -218,7 +213,6 @@ export default function SchedulesPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       <Dialog.Root open={!!scheduleToDelete} onOpenChange={(open) => !open && setScheduleToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40" />
@@ -309,7 +303,9 @@ export default function SchedulesPage() {
                   {periods.map(period => (
                     <th key={period.id} scope="col" className="py-3.5 px-4 text-center text-sm font-semibold text-slate-900 border-l border-slate-200 min-w-[140px]">
                       الحصة {period.period_number}<br/>
-                      <span className="text-xs font-normal text-slate-500">{period.start_time.slice(0,5)} - {period.end_time.slice(0,5)}</span>
+                      <span className="text-xs font-normal text-slate-500">
+                        {period.start_time ? String(period.start_time).slice(0,5) : ''} - {period.end_time ? String(period.end_time).slice(0,5) : ''}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -323,7 +319,6 @@ export default function SchedulesPage() {
                     {periods.map(period => {
                       const cellData = getCellData(day.id, period.period_number);
                       
-                      // استخراج آمن للواجهة لتجنب انهيار الصفحة
                       const safeSubj = safeObj(cellData?.subjects);
                       const safeTeacher = safeObj(cellData?.teachers);
                       const safeUser = safeObj(safeTeacher?.users);
@@ -375,7 +370,6 @@ export default function SchedulesPage() {
         )}
       </div>
 
-      {/* Add/Edit Schedule Modal */}
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40" />
