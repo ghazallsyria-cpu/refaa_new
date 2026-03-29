@@ -46,7 +46,7 @@ export function useExamsSystem() {
         const { data: studentProfile } = await supabase
           .from('students')
           .select('section_id')
-          .eq('id', user.id)
+          .eq('user_id', user.id) // تم التصحيح: البحث بـ user_id بدلاً من id
           .single();
 
         if (studentProfile?.section_id) {
@@ -60,17 +60,33 @@ export function useExamsSystem() {
           return;
         }
       } else if (authRole === 'teacher') {
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
-          .select('section_id')
-          .eq('teacher_id', user.id);
+        // تم التصحيح: جلب رقم ملف المعلم أولاً
+        const { data: teacherProfile } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (teacherProfile) {
+          const teacherId = teacherProfile.id;
           
-        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-        
-        if (sectionIds.length > 0) {
-          query = query.or(`teacher_id.eq.${user.id},exam_sections.section_id.in.(${sectionIds.join(',')})`);
+          const { data: teacherSections } = await supabase
+            .from('teacher_sections')
+            .select('section_id')
+            .eq('teacher_id', teacherId);
+            
+          const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+          
+          if (sectionIds.length > 0) {
+            query = query.or(`teacher_id.eq.${teacherId},exam_sections.section_id.in.(${sectionIds.join(',')})`);
+          } else {
+            query = query.eq('teacher_id', teacherId);
+          }
         } else {
-          query = query.eq('teacher_id', user.id);
+           // لم يتم العثور على ملف المعلم
+           setData([]);
+           setLoading(false);
+           return;
         }
       }
 
@@ -110,19 +126,28 @@ export function useExamsSystem() {
 
       // Fetch submission status for student
       if (authRole === 'student') {
-        const { data: attemptsData } = await supabase
-          .from('exam_attempts')
-          .select('exam_id, score, status')
-          .eq('student_id', user.id);
+        // جلب رقم ملف الطالب (Student ID) أولاً لجلـب المحاولات
+        const { data: studentProfile } = await supabase
+          .from('students')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
 
-        mappedData = mappedData.map(exam => {
-          const attempt = attemptsData?.find(a => a.exam_id === exam.id);
-          return {
-            ...exam,
-            submission_status: attempt ? (attempt.status === 'completed' || attempt.status === 'graded' ? 'submitted' : 'pending') : 'pending',
-            score: attempt?.score
-          };
-        });
+        if (studentProfile) {
+            const { data: attemptsData } = await supabase
+            .from('exam_attempts')
+            .select('exam_id, score, status')
+            .eq('student_id', studentProfile.id);
+
+            mappedData = mappedData.map(exam => {
+            const attempt = attemptsData?.find(a => a.exam_id === exam.id);
+            return {
+                ...exam,
+                submission_status: attempt ? (attempt.status === 'completed' || attempt.status === 'graded' ? 'submitted' : 'pending') : 'pending',
+                score: attempt?.score
+            };
+            });
+        }
       }
 
       setData(mappedData);
