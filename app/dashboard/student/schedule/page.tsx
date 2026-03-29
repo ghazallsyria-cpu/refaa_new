@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Clock, BookOpen, User } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useDashboardSystem } from '@/hooks/useDashboardSystem';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -14,36 +15,59 @@ const DAYS = [
 ];
 
 export default function StudentSchedulePage() {
+  const { user } = useAuth();
   const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState<any>(null);
-  const { fetchStudentSchedule: fetchScheduleData } = useDashboardSystem();
 
-  const fetchStudentSchedule = useCallback(async () => {
+  // جلب البيانات مباشرة بنفس طريقة الداشبورد الناجحة
+  const fetchDirectSchedule = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      const data = await fetchScheduleData();
-      if (data) {
-        setStudentInfo(data.student);
-        // الاعتماد الكلي على بيانات الحصص المرجعة والتي تعمل بنجاح في الداشبورد
-        setSchedule(data.schedule || []);
+      // 1. جلب بيانات الطالب وشعبته
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('section_id, sections(name, classes(name))')
+        .eq('id', user.id)
+        .single();
+
+      if (studentError) throw studentError;
+      if (!student || !student.section_id) {
+        setLoading(false);
+        return;
       }
+
+      setStudentInfo(student);
+
+      // 2. جلب جدول الحصص بناءً على الشعبة (باستخدام الاستعلام الصحيح)
+      const { data: scheduleData, error: scheduleError } = await supabase
+        .from('schedules')
+        .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
+        .eq('section_id', student.section_id)
+        .order('day_of_week')
+        .order('period');
+
+      if (scheduleError) throw scheduleError;
+      
+      setSchedule(scheduleData || []);
+
     } catch (error) {
-      console.error('Error fetching student schedule:', error);
+      console.error('Error fetching direct schedule:', error);
     } finally {
       setLoading(false);
     }
-  }, [fetchScheduleData]);
+  }, [user]);
 
   useEffect(() => {
-    fetchStudentSchedule();
-  }, [fetchStudentSchedule]);
+    fetchDirectSchedule();
+  }, [fetchDirectSchedule]);
 
-  // تحديد عدد أعمدة الحصص بناءً على أقصى رقم حصة موجود في البيانات (أو 7 كحد أدنى افتراضي)
+  // تحديد عدد أعمدة الحصص (7 افتراضي أو أقصى حصة مسجلة)
   const maxPeriod = schedule.reduce((max, s) => Math.max(max, Number(s.period) || 0), 7);
   const periodColumns = Array.from({ length: maxPeriod }, (_, i) => i + 1);
 
-  // استخراج أوقات الحصة من بيانات الجدول نفسه (نفس طريقة عمل الداشبورد)
+  // استخراج أوقات الحصة
   const getPeriodTime = (periodNum: number) => {
     const session = schedule.find(s => Number(s.period) === periodNum && s.start_time);
     if (session && session.start_time && session.end_time) {
@@ -52,25 +76,25 @@ export default function StudentSchedulePage() {
     return null;
   };
 
-  // مطابقة آمنة للخلايا مع تحويل جميع القيم إلى أرقام لتجنب أي تعارض
+  // مطابقة الخلية (اليوم + الحصة)
   const getCellData = (dayId: number, periodNum: number) => {
     return schedule.find(s => Number(s.day_of_week) === dayId && Number(s.period) === periodNum);
   };
 
-  // استخراج آمن لاسم المادة
+  // استخراج اسم المادة
   const getSubjectName = (cell: any) => {
     if (!cell || !cell.subjects) return 'بدون مادة';
     const subj = Array.isArray(cell.subjects) ? cell.subjects[0] : cell.subjects;
     return subj?.name || 'بدون مادة';
   };
 
-  // استخراج آمن لبيانات المعلم
+  // استخراج بيانات المعلم والزووم
   const getTeacherData = (cell: any) => {
     if (!cell || !cell.teachers) return { name: 'غير محدد', zoom: '' };
     const teacher = Array.isArray(cell.teachers) ? cell.teachers[0] : cell.teachers;
-    const user = Array.isArray(teacher?.users) ? teacher.users[0] : teacher?.users;
+    const userObj = Array.isArray(teacher?.users) ? teacher.users[0] : teacher?.users;
     return {
-      name: user?.full_name || teacher?.users?.full_name || 'غير محدد',
+      name: userObj?.full_name || 'غير محدد',
       zoom: teacher?.zoom_link || ''
     };
   };
@@ -83,7 +107,6 @@ export default function StudentSchedulePage() {
     );
   }
 
-  // استخراج آمن لبيانات صف الطالب
   const sectionData = Array.isArray(studentInfo?.sections) ? studentInfo.sections[0] : studentInfo?.sections;
   const classData = Array.isArray(sectionData?.classes) ? sectionData.classes[0] : sectionData?.classes;
   const sectionName = sectionData?.name || 'غير محدد';
@@ -118,11 +141,10 @@ export default function StudentSchedulePage() {
       ) : (
         <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden w-full relative">
           <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-transparent">
-            {/* تم استخدام min-w-max لضمان عدم تداخل وتشوه الخلايا */}
             <table className="w-full min-w-max divide-y divide-slate-200 border-collapse">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50 sticky right-0 z-20">
+                  <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50 sticky right-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                     اليوم / الحصة
                   </th>
                   {periodColumns.map(periodNum => {
