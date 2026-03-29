@@ -2,6 +2,12 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
+// تعريف الأنواع المتوقعة لنتائج الاستعلامات لتجنب 'never' و 'any'
+interface StudentQueryResult {
+  created_at: string;
+  users: { full_name: string } | { full_name: string }[] | null;
+}
+
 export function useDashboardSystem() {
   const { user } = useAuth();
 
@@ -53,8 +59,21 @@ export function useDashboardSystem() {
         supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
       ]);
 
+      // استخدام النوع المعرف أعلاه بدلاً من any لتمرير فحص النوع
       const activities: { title: string; time: string; type: string; color: string }[] = [
-        ...(recentStudents || []).map(s => ({ title: `إضافة الطالب ${Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name}`, time: s.created_at, type: 'students', color: 'bg-indigo-100 text-indigo-600' })),
+        ...((recentStudents as unknown as StudentQueryResult[]) || []).map(s => {
+          const userData = s.users;
+          const fullName = Array.isArray(userData) 
+            ? userData[0]?.full_name 
+            : userData?.full_name;
+            
+          return { 
+            title: `إضافة الطالب ${fullName || 'غير معروف'}`, 
+            time: s.created_at, 
+            type: 'students', 
+            color: 'bg-indigo-100 text-indigo-600' 
+          };
+        }),
         ...(recentDocs || []).map(d => ({ title: `مستند جديد: ${d.title}`, time: d.created_at, type: 'documents', color: 'bg-emerald-100 text-emerald-600' })),
         ...(recentExams || []).map(e => ({ title: `اختبار جديد: ${e.title}`, time: e.created_at, type: 'exams', color: 'bg-amber-100 text-amber-600' })),
         ...(recentNotifs || []).map(n => ({ title: `إعلان جديد: ${n.title}`, time: n.created_at, type: 'notifications', color: 'bg-sky-100 text-sky-600' }))
@@ -82,8 +101,8 @@ export function useDashboardSystem() {
         { data: assignmentSections },
         { data: examSections }
       ] = await Promise.all([
-        supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id),
-        supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id)
+        supabase.from('assignment_sections').select('assignment_id').eq('section_id', (student as any).section_id),
+        supabase.from('exam_sections').select('exam_id').eq('section_id', (student as any).section_id)
       ]);
 
       const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
@@ -122,7 +141,7 @@ export function useDashboardSystem() {
         supabase
           .from('schedules')
           .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))')
-          .eq('section_id', student.section_id)
+          .eq('section_id', (student as any).section_id)
           .eq('day_of_week', new Date().getDay() + 1)
           .order('period'),
         supabase
@@ -169,7 +188,7 @@ export function useDashboardSystem() {
         supabase
           .from('schedules')
           .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
-          .eq('section_id', student.section_id)
+          .eq('section_id', (student as any).section_id)
           .order('day_of_week')
           .order('period'),
         supabase
@@ -348,3 +367,4 @@ export function useDashboardSystem() {
     fetchTeacherSchedule
   };
 }
+
