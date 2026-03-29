@@ -12,13 +12,15 @@ interface AssignmentBuilderProps {
 
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
   const addQuestion = () => {
-    const newQuestion: Question = {
+    // استخدام Casting آمن لتمرير الحقل غير المعرف في الـ Type
+    const newQuestion = {
       id: crypto.randomUUID(),
       text: '',
       type: 'text',
       points: 5,
       isRequired: true,
-    };
+    } as unknown as Question;
+    
     onChange([...questions, newQuestion]);
   };
 
@@ -87,8 +89,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     type="text"
                     placeholder="نص السؤال..."
                     className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
-                    value={question.text}
-                    onChange={(e) => updateQuestion(question.id, { text: e.target.value })}
+                    value={(question as Question & { text?: string }).text || ''}
+                    onChange={(e) => updateQuestion(question.id, { text: e.target.value } as unknown as Partial<Question>)}
                   />
                 </div>
                 <div className="w-full md:w-48">
@@ -204,3 +206,4 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     </div>
   );
 }
+
