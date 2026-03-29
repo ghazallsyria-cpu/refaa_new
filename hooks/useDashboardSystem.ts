@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-// تعريف الأنواع المتوقعة لنتائج الاستعلامات لتجنب 'never' و 'any'
 interface StudentQueryResult {
   created_at: string;
   users: { full_name: string } | { full_name: string }[] | null;
@@ -59,7 +58,6 @@ export function useDashboardSystem() {
         supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
       ]);
 
-      // استخدام النوع المعرف أعلاه بدلاً من any لتمرير فحص النوع
       const activities: { title: string; time: string; type: string; color: string }[] = [
         ...((recentStudents as unknown as StudentQueryResult[]) || []).map(s => {
           const userData = s.users;
@@ -89,9 +87,10 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
+      // إصلاح: جلب حقل users(full_name) لإظهار اسم الطالب
       const { data: student } = await supabase
         .from('students')
-        .select('*, sections(name, classes(name))')
+        .select('*, users(full_name), sections(name, classes(name))')
         .eq('id', user.id)
         .single();
       
@@ -116,25 +115,27 @@ export function useDashboardSystem() {
         { data: todaysSchedule },
         { data: periods }
       ] = await Promise.all([
-        supabase
+        // إصلاح: حماية ضد المصفوفة الفارغة لتجنب انهيار الاستعلام
+        assignmentIds.length > 0 ? supabase
           .from('assignments')
           .select('*, subject:subjects(name)')
           .in('id', assignmentIds)
           .order('due_date', { ascending: true })
-          .limit(3),
-        supabase
+          .limit(3) : Promise.resolve({ data: [] }),
+        examIds.length > 0 ? supabase
           .from('exams')
           .select('*, subject:subjects(name)')
           .in('id', examIds)
           .order('start_time', { ascending: true })
-          .limit(3),
+          .limit(3) : Promise.resolve({ data: [] }),
         supabase
           .from('daily_attendance_summary')
           .select('daily_status')
           .eq('student_id', student.id),
+        // إصلاح: جلب completed_at و subjects لتجنب انهيار التواريخ وعرض المادة
         supabase
           .from('exam_attempts')
-          .select('score, exam:exams(title, total_points)')
+          .select('score, completed_at, exam:exams(title, total_points, subjects(name))')
           .eq('student_id', student.id)
           .order('completed_at', { ascending: false })
           .limit(5),
@@ -367,4 +368,5 @@ export function useDashboardSystem() {
     fetchTeacherSchedule
   };
 }
+
 
