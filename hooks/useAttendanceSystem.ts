@@ -1,4 +1,6 @@
- import { useState, useEffect, useCallback } from 'react';
+'use client';
+
+import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
@@ -29,96 +31,159 @@ export interface SectionData {
 
 export interface StudentData {
   id: string;
-  users: { full_name: string };
+  users: {
+    full_name: string;
+  };
 }
 
 export interface AttendanceStats {
-  daily: { present: number, absent: number, partial: number, incomplete: number, total: number, rate: number };
-  weekly: { present: number, absent: number, late: number, excused: number, total: number, rate: number };
-  monthly: { present: number, absent: number, late: number, excused: number, total: number, rate: number };
-  students: Record<string, any>;
+  daily: {
+    present: number;
+    absent: number;
+    partial: number;
+    incomplete: number;
+    total: number;
+    rate: number;
+  };
+  weekly: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    rate: number;
+  };
+  monthly: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    rate: number;
+  };
+  students: Record<string, unknown>;
 }
+
+type ScheduleRow = {
+  section_id: string;
+  subject_id: string;
+  period: number;
+  section: {
+    id: string;
+    name: string;
+    classes: { name: string };
+  } | null;
+  subject: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+type SessionRow = {
+  id: string;
+  status: string;
+};
+
+type AttendanceRow = {
+  student_id: string;
+  status: AttendanceStatus;
+};
+
+type DailySummaryRow = {
+  daily_status: 'present' | 'full_absent' | 'partial_absent' | 'incomplete';
+};
 
 export function useAttendanceSystem() {
   const { user, authRole } = useAuth();
+
   const [sections, setSections] = useState<SectionData[]>([]);
-  const [daySchedule, setDaySchedule] = useState<any[]>([]);
+  const [daySchedule, setDaySchedule] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeDay = (d: number) => (d === 0 ? 1 : d);
+
   const fetchDaySchedule = useCallback(async (targetDate: string) => {
     if (!user || authRole !== 'teacher') return [];
-    try {
-      const jsDay = new Date(targetDate).getDay();
-      const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
-                    jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
-      const { data } = await supabase
-        .from('schedules')
-        .select('period, section:sections(name, classes(name)), subject:subjects(name)')
-        .eq('teacher_id', user.id)
-        .eq('day_of_week', dbDay)
-        .order('period');
-      
-      const schedule = data || [];
-      setDaySchedule(schedule);
-      return schedule;
-    } catch (err) {
-      console.error('Error fetching day schedule:', err);
-      return [];
-    }
+    const jsDay = new Date(targetDate).getDay();
+    const dbDay = normalizeDay(jsDay);
+
+    const { data } = await supabase
+      .from('schedules')
+      .select('period, section:sections(name, classes(name)), subject:subjects(name)')
+      .eq('teacher_id', user.id)
+      .eq('day_of_week', dbDay)
+      .order('period');
+
+    const schedule = (data as ScheduleRow[]) ?? [];
+    setDaySchedule(schedule);
+    return schedule;
   }, [user, authRole]);
 
   const fetchSections = useCallback(async (targetDate: string, targetPeriod: number): Promise<SectionData[]> => {
     if (!user) return [];
-    try {
-      let sectionsData: SectionData[] = [];
-      const isTeacher = authRole === 'teacher' || (typeof authRole === 'string' && authRole.includes('teacher'));
-      const isAdmin = authRole === 'admin' || (typeof authRole === 'string' && authRole.includes('admin'));
 
-      if (isTeacher) {
-        const jsDay = new Date(targetDate).getDay();
-        const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
-                      jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+    const isTeacher = authRole === 'teacher';
+    const isAdmin = authRole === 'admin';
 
-        const { data: scheduledClasses } = await supabase
-          .from('schedules')
-          .select('section_id, subject_id, section:sections(id, name, classes(name)), subject:subjects(id, name)')
-          .eq('teacher_id', user.id)
-          .eq('day_of_week', dbDay)
-          .eq('period', targetPeriod);
-        
-        sectionsData = (scheduledClasses?.map(sc => {
-          const section = Array.isArray(sc.section) ? sc.section[0] : sc.section;
-          const subject = Array.isArray(sc.subject) ? sc.subject[0] : sc.subject;
+    let result: SectionData[] = [];
+
+    if (isTeacher) {
+      const dbDay = normalizeDay(new Date(targetDate).getDay());
+
+      const { data } = await supabase
+        .from('schedules')
+        .select(`
+          section_id,
+          subject_id,
+          section:sections(id, name, classes(name)),
+          subject:subjects(id, name)
+        `)
+        .eq('teacher_id', user.id)
+        .eq('day_of_week', dbDay)
+        .eq('period', targetPeriod);
+
+      const rows = (data as ScheduleRow[]) ?? [];
+
+      result = rows
+        .map(r => {
+          if (!r.section) return null;
+
           return {
-            ...section,
-            subject_id: sc.subject_id,
-            subject_name: subject?.name
+            id: r.section.id,
+            name: r.section.name,
+            classes: r.section.classes,
+            subject_id: r.subject_id,
+            subject_name: r.subject?.name
           };
-        }) || []) as SectionData[];
-      } else if (isAdmin) {
-        const { data: allSections } = await supabase
-          .from('sections')
-          .select('id, name, classes(name)');
-        sectionsData = (allSections || []) as SectionData[];
-      }
-      
-      setSections(sectionsData);
-      return sectionsData;
-    } catch (err) {
-      console.error('Error fetching sections:', err);
-      return [];
+        })
+        .filter((x): x is SectionData => x !== null);
+
+    } else if (isAdmin) {
+      const { data } = await supabase
+        .from('sections')
+        .select('id, name, classes(name)');
+
+      result = (data ?? []) as SectionData[];
     }
+
+    setSections(result);
+    return result;
   }, [user, authRole]);
 
-  const fetchStudentsAndAttendance = useCallback(async (selectedSection: string, selectedSubject: string, date: string, period: number) => {
+  const fetchStudentsAndAttendance = useCallback(async (
+    selectedSection: string,
+    selectedSubject: string,
+    date: string,
+    period: number
+  ) => {
     if (!user || !selectedSection) return null;
+
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch students for the section
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select('id, users(full_name)')
@@ -126,8 +191,7 @@ export function useAttendanceSystem() {
 
       if (studentsError) throw studentsError;
 
-      // Fetch existing session
-      const { data: sessionData, error: sessionError } = await supabase
+      const { data: sessionData } = await supabase
         .from('attendance_sessions')
         .select('id, status')
         .eq('teacher_id', user.id)
@@ -137,62 +201,57 @@ export function useAttendanceSystem() {
         .eq('period_number', period)
         .maybeSingle();
 
-      if (sessionError) throw sessionError;
+      const attendance: Record<string, AttendanceStatus> = {};
 
-      const newAttendance: Record<string, AttendanceStatus> = {};
-      (studentsData as any[] || [])?.forEach(s => {
-        newAttendance[s.id] = 'present';
+      (studentsData ?? []).forEach(s => {
+        attendance[s.id] = 'present';
       });
 
       if (sessionData) {
-        const { data: recordsData, error: recordsError } = await supabase
+        const { data: recordsData } = await supabase
           .from('attendance_records')
           .select('student_id, status')
           .eq('session_id', sessionData.id);
 
-        if (recordsError) throw recordsError;
-
-        recordsData?.forEach(r => {
-          newAttendance[r.student_id] = r.status as AttendanceStatus;
+        (recordsData ?? []).forEach(r => {
+          attendance[r.student_id] = r.status;
         });
       }
 
-      // Fetch daily stats
-      const { data: dailyStats, error: statsError } = await supabase
+      const { data: dailyStats } = await supabase
         .from('daily_attendance_summary')
         .select('*')
         .eq('date', date);
 
-      let stats: AttendanceStats | null = null;
-      if (!statsError && dailyStats) {
-        stats = {
-          daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
-          weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-          monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
-          students: {}
-        };
+      const stats: AttendanceStats = {
+        daily: { present: 0, absent: 0, partial: 0, incomplete: 0, total: 0, rate: 0 },
+        weekly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
+        monthly: { present: 0, absent: 0, late: 0, excused: 0, total: 0, rate: 0 },
+        students: {}
+      };
 
-        dailyStats.forEach(s => {
-          if (s.daily_status === 'present') stats!.daily.present++;
-          else if (s.daily_status === 'full_absent') stats!.daily.absent++;
-          else if (s.daily_status === 'partial_absent') stats!.daily.partial++;
-          else if (s.daily_status === 'incomplete') stats!.daily.incomplete++;
-          stats!.daily.total++;
-        });
+      (dailyStats as DailySummaryRow[] ?? []).forEach(s => {
+        if (s.daily_status === 'present') stats.daily.present++;
+        if (s.daily_status === 'full_absent') stats.daily.absent++;
+        if (s.daily_status === 'partial_absent') stats.daily.partial++;
+        if (s.daily_status === 'incomplete') stats.daily.incomplete++;
+        stats.daily.total++;
+      });
 
-        if (stats.daily.total > 0) {
-          stats.daily.rate = Math.round((stats.daily.present / stats.daily.total) * 100);
-        }
+      if (stats.daily.total > 0) {
+        stats.daily.rate = Math.round((stats.daily.present / stats.daily.total) * 100);
       }
 
-      return { 
-        students: (studentsData as any[] || []) as StudentData[], 
-        attendance: newAttendance, 
-        stats 
+      const students = (studentsData ?? []) as StudentData[];
+
+      return {
+        students,
+        attendance,
+        stats
       };
-    } catch (err: any) {
-      console.error('Error fetching students and attendance:', err);
-      setError(err.message);
+
+    } catch (err: unknown) {
+      if (err instanceof Error) setError(err.message);
       return null;
     } finally {
       setLoading(false);
@@ -200,72 +259,70 @@ export function useAttendanceSystem() {
   }, [user]);
 
   const saveAttendance = useCallback(async (
-    selectedSection: string, 
-    selectedSubject: string, 
-    date: string, 
-    period: number, 
+    selectedSection: string,
+    selectedSubject: string,
+    date: string,
+    period: number,
     attendance: Record<string, AttendanceStatus>,
     students: StudentData[]
   ) => {
-    if (!user) throw new Error('User not found');
-    
-    try {
-      const response = await fetch('/api/attendance/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          selectedSection,
-          selectedSubject,
-          date,
-          period,
-          attendance,
-          students,
-          userId: user.id
-        }),
-      });
+    if (!user) throw new Error('No user');
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to save attendance');
-    } catch (err) {
-      console.error('Error saving attendance:', err);
-      throw err;
-    }
+    const res = await fetch('/api/attendance/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        selectedSection,
+        selectedSubject,
+        date,
+        period,
+        attendance,
+        students,
+        userId: user.id
+      })
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error ?? 'save failed');
   }, [user]);
 
   const fetchStudentAttendance = useCallback(async () => {
     if (!user || authRole !== 'student') return null;
-    try {
-      const { data: summaryData, error: summaryError } = await supabase
-        .from('daily_attendance_summary')
-        .select('*')
-        .eq('student_id', user.id)
-        .order('date', { ascending: false });
 
-      if (summaryError) throw summaryError;
-      
-      const stats = { present: 0, absent: 0, partial: 0, incomplete: 0 };
-      summaryData?.forEach(s => {
-        if (s.daily_status === 'present') stats.present++;
-        else if (s.daily_status === 'full_absent') stats.absent++;
-        else if (s.daily_status === 'partial_absent') stats.partial++;
-        else if (s.daily_status === 'incomplete') stats.incomplete++;
-      });
-      
-      return { studentAttendance: summaryData || [], studentStats: stats };
-    } catch (err) {
-      console.error('Error fetching student attendance:', err);
-      return null;
-    }
+    const { data } = await supabase
+      .from('daily_attendance_summary')
+      .select('*')
+      .eq('student_id', user.id)
+      .order('date', { ascending: false });
+
+    const stats = {
+      present: 0,
+      absent: 0,
+      partial: 0,
+      incomplete: 0
+    };
+
+    (data as DailySummaryRow[] ?? []).forEach(s => {
+      if (s.daily_status === 'present') stats.present++;
+      if (s.daily_status === 'full_absent') stats.absent++;
+      if (s.daily_status === 'partial_absent') stats.partial++;
+      if (s.daily_status === 'incomplete') stats.incomplete++;
+    });
+
+    return {
+      studentAttendance: data ?? [],
+      studentStats: stats
+    };
   }, [user, authRole]);
 
-  return { 
-    sections, 
-    daySchedule, 
-    loading, 
-    error, 
-    fetchDaySchedule, 
-    fetchSections, 
-    fetchStudentsAndAttendance, 
+  return {
+    sections,
+    daySchedule,
+    loading,
+    error,
+    fetchDaySchedule,
+    fetchSections,
+    fetchStudentsAndAttendance,
     saveAttendance,
     fetchStudentAttendance
   };
