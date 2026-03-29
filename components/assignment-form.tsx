@@ -163,7 +163,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
               {question.type === 'checkbox' && (
                 <div className="space-y-3">
                   {question.options?.map((option, optIndex) => {
-                    const isChecked = (answers[question.id] as string[] || []).includes(option);
+                    const isChecked = (answers[question.id] as string[] || []).includes(option.content);
                     return (
                       <label
                         key={optIndex}
@@ -183,7 +183,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         <input
                           type="checkbox"
                           className="hidden"
-                          value={option}
+                          value={option.content}
                           checked={isChecked}
                           onChange={(e) => handleCheckboxChange(question.id, option, e.target.checked)}
                           disabled={readOnly}
@@ -191,7 +191,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         <span className={`text-sm font-bold transition-colors ${
                           isChecked ? 'text-indigo-900' : 'text-slate-600'
                         }`}>
-                          {option}
+                          {option.content}
                         </span>
                       </label>
                     );
