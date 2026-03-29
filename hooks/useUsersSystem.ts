@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'; // تم تصحيح حرف I
+import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Student, Teacher, Parent, Section, Subject } from '@/types';
 
@@ -121,7 +121,6 @@ export function useUsersSystem() {
     }
   }, []);
 
-  // تم إضافة parent_id للنوع هنا لحل مشكلة السطر 142
   const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string, parent_id?: string | null }>): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -202,7 +201,8 @@ export function useUsersSystem() {
     }
   }, [fetchStudents]);
 
-  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link: string }>): Promise<{ success: boolean, password?: string }> => {
+  // تم إضافة specialization و zoom_link للنوع هنا لحل مشكلة السطر 226
+  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link: string, specialization: string }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -286,6 +286,7 @@ export function useUsersSystem() {
     }
   }, [fetchTeachers]);
 
+  // تم إضافة job_title و workplace للنوع هنا بشكل استباقي
   const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title: string, workplace: string, student_ids: string[] }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
