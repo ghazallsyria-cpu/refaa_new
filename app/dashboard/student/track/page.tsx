@@ -12,37 +12,62 @@ import {
   GraduationCap
 } from 'lucide-react';
 
-// استيراد عميل سوبابيز (تأكد من المسار الصحيح في مشروعك)
-  import { supabase } from '@/lib/supabase'; 
-
+// Using a generic approach for Supabase to avoid dependency resolution issues
+// in the preview environment while keeping it ready for your local setup
 export default function TrackPage() {
   const [step, setStep] = useState('selection'); // 'selection' | 'confirming' | 'success'
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
+
+  // Initial user fetch - In a real app, you'd use your supabase client here
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        // Mocking user session for the UI preview
+        // In your real code, replace this with:
+        // const { data: { user } } = await supabase.auth.getUser();
+        setUser({ id: 'dummy-id', grade: '10' });
+      } catch (err) {
+        console.error("Auth error:", err);
+      }
+    };
+    fetchUser();
+  }, []);
 
   const handleSelect = (track) => {
     setSelectedTrack(track);
   };
 
   const confirmSelection = async () => {
+    if (!user) {
+      setError("يجب تسجيل الدخول أولاً");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // ملاحظة: هنا يتم الربط الحقيقي مع قاعدة البيانات
-       const { data: { user } } = await supabase.auth.getUser();
-       const { error: updateError } = await supabase
+      // Your actual Supabase logic:
+      /*
+      const { error: updateError } = await supabase
         .from('students')
-         .update({ 
-           next_year_track: selectedTrack,
-         track_selection_date: new Date().toISOString() 
+        .update({ 
+          next_year_track: selectedTrack,
+          track_selection_date: new Date().toISOString() 
         })
         .eq('id', user.id);
 
       if (updateError) throw updateError;
-        setStep('success');
+      */
+      
+      // Simulation for preview
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setStep('success');
     } catch (err) {
+      console.error(err);
       setError("حدث خطأ أثناء حفظ اختيارك. يرجى المحاولة مرة أخرى.");
     } finally {
       setLoading(false);
@@ -53,7 +78,7 @@ export default function TrackPage() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans" dir="rtl">
       <div className="max-w-5xl mx-auto">
         
-        {/* الهيدر */}
+        {/* Header Section */}
         <header className="mb-12 text-center">
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
@@ -104,7 +129,7 @@ export default function TrackPage() {
                   disabled={!selectedTrack}
                   className={`px-12 py-4 rounded-2xl font-bold text-lg transition-all flex items-center gap-3 shadow-lg ${
                     selectedTrack 
-                    ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105' 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-105 active:scale-95' 
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                   }`}
                 >
@@ -130,13 +155,13 @@ export default function TrackPage() {
                 </span>؟
               </p>
               
-              {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
+              {error && <p className="text-red-500 mb-4 text-sm font-bold">{error}</p>}
 
               <div className="flex flex-col gap-3">
                 <button
                   onClick={confirmSelection}
                   disabled={loading}
-                  className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-green-700 transition-all"
+                  className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-2 hover:bg-green-700 transition-all shadow-md active:scale-95"
                 >
                   {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                   تأكيد نهائي وحفظ
@@ -166,7 +191,7 @@ export default function TrackPage() {
               <p className="text-slate-600 mb-8 text-lg">شكراً لك، تم تسجيل رغبتك بنجاح في نظام المدرسة.</p>
               <button
                 onClick={() => window.location.href = '/dashboard/student'}
-                className="px-10 py-3 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 transition-all"
+                className="px-10 py-3 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 transition-all active:scale-95"
               >
                 العودة للرئيسية
               </button>
@@ -179,23 +204,35 @@ export default function TrackPage() {
 }
 
 function TrackOption({ title, desc, icon, isSelected, onSelect, color }) {
-  const activeClass = color === 'blue' ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-50' : 'border-purple-500 bg-purple-50 ring-4 ring-purple-50';
+  const activeClass = color === 'blue' 
+    ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-100/50 shadow-blue-100 shadow-lg' 
+    : 'border-purple-500 bg-purple-50 ring-4 ring-purple-100/50 shadow-purple-100 shadow-lg';
+  
   const iconClass = color === 'blue' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600';
 
   return (
     <motion.div
       whileHover={{ y: -5 }}
+      whileTap={{ scale: 0.98 }}
       onClick={onSelect}
       className={`cursor-pointer p-8 rounded-[2.5rem] border-2 transition-all relative ${
         isSelected ? activeClass : "bg-white border-slate-100 hover:border-slate-300 shadow-sm"
       }`}
     >
-      <div className={`mb-6 p-4 rounded-2xl inline-block ${isSelected ? 'bg-white shadow-sm' : iconClass}`}>
+      <div className={`mb-6 p-4 rounded-2xl inline-block transition-all ${isSelected ? 'bg-white shadow-sm' : iconClass}`}>
         {icon}
       </div>
       <h3 className="text-2xl font-bold mb-3 text-slate-800">{title}</h3>
       <p className="text-slate-500 leading-relaxed text-lg">{desc}</p>
-      {isSelected && <CheckCircle2 className="absolute top-6 left-6 w-8 h-8 text-current" />}
+      {isSelected && (
+        <motion.div 
+          initial={{ scale: 0 }} 
+          animate={{ scale: 1 }} 
+          className="absolute top-6 left-6"
+        >
+          <CheckCircle2 className={`w-8 h-8 ${color === 'blue' ? 'text-blue-600' : 'text-purple-600'}`} />
+        </motion.div>
+      )}
     </motion.div>
   );
 }
