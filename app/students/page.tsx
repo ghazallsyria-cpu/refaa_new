@@ -136,7 +136,7 @@ export default function StudentsPage() {
       'رقم الهاتف': (student.users as { phone?: string })?.phone,
       'الصف': (student.sections as { classes?: { name?: string } })?.classes?.name,
       'الشعبة': student.sections?.name,
-      'ولي الأمر': (student.parents as { users?: { full_name?: string } })?.users?.full_name || 'غير مسجل'
+      'ولي الأمر': (student as unknown as { parents?: { users?: { full_name?: string } } })?.parents?.users?.full_name || 'غير مسجل'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -346,7 +346,7 @@ export default function StudentsPage() {
                           <Users className="h-3 w-3 text-slate-400" />
                         </div>
                         <span className="text-sm font-bold text-slate-600">
-                          {(student.parents as { users?: { full_name?: string } })?.users?.full_name || '-'}
+                          {(student as unknown as { parents?: { users?: { full_name?: string } } })?.parents?.users?.full_name || '-'}
                         </span>
                       </div>
                     </td>
@@ -463,7 +463,7 @@ export default function StudentsPage() {
                         <Users className="h-4 w-4 text-slate-400" />
                       </div>
                       <span className="text-sm font-bold text-slate-900">
-                        {(student.parents as { users?: { full_name?: string } })?.users?.full_name || 'غير مسجل'}
+                        {(student as unknown as { parents?: { users?: { full_name?: string } } })?.parents?.users?.full_name || 'غير مسجل'}
                       </span>
                     </div>
                   </div>
