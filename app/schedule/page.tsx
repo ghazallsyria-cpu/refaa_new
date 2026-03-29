@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-// تمت إضافة Clock هنا 👇
 import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -472,7 +471,8 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            <form onSubmit={handleSaveSchedule} className="space-y-4">
+            {/* تم تصحيح الدالة هنا وإضافة منع إعادة التحميل (preventDefault) */}
+            <form onSubmit={(e) => { e.preventDefault(); handleAddSchedule(); }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium leading-6 text-slate-900">المادة الدراسية</label>
                 <select 
