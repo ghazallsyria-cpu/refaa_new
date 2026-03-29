@@ -96,12 +96,12 @@ export function useAttendanceSystem() {
             subject_id: sc.subject_id,
             subject_name: subject?.name
           };
-        }) || []) as SectionData[];
+        }) || []) as unknown as SectionData[]; // ← التعويذة السحرية هنا
       } else if (isAdmin) {
         const { data: allSections } = await supabase
           .from('sections')
           .select('id, name, classes(name)');
-        sectionsData = (allSections || []) as SectionData[];
+        sectionsData = (allSections || []) as unknown as SectionData[]; // ← وهنا أيضاً
       }
       
       setSections(sectionsData);
@@ -186,7 +186,7 @@ export function useAttendanceSystem() {
       }
 
       return { 
-        students: (studentsData as any[] || []) as StudentData[], 
+        students: (studentsData as any[] || []) as unknown as StudentData[], // ← احتياطاً هنا أيضاً
         attendance: newAttendance, 
         stats 
       };
@@ -270,3 +270,4 @@ export function useAttendanceSystem() {
     fetchStudentAttendance
   };
 }
+
