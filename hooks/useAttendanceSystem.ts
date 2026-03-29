@@ -154,7 +154,7 @@ export function useAttendanceSystem() {
         .eq('day_of_week', dbDay)
         .eq('period', targetPeriod);
 
-      const rows = (data as ScheduleRow[]) ?? [];
+      const rows = (data as unknown as ScheduleRow[]) ?? [];
 
       result = rows
         .map(r => {
