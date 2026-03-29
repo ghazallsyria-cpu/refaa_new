@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, Circle, Square, Type, AlignLeft, AlertCircle, Send } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Question, QuestionType } from './assignment-builder';
+import { Question, QuestionType } from '@/types/question';
 
 interface AssignmentFormProps {
   questions: Question[];
@@ -91,7 +91,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
-                  {question.text}
+                  {(question as unknown as { text?: string }).text}
                   {question.isRequired && <span className="text-red-500 mr-1">*</span>}
                 </h3>
               </div>
@@ -145,7 +145,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         type="radio"
                         className="hidden"
                         name={question.id}
-                        value={option}
+                        value={option as unknown as string}
                         checked={answers[question.id] === option}
                         onChange={() => handleAnswerChange(question.id, option)}
                         disabled={readOnly}
@@ -153,7 +153,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                       <span className={`text-sm font-bold transition-colors ${
                         answers[question.id] === option ? 'text-indigo-900' : 'text-slate-600'
                       }`}>
-                        {option}
+                        {option as unknown as string}
                       </span>
                     </label>
                   ))}
@@ -163,7 +163,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
               {question.type === 'checkbox' && (
                 <div className="space-y-3">
                   {question.options?.map((option, optIndex) => {
-                    const isChecked = (answers[question.id] as string[] || []).includes(option);
+                    const isChecked = (answers[question.id] as string[] || []).includes(option as unknown as string);
                     return (
                       <label
                         key={optIndex}
@@ -183,15 +183,15 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         <input
                           type="checkbox"
                           className="hidden"
-                          value={option}
+                          value={option as unknown as string}
                           checked={isChecked}
-                          onChange={(e) => handleCheckboxChange(question.id, option, e.target.checked)}
+                          onChange={(e) => handleCheckboxChange(question.id, option as unknown as string, e.target.checked)}
                           disabled={readOnly}
                         />
                         <span className={`text-sm font-bold transition-colors ${
                           isChecked ? 'text-indigo-900' : 'text-slate-600'
                         }`}>
-                          {option}
+                          {option as unknown as string}
                         </span>
                       </label>
                     );
@@ -231,3 +231,4 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     </form>
   );
 }
+
