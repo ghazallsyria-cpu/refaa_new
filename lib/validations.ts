@@ -17,6 +17,29 @@ export const UserSchema = z.object({
   created_at: z.string().optional(),
 });
 
+// 1. تعريف الكيانات الأساسية أولاً (Base Schemas)
+export const ClassSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  level: z.number().int().min(1).max(12),
+  created_at: z.string().optional(),
+});
+
+export const SectionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  class_id: z.string().uuid(),
+  classes: ClassSchema.partial().optional(),
+  created_at: z.string().optional(),
+});
+
+export const SubjectSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  created_at: z.string().optional(),
+});
+
+// 2. تعريف الكيانات المركبة التي تعتمد على الكيانات الأساسية (Dependent Schemas)
 export const TeacherSectionSchema = z.object({
   teacher_id: z.string().uuid(),
   section_id: z.string().uuid(),
@@ -33,21 +56,6 @@ export const TeacherSchema = z.object({
   zoom_link: nullableString,
   users: UserSchema.partial().optional(),
   teacher_sections: z.array(TeacherSectionSchema).optional(),
-});
-
-export const SectionSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1),
-  class_id: z.string().uuid(),
-  classes: ClassSchema.partial().optional(),
-  created_at: z.string().optional(),
-});
-
-export const ClassSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1),
-  level: z.number().int().min(1).max(12),
-  created_at: z.string().optional(),
 });
 
 export const StudentSchema = z.object({
@@ -75,12 +83,7 @@ export const ParentSchema = z.object({
   student_ids: z.array(z.string().uuid()).optional(),
 });
 
-export const SubjectSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1),
-  created_at: z.string().optional(),
-});
-
+// 3. باقي الكيانات
 export const AssignmentSchema = z.object({
   id: z.string().uuid(),
   title: z.string().min(1),
