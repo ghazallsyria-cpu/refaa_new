@@ -40,14 +40,14 @@ export interface AttendanceStats {
 }
 
 export function useAttendanceSystem() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const [sections, setSections] = useState<SectionData[]>([]);
   const [daySchedule, setDaySchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchDaySchedule = useCallback(async (targetDate: string) => {
-    if (!user || userRole !== 'teacher') return [];
+    if (!user || authRole !== 'teacher') return [];
     try {
       const jsDay = new Date(targetDate).getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
@@ -67,14 +67,14 @@ export function useAttendanceSystem() {
       console.error('Error fetching day schedule:', err);
       return [];
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const fetchSections = useCallback(async (targetDate: string, targetPeriod: number): Promise<SectionData[]> => {
     if (!user) return [];
     try {
       let sectionsData: SectionData[] = [];
-      const isTeacher = userRole === 'teacher' || (typeof userRole === 'string' && userRole.includes('teacher'));
-      const isAdmin = userRole === 'admin' || (typeof userRole === 'string' && userRole.includes('admin'));
+      const isTeacher = authRole === 'teacher' || (typeof authRole === 'string' && authRole.includes('teacher'));
+      const isAdmin = authRole === 'admin' || (typeof authRole === 'string' && authRole.includes('admin'));
 
       if (isTeacher) {
         const jsDay = new Date(targetDate).getDay();
@@ -110,7 +110,7 @@ export function useAttendanceSystem() {
       console.error('Error fetching sections:', err);
       return [];
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const fetchStudentsAndAttendance = useCallback(async (selectedSection: string, selectedSubject: string, date: string, period: number) => {
     if (!user || !selectedSection) return null;
@@ -233,7 +233,7 @@ export function useAttendanceSystem() {
   }, [user]);
 
   const fetchStudentAttendance = useCallback(async () => {
-    if (!user || userRole !== 'student') return null;
+    if (!user || authRole !== 'student') return null;
     try {
       const { data: summaryData, error: summaryError } = await supabase
         .from('daily_attendance_summary')
@@ -256,7 +256,7 @@ export function useAttendanceSystem() {
       console.error('Error fetching student attendance:', err);
       return null;
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   return { 
     sections, 

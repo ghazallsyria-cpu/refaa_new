@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 import { Teacher, Subject, Section } from '@/types';
 
 export default function AssignmentsPage() {
-  const { user, userRole, isChecking: authLoading } = useAuth();
+  const { user, authRole, isChecking: authLoading } = useAuth();
   const { data: assignments, loading: contentLoading, error: contentError, studentSubmissions, refetch: refresh, fetchAssignmentQuestions, saveAssignment, deleteAssignment } = useAssignmentsSystem();
 
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
@@ -56,7 +56,7 @@ export default function AssignmentsPage() {
         title: currentAssignment.title,
         description: currentAssignment.description,
         subject_id: currentAssignment.subject_id,
-        teacher_id: userRole === 'teacher' ? user.id : currentAssignment.teacher_id,
+        teacher_id: authRole === 'teacher' ? user.id : currentAssignment.teacher_id,
         due_date: currentAssignment.due_date,
         file_url: currentAssignment.file_url,
         status: currentAssignment.status || 'draft'
@@ -141,7 +141,7 @@ export default function AssignmentsPage() {
       title: '',
       description: '',
       subject_id: subjects[0]?.id || '',
-      teacher_id: userRole === 'teacher' ? user?.id || '' : teachers[0]?.id || '',
+      teacher_id: authRole === 'teacher' ? user?.id || '' : teachers[0]?.id || '',
       due_date: formattedDate,
       section_ids: [],
       file_url: ''
@@ -184,7 +184,7 @@ export default function AssignmentsPage() {
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">الواجبات المدرسية</h1>
           <p className="text-lg text-slate-500 font-medium">إدارة الواجبات والمهام المسندة للطلاب</p>
         </div>
-        {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && (
+        {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
           <button 
             onClick={openAddModal}
             className="inline-flex items-center justify-center gap-3 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 self-start md:self-end"
@@ -244,7 +244,7 @@ export default function AssignmentsPage() {
                       <span className="inline-flex items-center rounded-2xl bg-indigo-50 px-4 py-1.5 text-xs font-black text-indigo-700 uppercase tracking-widest border border-indigo-100 shadow-sm">
                         {assignment.subject_name}
                       </span>
-                      {userRole === 'student' && studentSubmissions[assignment.id] && (
+                      {authRole === 'student' && studentSubmissions[assignment.id] && (
                         <span className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-50 px-4 py-1.5 text-xs font-black text-emerald-700 uppercase tracking-widest border border-emerald-100 shadow-sm">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           تم التسليم
@@ -256,7 +256,7 @@ export default function AssignmentsPage() {
                           انتهى الوقت
                         </span>
                       )}
-                      {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && assignment.submission_count !== undefined && assignment.submission_count > 0 && (
+                      {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && assignment.submission_count !== undefined && assignment.submission_count > 0 && (
                         <span className={`inline-flex items-center gap-1.5 rounded-2xl px-4 py-1.5 text-xs font-black uppercase tracking-widest border shadow-sm ${
                           assignment.graded_count === assignment.submission_count
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
@@ -271,7 +271,7 @@ export default function AssignmentsPage() {
                         </span>
                       )}
                     </div>
-                    {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && (
+                    {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
                       <div className="flex gap-2">
                         <Link 
                            href={`/assignments/${assignment.id}`}
@@ -291,7 +291,7 @@ export default function AssignmentsPage() {
                         >
                           <Share2 className="h-5 w-5" />
                         </button>
-                        {(userRole === 'admin' || userRole === 'management' || assignment.teacher_id === user?.id) && (
+                        {(authRole === 'admin' || authRole === 'management' || assignment.teacher_id === user?.id) && (
                           <>
                             <button 
                               onClick={() => openEditModal(assignment)}
@@ -358,13 +358,13 @@ export default function AssignmentsPage() {
                     <Link 
                       href={`/assignments/${assignment.id}`}
                       className={`h-10 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center gap-2 active:scale-95 ${
-                        userRole === 'student' && studentSubmissions[assignment.id]
+                        authRole === 'student' && studentSubmissions[assignment.id]
                           ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100'
                           : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
                     >
                       <span>
-                        {userRole === 'student' 
+                        {authRole === 'student' 
                           ? (studentSubmissions[assignment.id] ? 'عرض الإجابة' : 'عرض وتسليم') 
                           : 'التفاصيل'}
                       </span>
@@ -529,7 +529,7 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
 
-                  {(userRole === 'admin' || userRole === 'management') && (
+                  {(authRole === 'admin' || authRole === 'management') && (
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المعلم المسؤول <span className="text-red-500">*</span></label>
                       <div className="relative">

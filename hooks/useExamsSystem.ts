@@ -18,13 +18,13 @@ export interface StudentExamResult {
 }
 
 export function useExamsSystem() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const [data, setData] = useState<ExamWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchExams = useCallback(async (): Promise<void> => {
-    if (!user || !userRole) return;
+    if (!user || !authRole) return;
     setLoading(true);
     setError(null);
     try {
@@ -42,7 +42,7 @@ export function useExamsSystem() {
         .order('created_at', { ascending: false });
 
       // If student, we only want published exams for their section
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         const { data: studentProfile } = await supabase
           .from('students')
           .select('section_id')
@@ -59,7 +59,7 @@ export function useExamsSystem() {
           setLoading(false);
           return;
         }
-      } else if (userRole === 'teacher') {
+      } else if (authRole === 'teacher') {
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
           .select('section_id')
@@ -85,7 +85,7 @@ export function useExamsSystem() {
       }));
 
       // Fetch stats for teacher/admin
-      if (['teacher', 'admin', 'management'].includes(userRole || '')) {
+      if (['teacher', 'admin', 'management'].includes(authRole || '')) {
         const examsWithStats = await Promise.all(mappedData.map(async (e) => {
           const [attemptsRes, questionsRes] = await Promise.all([
             supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
@@ -109,7 +109,7 @@ export function useExamsSystem() {
       }
 
       // Fetch submission status for student
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         const { data: attemptsData } = await supabase
           .from('exam_attempts')
           .select('exam_id, score, status')
@@ -133,7 +133,7 @@ export function useExamsSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   useEffect(() => {
     fetchExams();

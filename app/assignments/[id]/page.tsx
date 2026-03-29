@@ -25,7 +25,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentId = resolvedParams.id;
   
   const router = useRouter();
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment } = useAssignmentsSystem();
   
   const [assignment, setAssignment] = useState<AssignmentWithMeta | null>(null);
@@ -121,7 +121,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (!user) return;
     setLoading(true);
     try {
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         setStudentId(user.id);
       }
 
@@ -134,7 +134,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         setQuestions(details.questions);
       }
 
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         if (details.submission) {
           setMySubmission(details.submission as any);
           setContent(details.submission.content || '');
@@ -148,7 +148,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             setMyAnswers(answersMap);
           }
         }
-      } else if (['teacher', 'admin', 'management'].includes(userRole || '')) {
+      } else if (['teacher', 'admin', 'management'].includes(authRole || '')) {
         setSubmissions(details.allSubmissions);
       }
 
@@ -158,7 +158,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     } finally {
       setLoading(false);
     }
-  }, [assignmentId, user, userRole, fetchAssignmentDetails]);
+  }, [assignmentId, user, authRole, fetchAssignmentDetails]);
 
   useEffect(() => {
     fetchData();
@@ -309,7 +309,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             <span className="hidden sm:inline">مشاركة</span>
           </button>
 
-          {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && (
+          {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
             <>
               <button 
                 onClick={() => setIsEditModalOpen(true)}
@@ -375,7 +375,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       </div>
 
       {/* Student View: Submission Form */}
-      {userRole === 'student' && (
+      {authRole === 'student' && (
         <div className="glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden">
           <div className="p-8 border-b border-slate-100/50 bg-slate-50/50">
             <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -483,7 +483,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       )}
 
       {/* Teacher View: Submissions List & Preview */}
-      {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && (
+      {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
         <div className="space-y-8">
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
             <button 

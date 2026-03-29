@@ -4,7 +4,7 @@ import { useAuth } from '@/context/auth-context';
 import { OrganizedClass, OrganizedSection, OrganizedStudent } from '@/types';
 
 export function useClassesSystem() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const [classes, setClasses] = useState<OrganizedClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +14,7 @@ export function useClassesSystem() {
     setLoading(true);
     setError(null);
     try {
-      const isTeacher = userRole === 'teacher';
+      const isTeacher = authRole === 'teacher';
 
       // Fetch classes
       const { data: classesData, error: classesError } = await supabase
@@ -105,7 +105,7 @@ export function useClassesSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const addClass = useCallback(async (name: string, level: number): Promise<void> => {
     const response = await fetch('/api/classes/save', {

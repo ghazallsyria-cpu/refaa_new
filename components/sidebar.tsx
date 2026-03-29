@@ -55,12 +55,12 @@ const navigation = [
 
 export function Sidebar({ 
   onClose, 
-  userRole = 'admin', 
+  authRole = 'admin', 
   isCollapsed = false, 
   onToggleCollapse 
 }: { 
   onClose?: () => void, 
-  userRole?: string,
+  authRole?: string,
   isCollapsed?: boolean,
   onToggleCollapse?: () => void
 }) {
@@ -68,17 +68,17 @@ export function Sidebar({
 
   // Filter navigation based on user role
   const filteredNavigation = navigation.filter(item => {
-    if (userRole === 'admin' || userRole === 'management') return true;
+    if (authRole === 'admin' || authRole === 'management') return true;
     
-    if (userRole === 'teacher') {
+    if (authRole === 'teacher') {
       return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
     }
     
-    if (userRole === 'student') {
+    if (authRole === 'student') {
       return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
     }
     
-    if (userRole === 'parent') {
+    if (authRole === 'parent') {
       return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     }
     
@@ -93,7 +93,7 @@ export function Sidebar({
     'student': 'طالب',
     'parent': 'ولي أمر'
   };
-  const roleDisplayName = roleDisplayNames[userRole] || 'مستخدم';
+  const roleDisplayName = roleDisplayNames[authRole] || 'مستخدم';
 
   return (
     <div className={cn(
@@ -168,10 +168,10 @@ export function Sidebar({
             // Special handling for dashboard route based on role
             let itemHref = item.href;
             if (item.name === 'لوحة التحكم') {
-              if (userRole === 'student') itemHref = '/dashboard/student';
-              else if (userRole === 'teacher') itemHref = '/dashboard/teacher';
-              else if (userRole === 'parent') itemHref = '/dashboard/parent';
-              else if (userRole === 'admin' || userRole === 'management') itemHref = '/dashboard';
+              if (authRole === 'student') itemHref = '/dashboard/student';
+              else if (authRole === 'teacher') itemHref = '/dashboard/teacher';
+              else if (authRole === 'parent') itemHref = '/dashboard/parent';
+              else if (authRole === 'admin' || authRole === 'management') itemHref = '/dashboard';
             }
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));

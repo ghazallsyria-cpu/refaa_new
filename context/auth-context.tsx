@@ -9,7 +9,7 @@ import { User, UserRole } from '@/types';
 
 interface AuthContextType {
   user: SupabaseUser | null;
-  userRole: UserRole | null;
+  authRole: UserRole | null;
   userName: string;
   mustResetPassword: boolean;
   isChecking: boolean;
@@ -27,7 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [authRole, setAuthRole] = useState<UserRole | null>(null);
   const [userName, setUserName] = useState<string>('');
   const [mustResetPassword, setMustResetPassword] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
@@ -194,13 +194,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           setUser(session.user);
           // Check cached role
-          const cachedRole = sessionStorage.getItem('userRole');
+          const cachedRole = sessionStorage.getItem('authRole');
           const cachedName = sessionStorage.getItem('userName');
-          if (cachedRole) setUserRole(cachedRole);
+          if (cachedRole) setAuthRole(cachedRole as UserRole);
           if (cachedName) setUserName(cachedName);
         } else {
           setUser(null);
-          sessionStorage.removeItem('userRole');
+          sessionStorage.removeItem('authRole');
           sessionStorage.removeItem('userName');
           if (!isPublicPage) {
             router.push('/login');
@@ -218,8 +218,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
-        setUserRole(null);
-        sessionStorage.removeItem('userRole');
+        setAuthRole(null);
+        sessionStorage.removeItem('authRole');
         sessionStorage.removeItem('userName');
         if (!isPublicPage) {
           router.push('/login');
@@ -239,12 +239,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) {
-      setUserRole(null);
+      setAuthRole(null);
       return;
     }
 
     // Skip fetching if we already have the role from cache and it's not a fresh login
-    if (userRole && userName && !isLoginPage) {
+    if (authRole && userName && !isLoginPage) {
       return;
     }
 
@@ -271,11 +271,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (userRes.data) {
           const name = userRes.data.full_name || user.email?.split('@')[0] || '';
           setUserName(name);
-          setUserRole(role);
+          setAuthRole(role as UserRole);
           setMustResetPassword(userRes.data.must_reset_password || false);
           
           // Cache the data
-          sessionStorage.setItem('userRole', role || '');
+          sessionStorage.setItem('authRole', role || '');
           sessionStorage.setItem('userName', name);
         }
 
@@ -309,13 +309,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchUserData();
-  }, [user, isPublicPage, isLoginPage, userRole, userName]);
+  }, [user, isPublicPage, isLoginPage, authRole, userName]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    setUserRole(null);
-    sessionStorage.removeItem('userRole');
+    setAuthRole(null);
+    sessionStorage.removeItem('authRole');
     sessionStorage.removeItem('userName');
     router.push('/login');
   };
@@ -323,7 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ 
       user, 
-      userRole, 
+      authRole, 
       userName, 
       mustResetPassword,
       isChecking, 

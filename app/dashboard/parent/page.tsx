@@ -170,7 +170,7 @@ export default function ParentDashboard() {
         <div className="space-y-8">
           
           {/* Announcements Widget */}
-          <AnnouncementsWidget role="parent" />
+          <AnnouncementsWidget authRole="parent" />
 
           <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-sm ring-1 ring-slate-200/50 p-6 hover:shadow-md transition-all">
             <h2 className="text-xl font-bold text-slate-900 mb-6">روابط سريعة</h2>

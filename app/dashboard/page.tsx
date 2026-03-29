@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, School, ArrowUpRight, Activity, FileText } from 'lucide-react';
+import { Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, School, ArrowUpRight, Activity, FileText, Target } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
@@ -30,13 +30,14 @@ const itemVariants: any = {
 };
 
 export default function AdminDashboard() {
-  const { fetchAdminDashboardStats, fetchAdminRecentActivities } = useDashboardSystem();
+  const { fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats } = useDashboardSystem();
   const [stats, setStats] = useState([
     { name: 'إجمالي الطلاب', value: '...', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '+12%' },
     { name: 'إجمالي المعلمين', value: '...', icon: GraduationCap, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '+3' },
     { name: 'إجمالي الفصول', value: '...', icon: BookOpen, color: 'text-amber-600', bg: 'bg-amber-50', trend: '0' },
     { name: 'حضور اليوم', value: '...', icon: CalendarDays, color: 'text-sky-600', bg: 'bg-sky-50', trend: '92%' },
   ]);
+  const [trackStats, setTrackStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
@@ -75,9 +76,19 @@ export default function AdminDashboard() {
       }
     }
 
+    async function fetchTrackData() {
+      try {
+        const data = await fetchTrackSelectionStats();
+        setTrackStats(data);
+      } catch (error) {
+        console.error('Error fetching track selection stats:', error);
+      }
+    }
+
     fetchDashboardStats();
     fetchRecentActivities();
-  }, [fetchAdminDashboardStats, fetchAdminRecentActivities]);
+    fetchTrackData();
+  }, [fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats]);
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '...';
@@ -196,6 +207,54 @@ export default function AdminDashboard() {
         ))}
       </motion.div>
 
+      {/* Track Selection Results */}
+      {trackStats && trackStats.total > 0 && (
+        <motion.div 
+          variants={itemVariants}
+          className="bg-white/70 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-sm ring-1 ring-slate-200/50"
+        >
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-50 rounded-xl text-amber-600">
+                <Target className="h-5 w-5" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900">نتائج اختيار المسار (الصف العاشر)</h2>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100">
+              <p className="text-sm font-bold text-indigo-600 mb-1">المسار العلمي</p>
+              <p className="text-4xl font-black text-indigo-900">{trackStats.scientific}</p>
+              <p className="text-xs text-indigo-400 mt-2 font-medium">طالب اختاروا هذا المسار</p>
+            </div>
+            <div className="p-6 rounded-3xl bg-emerald-50 border border-emerald-100">
+              <p className="text-sm font-bold text-emerald-600 mb-1">المسار الأدبي</p>
+              <p className="text-4xl font-black text-emerald-900">{trackStats.literary}</p>
+              <p className="text-xs text-emerald-400 mt-2 font-medium">طالب اختاروا هذا المسار</p>
+            </div>
+            <div className="p-6 rounded-3xl bg-slate-50 border border-slate-100">
+              <p className="text-sm font-bold text-slate-600 mb-1">إجمالي المشاركين</p>
+              <p className="text-4xl font-black text-slate-900">{trackStats.total}</p>
+              <p className="text-xs text-slate-400 mt-2 font-medium">إجمالي الطلاب الذين حددوا مسارهم</p>
+            </div>
+          </div>
+          <div className="mt-8 h-4 w-full bg-slate-100 rounded-full overflow-hidden flex">
+            <div 
+              className="h-full bg-indigo-500 transition-all duration-1000" 
+              style={{ width: `${(trackStats.scientific / trackStats.total) * 100}%` }}
+            ></div>
+            <div 
+              className="h-full bg-emerald-500 transition-all duration-1000" 
+              style={{ width: `${(trackStats.literary / trackStats.total) * 100}%` }}
+            ></div>
+          </div>
+          <div className="mt-4 flex justify-between text-xs font-bold">
+            <span className="text-indigo-600">علمي ({Math.round((trackStats.scientific / trackStats.total) * 100)}%)</span>
+            <span className="text-emerald-600">أدبي ({Math.round((trackStats.literary / trackStats.total) * 100)}%)</span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Main Content Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Activity */}
@@ -297,7 +356,7 @@ export default function AdminDashboard() {
           </motion.div>
 
           {/* Announcements Widget */}
-          <AnnouncementsWidget role="admin" />
+          <AnnouncementsWidget authRole="admin" />
 
           <motion.div 
             variants={itemVariants}

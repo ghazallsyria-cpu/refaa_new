@@ -17,7 +17,7 @@ type Announcement = {
   image_url?: string;
 };
 
-export default function AnnouncementsWidget({ limit = 3, role }: { limit?: number; role: string }) {
+export default function AnnouncementsWidget({ limit = 3, authRole }: { limit?: number; authRole: string }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
@@ -36,8 +36,8 @@ export default function AnnouncementsWidget({ limit = 3, role }: { limit?: numbe
           .order('created_at', { ascending: false })
           .limit(limit);
 
-        if (role && role !== 'admin' && role !== 'management') {
-          query = query.or(`target_role.eq.${role},target_role.is.null`);
+        if (authRole && authRole !== 'admin' && authRole !== 'management') {
+          query = query.or(`target_role.eq.${authRole},target_role.is.null`);
         }
 
         const { data, error } = await query;
@@ -51,7 +51,7 @@ export default function AnnouncementsWidget({ limit = 3, role }: { limit?: numbe
     }
 
     fetchAnnouncements();
-  }, [limit, role]);
+  }, [limit, authRole]);
 
   if (loading) {
     return (

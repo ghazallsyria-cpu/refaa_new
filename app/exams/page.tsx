@@ -14,7 +14,7 @@ import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 
 export default function ExamsDashboard() {
-  const { user, userRole, isChecking: authLoading } = useAuth();
+  const { user, authRole, isChecking: authLoading } = useAuth();
   const { data: exams, loading: contentLoading, error: contentError, refetch: refresh, deleteExamWithMedia } = useExamsSystem();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,7 +61,7 @@ export default function ExamsDashboard() {
     }
   };
 
-  const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin' || userRole === 'management';
+  const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
   
   const getExamStatus = (exam: any) => {
     if (exam.status !== 'published') return null;
@@ -257,7 +257,7 @@ export default function ExamsDashboard() {
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Portal>
                             <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
-                              {(userRole === 'admin' || userRole === 'management' || exam.teacher_id === user?.id) && (
+                              {(authRole === 'admin' || authRole === 'management' || exam.teacher_id === user?.id) && (
                                 <>
                                   <DropdownMenu.Item asChild>
                                     <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">

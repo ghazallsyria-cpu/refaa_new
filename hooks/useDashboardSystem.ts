@@ -72,7 +72,7 @@ export function useDashboardSystem() {
     try {
       const { data: student } = await supabase
         .from('students')
-        .select('*, sections(name, classes(name))')
+        .select('*, users(full_name), sections(name, classes(name))')
         .eq('id', user.id)
         .single();
       
@@ -338,6 +338,54 @@ export function useDashboardSystem() {
     }
   }, [user]);
 
+  const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
+    if (!user) return null;
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .update({ 
+          next_year_track: track,
+          track_selection_date: new Date().toISOString()
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating student track:', error);
+      throw error;
+    }
+  }, [user]);
+
+  const fetchTrackSelectionStats = useCallback(async (classId?: string) => {
+    try {
+      let query = supabase
+        .from('students')
+        .select('next_year_track, sections!inner(class_id)')
+        .not('next_year_track', 'is', null);
+      
+      if (classId) {
+        query = query.eq('sections.class_id', classId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const stats = {
+        scientific: data.filter(s => s.next_year_track === 'scientific').length,
+        literary: data.filter(s => s.next_year_track === 'literary').length,
+        total: data.length
+      };
+
+      return stats;
+    } catch (error) {
+      console.error('Error fetching track selection stats:', error);
+      throw error;
+    }
+  }, []);
+
   return {
     fetchAdminDashboardStats,
     fetchAdminRecentActivities,
@@ -345,6 +393,8 @@ export function useDashboardSystem() {
     fetchStudentSchedule,
     fetchParentDashboardData,
     fetchTeacherDashboardData,
-    fetchTeacherSchedule
+    fetchTeacherSchedule,
+    updateStudentTrack,
+    fetchTrackSelectionStats
   };
 }

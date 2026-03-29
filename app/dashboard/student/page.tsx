@@ -33,7 +33,7 @@ export default function StudentDashboard() {
     setMounted(true);
   }, []);
 
-  const { fetchStudentDashboardData } = useDashboardSystem();
+  const { fetchStudentDashboardData, updateStudentTrack } = useDashboardSystem();
 
   const fetchData = useCallback(async () => {
     try {
@@ -56,6 +56,16 @@ export default function StudentDashboard() {
     }
   }, [fetchStudentDashboardData]);
 
+  const handleTrackSelection = async (track: 'scientific' | 'literary') => {
+    try {
+      await updateStudentTrack(track);
+      // Refresh data to hide the selection UI
+      fetchData();
+    } catch (error) {
+      console.error('Error selecting track:', error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -70,6 +80,10 @@ export default function StudentDashboard() {
       </div>
     );
   }
+
+  // Check if student is in 10th grade and hasn't selected a track
+  const isTenthGrade = studentData?.sections?.classes?.name?.includes('العاشر');
+  const hasSelectedTrack = !!studentData?.next_year_track;
 
   // Calculate average score
   const avgScore = recentGrades.length > 0 
@@ -107,6 +121,59 @@ export default function StudentDashboard() {
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
         <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"></div>
       </div>
+
+      {/* Track Selection for 10th Grade */}
+      {isTenthGrade && !hasSelectedTrack && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="rounded-3xl bg-amber-50 border-2 border-amber-200 p-8 shadow-lg"
+        >
+          <div className="flex flex-col md:flex-row items-center gap-8">
+            <div className="p-4 bg-amber-100 rounded-2xl">
+              <Target className="h-12 w-12 text-amber-600" />
+            </div>
+            <div className="flex-1 text-center md:text-right">
+              <h2 className="text-2xl font-black text-slate-900 mb-2">تحديد المسار الأكاديمي للصف الحادي عشر</h2>
+              <p className="text-slate-600 font-medium">عزيزي الطالب، يرجى اختيار المسار الذي ترغب في إكماله العام القادم. هذا القرار مهم لمستقبلك الدراسي.</p>
+            </div>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => handleTrackSelection('scientific')}
+                className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95"
+              >
+                المسار العلمي
+              </button>
+              <button 
+                onClick={() => handleTrackSelection('literary')}
+                className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all hover:scale-105 active:scale-95"
+              >
+                المسار الأدبي
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Track Selection Confirmation */}
+      {isTenthGrade && hasSelectedTrack && (
+        <div className="rounded-3xl bg-slate-50 border border-slate-200 p-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-2 bg-emerald-100 rounded-xl">
+              <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-bold text-slate-900">تم تحديد المسار الأكاديمي للعام القادم</p>
+              <p className="text-sm text-slate-500">
+                المسار المختار: <span className="font-black text-indigo-600">{studentData.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}</span>
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 font-medium">
+            تاريخ الاختيار: {mounted ? format(new Date(studentData.track_selection_date), 'd MMMM yyyy', { locale: arSA }) : '...'}
+          </p>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -308,7 +375,7 @@ export default function StudentDashboard() {
           </div>
 
           {/* Announcements Widget */}
-          <AnnouncementsWidget role="student" />
+          <AnnouncementsWidget authRole="student" />
 
           {/* Attendance Widget */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">

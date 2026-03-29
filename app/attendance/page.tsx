@@ -6,7 +6,7 @@ import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSyst
 import { useAuth } from '@/context/auth-context';
 
 export default function AttendancePage() {
-  const { userRole } = useAuth();
+  const { authRole } = useAuth();
   const { 
     sections, 
     daySchedule, 
@@ -36,7 +36,7 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    if (date && userRole === 'teacher') {
+    if (date && authRole === 'teacher') {
       fetchDaySchedule(date).then((schedule) => {
         if (schedule && schedule.length > 0) {
           const isCurrentPeriodScheduled = schedule.some(s => s.period === period);
@@ -46,11 +46,11 @@ export default function AttendancePage() {
         }
       });
     }
-  }, [date, userRole, fetchDaySchedule, period]);
+  }, [date, authRole, fetchDaySchedule, period]);
 
   useEffect(() => {
     if (date && period) {
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         fetchStudentAttendance().then(res => {
           if (res) {
             setStudentAttendance(res.studentAttendance);
@@ -72,7 +72,7 @@ export default function AttendancePage() {
         });
       }
     }
-  }, [date, period, fetchSections, fetchStudentAttendance, userRole]);
+  }, [date, period, fetchSections, fetchStudentAttendance, authRole]);
 
   const loadStudentsAndAttendance = useCallback(async () => {
     if (selectedSection && date) {
@@ -122,7 +122,7 @@ export default function AttendancePage() {
     setAttendance(newAttendance);
   };
 
-  if (userRole === 'student') {
+  if (authRole === 'student') {
     return (
       <div className="space-y-10 max-w-6xl mx-auto pb-24 p-4 sm:p-8">
         <div className="space-y-2">
@@ -279,7 +279,7 @@ export default function AttendancePage() {
               onChange={(e) => setPeriod(parseInt(e.target.value))}
               className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
             >
-              {userRole === 'teacher' ? (
+              {authRole === 'teacher' ? (
                 daySchedule.length > 0 ? (
                   daySchedule.map(s => (
                     <option key={s.period} value={s.period}>

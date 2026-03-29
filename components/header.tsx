@@ -13,14 +13,14 @@ export function Header({
   onMenuClick, 
   showMenuButton = true,
   user,
-  userRole,
+  authRole,
   userName,
   isSidebarCollapsed = false
 }: { 
   onMenuClick?: () => void, 
   showMenuButton?: boolean,
   user?: any,
-  userRole?: string,
+  authRole?: string,
   userName?: string,
   isSidebarCollapsed?: boolean
 }) {
@@ -40,7 +40,7 @@ export function Header({
     'parent': 'ولي أمر'
   };
   
-  const displayRole = userRole ? (roleMap[userRole] || userRole) : '';
+  const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
 
   return (
     <header className="flex h-24 shrink-0 items-center justify-between bg-white/70 backdrop-blur-xl border-b border-slate-200/50 px-8 sticky top-0 z-30">

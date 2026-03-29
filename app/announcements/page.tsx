@@ -19,7 +19,7 @@ const AUDIENCE_OPTIONS = [
 ];
 
 export default function AnnouncementsPage() {
-  const { userRole } = useAuth();
+  const { authRole } = useAuth();
   const { 
     announcements, 
     loading, 
@@ -47,8 +47,8 @@ export default function AnnouncementsPage() {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
   const loadAnnouncements = useCallback(async () => {
-    await fetchAnnouncements(userRole);
-  }, [fetchAnnouncements, userRole]);
+    await fetchAnnouncements(authRole);
+  }, [fetchAnnouncements, authRole]);
 
   useEffect(() => {
     loadAnnouncements();
@@ -172,7 +172,7 @@ export default function AnnouncementsPage() {
             <p className="text-xl text-slate-500 font-medium max-w-2xl">إدارة ونشر الإعلانات الموجهة لمجتمع المدرسة بكفاءة وشفافية.</p>
           </div>
           
-          { (userRole === 'admin' || userRole === 'management') && (
+          { (authRole === 'admin' || authRole === 'management') && (
             <motion.button 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -283,7 +283,7 @@ export default function AnnouncementsPage() {
                           </div>
                         </div>
                         
-                        { (userRole === 'admin' || userRole === 'management') && (
+                        { (authRole === 'admin' || authRole === 'management') && (
                           <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
                             <motion.button 
                               whileHover={{ scale: 1.1 }}

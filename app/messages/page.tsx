@@ -9,7 +9,7 @@ import { useMessagesSystem } from '@/hooks/useMessagesSystem';
 type Tab = 'messages';
 
 export default function MessagesPage() {
-  const { user: currentUser, userRole } = useAuth();
+  const { user: currentUser, authRole } = useAuth();
   const {
     messages,
     users,
@@ -64,7 +64,7 @@ export default function MessagesPage() {
     try {
       const isGroup = !!activeThread.section_id;
       
-      if (isGroup && userRole === 'teacher') {
+      if (isGroup && authRole === 'teacher') {
         await hookSendGroupMessage(activeThread.section_id, activeThread.subject, replyContent);
       } else {
         const receiverId = isGroup 

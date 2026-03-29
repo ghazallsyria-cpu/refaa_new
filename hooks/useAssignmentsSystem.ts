@@ -14,14 +14,14 @@ export interface AssignmentDetails {
 }
 
 export function useAssignmentsSystem() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const [data, setData] = useState<AssignmentWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
   const fetchAssignments = useCallback(async (): Promise<void> => {
-    if (!user || !userRole) return;
+    if (!user || !authRole) return;
     setLoading(true);
     setError(null);
     try {
@@ -42,7 +42,7 @@ export function useAssignmentsSystem() {
         `)
         .order('due_date', { ascending: true });
 
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         // Fetch student's section
         const { data: studentData } = await supabase
           .from('students')
@@ -57,7 +57,7 @@ export function useAssignmentsSystem() {
           setLoading(false);
           return;
         }
-      } else if (userRole === 'teacher') {
+      } else if (authRole === 'teacher') {
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
           .select('section_id')
@@ -86,7 +86,7 @@ export function useAssignmentsSystem() {
       setData(mappedData);
 
       // 2. Fetch submissions if student
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         const { data: subData, error: subError } = await supabase
           .from('assignment_submissions')
           .select('assignment_id, status, grade, id, student_id, submitted_at')
@@ -102,7 +102,7 @@ export function useAssignmentsSystem() {
       }
 
       // 3. Fetch submission counts if teacher/admin
-      if (['teacher', 'admin', 'management'].includes(userRole)) {
+      if (['teacher', 'admin', 'management'].includes(authRole)) {
         const { data: countsData, error: countsError } = await supabase
           .from('assignment_submissions')
           .select('assignment_id, status');
@@ -127,7 +127,7 @@ export function useAssignmentsSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   useEffect(() => {
     fetchAssignments();
@@ -227,7 +227,7 @@ export function useAssignmentsSystem() {
       let answersData: AssignmentAnswer[] = [];
       let allSubmissionsData: SubmissionWithStudent[] = [];
 
-      if (userRole === 'student' && user) {
+      if (authRole === 'student' && user) {
         const { data: subData } = await supabase
           .from('assignment_submissions')
           .select('*')
@@ -243,7 +243,7 @@ export function useAssignmentsSystem() {
             .eq('submission_id', subData.id);
           answersData = (aData as AssignmentAnswer[]) || [];
         }
-      } else if (['teacher', 'admin', 'management'].includes(userRole || '')) {
+      } else if (['teacher', 'admin', 'management'].includes(authRole || '')) {
         const { data: subsData, error: subsError } = await supabase
           .from('assignment_submissions')
           .select(`
@@ -276,7 +276,7 @@ export function useAssignmentsSystem() {
       console.error('Error fetching assignment details:', err);
       throw err;
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const submitAssignment = useCallback(async (assignmentId: string, answers: RawAssignmentAnswer[], submissionId?: string): Promise<string> => {
     if (!user) throw new Error('Not authenticated');

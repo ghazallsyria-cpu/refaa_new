@@ -19,7 +19,7 @@ export function useAnnouncementsSystem() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAnnouncements = useCallback(async (userRole: string | null) => {
+  const fetchAnnouncements = useCallback(async (authRole: string | null) => {
     setLoading(true);
     setError(null);
     try {
@@ -35,9 +35,9 @@ export function useAnnouncementsSystem() {
         `)
         .order('created_at', { ascending: false });
 
-      if (userRole !== 'admin' && userRole !== 'management') {
-        if (userRole) {
-          query = query.or(`target_role.eq.${userRole},target_role.is.null`);
+      if (authRole !== 'admin' && authRole !== 'management') {
+        if (authRole) {
+          query = query.or(`target_role.eq.${authRole},target_role.is.null`);
         } else {
           query = query.is('target_role', null);
         }

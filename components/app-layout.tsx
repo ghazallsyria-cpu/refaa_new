@@ -15,7 +15,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { 
     user, 
-    userRole, 
+    authRole, 
     userName, 
     mustResetPassword,
     isChecking, 
@@ -35,7 +35,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Derive authorization state
   const getAuthorization = () => {
-    if (isChecking || isPublicPage || !user || !userRole) return true;
+    if (isChecking || isPublicPage || !user || !authRole) return true;
 
     // Force password reset
     if (mustResetPassword && !isResetPasswordPage) return false;
@@ -43,19 +43,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
-    if (userRole === 'student') {
+    if (authRole === 'student') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
         return false;
       }
-    } else if (userRole === 'teacher') {
+    } else if (authRole === 'teacher') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
         return false;
       }
-    } else if (userRole === 'parent') {
+    } else if (authRole === 'parent') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
         return false;
       }
-    } else if (userRole === 'admin' || userRole === 'management' || isAdminByEmail) {
+    } else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) {
       if (isRoot) {
         return false;
       }
@@ -78,24 +78,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (!userRole) return;
+    if (!authRole) return;
 
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
-    if (userRole === 'student') {
+    if (authRole === 'student') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
         router.push('/dashboard/student');
       }
-    } else if (userRole === 'teacher') {
+    } else if (authRole === 'teacher') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
         router.push('/dashboard/teacher');
       }
-    } else if (userRole === 'parent') {
+    } else if (authRole === 'parent') {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
         router.push('/dashboard/parent');
       }
-    } else if (userRole === 'admin' || userRole === 'management' || isAdminByEmail) {
+    } else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) {
       if (isRoot) {
         router.push('/dashboard');
       }
@@ -104,7 +104,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         router.push('/');
       }
     }
-  }, [pathname, userRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
+  }, [pathname, authRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
@@ -179,7 +179,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         >
           <Sidebar 
             onClose={() => setIsSidebarOpen(false)} 
-            userRole={userRole || 'student'} 
+            authRole={authRole || 'student'} 
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={() => {
               setIsSidebarCollapsed(!isSidebarCollapsed);
@@ -200,7 +200,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             }} 
             showMenuButton={showSidebar} 
             user={user} 
-            userRole={userRole || ''} 
+            authRole={authRole || ''} 
             userName={userName} 
             isSidebarCollapsed={!isSidebarOpen}
           />

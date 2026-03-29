@@ -4,14 +4,14 @@ import { useAuth } from '@/context/auth-context';
 import { Subject, Section, Teacher } from '@/types';
 
 export function useSchoolFormData() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
 
   return useQuery({
-    queryKey: ['school-form-data', user?.id, userRole],
+    queryKey: ['school-form-data', user?.id, authRole],
     queryFn: async () => {
-      if (!user || !userRole) return { subjects: [], sections: [], teachers: [] };
+      if (!user || !authRole) return { subjects: [], sections: [], teachers: [] };
 
-      if (userRole === 'admin' || userRole === 'management') {
+      if (authRole === 'admin' || authRole === 'management') {
         const [subjectsRes, sectionsRes, teachersRes] = await Promise.all([
           supabase.from('subjects').select('*').order('name'),
           supabase.from('sections').select('*, class:classes(name)').order('name'),
@@ -29,7 +29,7 @@ export function useSchoolFormData() {
             user: Array.isArray(t.user) ? t.user[0] : t.user
           }))
         };
-      } else if (userRole === 'teacher') {
+      } else if (authRole === 'teacher') {
         const [subjectsRes, sectionsRes, teacherSectionsRes] = await Promise.all([
           supabase.from('subjects').select('*').order('name'),
           supabase.from('sections').select('*, class:classes(name)').order('name'),
@@ -53,7 +53,7 @@ export function useSchoolFormData() {
       
       return { subjects: [], sections: [], teachers: [] };
     },
-    enabled: !!user && !!userRole,
+    enabled: !!user && !!authRole,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 }

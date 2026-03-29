@@ -4,7 +4,7 @@ import { useAuth } from '@/context/auth-context';
 import { Message, User, Section } from '@/types';
 
 export function useMessagesSystem() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [teacherSections, setTeacherSections] = useState<Section[]>([]);
@@ -37,7 +37,7 @@ export function useMessagesSystem() {
   const fetchUsers = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         const { data: studentData } = await supabase
           .from('students')
           .select('section_id')
@@ -91,10 +91,10 @@ export function useMessagesSystem() {
       console.error('Error fetching users:', err);
       setError(errorMessage);
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const fetchTeacherSections = useCallback(async (): Promise<void> => {
-    if (!user || userRole !== 'teacher') return;
+    if (!user || authRole !== 'teacher') return;
     try {
       const { data: sectionsData } = await supabase
         .from('teacher_sections')
@@ -121,7 +121,7 @@ export function useMessagesSystem() {
     } catch (err: unknown) {
       console.error('Error fetching teacher sections:', err);
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const loadInitialData = useCallback(async (): Promise<void> => {
     setLoading(true);

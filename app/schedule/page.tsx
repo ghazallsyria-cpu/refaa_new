@@ -16,7 +16,7 @@ const DAYS = [
 ];
 
 export default function SchedulePage() {
-  const { user, userRole: authRole, isChecking } = useAuth();
+  const { user, authRole, isChecking } = useAuth();
   const [viewType, setViewType] = useState<'teacher' | 'section'>('teacher');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
@@ -378,7 +378,7 @@ export default function SchedulePage() {
       )}
 
       {/* Copied Lesson Indicator */}
-      {isAdmin && userRole !== 'teacher' && copiedLesson && (
+      {isAdmin && authRole !== 'teacher' && copiedLesson && (
         <div className="bg-emerald-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between sticky top-4 z-40 no-print mt-4">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2 rounded-lg">
