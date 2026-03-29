@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (studentData && studentData.users) {
-        authEmail = (studentData.users as { email: string }).email;
+        authEmail = studentData.users?.[0]?.email;
       } else {
         // Try to find teacher
         const { data: teacherData } = await supabase
