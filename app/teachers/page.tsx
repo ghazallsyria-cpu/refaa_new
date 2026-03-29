@@ -178,7 +178,7 @@ export default function TeachersPage() {
     });
 
     try {
-      await assignTeacherToSections(selectedTeacher.id, newAssignments);
+      await assignTeacherToSections(newAssignments);
       const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
       setTeacherSections(refreshed);
       setBulkAssignData({ section_ids: [], subject_ids: [] });
