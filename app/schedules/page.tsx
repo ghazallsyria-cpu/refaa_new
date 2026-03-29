@@ -48,12 +48,15 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
+// دالة مساعدة لفك التغليف الآمن للبيانات
+const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
+
 export default function SchedulesPage() {
   const [sections, setSections] = useState<Section[]>([]);
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); // New state
+  const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   
   // Modal Data
@@ -65,7 +68,6 @@ export default function SchedulesPage() {
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
   
-  // تم إضافة updateSchedule هنا ↓
   const { fetchInitialScheduleData, fetchSchedules: fetchSchedulesData, addSchedule, updateSchedule, deleteSchedule: deleteScheduleAction } = useSchedulesSystem();
 
   const showNotification = (type: 'success' | 'error', message: string) => {
@@ -162,10 +164,8 @@ export default function SchedulesPage() {
       };
 
       if (currentCell.scheduleId) {
-        // Update
         await updateSchedule(currentCell.scheduleId, payload);
       } else {
-        // Insert
         await addSchedule(payload);
       }
 
@@ -199,8 +199,9 @@ export default function SchedulesPage() {
     }
   };
 
+  // مطابقة آمنة بنسبة 100%
   const getCellData = (day: number, period: number) => {
-    return schedules.find(s => s.day_of_week === day && s.period === period);
+    return schedules.find(s => String(s.day_of_week) === String(day) && String(s.period) === String(period));
   };
 
   return (
@@ -250,15 +251,15 @@ export default function SchedulesPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">الجدول الدراسي</h1>
-          <p className="text-slate-500">إدارة الجداول الدراسية للفصول والشعب</p>
+          <h1 className="text-2xl font-bold text-slate-900">بناء الجدول الدراسي</h1>
+          <p className="text-slate-500">إدارة وتعبئة الجداول الدراسية للفصول والشعب من الصفر</p>
         </div>
       </div>
 
       <div className="bg-white p-4 rounded-xl shadow-sm ring-1 ring-slate-200">
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
-            اختر الشعبة:
+            اختر الشعبة المستهدفة للتعديل:
           </label>
           <select
             className="block w-full sm:w-64 rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
@@ -269,11 +270,14 @@ export default function SchedulesPage() {
             {sections.length === 0 ? (
               <option value="">لا توجد شعب مسجلة</option>
             ) : (
-              sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                  {section.classes?.name} - {section.name}
-                </option>
-              ))
+              sections.map((section) => {
+                const safeClass = safeObj(section.classes);
+                return (
+                  <option key={section.id} value={section.id}>
+                    {safeClass?.name} - {section.name}
+                  </option>
+                );
+              })
             )}
           </select>
         </div>
@@ -287,14 +291,19 @@ export default function SchedulesPage() {
         ) : !selectedSectionId ? (
           <div className="text-center py-20">
             <Calendar className="mx-auto h-12 w-12 text-slate-300 mb-3" />
-            <p className="text-slate-500">الرجاء اختيار الشعبة لعرض الجدول الدراسي</p>
+            <p className="text-slate-500">الرجاء اختيار الشعبة للبدء في تعبئة الجدول</p>
+          </div>
+        ) : periods.length === 0 ? (
+          <div className="text-center py-20">
+             <AlertCircle className="mx-auto h-12 w-12 text-amber-500 mb-3" />
+             <p className="text-slate-500">لم يتم إعداد توقيت الحصص. يرجى إضافتها من صفحة إعداد توقيت الحصص أولاً.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 border-collapse table-fixed">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-transparent">
+            <table className="w-full min-w-max divide-y divide-slate-200 border-collapse">
               <thead className="bg-slate-50">
                 <tr>
-                  <th scope="col" className="py-3.5 px-4 text-center text-sm font-semibold text-slate-900 border-l border-slate-200 w-32 bg-slate-100">
+                  <th scope="col" className="py-3.5 px-4 text-center text-sm font-semibold text-slate-900 border-l border-slate-200 w-32 bg-slate-100 sticky right-0 z-10">
                     اليوم / الحصة
                   </th>
                   {periods.map(period => (
@@ -308,11 +317,17 @@ export default function SchedulesPage() {
               <tbody className="divide-y divide-slate-200 bg-white">
                 {DAYS.map((day) => (
                   <tr key={day.id} className="hover:bg-slate-50/50">
-                    <td className="whitespace-nowrap py-4 px-4 text-sm font-bold text-slate-900 border-l border-slate-200 text-center bg-slate-50">
+                    <td className="whitespace-nowrap py-4 px-4 text-sm font-bold text-slate-900 border-l border-slate-200 text-center bg-slate-50 sticky right-0 z-10">
                       {day.name}
                     </td>
                     {periods.map(period => {
                       const cellData = getCellData(day.id, period.period_number);
+                      
+                      // استخراج آمن للواجهة لتجنب انهيار الصفحة
+                      const safeSubj = safeObj(cellData?.subjects);
+                      const safeTeacher = safeObj(cellData?.teachers);
+                      const safeUser = safeObj(safeTeacher?.users);
+
                       return (
                         <td 
                           key={`${day.id}-${period.period_number}`} 
@@ -322,11 +337,11 @@ export default function SchedulesPage() {
                           {cellData ? (
                             <div className="h-full flex flex-col justify-between bg-indigo-50 rounded-md p-2 border border-indigo-100">
                               <div>
-                                <div className="font-bold text-indigo-900 text-sm truncate" title={cellData.subjects?.name}>
-                                  {cellData.subjects?.name}
+                                <div className="font-bold text-indigo-900 text-sm truncate" title={safeSubj?.name}>
+                                  {safeSubj?.name || 'مادة غير محددة'}
                                 </div>
-                                <div className="text-xs text-indigo-600 mt-1 truncate" title={cellData.teachers?.users?.full_name}>
-                                  أ. {cellData.teachers?.users?.full_name}
+                                <div className="text-xs text-indigo-600 mt-1 truncate" title={safeUser?.full_name}>
+                                  أ. {safeUser?.full_name || 'معلم غير محدد'}
                                 </div>
                               </div>
                               <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity mt-2">
@@ -396,9 +411,9 @@ export default function SchedulesPage() {
                   {subjects
                     .filter(s => {
                       if (currentCell.teacherId) {
-                        return teacherAssignments.some(a => a.subject_id === s.id && a.teacher_id === currentCell.teacherId && a.section_id === selectedSectionId);
+                        return teacherAssignments.some(a => String(a.subject_id) === String(s.id) && String(a.teacher_id) === String(currentCell.teacherId) && String(a.section_id) === String(selectedSectionId));
                       }
-                      return teacherAssignments.some(a => a.subject_id === s.id && a.section_id === selectedSectionId);
+                      return teacherAssignments.some(a => String(a.subject_id) === String(s.id) && String(a.section_id) === String(selectedSectionId));
                     })
                     .map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
@@ -418,13 +433,16 @@ export default function SchedulesPage() {
                   {teachers
                     .filter(t => {
                       if (currentCell.subjectId) {
-                        return teacherAssignments.some(a => a.teacher_id === t.id && a.subject_id === currentCell.subjectId && a.section_id === selectedSectionId);
+                        return teacherAssignments.some(a => String(a.teacher_id) === String(t.id) && String(a.subject_id) === String(currentCell.subjectId) && String(a.section_id) === String(selectedSectionId));
                       }
-                      return teacherAssignments.some(a => a.teacher_id === t.id && a.section_id === selectedSectionId);
+                      return teacherAssignments.some(a => String(a.teacher_id) === String(t.id) && String(a.section_id) === String(selectedSectionId));
                     })
-                    .map(t => (
-                    <option key={t.id} value={t.id}>{t.users?.full_name}</option>
-                  ))}
+                    .map(t => {
+                      const safeUser = safeObj(t.users);
+                      return (
+                        <option key={t.id} value={t.id}>{safeUser?.full_name || 'غير محدد'}</option>
+                      );
+                    })}
                 </select>
               </div>
               
@@ -452,4 +470,5 @@ export default function SchedulesPage() {
     </div>
   );
 }
+
 
