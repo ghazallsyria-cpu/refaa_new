@@ -26,20 +26,23 @@ export default function ExamsDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
+  // فلترة ذكية محصنة ضد القيم الفارغة
   const filteredExams = exams.filter(exam => {
-    const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
+    const titleMatch = exam?.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    const subjectMatch = exam?.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    const matchesSearch = titleMatch || subjectMatch;
+    const matchesStatus = statusFilter === 'all' || exam?.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const handleDelete = async (examId: string) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) return;
+    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار بشكل نهائي؟')) return;
     
     try {
       await deleteExamWithMedia(examId);
     } catch (err) {
       console.error('Error deleting exam:', err);
+      alert('حدث خطأ أثناء محاولة الحذف.');
     }
   };
 
@@ -63,24 +66,31 @@ export default function ExamsDashboard() {
 
   const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin' || userRole === 'management';
   
+  // دالة مطورة ومحصنة للتحقق من حالة توفر الاختبار للطالب
   const getExamStatus = (exam: any) => {
-    if (exam.status !== 'published') return null;
+    if (exam?.status !== 'published') return null;
+    if (!exam?.exam_date) return 'available'; // إذا لم يتم تحديد تاريخ يعتبر متاحاً
     
-    const now = new Date();
-    const examDate = new Date(exam.exam_date);
-    
-    const startTimeParts = (exam.start_time || '00:00').split(':');
-    const endTimeParts = (exam.end_time || '23:59').split(':');
-    
-    const startDateTime = new Date(examDate);
-    startDateTime.setHours(parseInt(startTimeParts[0]), parseInt(startTimeParts[1]), 0);
-    
-    const endDateTime = new Date(examDate);
-    endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
-    
-    if (now < startDateTime) return 'not_started';
-    if (now > endDateTime) return 'expired';
-    return 'available';
+    try {
+      const now = new Date();
+      const examDate = new Date(exam.exam_date);
+      
+      const startTimeParts = (exam.start_time || '00:00').split(':');
+      const endTimeParts = (exam.end_time || '23:59').split(':');
+      
+      const startDateTime = new Date(examDate);
+      startDateTime.setHours(parseInt(startTimeParts[0] || '0'), parseInt(startTimeParts[1] || '0'), 0);
+      
+      const endDateTime = new Date(examDate);
+      endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
+      
+      if (now < startDateTime) return 'not_started';
+      if (now > endDateTime) return 'expired';
+      return 'available';
+    } catch (e) {
+      console.error("Error parsing exam dates", e);
+      return 'available'; // في حالة الخطأ، نجعله متاحاً لتجنب حظر الطالب
+    }
   };
 
   if (!mounted || authLoading) {
@@ -128,7 +138,7 @@ export default function ExamsDashboard() {
           )}
         </motion.div>
 
-        {/* Stats Overview */}
+        {/* Stats Overview for Teachers/Admins */}
         {isTeacherOrAdmin && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
@@ -196,7 +206,7 @@ export default function ExamsDashboard() {
                   <Filter className="h-6 w-6" />
                 </div>
                 <select
-                  className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold appearance-none"
+                  className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold appearance-none cursor-pointer"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -226,7 +236,7 @@ export default function ExamsDashboard() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: index * 0.05 }}
-                  className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col"
+                  className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col bg-white"
                 >
                   <div className="p-10 flex-1">
                     <div className="flex items-start justify-between mb-8">
@@ -256,7 +266,7 @@ export default function ExamsDashboard() {
                             </motion.button>
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Portal>
-                            <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
+                            <DropdownMenu.Content className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
                               {(userRole === 'admin' || userRole === 'management' || exam.teacher_id === user?.id) && (
                                 <>
                                   <DropdownMenu.Item asChild>
@@ -293,8 +303,8 @@ export default function ExamsDashboard() {
                       )}
                     </div>
 
-                    <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
-                      {exam.title}
+                    <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight line-clamp-2">
+                      {exam.title || 'بدون عنوان'}
                     </h3>
                     <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-lg leading-relaxed">
                       {exam.description || 'لا يوجد وصف لهذا الاختبار'}
@@ -302,13 +312,13 @@ export default function ExamsDashboard() {
 
                     <div className="grid grid-cols-2 gap-5">
                       <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                        <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                        <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
                           <BookOpen className="h-5 w-5 text-indigo-500" />
                         </div>
-                        <span className="truncate">{exam.subject_name}</span>
+                        <span className="truncate">{exam.subject_name || 'غير محدد'}</span>
                       </div>
                       <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                        <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center">
+                        <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
                           <Clock className="h-5 w-5 text-amber-500" />
                         </div>
                         <span>{exam.duration ? `${exam.duration} د` : 'مفتوح'}</span>
@@ -316,23 +326,23 @@ export default function ExamsDashboard() {
                       {isTeacherOrAdmin && (
                         <>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
+                            <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
                               <FileText className="h-5 w-5 text-blue-500" />
                             </div>
-                            <span>{exam.question_count} سؤال</span>
+                            <span>{exam.question_count || 0} سؤال</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
+                            <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
                               <Users className="h-5 w-5 text-emerald-500" />
                             </div>
-                            <span>{exam.submission_count} محاولة</span>
+                            <span>{exam.submission_count || 0} محاولة</span>
                           </div>
                         </>
                       )}
                     </div>
                   </div>
 
-                  <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
+                  <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between mt-auto">
                     {isTeacherOrAdmin ? (
                       <>
                         <div className="flex items-center gap-4">
@@ -341,7 +351,7 @@ export default function ExamsDashboard() {
                           </div>
                           <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">متوسط الأداء</p>
-                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score}%</p>
+                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score || 0}%</p>
                           </div>
                         </div>
                         <Link href={`/exams/results/${exam.id}`}>
@@ -395,21 +405,21 @@ export default function ExamsDashboard() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="col-span-full py-40 text-center glass-card rounded-[3rem] border border-dashed border-slate-300 shadow-2xl shadow-slate-200/50"
+              className="col-span-full py-40 text-center glass-card rounded-[3rem] border border-dashed border-slate-300 shadow-2xl shadow-slate-200/50 bg-white/50"
             >
-              <div className="h-32 w-32 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8">
-                <FileText className="h-16 w-16 text-slate-200" />
+              <div className="h-32 w-32 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8 border border-slate-100">
+                <FileText className="h-16 w-16 text-slate-300" />
               </div>
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">لا توجد اختبارات حالياً</h3>
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight mb-2">لا توجد اختبارات حالياً</h3>
               <p className="text-slate-500 mb-10 text-lg font-medium">
-                {isTeacherOrAdmin ? 'ابدأ بإنشاء أول اختبار لك لتقييم مستوى طلابك.' : 'لم يتم نشر أي اختبارات بعد.'}
+                {isTeacherOrAdmin ? 'ابدأ بإنشاء أول اختبار لك لتقييم مستوى طلابك.' : 'لم يتم نشر أي اختبارات مطابقة لبحثك بعد.'}
               </p>
               {isTeacherOrAdmin && (
                 <Link href="/exams/builder/new">
                   <motion.button 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="inline-flex items-center gap-4 bg-indigo-600 text-white px-10 py-5 rounded-3xl hover:bg-indigo-700 transition-all font-black shadow-2xl shadow-indigo-100"
+                    className="inline-flex items-center gap-4 bg-indigo-600 text-white px-10 py-5 rounded-3xl hover:bg-indigo-700 transition-all font-black shadow-2xl shadow-indigo-200"
                   >
                     <Plus className="h-6 w-6" />
                     <span>إنشاء اختبار جديد</span>
@@ -423,3 +433,4 @@ export default function ExamsDashboard() {
     </div>
   );
 }
+
