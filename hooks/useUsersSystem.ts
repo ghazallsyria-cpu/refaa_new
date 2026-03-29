@@ -201,8 +201,7 @@ export function useUsersSystem() {
     }
   }, [fetchStudents]);
 
-  // تم إضافة specialization و zoom_link للنوع هنا لحل مشكلة السطر 226
-  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link: string, specialization: string }>): Promise<{ success: boolean, password?: string }> => {
+  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link?: string, specialization?: string }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -286,8 +285,7 @@ export function useUsersSystem() {
     }
   }, [fetchTeachers]);
 
-  // تم إضافة job_title و workplace للنوع هنا بشكل استباقي
-  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title: string, workplace: string, student_ids: string[] }>): Promise<{ success: boolean, password?: string }> => {
+  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title?: string, workplace?: string, student_ids?: string[] }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
