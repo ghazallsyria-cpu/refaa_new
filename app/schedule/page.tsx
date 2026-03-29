@@ -37,6 +37,7 @@ export default function SchedulePage() {
   const [swappingFrom, setSwappingFrom] = useState<any | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // تم إضافة المتغير هنا ✅
 
   const { 
     fetchInitialScheduleData, 
@@ -172,6 +173,7 @@ export default function SchedulePage() {
       return;
     }
     
+    setIsSubmitting(true);
     try {
       const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
 
@@ -183,6 +185,7 @@ export default function SchedulePage() {
           const subject = safeObj(conflictData.subjects);
           const className = safeObj(section?.classes)?.name;
           alert(`تضارب: المعلم لديه حصة (${subject?.name}) مع فصل (${className} - ${section?.name}) في هذا الوقت.`);
+          setIsSubmitting(false);
           return;
         }
         
@@ -195,6 +198,7 @@ export default function SchedulePage() {
           const subjectName = subject?.name || 'مادة غير معروفة';
 
           alert(`تضارب: هذا الفصل لديه حصة (${subjectName}) مع المعلم (${teacherName}) في هذا الوقت.`);
+          setIsSubmitting(false);
           return;
         }
       }
@@ -222,6 +226,8 @@ export default function SchedulePage() {
     } catch (err) {
       console.error(err);
       alert(`حدث خطأ أثناء ${editingId ? 'تعديل' : 'إضافة'} الحصة`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -471,7 +477,6 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            {/* تم تصحيح الدالة هنا وإضافة منع إعادة التحميل (preventDefault) */}
             <form onSubmit={(e) => { e.preventDefault(); handleAddSchedule(); }} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium leading-6 text-slate-900">المادة الدراسية</label>
