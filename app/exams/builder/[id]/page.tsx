@@ -18,6 +18,7 @@ import { Question, QuestionType, Option, createQuestion } from '@/types/question
 import { useAuth } from '@/context/auth-context';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import ImageUpload from '@/components/ImageUpload';
+import { useParams, useRouter } from 'next/navigation';
 
 type ExamData = {
   id?: string;
