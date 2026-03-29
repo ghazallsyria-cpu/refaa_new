@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Clock, BookOpen, User } from 'lucide-react';
 import { motion } from 'motion/react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth-context';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -15,73 +14,34 @@ const DAYS = [
 ];
 
 export default function StudentSchedulePage() {
-  const { user } = useAuth();
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState<any>(null);
+  const { fetchStudentSchedule: fetchScheduleData } = useDashboardSystem();
 
-  const fetchScheduleData = useCallback(async () => {
-    if (!user) return;
+  const fetchStudentSchedule = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. جلب بيانات الطالب للوصول إلى شعبته
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('section_id, sections(name, classes(name))')
-        .eq('id', user.id)
-        .single();
-
-      if (studentError) throw studentError;
-      setStudentInfo(student);
-
-      if (student?.section_id) {
-        // 2. جلب الحصص المجدولة لهذه الشعبة
-        const { data: scheduleData } = await supabase
-          .from('schedules')
-          .select('id, day_of_week, period, subjects(name), teachers(zoom_link, users(full_name))')
-          .eq('section_id', student.section_id);
-
-        setSchedule(scheduleData || []);
-
-        // 3. جلب أوقات الحصص الرسمية المبرمجة
-        const { data: periodsData } = await supabase
-          .from('class_periods')
-          .select('*')
-          .order('period_number');
-
-        setPeriods(periodsData || []);
+      const data = await fetchScheduleData();
+      if (data) {
+        setStudentInfo(data.student);
+        setSchedule(data.schedule);
+        setPeriods(data.periods);
       }
     } catch (error) {
-      console.error('Error fetching student schedule data:', error);
+      console.error('Error fetching student schedule:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
-
-  useEffect(() => {
-    fetchScheduleData();
   }, [fetchScheduleData]);
 
-  // دالة المطابقة الآمنة (تقارن القيم كنصوص)
+  useEffect(() => {
+    fetchStudentSchedule();
+  }, [fetchStudentSchedule]);
+
   const getCellData = (day: number, period: number) => {
-    return schedule.find(s => String(s.day_of_week) === String(day) && String(s.period) === String(period));
-  };
-
-  const getSubjectName = (cellData: any) => {
-    if (!cellData?.subjects) return null;
-    const subject = Array.isArray(cellData.subjects) ? cellData.subjects[0] : cellData.subjects;
-    return subject?.name || null;
-  };
-
-  const getTeacherData = (cellData: any) => {
-    if (!cellData?.teachers) return { name: null, zoom: null };
-    const teacher = Array.isArray(cellData.teachers) ? cellData.teachers[0] : cellData.teachers;
-    const user = Array.isArray(teacher?.users) ? teacher.users[0] : teacher?.users;
-    return {
-      name: user?.full_name || null,
-      zoom: teacher?.zoom_link || null
-    };
+    return schedule.find(s => s.day_of_week === day && s.period === period);
   };
 
   if (loading) {
@@ -91,20 +51,6 @@ export default function StudentSchedulePage() {
       </div>
     );
   }
-
-  // --- الفلتر الذكي للحصص ---
-  // حساب أقصى رقم حصة في جدول الطالب الفعلي، مع تعيين 5 كحد أدنى لتجنب شكل الجدول الصغير
-  const maxScheduledPeriod = schedule.length > 0 
-    ? Math.max(...schedule.map(s => Number(s.period) || 0)) 
-    : 5;
-
-  // قص وإخفاء أي حصص إضافية من الإدارة (مثل 6، 7، 8) إذا لم يكن الطالب يحتاجها
-  const displayPeriods = periods.filter(p => Number(p.period_number) <= Math.max(maxScheduledPeriod, 5));
-
-  const sectionData = Array.isArray(studentInfo?.sections) ? studentInfo.sections[0] : studentInfo?.sections;
-  const classData = Array.isArray(sectionData?.classes) ? sectionData.classes[0] : sectionData?.classes;
-  const sectionName = sectionData?.name || '';
-  const className = classData?.name || '';
 
   return (
     <motion.div 
@@ -121,7 +67,7 @@ export default function StudentSchedulePage() {
             جدولي الدراسي الأسبوعي
           </h1>
           <p className="text-slate-500 mt-2 font-medium">
-            عرض الحصص الدراسية لصفك: <span className="text-indigo-600 font-bold">{className} - {sectionName}</span>
+            عرض الحصص الدراسية لصفك: <span className="text-indigo-600 font-bold">{studentInfo?.sections?.classes?.name} - {studentInfo?.sections?.name}</span>
           </p>
         </div>
       </div>
@@ -132,16 +78,14 @@ export default function StudentSchedulePage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200 w-32 bg-slate-100/50">اليوم / الحصة</th>
-                {displayPeriods.map(period => (
+                {periods.map(period => (
                   <th key={period.id} className="py-5 px-4 text-center text-sm font-black text-slate-900 border-l border-slate-200">
                     <div className="flex flex-col items-center gap-1">
                       <Clock className="h-4 w-4 text-indigo-500" />
                       <span>الحصة {period.period_number}</span>
-                      {period.start_time && period.end_time && (
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
-                          {String(period.start_time).substring(0, 5)} - {String(period.end_time).substring(0, 5)}
-                        </span>
-                      )}
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
+                        {period.start_time.substring(0, 5)} - {period.end_time.substring(0, 5)}
+                      </span>
                     </div>
                   </th>
                 ))}
@@ -151,14 +95,11 @@ export default function StudentSchedulePage() {
               {DAYS.map((day) => (
                 <tr key={day.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80">{day.name}</td>
-                  {displayPeriods.map(period => {
-                    const cellData = getCellData(day.id, Number(period.period_number));
-                    const subjectName = getSubjectName(cellData);
-                    const { name: teacherName, zoom: zoomLink } = getTeacherData(cellData);
-
+                  {periods.map(period => {
+                    const cellData = getCellData(day.id, period.period_number);
                     return (
-                      <td key={`${day.id}-${period.id}`} className="p-3 border-l border-slate-200 h-32 align-top min-w-[140px]">
-                        {cellData && subjectName ? (
+                      <td key={`${day.id}-${period}`} className="p-3 border-l border-slate-200 h-32 align-top min-w-[140px]">
+                        {cellData ? (
                           <motion.div 
                             whileHover={{ scale: 1.02 }}
                             className="h-full flex flex-col justify-between bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-3 border border-indigo-100 shadow-sm"
@@ -168,18 +109,16 @@ export default function StudentSchedulePage() {
                                 <BookOpen className="h-3.5 w-3.5" />
                                 <span className="text-[10px] font-black uppercase tracking-wider">مادة</span>
                               </div>
-                              <div className="font-black text-slate-900 text-sm leading-tight">{subjectName}</div>
+                              <div className="font-black text-slate-900 text-sm leading-tight">{cellData.subjects?.name}</div>
                             </div>
                             <div className="mt-3 pt-2 border-t border-indigo-100/50 flex flex-col gap-2">
-                              {teacherName && (
-                                <div className="flex items-center gap-1.5 text-slate-400">
-                                  <User className="h-3 w-3" />
-                                  <div className="text-[11px] font-bold text-slate-600 truncate">{teacherName}</div>
-                                </div>
-                              )}
-                              {zoomLink && (
+                              <div className="flex items-center gap-1.5 text-slate-400">
+                                <User className="h-3 w-3" />
+                                <div className="text-[11px] font-bold text-slate-600 truncate">{cellData.teachers?.users?.full_name}</div>
+                              </div>
+                              {cellData.teachers?.zoom_link && (
                                 <a 
-                                  href={zoomLink}
+                                  href={cellData.teachers.zoom_link}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center justify-center gap-1.5 py-1 px-2 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors"
@@ -216,5 +155,3 @@ export default function StudentSchedulePage() {
     </motion.div>
   );
 }
-
-

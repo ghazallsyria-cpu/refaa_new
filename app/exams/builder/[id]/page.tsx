@@ -1,40 +1,40 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { 
   Plus, Save, Eye, Settings, Trash2, 
   Copy, GripVertical, Image as ImageIcon, 
-  Video, FileText, X, HelpCircle, AlertCircle, ArrowRight,
+  Video, FileText, ChevronDown, Check,
+  X, HelpCircle, AlertCircle, ArrowRight,
   MoreVertical, Type, List, CheckSquare,
-  AlignLeft, Hash, Clock, CheckCircle, Check
+  AlignLeft, Hash, Link as LinkIcon, Clock, CheckCircle
 } from 'lucide-react';
 import { motion, Reorder, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
+import * as Tabs from '@radix-ui/react-tabs';
 import * as Switch from '@radix-ui/react-switch';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
+
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
-import { useAuth } from '@/context/auth-context';
-import { useSchoolFormData } from '@/hooks/useSchoolFormData';
-import ImageUpload from '@/components/ImageUpload';
-import { useParams, useRouter } from 'next/navigation';
 
 type ExamData = {
   id?: string;
   title: string;
   description: string | null;
   subject_id: string;
-  section_ids: string[];
+  section_id?: string;
+  section_ids?: string[];
   teacher_id?: string;
   duration: number;
   max_attempts: number;
-  max_score: number;
+  max_score: number; // Added max_score
   exam_date: string;
-  start_time: string;
-  end_time: string;
+  start_time?: string;
+  end_time?: string;
   status: 'draft' | 'published' | 'archived';
-  settings: {
+  settings?: {
     shuffle_questions: boolean;
     shuffle_options: boolean;
     show_results_immediately: boolean;
@@ -42,8 +42,13 @@ type ExamData = {
   };
 };
 
-export default function App() {
-  const params = useParams<{ id: string }>();
+import { useAuth } from '@/context/auth-context';
+import { useSchoolFormData } from '@/hooks/useSchoolFormData';
+import { Teacher, Subject, Section } from '@/types';
+import ImageUpload from '@/components/ImageUpload';
+
+export default function QuizBuilder() {
+  const params = useParams();
   const router = useRouter();
   const { user, userRole } = useAuth();
   const isNew = params.id === 'new';
@@ -53,11 +58,11 @@ export default function App() {
     title: '',
     description: '',
     subject_id: '',
-    section_ids: [], 
+    section_ids: [], // Changed from section_id to section_ids
     teacher_id: '',
     duration: 30,
     max_attempts: 1,
-    max_score: 100,
+    max_score: 100, // Default to 100
     exam_date: new Date().toISOString().split('T')[0],
     start_time: '08:00',
     end_time: '23:59',
@@ -75,6 +80,7 @@ export default function App() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState('questions');
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
   const subjects = formData?.subjects || [];
@@ -109,17 +115,20 @@ export default function App() {
         setExam({
           ...examData,
           section_ids: examData.section_ids || [],
+          // أضف هذا السطر لمعالجة الـ null وتوفير قيم افتراضية متوافقة مع الـ Type
           settings: {
             shuffle_questions: examData.settings?.shuffle_questions ?? false,
             shuffle_options: examData.settings?.shuffle_options ?? false,
-            show_results_immediately: examData.settings?.show_results_immediately ?? true,
+            show_results_immediately: examData.settings?.show_results_immediately ?? true, // أو القيمة الافتراضية المناسبة لعملكم
             allow_backtracking: examData.settings?.allow_backtracking ?? true,
           }
         });
 
         setQuestions(questionsData || []);
       } else {
+        // Default first question
         addQuestion('multiple_choice');
+        // Set teacher_id for new exam
         if (user) {
           setExam(prev => ({ ...prev, teacher_id: user.id }));
         }
@@ -179,6 +188,7 @@ export default function App() {
       if (q.id === questionId) {
         const newOptions = q.options.map(o => {
           if (o.id === optionId) {
+            // If setting to correct and it's MCQ or T/F, uncheck others
             if (updates.is_correct && (q.type === 'multiple_choice' || q.type === 'true_false')) {
               return { ...o, ...updates };
             }
@@ -210,6 +220,7 @@ export default function App() {
       return;
     }
 
+    // التحقق من أن مجموع درجات الأسئلة يساوي الدرجة الكلية
     const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
     const maxScore = Number(exam.max_score) || 0;
 
@@ -221,6 +232,7 @@ export default function App() {
     setSaving(true);
     try {
       let finalTeacherId = exam.teacher_id;
+
       if (!finalTeacherId && userRole === 'admin') {
         if (teachers.length > 0) {
           finalTeacherId = teachers[0].id;
@@ -233,6 +245,7 @@ export default function App() {
         ...exam,
         teacher_id: userRole === 'teacher' ? user?.id : finalTeacherId,
         max_score: exam.max_score || 100,
+        total_marks: exam.max_score || 100
       };
 
       await saveExam(examPayload, questions, isNew);
@@ -241,7 +254,9 @@ export default function App() {
       router.push('/exams');
     } catch (err: any) {
       console.error('Error saving quiz:', err);
-      showNotification('error', `حدث خطأ أثناء حفظ الاختبار: ${err.message || 'خطأ غير معروف'}`);
+      const errorMessage = (err && typeof err === 'object') ? JSON.stringify(err, Object.getOwnPropertyNames(err)) : String(err);
+      console.error('Full error details:', errorMessage);
+      showNotification('error', `حدث خطأ أثناء حفظ الاختبار: ${err.message || errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -256,7 +271,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 relative font-sans" dir="rtl">
+    <div className="min-h-screen bg-slate-50/50 pb-24 relative">
+      {/* Notification Toast */}
       <AnimatePresence>
         {notification && (
           <motion.div 
@@ -267,35 +283,41 @@ export default function App() {
               notification.type === 'success' ? 'bg-emerald-50/90 text-emerald-800 border-emerald-200' : 'bg-red-50/90 text-red-800 border-red-200'
             }`}
           >
-            <div className="h-8 w-8 rounded-full bg-white/50 flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-full bg-white/50 flex items-center justify-center">
               {notification.type === 'success' ? <Check className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
             </div>
             <div className="font-black tracking-tight">{notification.message}</div>
-            <button onClick={() => setNotification(null)} className="p-1 hover:bg-black/5 rounded-lg transition-colors shrink-0">
+            <button onClick={() => setNotification(null)} className="p-1 hover:bg-black/5 rounded-lg transition-colors">
               <X className="h-4 w-4" />
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-5 w-full sm:w-auto">
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-40 glass-card border-b border-white/60 px-6 py-4 shadow-xl shadow-slate-200/20">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
             <button 
               onClick={() => router.back()}
-              className="h-12 w-12 flex items-center justify-center rounded-2xl bg-slate-50 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:shadow-md transition-all active:scale-95 shrink-0"
+              className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 hover:shadow-lg transition-all active:scale-95"
             >
               <ArrowRight className="h-5 w-5" />
             </button>
-            <div className="space-y-0.5 w-full">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight truncate max-w-[200px] sm:max-w-[300px]">
+            <div className="hidden sm:block space-y-0.5">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight truncate max-w-[300px]">
                 {exam.title || 'اختبار جديد'}
               </h1>
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">جاري الحفظ تلقائياً</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0 hide-scrollbar">
-            <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl border font-black transition-all shrink-0 ${
+          <div className="flex items-center gap-3">
+            {/* مؤشر مجموع الدرجات */}
+            <div className={`hidden lg:flex items-center gap-3 px-5 py-3 rounded-2xl border font-black transition-all ${
               questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0) === (Number(exam.max_score) || 0)
                 ? 'bg-emerald-50/50 border-emerald-100 text-emerald-600'
                 : 'bg-amber-50/50 border-amber-100 text-amber-600'
@@ -311,98 +333,98 @@ export default function App() {
               </span>
             </div>
 
-            {!isNew && (
-              <button 
-                onClick={() => router.push(`/exams/take/${params.id}`)}
-                className="hidden md:flex items-center gap-3 px-6 py-3 text-sm font-black text-slate-600 hover:bg-slate-50 hover:shadow-sm rounded-2xl transition-all active:scale-95 border border-transparent hover:border-slate-200 shrink-0"
-              >
-                <Eye className="h-5 w-5" />
-                <span>معاينة</span>
-              </button>
-            )}
-
+            <button 
+              onClick={() => router.push(`/exams/take/${params.id}`)}
+              className="hidden md:flex items-center gap-3 px-6 py-3 text-sm font-black text-slate-600 hover:bg-white hover:shadow-lg rounded-2xl transition-all active:scale-95 border border-transparent hover:border-slate-100"
+            >
+              <Eye className="h-5 w-5" />
+              <span>معاينة</span>
+            </button>
             <Dialog.Root>
               <Dialog.Trigger asChild>
-                <button className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:shadow-md transition-all active:scale-95 shrink-0">
+                <button className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-600 hover:text-indigo-600 hover:shadow-lg transition-all active:scale-95">
                   <Settings className="h-5 w-5" />
                 </button>
               </Dialog.Trigger>
               <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50" />
-                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[95%] sm:w-full max-w-lg bg-white rounded-3xl p-6 sm:p-10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto" dir="rtl">
-                  <div className="flex items-center justify-between mb-8">
+                <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50" />
+                <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white rounded-[40px] p-10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-300 border border-white/20">
+                  <div className="flex items-center justify-between mb-10">
                     <div>
-                      <Dialog.Title className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">إعدادات الاختبار</Dialog.Title>
-                      <p className="text-slate-500 font-bold text-sm mt-1">تخصيص تجربة الاختبار للطلاب</p>
+                      <Dialog.Title className="text-3xl font-black text-slate-900 tracking-tight">إعدادات الاختبار</Dialog.Title>
+                      <p className="text-slate-500 font-bold">تخصيص تجربة الاختبار للطلاب</p>
                     </div>
-                    <Dialog.Close className="h-10 w-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-xl transition-all active:scale-95 shrink-0">
-                      <X className="h-5 w-5 text-slate-500" />
+                    <Dialog.Close className="h-12 w-12 flex items-center justify-center bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all active:scale-95">
+                      <X className="h-6 w-6 text-slate-500" />
                     </Dialog.Close>
                   </div>
                   
-                  <div className="space-y-8">
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-3">الإعدادات العامة</h4>
-                      <div className="space-y-3">
+                  <div className="space-y-10">
+                    <div className="space-y-6">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-4">الإعدادات العامة</h4>
+                      <div className="space-y-4">
                         {[
                           { label: 'ترتيب الأسئلة عشوائياً', desc: 'تغيير ترتيب الأسئلة لكل طالب', key: 'shuffle_questions' },
                           { label: 'ترتيب الخيارات عشوائياً', desc: 'تغيير ترتيب خيارات الإجابة', key: 'shuffle_options' },
                           { label: 'إظهار النتيجة فوراً', desc: 'عرض الدرجة للطالب بعد الإرسال', key: 'show_results_immediately' },
                         ].map((setting) => (
-                          <div key={setting.key} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                            <div className="pr-2">
+                          <div key={setting.key} className="flex items-center justify-between p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
+                            <div>
                               <p className="text-sm font-black text-slate-800 tracking-tight">{setting.label}</p>
-                              <p className="text-[10px] sm:text-xs text-slate-500 font-bold mt-0.5">{setting.desc}</p>
+                              <p className="text-xs text-slate-500 font-bold">{setting.desc}</p>
                             </div>
                             <Switch.Root 
                               checked={(exam.settings as any)[setting.key]}
                               onCheckedChange={(val) => setExam({
                                 ...exam, 
-                                settings: { ...exam.settings, [setting.key]: val }
+                                settings: { 
+                                  ...exam.settings, 
+                                  [setting.key]: val 
+                                } as NonNullable<typeof exam.settings>
                               })}
-                              className="w-12 h-7 bg-slate-200 rounded-full relative data-[state=checked]:bg-indigo-600 transition-all outline-none cursor-pointer shadow-inner shrink-0"
+                              className="w-14 h-8 bg-slate-200 rounded-full relative data-[state=checked]:bg-indigo-600 transition-all outline-none cursor-pointer shadow-inner"
                             >
-                              <Switch.Thumb className="block w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 translate-x-0.5 data-[state=checked]:translate-x-[22px] rtl:data-[state=checked]:-translate-x-[22px]" />
+                              <Switch.Thumb className="block w-6 h-6 bg-white rounded-full shadow-xl transition-transform duration-200 translate-x-1 will-change-transform data-[state=checked]:translate-x-[26px]" />
                             </Switch.Root>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">المدة (دقيقة)</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div className="space-y-3">
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">مدة الاختبار (دقيقة)</label>
                         <div className="relative">
-                          <Clock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                          <Clock className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                           <input 
                             type="number" 
                             value={exam.duration}
-                            onChange={(e) => setExam({...exam, duration: parseInt(e.target.value) || 0})}
-                            className="w-full pr-10 pl-3 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-black text-slate-900 transition-all"
+                            onChange={(e) => setExam({...exam, duration: parseInt(e.target.value)})}
+                            className="w-full pr-12 pl-4 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-900 transition-all"
                           />
                         </div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest">عدد المحاولات</label>
                         <div className="relative">
-                          <HelpCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                          <HelpCircle className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                           <input 
                             type="number" 
                             value={exam.max_attempts}
-                            onChange={(e) => setExam({...exam, max_attempts: parseInt(e.target.value) || 1})}
-                            className="w-full pr-10 pl-3 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-black text-slate-900 transition-all"
+                            onChange={(e) => setExam({...exam, max_attempts: parseInt(e.target.value)})}
+                            className="w-full pr-12 pl-4 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-900 transition-all"
                           />
                         </div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest">الدرجة الكلية</label>
                         <div className="relative">
-                          <Hash className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                          <Hash className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                           <input 
                             type="number" 
                             value={exam.max_score}
-                            onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value) || 100})}
-                            className="w-full pr-10 pl-3 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-black text-slate-900 transition-all"
+                            onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value)})}
+                            className="w-full pr-12 pl-4 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-900 transition-all"
                           />
                         </div>
                       </div>
@@ -414,127 +436,138 @@ export default function App() {
 
             <button
               onClick={() => setExam({...exam, status: exam.status === 'published' ? 'draft' : 'published'})}
-              className={`flex items-center gap-2 px-4 sm:px-6 py-3 rounded-2xl font-black transition-all active:scale-95 border shrink-0 ${
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black transition-all active:scale-95 border ${
                 exam.status === 'published' 
                   ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' 
                   : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100'
               }`}
             >
-              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="hidden sm:inline">{exam.status === 'published' ? 'منشور' : 'مسودة'}</span>
+              <CheckCircle className="h-5 w-5" />
+              <span>{exam.status === 'published' ? 'منشور' : 'مسودة'}</span>
             </button>
 
             <button 
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 sm:gap-3 bg-indigo-600 text-white px-5 sm:px-8 py-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 font-black disabled:opacity-50 active:scale-95 shrink-0"
+              className="flex items-center gap-3 bg-indigo-600 text-white px-8 py-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 font-black disabled:opacity-50 active:scale-95"
             >
               {saving ? (
-                <div className="h-4 w-4 sm:h-5 sm:w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               ) : (
-                <Save className="h-4 w-4 sm:h-5 sm:w-5" />
+                <Save className="h-5 w-5" />
               )}
-              <span className="hidden sm:inline">{exam.status === 'published' ? 'حفظ ونشر' : 'حفظ كمسودة'}</span>
+              <span>{exam.status === 'published' ? 'حفظ ونشر الاختبار' : 'حفظ كمسودة'}</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8 sm:space-y-10">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-10 space-y-8 relative overflow-hidden">
+      <main className="max-w-4xl mx-auto px-6 py-12 space-y-10">
+        {/* Quiz Header Info */}
+        <div className="glass-card rounded-[40px] border-t-[16px] border-t-indigo-600 border border-white/60 shadow-2xl shadow-slate-200/50 p-10 space-y-8 relative overflow-hidden">
+          <div className="absolute -right-20 -top-20 h-64 w-64 bg-indigo-50/30 rounded-full blur-3xl -z-10" />
           <div className="space-y-4">
             <input 
               type="text"
-              placeholder="عنوان الاختبار..."
+              placeholder="عنوان الاختبار"
               value={exam.title}
               onChange={(e) => setExam({...exam, title: e.target.value})}
-              className="w-full text-3xl sm:text-4xl font-black text-slate-900 border-none focus:ring-0 placeholder:text-slate-300 p-0 bg-transparent tracking-tighter"
+              className="w-full text-5xl font-black text-slate-900 border-none focus:ring-0 placeholder:text-slate-200 p-0 bg-transparent tracking-tighter leading-tight"
             />
             <textarea 
-              placeholder="وصف الاختبار والتعليمات (اختياري)..."
+              placeholder="وصف الاختبار (اختياري)"
               value={exam.description || ''}
               onChange={(e) => setExam({...exam, description: e.target.value})}
-              className="w-full text-lg sm:text-xl text-slate-500 border-none focus:ring-0 placeholder:text-slate-300 p-0 resize-none min-h-[80px] bg-transparent font-medium leading-relaxed"
+              className="w-full text-xl text-slate-500 border-none focus:ring-0 placeholder:text-slate-200 p-0 resize-none h-16 bg-transparent font-bold leading-relaxed"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-8 border-t border-slate-100">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10 border-t border-slate-100">
             {isAdmin && (
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">المعلم المسؤول</label>
+              <div className="space-y-3">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">المعلم المسئول</label>
                 <select 
                   value={exam.teacher_id || ''}
                   onChange={(e) => setExam({...exam, teacher_id: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all cursor-pointer"
+                  className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer"
                 >
-                  <option value="">اختر المعلم...</option>
+                  <option value="">اختر المعلم</option>
                   {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                 </select>
               </div>
             )}
-            <div className="space-y-2">
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">الدرجة العظمى</label>
+              <input 
+                type="number"
+                value={exam.max_score}
+                onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value)})}
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none"
+              />
+            </div>
+            <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">تاريخ الاختبار</label>
               <input 
                 type="date"
                 value={exam.exam_date}
                 onChange={(e) => setExam({...exam, exam_date: e.target.value})}
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all cursor-pointer"
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">وقت البداية / النهاية</label>
-              <div className="flex items-center gap-2">
-                <input 
-                  type="time"
-                  value={exam.start_time}
-                  onChange={(e) => setExam({...exam, start_time: e.target.value})}
-                  className="w-full px-2 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all cursor-pointer text-center"
-                />
-                <span className="text-slate-400">-</span>
-                <input 
-                  type="time"
-                  value={exam.end_time}
-                  onChange={(e) => setExam({...exam, end_time: e.target.value})}
-                  className="w-full px-2 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all cursor-pointer text-center"
-                />
-              </div>
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">وقت البداية</label>
+              <input 
+                type="time"
+                value={exam.start_time}
+                onChange={(e) => setExam({...exam, start_time: e.target.value})}
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer"
+              />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">وقت النهاية</label>
+              <input 
+                type="time"
+                value={exam.end_time}
+                onChange={(e) => setExam({...exam, end_time: e.target.value})}
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer"
+              />
+            </div>
+            <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">المادة الدراسية</label>
               <select 
                 value={exam.subject_id}
                 onChange={(e) => setExam({...exam, subject_id: e.target.value})}
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all cursor-pointer"
+                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none cursor-pointer"
               >
-                <option value="">اختر المادة...</option>
+                <option value="">اختر المادة</option>
                 {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
-            <div className="space-y-2 lg:col-span-2">
+            <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">الشعب المستهدفة</label>
-              <div className="flex flex-wrap gap-2">
-                <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all border ${exam.section_ids.length === 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer">
                   <input 
                     type="checkbox"
-                    checked={exam.section_ids.length === 0}
+                    checked={exam.section_ids?.length === 0}
                     onChange={(e) => e.target.checked ? setExam({...exam, section_ids: []}) : null}
-                    className="hidden"
+                    className="rounded text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span className="text-sm font-bold">الجميع</span>
+                  <span className="text-sm font-bold text-slate-700">الجميع</span>
                 </label>
                 {sections.map(s => (
-                  <label key={s.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all border ${exam.section_ids.includes(s.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  <label key={s.id} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer">
                     <input 
                       type="checkbox"
-                      checked={exam.section_ids.includes(s.id)}
+                      checked={exam.section_ids?.includes(s.id)}
                       onChange={(e) => {
                         const newSections = e.target.checked 
-                          ? [...exam.section_ids, s.id]
-                          : exam.section_ids.filter(id => id !== s.id);
+                          ? [...(exam.section_ids || []), s.id]
+                          : (exam.section_ids || []).filter(id => id !== s.id);
                         setExam({...exam, section_ids: newSections});
                       }}
-                      className="hidden"
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
                     />
-                    <span className="text-sm font-bold">{s.name}</span>
+                    <span className="text-sm font-bold text-slate-700">{s.name}</span>
                   </label>
                 ))}
               </div>
@@ -542,7 +575,8 @@ export default function App() {
           </div>
         </div>
 
-        <Reorder.Group axis="y" values={questions} onReorder={setQuestions} className="space-y-6 sm:space-y-8">
+        {/* Questions List */}
+        <Reorder.Group axis="y" values={questions} onReorder={setQuestions} className="space-y-10">
           <AnimatePresence initial={false}>
             {questions.map((q, index) => (
               <Reorder.Item 
@@ -551,40 +585,39 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white rounded-3xl border border-slate-200 shadow-sm group relative overflow-hidden"
+                className="glass-card rounded-[40px] border border-white/60 shadow-2xl shadow-slate-200/50 group relative overflow-hidden"
               >
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10 bg-white/80 rounded-b-xl backdrop-blur-sm shadow-sm border border-slate-100 border-t-0">
-                  <GripVertical className="h-5 w-5 text-slate-400" />
+                {/* Drag Handle */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10">
+                  <GripVertical className="h-6 w-6 text-slate-300" />
                 </div>
 
-                <div className="p-6 sm:p-8 space-y-6 sm:space-y-8">
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">السؤال {index + 1}</label>
-                      </div>
+                <div className="p-10 space-y-10">
+                  {/* Question Header */}
+                  <div className="flex flex-col md:flex-row gap-8">
+                    <div className="flex-1 space-y-3">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
                       <input 
                         type="text"
-                        placeholder="اكتب نص السؤال هنا..."
+                        placeholder="اكتب سؤالك هنا..."
                         value={q.content}
                         onChange={(e) => updateQuestion(q.id, { content: e.target.value })}
-                        className="w-full bg-slate-50 px-5 py-4 rounded-2xl border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-lg sm:text-xl font-bold text-slate-900 placeholder:text-slate-300 transition-all outline-none"
+                        className="w-full bg-slate-50/50 px-6 py-5 rounded-3xl border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 text-xl font-black text-slate-900 placeholder:text-slate-200 transition-all outline-none"
                       />
                       <div className="pt-2">
-                         <ImageUpload 
-                           label="إرفاق صورة للسؤال" 
-onUploadSuccess={(url: string | null) => {
-  if (!url) return;
-  updateQuestion(q.id, { media_url: url, media_type: 'image' });
-}}                         />
+                        <ImageUpload
+                          initialImageUrl={q.media_url}
+                          onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url || undefined, media_type: url ? 'image' : undefined })}
+                          label="إرفاق صورة للسؤال (اختياري)"
+                        />
                       </div>
                     </div>
-                    <div className="w-full md:w-56 space-y-2 shrink-0">
+                    <div className="w-full md:w-64 space-y-3">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نوع السؤال</label>
                       <select 
                         value={q.type}
                         onChange={(e) => updateQuestion(q.id, { type: e.target.value as QuestionType })}
-                        className="w-full px-4 py-4 rounded-2xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-slate-700 transition-all cursor-pointer"
+                        className="w-full px-6 py-5 rounded-3xl bg-white border-0 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-700 transition-all appearance-none cursor-pointer"
                       >
                         <option value="multiple_choice">اختيار من متعدد</option>
                         <option value="true_false">صح أو خطأ</option>
@@ -595,36 +628,37 @@ onUploadSuccess={(url: string | null) => {
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  {/* Options Area */}
+                  <div className="space-y-6">
                     {q.type === 'multiple_choice' || q.type === 'multi_select' || q.type === 'true_false' ? (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">خيارات الإجابة</label>
-                        <div className="grid grid-cols-1 gap-3">
+                        <div className="grid grid-cols-1 gap-4">
                           {q.options.map((opt, optIdx) => (
-                            <div key={opt.id} className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 group/opt hover:bg-white hover:border-indigo-200 hover:shadow-sm transition-all">
+                            <div key={opt.id} className="flex items-center gap-5 p-4 rounded-3xl bg-slate-50/50 border border-slate-100 group/opt hover:bg-white hover:shadow-lg transition-all">
                               <button 
                                 onClick={() => updateOption(q.id, opt.id, { is_correct: !opt.is_correct })}
-                                className={`h-8 w-8 sm:h-10 sm:w-10 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${
+                                className={`h-10 w-10 rounded-2xl border-2 flex items-center justify-center transition-all shrink-0 ${
                                   opt.is_correct 
-                                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' 
-                                    : 'border-slate-300 bg-white hover:border-indigo-400'
+                                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-200' 
+                                    : 'border-slate-200 bg-white hover:border-indigo-500'
                                 }`}
                               >
-                                {opt.is_correct && <Check className="h-5 w-5 sm:h-6 sm:w-6" />}
+                                {opt.is_correct && <Check className="h-6 w-6" />}
                               </button>
                               <input 
                                 type="text"
                                 value={opt.content}
                                 onChange={(e) => updateOption(q.id, opt.id, { content: e.target.value })}
-                                placeholder={`النص للخيار ${optIdx + 1}`}
-                                className="flex-1 bg-transparent border-none focus:ring-0 text-base sm:text-lg font-bold text-slate-700 p-0 placeholder:text-slate-400"
+                                placeholder={`الخيار ${optIdx + 1}`}
+                                className="flex-1 bg-transparent border-none focus:ring-0 text-lg font-bold text-slate-700 p-0 placeholder:text-slate-300"
                               />
                               {q.options.length > 2 && q.type !== 'true_false' && (
                                 <button 
                                   onClick={() => deleteOption(q.id, opt.id)}
-                                  className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center opacity-0 group-hover/opt:opacity-100 hover:bg-red-50 hover:text-red-600 rounded-xl text-slate-400 transition-all active:scale-95 shrink-0"
+                                  className="h-10 w-10 flex items-center justify-center opacity-0 group-hover/opt:opacity-100 hover:bg-red-50 hover:text-red-600 rounded-xl text-slate-400 transition-all active:scale-95"
                                 >
-                                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
+                                  <X className="h-5 w-5" />
                                 </button>
                               )}
                             </div>
@@ -633,52 +667,61 @@ onUploadSuccess={(url: string | null) => {
                         {q.type !== 'true_false' && (
                           <button 
                             onClick={() => addOption(q.id)}
-                            className="flex items-center justify-center gap-2 w-full py-4 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all font-bold text-sm group"
+                            className="flex items-center gap-3 px-6 py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-500 hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all font-black text-sm group"
                           >
                             <Plus className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                            <span>إضافة خيار إضافي</span>
+                            <span>إضافة خيار إجابة</span>
                           </button>
                         )}
                       </div>
                     ) : q.type === 'essay' ? (
-                      <div className="p-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 font-bold text-center">
-                        <AlignLeft className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        ستظهر هنا مساحة نصية للطالب لكتابة إجابته المقالية بحرية
+                      <div className="p-8 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200 text-slate-400 font-bold italic text-center">
+                        سيقوم الطالب بكتابة إجابته المقالية هنا...
                       </div>
                     ) : (
-                      <div className="p-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 text-slate-400 font-bold text-center">
-                         <Type className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        قم بكتابة الجملة في السؤال أعلاه واستخدم [____] لتحديد مكان الفراغ
+                      <div className="p-8 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200 text-slate-400 font-bold italic text-center">
+                        أدخل النص مع استخدام [____] لمكان الفراغ الذي سيملأه الطالب...
                       </div>
                     )}
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-center justify-between pt-6 border-t border-slate-100 gap-4 sm:gap-6">
-                    <div className="flex items-center gap-4 w-full sm:w-auto justify-center sm:justify-start">
-                      <div className="flex items-center gap-3 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200">
-                        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">الدرجة:</span>
+                  {/* Question Footer Actions */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between pt-10 border-t border-slate-100 gap-6">
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-4 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shadow-inner">
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">النقاط:</span>
                         <input 
                           type="number"
                           value={q.points}
-                          onChange={(e) => updateQuestion(q.id, { points: parseFloat(e.target.value) || 0 })}
-                          className="w-14 bg-white border border-slate-200 rounded-md focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-lg font-black text-slate-900 py-1 text-center"
+                          onChange={(e) => updateQuestion(q.id, { points: parseFloat(e.target.value) })}
+                          className="w-16 bg-transparent border-none focus:ring-0 text-xl font-black text-slate-900 p-0 text-center tracking-tighter"
                         />
                       </div>
+                      <div className="flex items-center gap-2">
+                        <button className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-indigo-600 hover:shadow-lg transition-all active:scale-95">
+                          <ImageIcon className="h-5 w-5" />
+                        </button>
+                        <button className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-indigo-600 hover:shadow-lg transition-all active:scale-95">
+                          <Video className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <div className="flex items-center gap-3">
                       <button 
                         onClick={() => duplicateQuestion(q.id)}
-                        className="h-10 px-4 flex items-center gap-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all active:scale-95 font-bold text-sm"
+                        className="h-12 px-6 flex items-center gap-3 rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-slate-900 hover:shadow-lg transition-all active:scale-95 font-black text-sm"
+                        title="تكرار السؤال"
                       >
-                        <Copy className="h-4 w-4" />
-                        <span className="hidden sm:inline">تكرار</span>
+                        <Copy className="h-5 w-5" />
+                        <span>تكرار</span>
                       </button>
                       <button 
                         onClick={() => deleteQuestion(q.id)}
-                        className="h-10 px-4 flex items-center gap-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all active:scale-95 font-bold text-sm"
+                        className="h-12 px-6 flex items-center gap-3 rounded-2xl bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 transition-all active:scale-95 font-black text-sm"
+                        title="حذف السؤال"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">حذف</span>
+                        <Trash2 className="h-5 w-5" />
+                        <span>حذف</span>
                       </button>
                     </div>
                   </div>
@@ -688,39 +731,40 @@ onUploadSuccess={(url: string | null) => {
           </AnimatePresence>
         </Reorder.Group>
 
-        <div className="flex justify-center pt-8">
+        {/* Add Question Button */}
+        <div className="flex justify-center pt-10">
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button className="flex flex-col sm:flex-row items-center gap-4 bg-white border-2 border-dashed border-indigo-200 text-indigo-600 px-8 py-6 rounded-3xl hover:border-indigo-400 hover:bg-indigo-50/50 hover:shadow-lg transition-all font-black text-lg group active:scale-95 w-full sm:w-auto justify-center">
-                <div className="h-12 w-12 rounded-2xl bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0">
-                  <Plus className="h-6 w-6 group-hover:scale-110 transition-transform" />
+              <button className="flex items-center gap-4 bg-white border-2 border-dashed border-slate-300 text-slate-500 px-12 py-6 rounded-[40px] hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 hover:shadow-2xl hover:shadow-indigo-200/50 transition-all font-black text-xl group active:scale-95">
+                <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                  <Plus className="h-8 w-8 group-hover:scale-110 transition-transform" />
                 </div>
                 <span>إضافة سؤال جديد للاختبار</span>
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content className="bg-white rounded-3xl shadow-xl border border-slate-100 p-2 min-w-[240px] z-50 animate-in fade-in slide-in-from-bottom-4 duration-200" sideOffset={8}>
-                <div className="px-4 py-2 mb-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">اختر نوع السؤال</p>
+              <DropdownMenu.Content className="bg-white rounded-[32px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] border border-slate-100 p-4 min-w-[280px] z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="px-4 py-2 mb-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">اختر نوع السؤال</p>
                 </div>
                 {[
-                  { type: 'multiple_choice', label: 'اختيار من متعدد', icon: List, desc: 'إجابة واحدة صحيحة' },
-                  { type: 'true_false', label: 'صح أو خطأ', icon: CheckSquare, desc: 'إجابة منطقية بسيطة' },
-                  { type: 'multi_select', label: 'اختيار متعدد', icon: CheckSquare, desc: 'عدة إجابات صحيحة' },
-                  { type: 'essay', label: 'سؤال مقالي', icon: AlignLeft, desc: 'يتطلب كتابة نصية' },
-                  { type: 'fill_in_blank', label: 'ملء الفراغ', icon: Type, desc: 'إكمال جملة ناقصة' },
+                  { type: 'multiple_choice', label: 'اختيار من متعدد', icon: List, desc: 'سؤال مع خيارات إجابة واحدة صحيحة' },
+                  { type: 'true_false', label: 'صح أو خطأ', icon: CheckSquare, desc: 'سؤال بإجابة منطقية بسيطة' },
+                  { type: 'multi_select', label: 'اختيار متعدد', icon: CheckSquare, desc: 'سؤال مع عدة إجابات صحيحة محتملة' },
+                  { type: 'essay', label: 'سؤال مقالي', icon: AlignLeft, desc: 'سؤال يتطلب كتابة نصية من الطالب' },
+                  { type: 'fill_in_blank', label: 'ملء الفراغ', icon: Type, desc: 'سؤال يتطلب إكمال جملة ناقصة' },
                 ].map((item) => (
                   <DropdownMenu.Item 
                     key={item.type}
                     onClick={() => addQuestion(item.type as QuestionType)}
-                    className="flex items-center gap-3 px-3 py-3 text-slate-700 hover:bg-slate-50 rounded-2xl outline-none cursor-pointer transition-all group"
+                    className="flex items-center gap-4 px-4 py-3 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 rounded-2xl outline-none cursor-pointer transition-all group"
                   >
-                    <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors shrink-0">
+                    <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center group-hover:bg-white transition-colors">
                       <item.icon className="h-5 w-5" />
                     </div>
                     <div>
                       <p className="text-sm font-black tracking-tight">{item.label}</p>
-                      <p className="text-[10px] font-bold text-slate-500">{item.desc}</p>
+                      <p className="text-[10px] font-bold text-slate-400 group-hover:text-indigo-400">{item.desc}</p>
                     </div>
                   </DropdownMenu.Item>
                 ))}
@@ -730,25 +774,20 @@ onUploadSuccess={(url: string | null) => {
         </div>
       </main>
 
-      {/* Floating Action Button for Mobile */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 md:hidden flex items-center gap-2 bg-white/90 backdrop-blur-md border border-slate-200 p-2 rounded-2xl shadow-xl z-40 w-[90%] max-w-sm">
-        <button 
-          onClick={() => addQuestion('multiple_choice')} 
-          className="flex-1 h-12 flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 rounded-xl active:scale-95 transition-transform font-bold text-sm"
-        >
-          <Plus className="h-5 w-5" />
-          <span>سؤال</span>
+      {/* Floating Bottom Bar for Mobile */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 md:hidden flex items-center gap-4 bg-white/80 backdrop-blur-xl border border-white/60 p-3 rounded-[32px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.2)] z-40">
+        <button onClick={() => addQuestion('multiple_choice')} className="h-14 w-14 flex items-center justify-center bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-200 active:scale-90 transition-transform">
+          <Plus className="h-8 w-8" />
         </button>
-        <div className="h-8 w-px bg-slate-200 shrink-0" />
-        <button 
-          onClick={handleSave} 
-          disabled={saving}
-          className="flex-1 h-12 flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-200 active:scale-95 transition-transform font-black text-sm disabled:opacity-50"
-        >
-          {saving ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="h-4 w-4" />}
+        <div className="h-8 w-px bg-slate-200 mx-1" />
+        <button onClick={handleSave} className="h-14 px-8 flex items-center gap-3 bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-200 active:scale-90 transition-transform font-black">
+          <Save className="h-6 w-6" />
           <span>حفظ</span>
         </button>
       </div>
     </div>
   );
 }
+
+// Radix Dropdown Components (Simplified import for this demo)
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';

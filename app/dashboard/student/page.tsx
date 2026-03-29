@@ -18,21 +18,6 @@ import { arSA } from 'date-fns/locale';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 
-// دالة فك التغليف للبيانات القادمة من Supabase Joins
-const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
-
-// دالة تنسيق التواريخ المحصنة ضد الانهيار (Anti-Crash Formatter)
-const safeFormatDate = (dateString: string | null | undefined, fmt: string) => {
-  if (!dateString) return '...';
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return '...';
-    return format(date, fmt, { locale: arSA });
-  } catch (e) {
-    return '...';
-  }
-};
-
 export default function StudentDashboard() {
   const [studentData, setStudentData] = useState<any>(null);
   const [attendanceStats, setAttendanceStats] = useState<any>(null);
@@ -58,11 +43,11 @@ export default function StudentDashboard() {
       if (data) {
         setStudentData(data.student);
         setAttendanceStats({ rate: data.attendanceRate });
-        setRecentGrades(data.grades || []);
-        setUpcomingExams(data.exams || []);
-        setUpcomingAssignments(data.assignments || []);
-        setTodaysSchedule(data.todaysSchedule || []);
-        setPeriods(data.periods || []);
+        setRecentGrades(data.grades);
+        setUpcomingExams(data.exams);
+        setUpcomingAssignments(data.assignments);
+        setTodaysSchedule(data.todaysSchedule);
+        setPeriods(data.periods);
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
@@ -86,13 +71,10 @@ export default function StudentDashboard() {
     );
   }
 
+  // Calculate average score
   const avgScore = recentGrades.length > 0 
-    ? Math.round(recentGrades.reduce((acc, curr) => acc + (curr.score || 0), 0) / recentGrades.length)
+    ? Math.round(recentGrades.reduce((acc, curr) => acc + curr.score, 0) / recentGrades.length)
     : 0;
-
-  const sectionInfo = safeObj(studentData?.sections);
-  const classInfo = safeObj(sectionInfo?.classes);
-  const studentName = safeObj(studentData?.users)?.full_name || studentData?.full_name || 'طالبنا العزيز';
 
   return (
     <motion.div 
@@ -100,13 +82,14 @@ export default function StudentDashboard() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8 pb-8 max-w-7xl mx-auto"
     >
+      {/* Welcome Header */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 to-violet-600 p-8 text-white shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-bold mb-2">مرحباً، {studentName.split(' ')[0]} 👋</h1>
+            <h1 className="text-3xl font-bold mb-2">مرحباً، {studentData?.users?.full_name} 👋</h1>
             <p className="text-indigo-100 text-lg flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
-              أنت مسجل في {classInfo?.name || '...'} - {sectionInfo?.name || '...'}
+              أنت مسجل في {studentData?.sections?.classes?.name} - {studentData?.sections?.name}
             </p>
           </div>
           <div className="flex flex-wrap gap-4">
@@ -120,10 +103,12 @@ export default function StudentDashboard() {
             </div>
           </div>
         </div>
+        {/* Decorative background circles */}
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
         <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"></div>
       </div>
 
+      {/* Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Link href="/dashboard/student/schedule" className="group">
           <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all flex items-center gap-3">
@@ -160,8 +145,10 @@ export default function StudentDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Content - Left 2 Columns */}
         <div className="lg:col-span-2 space-y-8">
           
+          {/* Recent Grades Chart */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -220,6 +207,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
+          {/* Recent Activity / Grades Table */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -234,32 +222,27 @@ export default function StudentDashboard() {
             </div>
             <div className="space-y-4">
               {recentGrades.length > 0 ? (
-                recentGrades.map((grade, index) => {
-                  const examData = safeObj(grade.exam) || grade.exam;
-                  const subjectData = safeObj(examData?.subjects);
-                  
-                  return (
-                    <div key={index} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all">
-                      <div className="flex items-center gap-4">
-                        <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${(grade.score || 0) >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                          <FileText className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-900">{examData?.title || 'اختبار مجهول'}</p>
-                          <p className="text-sm text-slate-500">{subjectData?.name || 'مادة غير محددة'}</p>
-                        </div>
+                recentGrades.map((grade) => (
+                  <div key={grade.id} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${grade.score >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                        <FileText className="h-6 w-6" />
                       </div>
-                      <div className="text-right">
-                        <p className={`text-xl font-bold ${(grade.score || 0) >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {grade.score || 0}%
-                        </p>
-                        <p className="text-xs text-slate-400 font-medium mt-1">
-                          {mounted ? safeFormatDate(grade.completed_at, 'd MMMM') : '...'}
-                        </p>
+                      <div>
+                        <p className="font-bold text-slate-900">{grade.exam?.title}</p>
+                        <p className="text-sm text-slate-500">{grade.exam?.subject?.name}</p>
                       </div>
                     </div>
-                  );
-                })
+                    <div className="text-right">
+                      <p className={`text-xl font-bold ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {grade.score}%
+                      </p>
+                      <p className="text-xs text-slate-400 font-medium mt-1">
+                        {mounted ? format(new Date(grade.completed_at), 'd MMMM', { locale: arSA }) : '...'}
+                      </p>
+                    </div>
+                  </div>
+                ))
               ) : (
                 <div className="text-center py-10 text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   لا توجد نتائج اختبارات حالياً
@@ -269,7 +252,10 @@ export default function StudentDashboard() {
           </div>
         </div>
 
+        {/* Sidebar Content - Right 1 Column */}
         <div className="space-y-8">
+          
+          {/* Today's Schedule Widget */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -282,42 +268,37 @@ export default function StudentDashboard() {
             </div>
             <div className="space-y-3">
               {todaysSchedule.length > 0 ? (
-                todaysSchedule.map((item, i) => {
-                  const teacherData = safeObj(item.teachers);
-                  const teacherName = safeObj(teacherData?.users)?.full_name || 'معلم غير محدد';
-                  
-                  return (
-                    <div key={i} className="flex items-center gap-4 p-3 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
-                      <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sm font-black text-slate-900 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">
-                        {item.period}
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-slate-900 line-clamp-1">{safeObj(item.subjects)?.name || 'بدون مادة'}</p>
-                        <div className="flex flex-col gap-0.5 mt-0.5">
-                          <p className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
-                            <GraduationCap className="h-3 w-3" />
-                            {teacherName}
-                          </p>
-                          {(() => {
-                            const periodInfo = periods.find(p => p.period_number === item.period);
-                            const startTime = item.start_time || periodInfo?.start_time;
-                            const endTime = item.end_time || periodInfo?.end_time;
-                            
-                            if (startTime && endTime) {
-                              return (
-                                <p className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
-                                  <Clock className="h-2.5 w-2.5" />
-                                  {startTime.substring(0, 5)} - {endTime.substring(0, 5)}
-                                </p>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
+                todaysSchedule.map((item, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
+                    <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sm font-black text-slate-900 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">
+                      {item.period}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 line-clamp-1">{item.subjects?.name}</p>
+                      <div className="flex flex-col gap-0.5 mt-0.5">
+                        <p className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
+                          <GraduationCap className="h-3 w-3" />
+                          {item.teachers?.users?.full_name}
+                        </p>
+                        {(() => {
+                          const periodInfo = periods.find(p => p.period_number === item.period);
+                          const startTime = item.start_time || periodInfo?.start_time;
+                          const endTime = item.end_time || periodInfo?.end_time;
+                          
+                          if (startTime && endTime) {
+                            return (
+                              <p className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
+                                <Clock className="h-2.5 w-2.5" />
+                                {startTime.substring(0, 5)} - {endTime.substring(0, 5)}
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
-                  );
-                })
+                  </div>
+                ))
               ) : (
                 <div className="text-center py-8 text-slate-500 text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   لا توجد حصص اليوم
@@ -326,8 +307,10 @@ export default function StudentDashboard() {
             </div>
           </div>
 
+          {/* Announcements Widget */}
           <AnnouncementsWidget role="student" />
 
+          {/* Attendance Widget */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
               <div className="p-2 bg-indigo-50 rounded-xl">
@@ -355,6 +338,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
+          {/* Upcoming Assignments */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -372,10 +356,10 @@ export default function StudentDashboard() {
                       <div className="flex items-start justify-between mb-2">
                         <p className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">{assignment.title}</p>
                         <span className="text-xs font-bold px-2 py-1 bg-amber-50 text-amber-700 rounded-md whitespace-nowrap ml-2">
-                          {mounted ? safeFormatDate(assignment.due_date, 'd MMM') : '...'}
+                          {mounted ? format(new Date(assignment.due_date), 'd MMM', { locale: arSA }) : '...'}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-500">{safeObj(assignment.subject)?.name || 'مادة غير محددة'}</p>
+                      <p className="text-sm text-slate-500">{assignment.subject?.name}</p>
                     </div>
                   </Link>
                 ))
@@ -387,6 +371,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
+          {/* Upcoming Exams */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -407,10 +392,10 @@ export default function StudentDashboard() {
                           <Clock className="h-4 w-4" />
                         </div>
                       </div>
-                      <p className="text-sm text-slate-500 mb-3">{safeObj(exam.subject)?.name || 'مادة غير محددة'}</p>
+                      <p className="text-sm text-slate-500 mb-3">{exam.subject?.name}</p>
                       <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 p-2 rounded-lg">
                         <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                        <span>{mounted ? safeFormatDate(exam.start_time, 'EEEE، d MMMM - h:mm a') : '...'}</span>
+                        <span>{mounted ? format(new Date(exam.start_time), 'EEEE، d MMMM - h:mm a', { locale: arSA }) : '...'}</span>
                       </div>
                     </div>
                   </Link>
@@ -428,5 +413,3 @@ export default function StudentDashboard() {
     </motion.div>
   );
 }
-
-

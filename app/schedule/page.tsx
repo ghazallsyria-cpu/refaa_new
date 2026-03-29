@@ -2,12 +2,9 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { 
-  Printer, User, Users, Info, X, Plus, 
-  Calendar, AlertCircle, Clock, Video, Trash2 
-} from 'lucide-react';
-import { motion } from 'motion/react'; 
+import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
 const DAYS = [
@@ -17,8 +14,6 @@ const DAYS = [
   { id: 4, name: 'الأربعاء' },
   { id: 5, name: 'الخميس' },
 ];
-
-const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
 
 export default function SchedulePage() {
   const { user, userRole: authRole, isChecking } = useAuth();
@@ -35,20 +30,23 @@ export default function SchedulePage() {
   const [selectedSlot, setSelectedSlot] = useState<{day: number, period: number} | null>(null);
   const [formData, setFormData] = useState({ teacher_id: '', section_id: '', subject_id: '' });
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [copiedLesson, setCopiedLesson] = useState<any | null>(null);
   const [showAllSchedules, setShowAllSchedules] = useState(true);
   const [swappingFrom, setSwappingFrom] = useState<any | null>(null);
+  const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { 
     fetchInitialScheduleData, 
+    fetchUserRole, 
+    fetchStudentSection, 
     fetchSchedules: fetchSchedulesData, 
     addSchedule, 
     updateSchedule, 
     deleteSchedule,
     checkConflicts,
     swapSchedules,
-    fetchStudentSection
+    notifyScheduleChange
   } = useSchedulesSystem();
 
   const fetchFilters = useCallback(async () => {
@@ -58,14 +56,16 @@ export default function SchedulePage() {
       if (user) {
         const isSystemAdmin = currentUserRole === 'admin' || currentUserRole === 'management';
         setIsAdmin(isSystemAdmin);
+      } else {
+        setIsAdmin(false);
       }
 
       const data = await fetchInitialScheduleData();
-      setTeachers(data.teachers || []);
-      setSections(data.sections || []);
-      setSubjects(data.subjects || []);
-      setAssignments(data.assignments || []);
-      setPeriods(data.periods || []);
+      setTeachers(data.teachers);
+      setSections(data.sections);
+      setSubjects(data.subjects);
+      setAssignments(data.assignments);
+      setPeriods(data.periods);
 
       if (currentUserRole === 'teacher' && user) {
         setSelectedId(user.id);
@@ -82,25 +82,176 @@ export default function SchedulePage() {
         setSelectedId(data.teachers[0].id);
       }
     } catch (err) {
-      console.error('Error fetching filters:', err);
+      console.error(err);
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
+
+  // تصفية الفصول المتاحة بناءً على المعلم المختار (في حال عرض جدول المعلم)
+  const availableSections = (viewType === 'teacher' && selectedId)
+    ? sections.filter(s => assignments.some(a => a.teacher_id === selectedId && a.section_id === s.id))
+    : sections;
+
+  // تصفية المعلمين المتاحين بناءً على الفصل المختار (في حال عرض جدول الفصل)
+  const modalAvailableTeachers = (viewType === 'section' && selectedId)
+    ? teachers.filter(t => assignments.some(a => a.section_id === selectedId && a.teacher_id === t.id))
+    : (formData.section_id 
+        ? teachers.filter(t => assignments.some(a => a.section_id === formData.section_id && a.teacher_id === t.id))
+        : teachers);
+
+  // تصفية المواد بناءً على الفصل والمعلم المختارين في النموذج
+  const availableSubjects = (formData.section_id && formData.teacher_id)
+    ? subjects.filter(sub => assignments.some(a => 
+        a.section_id === formData.section_id && 
+        a.teacher_id === formData.teacher_id && 
+        a.subject_id === sub.id
+      ))
+    : [];
 
   useEffect(() => {
     fetchFilters();
   }, [fetchFilters]);
 
+  const handleSwap = async (targetDay: number, targetPeriod: number, targetSlot: any | null) => {
+    if (!swappingFrom || !isAdmin) return;
+
+    try {
+      setLoading(true);
+      
+      const sourceDay = swappingFrom.day_of_week;
+      const sourcePeriod = swappingFrom.period;
+
+      // Conflict checks for the swap
+      const conflicts = await checkConflicts(targetDay, targetPeriod, swappingFrom.teacher_id, swappingFrom.section_id, swappingFrom.id);
+      
+      const targetConflicts = conflicts.filter(c => 
+        c.id !== targetSlot?.id && 
+        (c.teacher_id === swappingFrom.teacher_id || c.section_id === swappingFrom.section_id)
+      );
+
+      if (targetConflicts.length > 0) {
+        alert('تعذر التبديل: يوجد تعارض في الحصة المستهدفة للمعلم أو الفصل');
+        setLoading(false);
+        return;
+      }
+
+      if (targetSlot) {
+        const sourceConflicts = await checkConflicts(sourceDay, sourcePeriod, targetSlot.teacher_id, targetSlot.section_id, targetSlot.id);
+        const filteredSourceConflicts = sourceConflicts.filter(c => 
+          c.id !== swappingFrom.id && 
+          (c.teacher_id === targetSlot.teacher_id || c.section_id === targetSlot.section_id)
+        );
+
+        if (filteredSourceConflicts.length > 0) {
+          alert('تعذر التبديل: يوجد تعارض في الحصة الأصلية للمعلم أو الفصل المنقول');
+          setLoading(false);
+          return;
+        }
+      }
+
+      await swapSchedules(swappingFrom.id, sourceDay, sourcePeriod, targetSlot?.id || null, targetDay, targetPeriod);
+
+      await notifyScheduleChange(swappingFrom, targetDay, targetPeriod, DAYS);
+      if (targetSlot) {
+        await notifyScheduleChange(targetSlot, sourceDay, sourcePeriod, DAYS);
+      }
+
+      setSwappingFrom(null);
+      setIsSwapping(false);
+      await fetchSchedule();
+      alert('تم تبديل الحصص بنجاح');
+    } catch (err) {
+      console.error('Error swapping lessons:', err);
+      alert('حدث خطأ أثناء تبديل الحصص. يرجى المحاولة مرة أخرى.');
+      fetchSchedule();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddSchedule = async () => {
+    if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) {
+      alert('يرجى تعبئة جميع الحقول');
+      return;
+    }
+    
+    const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
+
+    try {
+      // 1. التحقق من وجود تضارب
+      const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
+
+      if (conflicts.length > 0) {
+        const tConflict = conflicts.find(c => c.teacher_id === formData.teacher_id);
+        if (tConflict) {
+          const section = safeObj(tConflict.sections);
+          const subject = safeObj(tConflict.subjects);
+          const className = safeObj(section?.classes)?.name;
+          alert(`تضارب: المعلم لديه حصة (${subject?.name}) مع فصل (${className} - ${section?.name}) في هذا الوقت.`);
+          return;
+        }
+        
+        const sConflict = conflicts.find(c => c.section_id === formData.section_id);
+        if (sConflict) {
+          const teacher = safeObj(sConflict.teachers);
+          const subject = safeObj(sConflict.subjects);
+          const teacherName = safeObj(teacher?.users)?.full_name;
+          alert(`تضارب: هذا الفصل لديه حصة (${subject?.name}) مع المعلم (${teacherName}) في هذا الوقت.`);
+          return;
+        }
+      }
+
+      // 2. الإضافة أو التحديث إذا لم يوجد تضارب
+      if (editingId) {
+        await updateSchedule(editingId, {
+          teacher_id: formData.teacher_id,
+          section_id: formData.section_id,
+          subject_id: formData.subject_id,
+        });
+      } else {
+        await addSchedule({
+          teacher_id: formData.teacher_id,
+          section_id: formData.section_id,
+          subject_id: formData.subject_id,
+          day_of_week: selectedSlot.day,
+          period: selectedSlot.period
+        });
+      }
+      
+      setIsModalOpen(false);
+      setEditingId(null);
+      setFormData({ teacher_id: '', section_id: '', subject_id: '' });
+      fetchSchedule(); // تحديث الجدول
+    } catch (err) {
+      console.error(err);
+      alert(`حدث خطأ أثناء ${editingId ? 'تعديل' : 'إضافة'} الحصة`);
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذه الحصة؟')) return;
+    try {
+      await deleteSchedule(id);
+      fetchSchedule();
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء حذف الحصة');
+    }
+  };
+
   const fetchSchedule = useCallback(async () => {
-    if (!selectedId && !showAllSchedules) return;
     setLoading(true);
     try {
       let filters: any = {};
       if (!(isAdmin && showAllSchedules)) {
-        if (viewType === 'teacher') filters.teacher_id = selectedId;
-        else filters.section_id = selectedId;
+        if (viewType === 'teacher') {
+          filters.teacher_id = selectedId;
+        } else {
+          filters.section_id = selectedId;
+        }
       }
 
       const data = await fetchSchedulesData(filters);
+      console.log('Fetched schedule data:', data);
       setScheduleData(data || []);
     } catch (err: any) {
       console.error('Error fetching schedule:', err);
@@ -111,243 +262,560 @@ export default function SchedulePage() {
   }, [selectedId, viewType, isAdmin, showAllSchedules, fetchSchedulesData]);
 
   useEffect(() => {
+    if (!selectedId && !showAllSchedules) return;
     fetchSchedule();
-  }, [fetchSchedule]);
+  }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
-  const handleAddSchedule = async () => {
-    if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) {
-      alert('يرجى تعبئة جميع الحقول');
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
-      if (conflicts && conflicts.length > 0) {
-        const tConflict = conflicts.find(c => String(c.teacher_id) === String(formData.teacher_id));
-        if (tConflict) {
-          const conflictData = tConflict as any;
-          alert(`تضارب: المعلم لديه حصة (${safeObj(conflictData.subjects)?.name}) مع فصل (${safeObj(safeObj(conflictData.sections)?.classes)?.name} - ${safeObj(conflictData.sections)?.name})`);
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      if (editingId) await updateSchedule(editingId, formData);
-      else await addSchedule({ ...formData, day_of_week: selectedSlot.day, period: selectedSlot.period });
-      
-      setIsModalOpen(false);
-      setEditingId(null);
-      setFormData({ teacher_id: '', section_id: '', subject_id: '' });
-      fetchSchedule();
-    } catch (err) {
-      console.error(err);
-      alert('حدث خطأ أثناء المعالجة');
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handlePrint = () => {
+    window.print();
   };
 
-  const handleSwap = async (targetDay: number, targetPeriod: number, targetSlot: any | null) => {
-    if (!swappingFrom || !isAdmin) return;
-    try {
-      setLoading(true);
-      await swapSchedules(swappingFrom.id, swappingFrom.day_of_week, swappingFrom.period, targetSlot?.id || null, targetDay, targetPeriod);
-      setSwappingFrom(null);
-      await fetchSchedule();
-      alert('تم التبديل بنجاح');
-    } catch (err) {
-      console.error(err);
-      alert('فشل التبديل');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const availableSections = (viewType === 'teacher' && selectedId)
-    ? sections.filter(s => assignments.some(a => String(a.teacher_id) === String(selectedId) && String(a.section_id) === String(s.id)))
-    : sections;
-
-  const modalAvailableTeachers = (viewType === 'section' && selectedId)
-    ? teachers.filter(t => assignments.some(a => String(a.section_id) === String(selectedId) && String(a.teacher_id) === String(t.id)))
-    : (formData.section_id 
-        ? teachers.filter(t => assignments.some(a => String(a.section_id) === String(formData.section_id) && String(a.teacher_id) === String(t.id)))
-        : teachers);
-
-  const availableSubjects = (formData.section_id && formData.teacher_id)
-    ? subjects.filter(sub => assignments.some(a => 
-        String(a.section_id) === String(formData.section_id) && 
-        String(a.teacher_id) === String(formData.teacher_id) && 
-        String(a.subject_id) === String(sub.id)
-      ))
-    : [];
-
-  const maxScheduledPeriod = scheduleData.length > 0 ? Math.max(...scheduleData.map(s => Number(s.period) || 0)) : 5;
-  const displayPeriods = periods.filter(p => Number(p.period_number) <= Math.max(maxScheduledPeriod, 5));
+  const groupedTeachers = teachers.reduce((acc, teacher) => {
+    const spec = teacher.specialization || 'غير محدد';
+    if (!acc[spec]) acc[spec] = [];
+    acc[spec].push(teacher);
+    return acc;
+  }, {} as Record<string, any[]>);
 
   return (
     <div className="space-y-6 print:m-0 print:p-0">
       <style jsx global>{`
         @media print {
-          @page { size: landscape; margin: 1cm; }
-          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; }
-          .no-print { display: none !important; }
+          @page {
+            size: landscape;
+            margin: 1cm;
+          }
+          body {
+            background: white !important;
+            color: black !important;
+            -webkit-print-color-adjust: exact;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-only {
+            display: block !important;
+          }
+          .print-table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            table-layout: fixed !important;
+          }
+          .print-table th, .print-table td {
+            border: 1px solid black !important;
+            padding: 4px !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+            word-wrap: break-word !important;
+          }
+          .print-table th {
+            background-color: #f1f5f9 !important;
+            font-weight: bold !important;
+          }
+          .print-others-text {
+            font-size: 8px !important;
+            color: #444 !important;
+            border-top: 1px dashed #ccc !important;
+            margin-top: 2px !important;
+            display: block !important;
+          }
         }
       `}</style>
+      {/* Debug Info */}
+      {isAdmin && authRole !== 'teacher' && (
+        <div className="bg-yellow-100 p-4 rounded-lg text-sm text-yellow-800 no-print">
+          <p className="font-bold">Debug Info:</p>
+          <p>isAdmin: {String(isAdmin)}</p>
+          <p>Email: {user?.email || 'غير مسجل'}</p>
+          <p>Role: {authRole || 'بدون دور'}</p>
+          <p>إذا كنت مديراً ولا تظهر خيارات الإدارة، يرجى التأكد من دورك في قاعدة البيانات أو التواصل مع المطور.</p>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الدراسي'}</h1>
-          <p className="text-slate-500 text-sm">عرض وإدارة الحصص الأسبوعية بنظام الزووم المدمج</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الدراسي'}
+          </h1>
+          <p className="text-slate-500">
+            {authRole === 'teacher' 
+              ? 'عرض حصصك الدراسية الأسبوعية' 
+              : 'عرض الجداول الدراسية للمعلمين والفصول'}
+          </p>
         </div>
-        <button onClick={() => window.print()} className="inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-slate-300 hover:bg-slate-50">
-          <Printer className="ml-2 h-4 w-4" /> طباعة الجدول
+        <button 
+          onClick={handlePrint}
+          className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+        >
+          <Printer className="mr-2 h-4 w-4 ml-2" />
+          طباعة الجدول
         </button>
       </div>
 
-      {isAdmin && swappingFrom && (
-        <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-indigo-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between no-print sticky top-4 z-40">
-           <div className="flex items-center gap-3">
-             <Video className="h-5 w-5 animate-pulse text-indigo-200" />
-             <p className="text-sm font-bold">وضع التبديل نشط: اختر الخانة المستهدفة لنقل حصة {safeObj(swappingFrom.subjects)?.name}</p>
-           </div>
-           <button onClick={() => setSwappingFrom(null)} className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-xs font-bold">إلغاء</button>
-        </motion.div>
+      {/* Swapping Indicator */}
+      {isAdmin && authRole !== 'teacher' && swappingFrom && (
+        <div className="bg-indigo-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-pulse sticky top-4 z-40 no-print">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-lg">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-bold">وضع تبديل الحصص نشط</p>
+              <p className="text-xs text-indigo-100">
+                أنت تقوم بنقل حصة: <span className="font-bold underline">{swappingFrom.subjects?.name}</span> ({swappingFrom.teachers?.users?.full_name})
+                <br />
+                انقر على أي خانة أخرى (فارغة أو مشغولة) لإتمام التبديل.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setSwappingFrom(null)}
+            className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            إلغاء التبديل
+          </button>
+        </div>
       )}
 
-      {isAdmin && (
-        <div className="bg-white p-4 rounded-2xl shadow-sm ring-1 ring-slate-200 print:hidden">
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            <div className="flex rounded-xl shadow-sm overflow-hidden">
-              <button onClick={() => setViewType('teacher')} className={`px-4 py-2 text-xs font-black border ${viewType === 'teacher' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>جدول المعلمين</button>
-              <button onClick={() => setViewType('section')} className={`px-4 py-2 text-xs font-black border-y border-l ${viewType === 'section' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>جدول الفصول</button>
+      {/* Copied Lesson Indicator */}
+      {isAdmin && userRole !== 'teacher' && copiedLesson && (
+        <div className="bg-emerald-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between sticky top-4 z-40 no-print mt-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-lg">
+              <Info className="h-5 w-5" />
             </div>
-            <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="flex-1 rounded-xl border-slate-200 py-2 text-sm font-bold focus:ring-indigo-600">
-              <option value="">-- اختر {viewType === 'teacher' ? 'المعلم' : 'الفصل'} --</option>
-              {viewType === 'teacher' 
-                ? teachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name || 'معلم غير محدد'}</option>) 
-                : sections.map(s => <option key={s.id} value={s.id}>{safeObj(s.classes)?.name} - {s.name}</option>)
-              }
-            </select>
+            <div>
+              <p className="font-bold">تم نسخ الحصة</p>
+              <p className="text-xs text-emerald-100">
+                الحصة المنسوخة: <span className="font-bold underline">{copiedLesson.subjects?.name}</span> ({copiedLesson.teachers?.users?.full_name})
+                <br />
+                انقر على أي خانة فارغة للصق هذه الحصة.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setCopiedLesson(null)}
+            className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            مسح النسخ
+          </button>
+        </div>
+      )}
+
+      {isAdmin && authRole !== 'teacher' && (
+        <div className="bg-white p-4 rounded-xl shadow-sm ring-1 ring-slate-200 print:hidden">
+          <div className="flex flex-col sm:flex-row gap-4 items-center">
+            <div className="flex rounded-md shadow-sm" role="group">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewType('teacher');
+                  if (teachers.length > 0) setSelectedId(teachers[0].id);
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-r-lg border ${
+                  viewType === 'teacher' 
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 z-10' 
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <User className="inline-block w-4 h-4 ml-2" />
+                جدول المعلمين
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewType('section');
+                  if (sections.length > 0) setSelectedId(sections[0].id);
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-l-lg border-y border-l ${
+                  viewType === 'section' 
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 z-10' 
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <Users className="inline-block w-4 h-4 ml-2" />
+                جدول الفصول
+              </button>
+            </div>
+
+            <div className="flex-1 w-full sm:max-w-xs">
+              <select
+                value={selectedId}
+                onChange={(e) => setSelectedId(e.target.value)}
+                className="block w-full rounded-md border-0 py-2 pl-3 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
+              >
+                <option value="">-- اختر {viewType === 'teacher' ? 'المعلم' : 'الفصل'} --</option>
+                {viewType === 'teacher' ? (
+                  teachers.map(t => (
+                    <option key={t.id} value={t.id}>{t.users?.full_name || 'معلم غير معروف'}</option>
+                  ))
+                ) : (
+                  sections.map(s => (
+                    <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                id="showAll" 
+                checked={showAllSchedules} 
+                onChange={(e) => setShowAllSchedules(e.target.checked)}
+                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+              />
+              <label htmlFor="showAll" className="text-sm font-medium text-slate-700">عرض جميع الحصص (للمدير)</label>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-indigo-200">
-          <table className="w-full min-w-max divide-y divide-slate-200 border-collapse">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="py-5 px-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-l border-slate-200 w-32 bg-slate-100/50 sticky right-0 z-10 shadow-sm">اليوم / الحصة</th>
-                {displayPeriods.map(p => (
-                  <th key={p.id} className="py-5 px-4 text-center border-l border-slate-200 min-w-[170px]">
-                    <div className="flex flex-col items-center">
-                      <span className="text-xs font-black text-slate-900 uppercase">الحصة {p.period_number}</span>
-                      <span className="text-[10px] text-slate-400 font-bold mt-1 bg-white px-2 py-0.5 rounded-full border border-slate-100">{p.start_time ? String(p.start_time).substring(0, 5) : ''} - {p.end_time ? String(p.end_time).substring(0, 5) : ''}</span>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900">{editingId ? 'تعديل الحصة' : 'إضافة حصة جديدة'}</h2>
+              <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="text-slate-400 hover:text-slate-600">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {viewType === 'teacher' ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">المعلم</label>
+                  <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                    {teachers.find(t => t.id === selectedId)?.users?.full_name}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">الفصل</label>
+                  <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                    {sections.find(s => s.id === selectedId)?.classes?.name} - {sections.find(s => s.id === selectedId)?.name}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  {viewType === 'teacher' ? 'الفصل' : 'المعلم'}
+                </label>
+                {viewType === 'teacher' ? (
+                  <select 
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
+                    value={formData.section_id}
+                    onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}
+                  >
+                    <option value="">اختر الفصل</option>
+                    {availableSections.map(s => <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>)}
+                  </select>
+                ) : (
+                  <select 
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
+                    value={formData.teacher_id}
+                    onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}
+                  >
+                    <option value="">اختر المعلم</option>
+                    {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">المادة</label>
+                <select 
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400" 
+                  value={formData.subject_id}
+                  disabled={!formData.section_id || !formData.teacher_id}
+                  onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
+                >
+                  <option value="">اختر المادة</option>
+                  {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                {(!formData.section_id || !formData.teacher_id) && <p className="text-[10px] text-slate-400 mt-1">يرجى اختيار {viewType === 'teacher' ? 'الفصل' : 'المعلم'} أولاً</p>}
+                {formData.section_id && formData.teacher_id && availableSubjects.length === 0 && <p className="text-[10px] text-amber-600 mt-1">لا توجد مواد مسندة لهذا الربط في تعيينات المعلمين</p>}
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-4">
+              <button className="px-6 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium" onClick={() => { setIsModalOpen(false); setEditingId(null); }}>إلغاء</button>
+              <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-sm" onClick={handleAddSchedule}>{editingId ? 'تحديث الحصة' : 'حفظ الحصة'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Header */}
+      <div className="hidden print:block text-center mb-8">
+        <h2 className="text-2xl font-bold text-slate-900">مدرسة الرفعة النموذجية</h2>
+        <h3 className="text-xl text-slate-700 mt-2">
+          {viewType === 'teacher' ? 'الجدول الدراسي للمعلم' : 'الجدول الدراسي للفصل'}
+        </h3>
+        <p className="text-lg font-medium mt-2">
+          {viewType === 'teacher' 
+            ? teachers.find(t => t.id === selectedId)?.users?.full_name 
+            : sections.find(s => s.id === selectedId)?.classes?.name + ' - ' + sections.find(s => s.id === selectedId)?.name}
+        </p>
+      </div>
+
+      {!selectedId && !showAllSchedules ? (
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-12 text-center">
+          <div className="mx-auto h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+            <Calendar className="h-10 w-10 text-slate-400" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">لا يوجد جدول متاح</h3>
+          <p className="text-slate-500">
+            {authRole === 'student' 
+              ? 'لم يتم تعيينك في فصل دراسي بعد، أو لا يوجد جدول متاح لصفك.' 
+              : 'يرجى اختيار معلم أو فصل لعرض الجدول الدراسي.'}
+          </p>
+        </div>
+      ) : periods.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-12 text-center">
+          <div className="mx-auto h-24 w-24 bg-amber-50 rounded-full flex items-center justify-center mb-4">
+            <AlertCircle className="h-10 w-10 text-amber-500" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">لم يتم إعداد توقيت الحصص</h3>
+          <p className="text-slate-500 mb-6">
+            يجب على المدير إعداد توقيت الحصص (Lesson Timings) أولاً ليظهر الجدول.
+          </p>
+          {isAdmin && (
+            <Link 
+              href="/admin/periods"
+              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+            >
+              انتقل إلى إعداد توقيت الحصص
+            </Link>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 overflow-hidden print:shadow-none print:ring-0 print:border-0">
+            <div className="overflow-x-auto print:hidden">
+              <div className="min-w-[800px] p-6">
+                <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${periods.length + 1}, minmax(0, 1fr))` }}>
+                  {/* Header Row */}
+                  <div className="h-14 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">اليوم / الحصة</span>
+                  </div>
+                  {periods.map(p => (
+                    <div key={p.id} className="h-14 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-xs font-black text-slate-900">الحصة {p.period_number}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">{p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}</span>
                     </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {DAYS.map((day) => (
-                <tr key={day.id} className="hover:bg-slate-50/40 transition-colors">
-                  <td className="py-10 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80 sticky right-0 z-10 shadow-sm">{day.name}</td>
-                  {displayPeriods.map(p => {
-                    const period = p.period_number;
-                    const slot = scheduleData.find(s => 
-                      String(s.day_of_week) === String(day.id) && 
-                      String(s.period) === String(period) && 
-                      (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
-                    );
-                    
-                    const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
-                      String(s.day_of_week) === String(day.id) && 
-                      String(s.period) === String(period) && 
-                      (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))
-                    ) : [];
-                    
-                    const displaySlot = slot || others[0];
+                  ))}
 
-                    // --- منطق استخراج رابط الزووم الذكي ---
-                    const teacher = safeObj(displaySlot?.teachers);
-                    const userRel = safeObj(teacher?.users);
-                    
-                    // البحث عن الرابط في كل مكان محتمل
-                    const zoomLink = displaySlot?.zoom_link || 
-                                     teacher?.zoom_link || 
-                                     userRel?.zoom_link || 
-                                     safeObj(displaySlot?.users)?.zoom_link;
+              {/* Body Rows */}
+              {loading ? (
+                <div className="col-span-6 py-20 text-center text-slate-500">
+                  جاري تحميل الجدول...
+                </div>
+              ) : (
+                DAYS.map((day) => (
+                  <React.Fragment key={day.id}>
+                    <div className="font-bold text-center p-4 bg-slate-50 rounded-lg flex items-center justify-center">
+                      {day.name}
+                    </div>
+                    {periods.map(p => {
+                      const period = p.period_number;
+                      const slot = scheduleData.find(s => 
+                        s.day_of_week === day.id && 
+                        s.period === period && 
+                        (viewType === 'teacher' ? s.teachers?.id === selectedId : s.sections?.id === selectedId)
+                      );
 
-                    return (
-                      <td key={`${day.id}-${period}`} className="p-3 border-l border-slate-200 h-40 align-top">
-                        {displaySlot ? (
-                          <motion.div 
-                            whileHover={{ y: -2 }}
-                            onClick={() => isAdmin && (swappingFrom ? handleSwap(day.id, period, displaySlot) : setSwappingFrom(displaySlot))}
-                            className={cn(
-                              "h-full flex flex-col justify-between rounded-3xl p-5 border transition-all relative group cursor-pointer shadow-sm",
-                              slot ? "bg-gradient-to-br from-indigo-600 to-indigo-700 text-white border-transparent" : "bg-slate-50 border-slate-100 text-slate-400 opacity-60"
-                            )}
-                          >
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="h-1.5 w-1.5 rounded-full bg-white/40" />
-                                <span className="text-[9px] font-black uppercase tracking-widest opacity-70">{safeObj(displaySlot.subjects)?.name}</span>
-                              </div>
-                              <span className="font-black text-xs block leading-tight">
-                                {viewType === 'teacher' 
-                                  ? `${safeObj(safeObj(displaySlot.sections)?.classes)?.name || ''} - ${safeObj(displaySlot.sections)?.name || ''}` 
-                                  : safeObj(safeObj(displaySlot.teachers)?.users)?.full_name || 'معلم غير محدد'}
+                      const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
+                        s.day_of_week === day.id && 
+                        s.period === period && 
+                        (viewType === 'teacher' ? s.teachers?.id !== selectedId : s.sections?.id !== selectedId)
+                      ) : [];
+
+                      // Prioritize showing the swapping or copied lesson if it's in this slot
+                      const isSwappingFromThisSlot = swappingFrom && others.find(o => o.id === swappingFrom.id);
+                      const isCopiedFromThisSlot = copiedLesson && others.find(o => o.id === copiedLesson.id);
+                      const displaySlot = slot || (isSwappingFromThisSlot ? swappingFrom : (isCopiedFromThisSlot ? copiedLesson : others[0]));
+
+                      return (
+                        <div key={`${day.id}-${period}`} className={`group p-3 border rounded-xl min-h-[110px] flex flex-col items-center justify-center text-center transition-all relative overflow-hidden
+                          ${slot 
+                            ? 'bg-gradient-to-br from-indigo-600 to-violet-700 text-white shadow-lg shadow-indigo-200 border-transparent scale-[1.02] z-10' 
+                            : displaySlot 
+                              ? 'bg-slate-100 border-slate-200 text-slate-400' 
+                              : 'bg-slate-50/50 border-dashed border-slate-200 text-slate-300'
+                          }
+                          ${isAdmin ? 'cursor-pointer hover:ring-2 hover:ring-indigo-300' : ''} 
+                          ${slot?.teachers?.zoom_link ? 'cursor-pointer hover:brightness-110' : ''} 
+                          ${swappingFrom?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-amber-500 bg-amber-50 z-20 scale-105 shadow-xl' : ''} 
+                          ${copiedLesson?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-emerald-500 bg-emerald-50 z-20' : ''}`}
+                          onClick={() => {
+                            if (isAdmin) {
+                              if (swappingFrom) {
+                                if (swappingFrom.id === displaySlot?.id) {
+                                  setSwappingFrom(null); // Cancel swap
+                                } else {
+                                  handleSwap(day.id, period, displaySlot);
+                                }
+                              } else if (displaySlot) {
+                                // If admin clicks an occupied slot and not swapping, maybe they want to start swapping?
+                                // Or we just let them use the button. Let's make the whole cell clickable for swap initiation if they want.
+                                // But they might want to edit. For now, let's keep the buttons for explicit actions but allow swap completion via cell click.
+                              } else {
+                                setFormData({ 
+                                  teacher_id: viewType === 'teacher' ? selectedId : (copiedLesson?.teachers?.id || ''), 
+                                  section_id: viewType === 'section' ? selectedId : (copiedLesson?.sections?.id || ''), 
+                                  subject_id: copiedLesson?.subjects?.id || '' 
+                                });
+                                setSelectedSlot({day: day.id, period: period});
+                                setIsModalOpen(true);
+                              }
+                            } else if (slot?.teachers?.zoom_link) {
+                              window.open(slot.teachers.zoom_link, '_blank');
+                            }
+                          }}
+                        >
+                          {displaySlot ? (
+                            <div className="w-full">
+                              <span className={`font-black text-sm block mb-1 ${slot ? 'text-white' : 'text-slate-500'}`}>
+                                {displaySlot.subjects?.name}
                               </span>
-                            </div>
-                            
-                            <div className="mt-4 pt-3 border-t border-white/10 flex flex-col gap-2">
-                              {/* وسم رابط الزووم - يظهر فقط إذا وجد رابط فعلي */}
-                              {zoomLink && zoomLink.trim() !== "" && (
-                                <div className="flex items-center gap-1.5 text-[8px] font-black bg-emerald-500/20 py-1 px-2 rounded-lg w-fit text-emerald-100">
-                                  <Video className="h-2.5 w-2.5 animate-pulse" />
-                                  <span>بث مباشر متاح</span>
+                              <div className={`text-[10px] font-bold uppercase tracking-wider ${slot ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                {viewType === 'teacher' ? (
+                                  `${displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}`
+                                ) : (
+                                  displaySlot.teachers?.users?.full_name
+                                )}
+                              </div>
+                              {displaySlot.teachers?.zoom_link && slot && (
+                                <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-bold text-white backdrop-blur-sm">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  رابط زوم
                                 </div>
                               )}
-                              
-                              {zoomLink && zoomLink.trim() !== "" && (
-                                <button 
-                                  onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    window.open(zoomLink, '_blank'); 
-                                  }}
-                                  className="w-full py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-[9px] font-black transition-colors border border-white/5"
-                                >
-                                  دخول البث الآن
-                                </button>
-                              )}
-
                               {isAdmin && (
-                                <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    if(confirm('هل أنت متأكد من حذف هذه الحصة؟')) {
-                                      deleteSchedule(displaySlot.id).then(() => fetchSchedule());
-                                    }
-                                  }} className="p-1.5 bg-red-500/20 hover:bg-red-500 text-white rounded-lg transition-colors">
-                                    <Trash2 className="h-3 w-3" />
+                                <div className="mt-3 flex flex-wrap justify-center gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button 
+                                    className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'}`}
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      setCopiedLesson(displaySlot);
+                                      alert('تم نسخ تفاصيل الحصة');
+                                    }}
+                                  >
+                                    نسخ
+                                  </button>
+                                  <button 
+                                    className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      setSwappingFrom(displaySlot);
+                                    }}
+                                  >
+                                    تبديل
+                                  </button>
+                                  <button 
+                                    className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      setEditingId(displaySlot.id);
+                                      setFormData({ 
+                                        teacher_id: displaySlot.teachers?.id || '', 
+                                        section_id: displaySlot.sections?.id || '', 
+                                        subject_id: displaySlot.subjects?.id || '' 
+                                      });
+                                      setSelectedSlot({day: day.id, period: period});
+                                      setIsModalOpen(true);
+                                    }}
+                                  >
+                                    تعديل
+                                  </button>
+                                  <button 
+                                    className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-red-500 hover:bg-red-600 text-white'}`}
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      handleDeleteSchedule(displaySlot.id); 
+                                    }}
+                                  >
+                                    حذف
                                   </button>
                                 </div>
                               )}
+                              {!slot && others.length > 1 && (
+                                <span className="text-[8px] text-slate-400 block mt-1">+{others.length - 1} أخرى</span>
+                              )}
                             </div>
-                          </motion.div>
-                        ) : (
-                          <div 
-                            onClick={() => isAdmin && (setSelectedSlot({day: day.id, period}), setIsModalOpen(true))}
-                            className="h-full w-full flex items-center justify-center border-2 border-dashed border-slate-100 rounded-[2rem] hover:bg-indigo-50/30 hover:border-indigo-200 transition-all cursor-pointer group"
-                          >
-                            {isAdmin && (
-                              <div className="flex flex-col items-center gap-1">
-                                <Plus className="h-5 w-5 text-slate-200 group-hover:text-indigo-400 transition-colors" />
-                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest opacity-0 group-hover:opacity-100">إضافة حصة</span>
-                              </div>
-                            )}
+                          ) : (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-slate-300 text-xs font-medium">فارغ</span>
+                              {isAdmin && (
+                                <div className="p-1.5 rounded-lg bg-slate-100 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Plus className="w-4 h-4" />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+        </div>
+
+        {/* Vertical Table for Print (Days as Rows) */}
+        <div className="hidden print:block p-4">
+          <table className="print-table table-fixed w-full">
+            <thead>
+              <tr>
+                <th className="w-32">اليوم / الحصة</th>
+                {periods.map(p => <th key={p.id}>الحصة {p.period_number}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {DAYS.map((day) => (
+                <tr key={day.id}>
+                  <td className="font-bold bg-slate-50">{day.name}</td>
+                  {periods.map(p => {
+                    const period = p.period_number;
+                    const slot = scheduleData.find(s => 
+                      s.day_of_week === day.id && 
+                      s.period === period && 
+                      (viewType === 'teacher' ? s.teachers?.id === selectedId : s.sections?.id === selectedId)
+                    );
+
+                    const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
+                      s.day_of_week === day.id && 
+                      s.period === period && 
+                      (viewType === 'teacher' ? s.teachers?.id !== selectedId : s.sections?.id !== selectedId)
+                    ) : [];
+
+                    return (
+                      <td key={p.id} className="h-28">
+                        {slot ? (
+                          <div className="flex flex-col items-center justify-center h-full gap-1">
+                            <div className="font-bold text-sm text-indigo-800">{slot.subjects?.name}</div>
+                            <div className="text-[10px] text-slate-700">
+                              {viewType === 'teacher' 
+                                ? `${slot.sections?.classes?.name} - ${slot.sections?.name}`
+                                : slot.teachers?.users?.full_name}
+                            </div>
                           </div>
+                        ) : others.length > 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full opacity-60">
+                            <span className="text-[8px] text-slate-500 mb-1">مشغول:</span>
+                            {others.slice(0, 2).map(o => (
+                              <div key={o.id} className="text-[8px] leading-tight text-slate-600">
+                                {viewType === 'teacher' ? o.sections?.name : o.teachers?.users?.full_name}
+                              </div>
+                            ))}
+                            {others.length > 2 && <span className="text-[7px] text-slate-400">+{others.length - 2}</span>}
+                          </div>
+                        ) : (
+                          <div className="text-slate-200">-</div>
                         )}
                       </td>
                     );
@@ -356,49 +824,20 @@ export default function SchedulePage() {
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2.5rem] p-10 w-full max-w-lg shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center mb-8">
-               <h2 className="text-2xl font-black text-slate-900">إضافة حصة جديدة</h2>
-               <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400"><X className="h-6 w-6"/></button>
+          
+          {/* Print Footer */}
+          <div className="mt-8 pt-6 border-t border-slate-200 flex justify-between items-center">
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-900">منصة مدرستي الرقمية</p>
+              <p className="text-[10px] text-slate-500 mt-1">نظام إدارة التعليم المتكامل</p>
             </div>
-            
-            <form onSubmit={(e) => { e.preventDefault(); handleAddSchedule(); }} className="space-y-5">
-              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex items-center gap-3">
-                 <Calendar className="h-5 w-5 text-indigo-600" />
-                 <span className="text-sm font-bold text-indigo-900">{DAYS.find(d => d.id === selectedSlot?.day)?.name} - الحصة {selectedSlot?.period}</span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">المادة الدراسية</label>
-                <select required className="w-full rounded-2xl border-slate-200 py-4 text-sm font-bold focus:ring-indigo-600 bg-slate-50/50" value={formData.subject_id} onChange={(e) => setFormData({...formData, subject_id: e.target.value})}>
-                  <option value="">اختر المادة</option>
-                  {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">المعلم المسند</label>
-                <select required className="w-full rounded-2xl border-slate-200 py-4 text-sm font-bold focus:ring-indigo-600 bg-slate-50/50" value={formData.teacher_id} onChange={(e) => setFormData({...formData, teacher_id: e.target.value})}>
-                  <option value="">اختر المعلم</option>
-                  {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name || 'معلم غير محدد'}</option>)}
-                </select>
-              </div>
-              
-              <div className="flex gap-4 pt-6">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm transition-all hover:bg-slate-200">إلغاء</button>
-                <button type="submit" disabled={isSubmitting} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50">
-                  {isSubmitting ? 'جاري الحفظ...' : 'حفظ الحصة'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
+            <div className="text-left">
+              <p className="text-[10px] text-slate-400">تم استخراج هذا الجدول بتاريخ {new Date().toLocaleDateString('ar-EG')}</p>
+            </div>
+          </div>
         </div>
+        </>
       )}
     </div>
   );
 }
-

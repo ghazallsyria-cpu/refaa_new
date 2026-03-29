@@ -108,8 +108,7 @@ export default function MessagesPage() {
         };
       } else {
         // Keep the latest message as the representative
-if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
-
+        if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
           const allIds = [...acc[convId].allIds, msg.id];
           const msgCount = acc[convId].msgCount + 1;
           acc[convId] = { ...msg, allIds, msgCount, convId };
@@ -142,8 +141,7 @@ if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
         const ids = [msg.sender_id, msg.receiver_id].sort();
         return `private-${ids.join('-')}` === convId;
       }
-}).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
-
+    }).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
     
     // Deduplicate group messages sent by the current user (teacher)
     if (convId.startsWith('group-')) {
@@ -153,11 +151,9 @@ if (new Date(msg.created_at || 0) > new Date(acc[convId].created_at || 0)) {
         if (msg.sender_id === currentUser?.id) {
           // Use a combination of content, subject, and timestamp (rounded to minute) to deduplicate
           // This ensures that if a teacher sends multiple group messages with same content at different times, they show up
-const date = new Date(msg.created_at || 0);
-
+          const date = new Date(msg.created_at || 0);
           const timeKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}-${date.getHours()}-${date.getMinutes()}`;
-const key = `${msg.content}-${timeKey}`;
-
+          const key = `${msg.content}-${msg.subject}-${timeKey}`;
           if (!seenContents.has(key)) {
             seenContents.add(key);
             uniqueMessages.push(msg);

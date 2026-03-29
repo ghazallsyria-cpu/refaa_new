@@ -26,9 +26,11 @@ export const normalizeQuestion = (raw: Partial<Question> & { text?: string }): Q
     points: raw.points || 0,
     explanation: raw.explanation,
     options: Array.isArray(raw.options) 
-      ? raw.options.map((o) => typeof o === 'string' 
-          ? { id: crypto.randomUUID(), content: o, is_correct: false } 
-          : o) 
+      ? raw.options
+          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+          .map((o) => typeof o === 'string' 
+            ? { id: crypto.randomUUID(), content: o, is_correct: false } 
+            : o) 
       : [],
     media_url: raw.media_url,
     media_type: raw.media_type,

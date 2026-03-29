@@ -1,6 +1,5 @@
-import { z } from 'zod'; // تصحيح حرف I
+import { z } from 'zod';
 import * as validations from '../lib/validations';
-import { Question } from './question'; // إضافة هذا السطر لاستخدام النوع محلياً
 
 export * from './question';
 export * from '../lib/validations';
@@ -27,6 +26,7 @@ export interface OrganizedStudent {
 export type { UserRole } from '../lib/validations';
 
 // Ensure all entities have a consistent interface for the UI
+// These can be used when we need to extend the base schema types with UI-specific fields
 export interface AssignmentWithMeta extends validations.Assignment {
   subject_name?: string;
   teacher_name?: string;
@@ -80,6 +80,5 @@ export interface ExamResults {
   students: { id: string, full_name: string, email: string, section_name: string }[];
   attempts: validations.ExamAttempt[];
   questions: Question[];
-  answers: any[]; 
+  answers: any[]; // Still need to define ExamAnswer if it exists
 }
-

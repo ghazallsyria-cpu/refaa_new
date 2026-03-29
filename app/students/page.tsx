@@ -39,9 +39,11 @@ export default function StudentsPage() {
     national_id: '',
     email: '',
     phone: '',
-    parent_id: ''
+    parent_id: '',
+    next_year_track: ''
   });
   const [selectedSection, setSelectedSection] = useState('all');
+  const [selectedTrack, setSelectedTrack] = useState('all');
 
   useEffect(() => {
     fetchStudents();
@@ -73,7 +75,8 @@ export default function StudentsPage() {
       national_id: student.national_id || '',
       email: student.users?.email || '',
       phone: student.users?.phone || '',
-      parent_id: student.parent_id || ''
+      parent_id: student.parent_id || '',
+      next_year_track: student.next_year_track || ''
     });
     setShowEditModal(true);
   };
@@ -133,10 +136,10 @@ export default function StudentsPage() {
       'الاسم الرباعي': student.users?.full_name,
       'الرقم المدني': student.national_id,
       'البريد الإلكتروني': student.users?.email,
-      'رقم الهاتف': (student.users as { phone?: string })?.phone,
-      'الصف': (student.sections as { classes?: { name?: string } })?.classes?.name,
+      'رقم الهاتف': student.users?.phone,
+      'الصف': student.sections?.classes?.name,
       'الشعبة': student.sections?.name,
-      'ولي الأمر': (student as unknown as { parents?: { users?: { full_name?: string } } })?.parents?.users?.full_name || 'غير مسجل'
+      'ولي الأمر': student.parents?.users?.full_name || 'غير مسجل'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -145,10 +148,17 @@ export default function StudentsPage() {
     XLSX.writeFile(workbook, "قائمة_الطلاب.xlsx");
   };
 
-  const filteredStudents = students.filter(s => 
-    s.users?.full_name?.includes(searchTerm) || 
-    s.national_id?.includes(searchTerm)
-  );
+  const filteredStudents = students.filter(s => {
+    const matchesSection = selectedSection === 'all' || s.section_id === selectedSection;
+    const matchesTrack = selectedTrack === 'all' || 
+      (selectedTrack === 'none' ? !s.next_year_track : s.next_year_track === selectedTrack);
+    const matchesSearch = 
+      s.users?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.users?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.national_id?.includes(searchTerm);
+    
+    return matchesSection && matchesTrack && matchesSearch;
+  });
 
   return (
     <div className="relative min-h-screen">
@@ -249,10 +259,21 @@ export default function StudentsPage() {
             >
               <option value="all">جميع الفصول</option>
               {sections.map(s => (
-                <option key={s.id} value={s.id}>
-                  {(s as { classes?: { name?: string } }).classes?.name} - {s.name}
-                </option>
+                <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>
               ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-3 bg-white/40 backdrop-blur-md p-2 rounded-2xl border border-white/20">
+            <select 
+              value={selectedTrack}
+              onChange={(e) => setSelectedTrack(e.target.value)}
+              className="bg-transparent border-0 py-2 pr-2 pl-8 text-sm font-bold text-slate-700 focus:ring-0 cursor-pointer"
+            >
+              <option value="all">جميع المسارات</option>
+              <option value="scientific">علمي</option>
+              <option value="literary">أدبي</option>
+              <option value="none">لم يحدد بعد</option>
             </select>
           </div>
         </div>
@@ -272,6 +293,7 @@ export default function StudentsPage() {
                 <th scope="col" className="py-6 pr-10 pl-4 text-right text-xs font-black text-slate-500 uppercase tracking-[0.2em]">الطالب</th>
                 <th scope="col" className="px-4 py-6 text-right text-xs font-black text-slate-500 uppercase tracking-[0.2em]">الرقم المدني</th>
                 <th scope="col" className="px-4 py-6 text-right text-xs font-black text-slate-500 uppercase tracking-[0.2em]">الصف والشعبة</th>
+                <th scope="col" className="px-4 py-6 text-right text-xs font-black text-slate-500 uppercase tracking-[0.2em]">المسار (للعاشر)</th>
                 <th scope="col" className="px-4 py-6 text-right text-xs font-black text-slate-500 uppercase tracking-[0.2em]">ولي الأمر</th>
                 <th scope="col" className="px-4 py-6 text-right text-xs font-black text-slate-500 uppercase tracking-[0.2em]">الحالة</th>
                 <th scope="col" className="relative py-6 pl-10 pr-4">
@@ -334,11 +356,26 @@ export default function StudentsPage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-6">
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-900">
-                          {(student.sections as { classes?: { name?: string } })?.classes?.name}
-                        </span>
+                        <span className="text-sm font-bold text-slate-900">{student.sections?.classes?.name}</span>
                         <span className="text-[10px] text-indigo-500 font-black uppercase tracking-widest mt-0.5">{student.sections?.name}</span>
                       </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-6">
+                      {student.sections?.classes?.level === 10 ? (
+                        student.next_year_track ? (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest ${
+                            student.next_year_track === 'scientific' 
+                              ? 'bg-blue-50 text-blue-600 border border-blue-100' 
+                              : 'bg-purple-50 text-purple-600 border border-purple-100'
+                          }`}>
+                            {student.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">لم يحدد</span>
+                        )
+                      ) : (
+                        <span className="text-xs font-bold text-slate-300">-</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-6">
                       <div className="flex items-center gap-2">
@@ -346,7 +383,7 @@ export default function StudentsPage() {
                           <Users className="h-3 w-3 text-slate-400" />
                         </div>
                         <span className="text-sm font-bold text-slate-600">
-                          {(student as unknown as { parents?: { users?: { full_name?: string } } })?.parents?.users?.full_name || '-'}
+                          {student.parents?.users?.full_name || '-'}
                         </span>
                       </div>
                     </td>
@@ -447,14 +484,12 @@ export default function StudentsPage() {
                 <div className="grid grid-cols-2 gap-4 relative z-10">
                   <div className="bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">الصف والشعبة</span>
-                    <span className="text-sm font-bold text-slate-900">
-                      {(student.sections as { classes?: { name?: string } })?.classes?.name}
-                    </span>
+                    <span className="text-sm font-bold text-slate-900">{student.sections?.classes?.name}</span>
                     <span className="text-[10px] text-indigo-500 font-black block mt-1">{student.sections?.name}</span>
                   </div>
                   <div className="bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">رقم الهاتف</span>
-                    <span className="text-sm font-bold text-slate-900">{(student.users as { phone?: string })?.phone || '-'}</span>
+                    <span className="text-sm font-bold text-slate-900">{student.users?.phone || '-'}</span>
                   </div>
                   <div className="col-span-2 bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">ولي الأمر</span>
@@ -462,9 +497,7 @@ export default function StudentsPage() {
                       <div className="h-8 w-8 rounded-xl bg-white/50 flex items-center justify-center border border-white/20">
                         <Users className="h-4 w-4 text-slate-400" />
                       </div>
-                      <span className="text-sm font-bold text-slate-900">
-                        {(student as unknown as { parents?: { users?: { full_name?: string } } })?.parents?.users?.full_name || 'غير مسجل'}
-                      </span>
+                      <span className="text-sm font-bold text-slate-900">{student.parents?.users?.full_name || 'غير مسجل'}</span>
                     </div>
                   </div>
                 </div>
@@ -545,6 +578,21 @@ export default function StudentsPage() {
                         ))}
                       </select>
                     </div>
+
+                    {editingStudent?.sections?.classes?.level === 10 && (
+                      <div className="sm:col-span-2 space-y-2">
+                        <label className="text-sm font-bold text-slate-700 mr-1">المسار الأكاديمي (للصف العاشر)</label>
+                        <select 
+                          value={editForm.next_year_track}
+                          onChange={(e) => setEditForm({...editForm, next_year_track: e.target.value})}
+                          className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all"
+                        >
+                          <option value="">لم يحدد بعد</option>
+                          <option value="scientific">علمي</option>
+                          <option value="literary">أدبي</option>
+                        </select>
+                      </div>
+                    )}
                     <div className="sm:col-span-2 pt-4 border-t border-slate-100">
                       <button
                         type="button"
@@ -734,7 +782,7 @@ export default function StudentsPage() {
                         <option value="">اختر الشعبة</option>
                         {sections.map(section => (
                           <option key={section.id} value={section.id}>
-                            {(section as { classes?: { name?: string } }).classes?.name} - {section.name}
+                            {section.classes?.name} - {section.name}
                           </option>
                         ))}
                       </select>
@@ -780,5 +828,3 @@ export default function StudentsPage() {
     </div>
   );
 }
-
-

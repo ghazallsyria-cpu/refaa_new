@@ -1,124 +1,148 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { SaveExamRequestSchema } from '@/lib/validations';
+import { normalizePayload } from '@/lib/utils';
+import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const body = await req.json();
-    const { examData, questions, isNew, userId } = body;
+    const validatedData = await validateRequest(req, SaveExamRequestSchema);
+    const { examData, questions, isNew, userId } = validatedData;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'المستخدم غير مصرح له' }, { status: 401 });
+    // Validation: Check if total question points equal exam max_score
+    const totalPoints = questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0);
+    if (totalPoints !== Number(examData.max_score)) {
+      return NextResponse.json(
+        { error: `مجموع درجات الأسئلة (${totalPoints}) لا يساوي الدرجة الكلية للاختبار (${examData.max_score})` },
+        { status: 400 }
+      );
     }
 
     let finalExamId = examData.id;
 
-    // تجهيز بيانات الاختبار مع حل مشكلة section_id لضمان التوافق
-    const examPayload = {
+    const examPayload = normalizePayload({
       title: examData.title,
-      description: examData.description || null,
+      description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: examData.teacher_id || userId,
-      duration: examData.duration || 30,
-      max_attempts: examData.max_attempts || 1,
-      max_score: examData.max_score || 100,
-      total_marks: examData.max_score || 100,
-      exam_date: examData.exam_date || new Date().toISOString().split('T')[0],
-      start_time: examData.start_time || '08:00',
-      end_time: examData.end_time || '23:59',
-      status: examData.status || 'draft',
-      settings: examData.settings || {},
-      // حل مشكلة الـ Not-Null في قاعدة البيانات القديمة
-      section_id: examData.section_ids && examData.section_ids.length > 0 ? examData.section_ids[0] : null
-    };
+      teacher_id: userId,
+      duration: examData.duration,
+      max_attempts: examData.max_attempts,
+      max_score: examData.max_score,
+      exam_date: examData.exam_date,
+      start_time: examData.start_time,
+      end_time: examData.end_time,
+      status: examData.status,
+      settings: examData.settings
+    });
 
-    // حفظ أو تحديث الاختبار
-    if (isNew || !finalExamId) {
-      const { data: newExam, error: insertError } = await adminSupabase
+    if (isNew) {
+      const { data: newExam, error } = await adminSupabase
         .from('exams')
         .insert([examPayload])
         .select()
         .single();
 
-      if (insertError) throw new Error(`فشل إنشاء الاختبار: ${insertError.message}`);
+      if (error) throw error;
+      if (!newExam) throw new Error('Failed to create exam');
       finalExamId = newExam.id;
     } else {
-      const { error: updateError } = await adminSupabase
+      const { error } = await adminSupabase
         .from('exams')
         .update(examPayload)
         .eq('id', finalExamId);
 
-      if (updateError) throw new Error(`فشل تحديث الاختبار: ${updateError.message}`);
+      if (error) throw error;
     }
 
-    // إدارة الفصول (Sections)
+    // Handle sections
     if (!isNew && finalExamId) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
     }
 
-    if (examData.section_ids && Array.isArray(examData.section_ids) && examData.section_ids.length > 0) {
+    if (examData.section_ids && examData.section_ids.length > 0 && finalExamId) {
       const sectionsToInsert = examData.section_ids.map((sectionId: string) => ({
         exam_id: finalExamId,
         section_id: sectionId
       }));
-      await adminSupabase.from('exam_sections').insert(sectionsToInsert);
+      const { error: sectionsError } = await adminSupabase.from('exam_sections').insert(sectionsToInsert);
+      if (sectionsError) throw sectionsError;
     }
 
-    // تنظيف الأسئلة القديمة عند التحديث
+    // Handle questions
     if (!isNew && finalExamId) {
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
         const oldQuestionIds = oldQuestions.map(q => q.id);
         await adminSupabase.from('question_options').delete().in('question_id', oldQuestionIds);
-        await adminSupabase.from('questions').delete().in('id', oldQuestionIds);
+      }
+      await adminSupabase.from('questions').delete().eq('exam_id', finalExamId);
+    }
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const questionPayload = normalizePayload({
+        exam_id: finalExamId,
+        type: q.type,
+        content: q.content,
+        points: q.points,
+        explanation: q.explanation,
+        media_url: q.media_url,
+        media_type: q.media_type,
+        order_index: i
+      });
+
+      const { data: newQ, error: qError } = await adminSupabase
+        .from('questions')
+        .insert([questionPayload])
+        .select()
+        .single();
+
+      if (qError) throw qError;
+
+      if (q.options && q.options.length > 0) {
+        const optionsPayload = q.options.map((opt: any, index: number) => ({
+          question_id: newQ.id,
+          content: opt.content,
+          is_correct: opt.is_correct,
+          order_index: index
+        }));
+        const { error: optError } = await adminSupabase.from('question_options').insert(optionsPayload);
+        if (optError) throw optError;
       }
     }
 
-    // إدخال الأسئلة والخيارات الجديدة
-    if (questions && Array.isArray(questions)) {
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        
-        const { data: newQ, error: qError } = await adminSupabase
-          .from('questions')
-          .insert([{
-            exam_id: finalExamId,
-            type: q.type || 'multiple_choice',
-            content: q.content || q.text || 'سؤال بدون نص',
-            points: Number(q.points) || 1,
-            explanation: q.explanation || null,
-            media_url: q.media_url || null,
-            media_type: q.media_type || null,
-            order_index: i
-          }])
-          .select()
-          .single();
-
-        if (qError) throw new Error(`فشل حفظ السؤال: ${qError.message}`);
-
-        // إدخال الخيارات مع حل مشكلة order_index
-        if (q.options && Array.isArray(q.options) && q.options.length > 0) {
-          const optionsPayload = q.options.map((opt: any, optIndex: number) => ({
-            question_id: newQ.id,
-            content: typeof opt === 'string' ? opt : (opt.content || opt.text || 'خيار غير محدد'),
-            is_correct: typeof opt === 'string' ? false : (opt.is_correct || false),
-            // إرسال رقم الترتيب لحل الخطأ المطلوب
-            order_index: optIndex 
-          }));
-          
-          const { error: optError } = await adminSupabase.from('question_options').insert(optionsPayload);
-          if (optError) throw new Error(`فشل حفظ الخيارات: ${optError.message}`);
+    // Send notifications if published
+    if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0 && finalExamId) {
+      try {
+        let studentsQuery = adminSupabase.from('students').select('id');
+        if (examData.section_ids.length > 0) {
+          studentsQuery = studentsQuery.in('section_id', examData.section_ids);
         }
+        const { data: students } = await studentsQuery;
+
+        if (students && students.length > 0) {
+          const notificationPayloads = students.map(student => ({
+            user_id: student.id,
+            title: 'اختبار جديد متاح',
+            content: `تم نشر اختبار جديد: ${examData.title}`,
+            type: 'exam',
+            link: `/exams/${finalExamId}`
+          }));
+          await adminSupabase.from('notifications').insert(notificationPayloads);
+        }
+      } catch (notifErr) {
+        console.error('Error sending exam notifications:', notifErr);
       }
     }
 
     return NextResponse.json({ success: true, examId: finalExamId });
 
-  } catch (error: any) {
-    console.error('Save Exam Full Error:', error);
-    return NextResponse.json({ error: error.message || 'حدث خطأ غير متوقع أثناء الحفظ' }, { status: 500 });
+  } catch (error: unknown) {
+    return handleApiError(error, 'Save Exam');
   }
 }

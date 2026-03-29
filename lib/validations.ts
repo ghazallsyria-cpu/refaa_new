@@ -12,21 +12,34 @@ export const UserSchema = z.object({
   email: z.string().email(),
   full_name: z.string().min(1),
   role: UserRoleSchema,
+  phone: nullableString,
   must_reset_password: z.boolean().optional(),
   created_at: z.string().optional(),
+});
+
+export const TeacherSectionSchema = z.object({
+  teacher_id: z.string().uuid(),
+  section_id: z.string().uuid(),
+  subject_id: z.string().uuid(),
+  sections: SectionSchema.partial().optional(),
+  subjects: SubjectSchema.partial().optional(),
 });
 
 export const TeacherSchema = z.object({
   id: z.string().uuid(),
   user_id: z.string().uuid(),
   national_id: z.string().min(1),
+  specialization: nullableString,
+  zoom_link: nullableString,
   users: UserSchema.partial().optional(),
+  teacher_sections: z.array(TeacherSectionSchema).optional(),
 });
 
 export const SectionSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   class_id: z.string().uuid(),
+  classes: ClassSchema.partial().optional(),
   created_at: z.string().optional(),
 });
 
@@ -42,16 +55,23 @@ export const StudentSchema = z.object({
   user_id: z.string().uuid(),
   national_id: z.string().min(1),
   section_id: z.string().uuid(),
+  next_year_track: z.enum(['scientific', 'literary']).nullable().optional(),
+  track_selection_date: z.string().optional().nullable(),
   users: UserSchema.partial().optional(),
   sections: SectionSchema.partial().optional(),
+  parents: z.any().optional(), // Avoid circular dependency for now
 });
 
 export const ParentSchema = z.object({
   id: z.string().uuid(),
   user_id: z.string().uuid(),
   national_id: z.string().min(1),
+  address: nullableString,
+  job_title: nullableString,
+  workplace: nullableString,
   users: UserSchema.partial().optional(),
   students: z.array(StudentSchema).optional(),
+  student_ids: z.array(z.string().uuid()).optional(),
 });
 
 export const SubjectSchema = z.object({
@@ -102,6 +122,7 @@ export const MessageSchema = z.object({
   sender_id: z.string().uuid(),
   receiver_id: nullableString,
   section_id: nullableString,
+  subject: z.string().optional().nullable(),
   content: z.string().min(1),
   is_read: z.boolean().default(false),
   created_at: z.string().optional(),

@@ -16,6 +16,8 @@ import {
   Tooltip, ResponsiveContainer, Cell, PieChart, Pie
 } from 'recharts';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type Attempt = {
   id: string;
@@ -77,7 +79,7 @@ export default function ExamResults() {
         };
       });
 
-      // دمج الطلاب الذين لم يمتحنوا بعد
+      // Merge with all students to include those who didn't attempt
       const mergedAttempts = [...formattedAttempts];
       const attemptedStudentIds = new Set(formattedAttempts.map((a: any) => a.student.id));
 
@@ -100,7 +102,7 @@ export default function ExamResults() {
 
       setAttempts(mergedAttempts);
 
-      // استخراج الفصول الفريدة للفلترة
+      // Extract unique sections for the filter
       const sections = Array.from(new Set(mergedAttempts.map(a => a.student.section_name))).filter(Boolean);
       setAvailableSections(sections);
 
@@ -115,6 +117,7 @@ export default function ExamResults() {
     fetchData();
   }, [fetchData]);
 
+  // Calculate stats whenever attempts or selected section changes
   useEffect(() => {
     if (!exam) return;
 
@@ -130,21 +133,23 @@ export default function ExamResults() {
     }
 
     if (filteredAttempts.length > 0) {
-      const scores = filteredAttempts.filter(a => a.status !== 'not_attempted').map(a => a.score);
+      const scores = filteredAttempts.map(a => a.score);
       const maxPossibleScore = exam.max_score || 100;
       const percentageScores = scores.map(s => (s / maxPossibleScore) * 100);
       
-      const avg = percentageScores.length > 0 ? percentageScores.reduce((a, b) => a + b, 0) / percentageScores.length : 0;
+      const avg = percentageScores.reduce((a, b) => a + b, 0) / percentageScores.length;
       setStats({
         avg_score: Math.round(avg),
-        max_score: percentageScores.length > 0 ? Math.round(Math.max(...percentageScores)) : 0,
-        min_score: percentageScores.length > 0 ? Math.round(Math.min(...percentageScores)) : 0,
-        pass_rate: percentageScores.length > 0 ? Math.round((percentageScores.filter(s => s >= 50).length / percentageScores.length) * 100) : 0,
+        max_score: Math.round(Math.max(...percentageScores)),
+        min_score: Math.round(Math.min(...percentageScores)),
+        pass_rate: Math.round((percentageScores.filter(s => s >= 50).length / percentageScores.length) * 100),
         total_attempts: scores.length
       });
 
+      // Calculate Question Analytics
       if (questionsData.length > 0 && answersData.length > 0) {
-        const validAttemptIds = new Set(filteredAttempts.filter(a => a.status !== 'not_attempted').map(a => a.id));
+        // Filter answers to only include those from the filtered attempts
+        const validAttemptIds = new Set(filteredAttempts.map(a => a.id));
         const filteredAnswers = answersData.filter(a => validAttemptIds.has(a.attempt_id));
 
         const analytics = questionsData.map((q, idx) => {
@@ -161,18 +166,25 @@ export default function ExamResults() {
         setQuestionAnalytics(analytics);
       }
 
+      // Calculate Score Distribution for Pie Chart
       const distribution = [
-        { name: 'ممتاز (90-100)', value: percentageScores.filter(s => s >= 90).length },
-        { name: 'جيد جداً (80-89)', value: percentageScores.filter(s => s >= 80 && s < 90).length },
-        { name: 'جيد (70-79)', value: percentageScores.filter(s => s >= 70 && s < 80).length },
-        { name: 'مقبول (50-69)', value: percentageScores.filter(s => s >= 50 && s < 70).length },
-        { name: 'ضعيف (أقل من 50)', value: percentageScores.filter(s => s < 50).length },
+        { name: 'ممتاز', value: percentageScores.filter(s => s >= 90).length },
+        { name: 'جيد جداً', value: percentageScores.filter(s => s >= 80 && s < 90).length },
+        { name: 'جيد', value: percentageScores.filter(s => s >= 70 && s < 80).length },
+        { name: 'مقبول', value: percentageScores.filter(s => s >= 50 && s < 70).length },
+        { name: 'ضعيف', value: percentageScores.filter(s => s < 50).length },
       ].filter(d => d.value > 0);
       
       setScoreDistribution(distribution.length > 0 ? distribution : [{ name: 'لا توجد بيانات', value: 1 }]);
 
     } else {
-      setStats({ avg_score: 0, max_score: 0, min_score: 0, pass_rate: 0, total_attempts: 0 });
+      setStats({
+        avg_score: 0,
+        max_score: 0,
+        min_score: 0,
+        pass_rate: 0,
+        total_attempts: 0
+      });
       setQuestionAnalytics([]);
       setScoreDistribution([]);
     }
@@ -182,7 +194,8 @@ export default function ExamResults() {
 
   const filteredAttempts = attempts.filter(a => {
     const matchesSection = selectedSection === 'all' || a.student.section_name === selectedSection;
-    const matchesSearch = !searchQuery || a.student.full_name.includes(searchQuery);
+    const matchesSearch = !searchQuery || 
+      a.student.full_name.includes(searchQuery);
     return matchesSection && matchesSearch;
   });
 
@@ -190,13 +203,14 @@ export default function ExamResults() {
     const data = filteredAttempts.map(a => ({
       'الطالب': a.student.full_name,
       'الفصل': a.student.section_name,
-      'تاريخ التقديم': a.completed_at ? new Date(a.completed_at).toLocaleDateString('ar-SA') : 'لم يتقدم',
-      'الدرجة': a.status === 'not_attempted' ? '-' : a.score,
-      'النسبة المئوية (%)': a.status === 'not_attempted' ? '-' : Math.round((a.score / (exam?.max_score || 100)) * 100),
-      'الحالة': a.status === 'not_attempted' ? 'لم يتقدم' : (a.score >= ((exam?.max_score || 100) / 2) ? 'ناجح' : 'راسب')
+      'تاريخ التقديم': new Date(a.completed_at).toLocaleDateString('ar-SA'),
+      'الدرجة (%)': a.score,
+      'الحالة': a.score >= (exam?.passing_score || 50) ? 'ناجح' : 'راسب'
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Add RTL support to the worksheet
     if (!ws['!cols']) ws['!cols'] = [];
     ws['!dir'] = 'rtl';
 
@@ -221,11 +235,26 @@ export default function ExamResults() {
     <div className="max-w-7xl mx-auto p-4 sm:p-8 space-y-10 pb-24 print:m-0 print:p-0">
       <style jsx global>{`
         @media print {
-          @page { size: A4 portrait; margin: 1cm; }
-          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          .glass-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; background: white !important; }
+          @page {
+            size: A4 portrait;
+            margin: 1cm;
+          }
+          body {
+            background: white !important;
+            color: black !important;
+            -webkit-print-color-adjust: exact;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-only {
+            display: block !important;
+          }
+          .glass-card {
+            box-shadow: none !important;
+            border: 1px solid #e2e8f0 !important;
+            background: white !important;
+          }
         }
       `}</style>
       
@@ -275,10 +304,10 @@ export default function ExamResults() {
                 <td className="p-3 text-sm text-slate-600 border border-slate-200">
                   {attempt.completed_at ? new Date(attempt.completed_at).toLocaleDateString('ar-SA') : 'لم يتقدم'}
                 </td>
-                <td className="p-3 text-sm font-black text-indigo-600 border border-slate-200" dir="ltr">{attempt.status === 'not_attempted' ? '-' : `${attempt.score} / ${exam?.max_score || 100}`}</td>
+                <td className="p-3 text-sm font-black text-indigo-600 border border-slate-200" dir="ltr">{attempt.score}%</td>
                 <td className="p-3 text-sm font-bold border border-slate-200">
-                  <span className={attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= ((exam?.max_score || 100) / 2) ? 'text-emerald-600' : 'text-red-600'}>
-                    {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= ((exam?.max_score || 100) / 2) ? 'ناجح' : 'راسب'}
+                  <span className={attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= 50 ? 'text-emerald-600' : 'text-red-600'}>
+                    {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= 50 ? 'ناجح' : 'راسب'}
                   </span>
                 </td>
               </tr>
@@ -328,10 +357,10 @@ export default function ExamResults() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 print:hidden">
         {[
-          { label: 'متوسط النسبة', value: `${stats?.avg_score}%`, icon: BarChart2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+          { label: 'متوسط الدرجات', value: `${stats?.avg_score}%`, icon: BarChart2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
           { label: 'نسبة النجاح', value: `${stats?.pass_rate}%`, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: 'أعلى نسبة', value: `${stats?.max_score}%`, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'المحاولات المكتملة', value: stats?.total_attempts, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'أعلى درجة', value: `${stats?.max_score}%`, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'إجمالي المحاولات', value: stats?.total_attempts, icon: Users, color: 'text-amber-600', bg: 'bg-amber-50' },
         ].map((stat, i) => (
           <motion.div
             key={i}
@@ -395,6 +424,22 @@ export default function ExamResults() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          
+          {questionAnalytics.length > 0 && questionAnalytics.some(q => q.correct < 50) && (
+            <div className="bg-red-50/50 p-6 rounded-3xl border border-red-100 flex items-start gap-4 animate-pulse">
+              <div className="h-12 w-12 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-lg font-black text-red-900 tracking-tight">
+                  تنبيه: {questionAnalytics.sort((a, b) => a.correct - b.correct)[0].name} يحتاج مراجعة
+                </p>
+                <p className="text-sm text-red-700 font-bold leading-relaxed">
+                  نسبة الإجابة الصحيحة منخفضة جداً ({questionAnalytics.sort((a, b) => a.correct - b.correct)[0].correct}%). قد يكون السؤال غير واضح أو صعب جداً أو يحتاج لإعادة صياغة.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Score Distribution */}
@@ -466,7 +511,7 @@ export default function ExamResults() {
                     <select
                       value={selectedSection}
                       onChange={(e) => setSelectedSection(e.target.value)}
-                      className="w-full pr-12 pl-4 py-4 rounded-2xl border-0 bg-slate-50 ring-1 ring-inset ring-slate-100 text-sm font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all appearance-none cursor-pointer"
+                      className="w-full pr-12 pl-4 py-4 rounded-2xl border-0 bg-slate-50 ring-1 ring-inset ring-slate-100 text-sm font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all appearance-none"
                     >
                       <option value="all">جميع الفصول</option>
                       {availableSections.map(section => (
@@ -494,6 +539,7 @@ export default function ExamResults() {
                     <th className="px-8 py-6">الطالب</th>
                     <th className="px-8 py-6">الفصل</th>
                     <th className="px-8 py-6">تاريخ التقديم</th>
+                    <th className="px-8 py-6">الوقت المستغرق</th>
                     <th className="px-8 py-6">الدرجة</th>
                     <th className="px-8 py-6">الحالة</th>
                     <th className="px-8 py-6 text-left">الإجراءات</th>
@@ -504,68 +550,72 @@ export default function ExamResults() {
                     <tr key={attempt.id} className="hover:bg-slate-50/50 transition-all group">
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-lg shadow-inner shrink-0">
+                          <div className="h-12 w-12 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-black text-lg shadow-inner">
                             {attempt.student.full_name.charAt(0)}
                           </div>
                           <div>
-                            <p className="text-base font-black text-slate-900 tracking-tight whitespace-nowrap">{attempt.student.full_name}</p>
+                            <p className="text-base font-black text-slate-900 tracking-tight">{attempt.student.full_name}</p>
                             <p className="text-xs text-slate-500 font-bold">{attempt.student.email}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-8 py-6 text-sm font-bold text-slate-600">
-                        <span className="px-3 py-1 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold whitespace-nowrap">
+                        <span className="px-3 py-1 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">
                           {attempt.student.section_name}
                         </span>
                       </td>
-                      <td className="px-8 py-6 text-sm font-bold text-slate-600 whitespace-nowrap">
+                      <td className="px-8 py-6 text-sm font-bold text-slate-600">
                         {attempt.completed_at 
                           ? new Date(attempt.completed_at).toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' })
                           : 'لم يتم التقديم'}
                       </td>
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4 min-w-[120px]">
-                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner hidden sm:block">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-1000 ${attempt.status === 'not_attempted' ? 'bg-slate-300' : attempt.score >= ((exam?.max_score || 100) / 2) ? 'bg-emerald-500' : 'bg-red-500'}`}
-                              style={{ width: attempt.status === 'not_attempted' ? '0%' : `${(attempt.score / (exam?.max_score || 100)) * 100}%` }}
-                            />
-                          </div>
-                          <span className={`text-base font-black tracking-tighter ${attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= ((exam?.max_score || 100) / 2) ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {attempt.status === 'not_attempted' ? '-' : `${attempt.score} / ${exam?.max_score || 100}`}
+                      <td className="px-8 py-6 text-sm font-bold text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-slate-400" />
+                          <span>
+                            {attempt.completed_at && attempt.started_at
+                              ? `${Math.round((new Date(attempt.completed_at).getTime() - new Date(attempt.started_at).getTime()) / 60000)} دقيقة`
+                              : '-'}
                           </span>
                         </div>
                       </td>
                       <td className="px-8 py-6">
-                        <span className={`inline-flex px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest border whitespace-nowrap ${
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 h-2 w-24 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-1000 ${attempt.status === 'not_attempted' ? 'bg-slate-300' : attempt.score >= 50 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]'}`}
+                              style={{ width: `${attempt.score}%` }}
+                            />
+                          </div>
+                          <span className={`text-base font-black tracking-tighter ${attempt.status === 'not_attempted' ? 'text-slate-400' : attempt.score >= (exam?.max_score || 100) / 2 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {attempt.score} / {exam?.max_score || 100}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className={`inline-flex px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-widest border ${
                           attempt.status === 'not_attempted'
                             ? 'bg-slate-50 text-slate-500 border-slate-100'
-                            : attempt.score >= ((exam?.max_score || 100) / 2) 
+                            : attempt.score >= (exam?.max_score || 100) / 2 
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                               : 'bg-red-50 text-red-700 border-red-100'
                         }`}>
-                          {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= ((exam?.max_score || 100) / 2) ? 'ناجح' : 'راسب'}
+                          {attempt.status === 'not_attempted' ? 'لم يتقدم' : attempt.score >= (exam?.max_score || 100) / 2 ? 'ناجح' : 'راسب'}
                         </span>
                       </td>
                       <td className="px-8 py-6 text-left">
                         <div className="flex items-center gap-2 justify-end">
                           <button 
-                            disabled={attempt.status === 'not_attempted'}
                             onClick={() => router.push(`/exams/results/${params.id}/student/${attempt.student.id}`)}
-                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="عرض تفاصيل الإجابات"
+                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:shadow-md transition-all active:scale-95"
+                            title="عرض الاختبار"
                           >
                             <FileText className="h-5 w-5" />
                           </button>
                           <button 
-                            disabled={attempt.status === 'not_attempted'}
-                            onClick={() => {
-                              if(confirm('هل أنت متأكد من حذف محاولة الطالب؟ سيسمح له ذلك بإعادة الاختبار.')){
-                                deleteAttempt(attempt.id).then(() => fetchData());
-                              }
-                            }}
-                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="حذف المحاولة (لإعادة الاختبار)"
+                            onClick={() => deleteAttempt(attempt.id)}
+                            className="h-10 w-10 flex items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:shadow-md transition-all active:scale-95"
+                            title="حذف المحاولة"
                           >
                             <XCircle className="h-5 w-5" />
                           </button>
@@ -587,4 +637,3 @@ export default function ExamResults() {
     </div>
   );
 }
-

@@ -2,11 +2,6 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-interface StudentQueryResult {
-  created_at: string;
-  users: { full_name: string } | { full_name: string }[] | null;
-}
-
 export function useDashboardSystem() {
   const { user } = useAuth();
 
@@ -59,19 +54,7 @@ export function useDashboardSystem() {
       ]);
 
       const activities: { title: string; time: string; type: string; color: string }[] = [
-        ...((recentStudents as unknown as StudentQueryResult[]) || []).map(s => {
-          const userData = s.users;
-          const fullName = Array.isArray(userData) 
-            ? userData[0]?.full_name 
-            : userData?.full_name;
-            
-          return { 
-            title: `إضافة الطالب ${fullName || 'غير معروف'}`, 
-            time: s.created_at, 
-            type: 'students', 
-            color: 'bg-indigo-100 text-indigo-600' 
-          };
-        }),
+        ...(recentStudents || []).map(s => ({ title: `إضافة الطالب ${Array.isArray(s.users) ? s.users[0]?.full_name : s.users?.full_name}`, time: s.created_at, type: 'students', color: 'bg-indigo-100 text-indigo-600' })),
         ...(recentDocs || []).map(d => ({ title: `مستند جديد: ${d.title}`, time: d.created_at, type: 'documents', color: 'bg-emerald-100 text-emerald-600' })),
         ...(recentExams || []).map(e => ({ title: `اختبار جديد: ${e.title}`, time: e.created_at, type: 'exams', color: 'bg-amber-100 text-amber-600' })),
         ...(recentNotifs || []).map(n => ({ title: `إعلان جديد: ${n.title}`, time: n.created_at, type: 'notifications', color: 'bg-sky-100 text-sky-600' }))
@@ -87,10 +70,9 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      // إصلاح: جلب حقل users(full_name) لإظهار اسم الطالب
       const { data: student } = await supabase
         .from('students')
-        .select('*, users(full_name), sections(name, classes(name))')
+        .select('*, sections(name, classes(name))')
         .eq('id', user.id)
         .single();
       
@@ -100,8 +82,8 @@ export function useDashboardSystem() {
         { data: assignmentSections },
         { data: examSections }
       ] = await Promise.all([
-        supabase.from('assignment_sections').select('assignment_id').eq('section_id', (student as any).section_id),
-        supabase.from('exam_sections').select('exam_id').eq('section_id', (student as any).section_id)
+        supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id),
+        supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id)
       ]);
 
       const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
@@ -115,34 +97,32 @@ export function useDashboardSystem() {
         { data: todaysSchedule },
         { data: periods }
       ] = await Promise.all([
-        // إصلاح: حماية ضد المصفوفة الفارغة لتجنب انهيار الاستعلام
-        assignmentIds.length > 0 ? supabase
+        supabase
           .from('assignments')
           .select('*, subject:subjects(name)')
           .in('id', assignmentIds)
           .order('due_date', { ascending: true })
-          .limit(3) : Promise.resolve({ data: [] }),
-        examIds.length > 0 ? supabase
+          .limit(3),
+        supabase
           .from('exams')
           .select('*, subject:subjects(name)')
           .in('id', examIds)
           .order('start_time', { ascending: true })
-          .limit(3) : Promise.resolve({ data: [] }),
+          .limit(3),
         supabase
           .from('daily_attendance_summary')
           .select('daily_status')
           .eq('student_id', student.id),
-        // إصلاح: جلب completed_at و subjects لتجنب انهيار التواريخ وعرض المادة
         supabase
           .from('exam_attempts')
-          .select('score, completed_at, exam:exams(title, total_points, subjects(name))')
+          .select('score, exam:exams(title, total_points)')
           .eq('student_id', student.id)
           .order('completed_at', { ascending: false })
           .limit(5),
         supabase
           .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))')
-          .eq('section_id', (student as any).section_id)
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
+          .eq('section_id', student.section_id)
           .eq('day_of_week', new Date().getDay() + 1)
           .order('period'),
         supabase
@@ -188,8 +168,8 @@ export function useDashboardSystem() {
       ] = await Promise.all([
         supabase
           .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:teacher_id(full_name))')
-          .eq('section_id', (student as any).section_id)
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
+          .eq('section_id', student.section_id)
           .order('day_of_week')
           .order('period'),
         supabase
@@ -368,5 +348,3 @@ export function useDashboardSystem() {
     fetchTeacherSchedule
   };
 }
-
-

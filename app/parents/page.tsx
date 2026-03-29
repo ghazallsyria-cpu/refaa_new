@@ -98,9 +98,7 @@ export default function ParentsPage() {
 
   const handleEditSubmit = async () => {
     try {
-await updateParent(editingParent.id, editingParent.national_id, editForm);
-
-
+      await updateParent(editingParent.id, editingParent.national_id, { ...editForm, student_ids: selectedStudents });
       showNotification('success', 'تم تحديث بيانات ولي الأمر بنجاح');
       setShowEditModal(false);
       setSelectedStudents([]);
@@ -322,13 +320,11 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                           <Phone className="h-3 w-3 text-slate-400" />
-{(parent.users as { phone?: string })?.phone || '-'}
-
+                          {parent.users?.phone || '-'}
                         </div>
                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
                           <MapPin className="h-3 w-3" />
-{(parent as { address?: string }).address || 'العنوان غير مسجل'}
-
+                          {parent.address || 'العنوان غير مسجل'}
                         </div>
                       </div>
                     </td>
@@ -338,8 +334,7 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                           <Briefcase className="h-3 w-3 text-slate-400" />
                         </div>
                         <span className="text-sm font-bold text-slate-600">
-{(parent as { job_title?: string }).job_title || '-'}
-
+                          {parent.job_title || '-'}
                         </span>
                       </div>
                     </td>
@@ -434,13 +429,11 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                 <div className="grid grid-cols-2 gap-4 relative z-10">
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">الوظيفة</span>
-<span className="text-sm font-bold text-slate-900">{(parent as { job_title?: string }).job_title || '-'}</span>
-
+                    <span className="text-sm font-bold text-slate-900">{parent.job_title || '-'}</span>
                   </div>
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">رقم الهاتف</span>
-<span className="text-sm font-bold text-slate-900">{(parent.users as { phone?: string })?.phone || '-'}</span>
-
+                    <span className="text-sm font-bold text-slate-900">{parent.users?.phone || '-'}</span>
                   </div>
                   <div className="col-span-2 bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">الأبناء المرتبطون</span>
@@ -462,8 +455,7 @@ await updateParent(editingParent.id, editingParent.national_id, editForm);
                       <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center">
                         <MapPin className="h-4 w-4 text-slate-400" />
                       </div>
-<span className="text-sm font-bold text-slate-900">{(parent as { address?: string }).address || 'غير مسجل'}</span>
-
+                      <span className="text-sm font-bold text-slate-900">{parent.address || 'غير مسجل'}</span>
                     </div>
                   </div>
                 </div>

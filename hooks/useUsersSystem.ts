@@ -59,7 +59,14 @@ export function useUsersSystem() {
         .select(`
           id,
           specialization,
-          users (full_name, email, phone)
+          zoom_link,
+          users (full_name, email, phone),
+          teacher_sections (
+            section_id,
+            subject_id,
+            sections (name, classes (name)),
+            subjects (name)
+          )
         `);
 
       if (error) throw error;
@@ -81,6 +88,10 @@ export function useUsersSystem() {
         .from('parents')
         .select(`
           id,
+          national_id,
+          job_title,
+          workplace,
+          address,
           users (full_name, email, phone)
         `);
 
@@ -121,7 +132,7 @@ export function useUsersSystem() {
     }
   }, []);
 
-  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string, parent_id?: string | null }>): Promise<{ success: boolean }> => {
+  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string }>): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -201,7 +212,7 @@ export function useUsersSystem() {
     }
   }, [fetchStudents]);
 
-  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link?: string, specialization?: string }>): Promise<{ success: boolean, password?: string }> => {
+  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link: string }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -285,7 +296,7 @@ export function useUsersSystem() {
     }
   }, [fetchTeachers]);
 
-  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title?: string, workplace?: string, student_ids?: string[] }>): Promise<{ success: boolean, password?: string }> => {
+  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title: string, workplace: string, student_ids: string[] }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -492,6 +503,26 @@ export function useUsersSystem() {
     }
   }, []);
 
+  const selectTrack = useCallback(async (studentId: string, track: 'scientific' | 'literary'): Promise<{ success: boolean }> => {
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ 
+          next_year_track: track,
+          track_selection_date: new Date().toISOString()
+        })
+        .eq('id', studentId);
+
+      if (error) throw error;
+      
+      await fetchStudents();
+      return { success: true };
+    } catch (err: unknown) {
+      console.error('Error selecting track:', err);
+      throw err;
+    }
+  }, [fetchStudents]);
+
   return {
     students,
     teachers,
@@ -506,6 +537,7 @@ export function useUsersSystem() {
     fetchSections,
     fetchSubjects,
     fetchStudentProfile,
+    selectTrack,
     addStudent,
     updateStudent,
     addTeacher,
@@ -516,4 +548,3 @@ export function useUsersSystem() {
     resetPassword
   };
 }
-

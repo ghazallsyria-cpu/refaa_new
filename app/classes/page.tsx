@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Users, BookOpen, ChevronDown, ChevronUp, Search, User, GraduationCap, Edit, Trash2, Plus, X, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import Link from 'next/link';
 import { useClassesSystem } from '@/hooks/useClassesSystem';
 import { useAuth } from '@/context/auth-context';

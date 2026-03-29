@@ -11,36 +11,29 @@ export async function POST(req: Request) {
     const { attemptId, userId } = await req.json();
 
     if (!userId) {
-      return NextResponse.json({ error: 'المستخدم غير مصرح له' }, { status: 401 });
+      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
     }
 
     if (!attemptId) {
-      return NextResponse.json({ error: 'معرف المحاولة مفقود' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing attemptId' }, { status: 400 });
     }
 
-    // 1. مسح إجابات الطالب المرتبطة بهذه المحاولة لتجنب أخطاء العلاقات (Foreign Key Constraints)
+    // Delete associated student answers first to avoid foreign key constraint errors
     const { error: answersError } = await adminSupabase
       .from('student_answers')
       .delete()
       .eq('attempt_id', attemptId);
 
-    if (answersError) {
-      console.warn('تحذير: حدث خطأ أثناء مسح الإجابات (قد تكون ممسوحة بالفعل):', answersError.message);
-    }
+    if (answersError) throw answersError;
 
-    // 2. مسح المحاولة نفسها
-    const { error: attemptError } = await adminSupabase
-      .from('exam_attempts')
-      .delete()
-      .eq('id', attemptId);
+    const { error } = await adminSupabase.from('exam_attempts').delete().eq('id', attemptId);
     
-    if (attemptError) throw new Error(`فشل مسح المحاولة: ${attemptError.message}`);
+    if (error) throw error;
 
-    return NextResponse.json({ success: true, message: 'تم مسح المحاولة وإجاباتها بنجاح' });
+    return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    console.error('Exam Attempt Delete Full Error:', error);
-    return NextResponse.json({ error: error.message || 'حدث خطأ غير متوقع أثناء مسح المحاولة' }, { status: 500 });
+    console.error('Exam Attempt Delete Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

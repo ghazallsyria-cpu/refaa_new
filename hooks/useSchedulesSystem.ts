@@ -19,7 +19,7 @@ export interface Schedule {
   section_id: string;
   subject_id: string;
   subjects?: { name: string };
-  teachers?: { users: { full_name: string } };
+  teachers?: { zoom_link?: string, users: { full_name: string } };
   sections?: { name: string, classes: { name: string } };
 }
 
@@ -75,7 +75,7 @@ export function useSchedulesSystem() {
         section_id,
         subject_id,
         subjects(name), 
-        teachers(users(full_name)), 
+        teachers(zoom_link, users(full_name)), 
         sections(name, classes(name))
       `);
 

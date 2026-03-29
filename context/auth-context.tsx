@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (studentData && studentData.users) {
-        authEmail = (studentData.users as unknown as { email: string }).email;
+        authEmail = (studentData.users as { email: string }).email;
       } else {
         // Try to find teacher
         const { data: teacherData } = await supabase
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (teacherData && teacherData.users) {
-          authEmail = (teacherData.users as unknown as { email: string }).email;
+          authEmail = (teacherData.users as { email: string }).email;
         } else {
           // Try to find parent
           const { data: parentData } = await supabase
@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .maybeSingle();
             
           if (parentData && parentData.users) {
-            authEmail = (parentData.users as unknown as { email: string }).email;
+            authEmail = (parentData.users as { email: string }).email;
           } else {
             // Default fallback
             authEmail = `${civilId}@alrefaa.edu`;
@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
       
     if (studentData && studentData.users) {
-      authEmail = (studentData.users as unknown as { email: string }).email;
+      authEmail = (studentData.users as { email: string }).email;
     } else {
       // Check teachers
       const { data: teacherData } = await supabase
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (teacherData && teacherData.users) {
-        authEmail = (teacherData.users as unknown as { email: string }).email;
+        authEmail = (teacherData.users as { email: string }).email;
       } else {
         // Check parents
         const { data: parentData } = await supabase
@@ -142,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (parentData && parentData.users) {
-          authEmail = (parentData.users as unknown as { email: string }).email;
+          authEmail = (parentData.users as { email: string }).email;
         }
       }
     }
@@ -196,7 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Check cached role
           const cachedRole = sessionStorage.getItem('userRole');
           const cachedName = sessionStorage.getItem('userName');
-          if (cachedRole) setUserRole(cachedRole as UserRole);
+          if (cachedRole) setUserRole(cachedRole);
           if (cachedName) setUserName(cachedName);
         } else {
           setUser(null);
@@ -264,7 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .maybeSingle() : Promise.resolve({ data: null, error: null })
         ]);
 
-        let role = userRes.data?.role as UserRole;
+        let role = userRes.data?.role;
         const settings = settingsRes.data;
         const settingsError = settingsRes.error;
 
@@ -348,4 +348,3 @@ export function useAuth() {
   }
   return context;
 }
-

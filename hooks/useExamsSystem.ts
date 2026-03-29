@@ -34,13 +34,14 @@ export function useExamsSystem() {
           *,
           subject:subjects(name),
           teacher:teachers(users(full_name)),
-          exam_sections!left(
+          exam_sections!inner(
             section_id,
             sections(name, classes(name))
           )
         `)
         .order('created_at', { ascending: false });
 
+      // If student, we only want published exams for their section
       if (userRole === 'student') {
         const { data: studentProfile } = await supabase
           .from('students')
@@ -53,6 +54,7 @@ export function useExamsSystem() {
             .eq('exam_sections.section_id', studentProfile.section_id)
             .eq('status', 'published');
         } else {
+          // Student has no section, return empty
           setData([]);
           setLoading(false);
           return;
@@ -79,12 +81,10 @@ export function useExamsSystem() {
         ...e,
         subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name,
         teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
-        section_name: e.exam_sections && e.exam_sections.length > 0 
-          ? e.exam_sections.map((es: any) => es.sections?.name).filter(Boolean).join('، ') 
-          : 'جميع الفصول',
+        section_name: e.exam_sections && e.exam_sections.length > 0 ? e.exam_sections.map((es: any) => es.sections?.name).join(', ') : 'غير محدد',
       }));
 
-      // إحصائيات المعلم والمدير
+      // Fetch stats for teacher/admin
       if (['teacher', 'admin', 'management'].includes(userRole || '')) {
         const examsWithStats = await Promise.all(mappedData.map(async (e) => {
           const [attemptsRes, questionsRes] = await Promise.all([
@@ -108,7 +108,7 @@ export function useExamsSystem() {
         mappedData = examsWithStats;
       }
 
-      // حالة تسليم الطالب
+      // Fetch submission status for student
       if (userRole === 'student') {
         const { data: attemptsData } = await supabase
           .from('exam_attempts')
@@ -149,10 +149,12 @@ export function useExamsSystem() {
 
       if (examError) throw examError;
 
-      const { data: examSectionsData } = await supabase
+      const { data: examSectionsData, error: examSectionsError } = await supabase
         .from('exam_sections')
         .select('section_id')
         .eq('exam_id', examId);
+      
+      if (examSectionsError) throw examSectionsError;
 
       const { data: questionsData, error: questionsError } = await supabase
         .from('questions')
@@ -298,11 +300,15 @@ export function useExamsSystem() {
     if (!user) throw new Error('User not authenticated');
     
     try {
-      const { data: questions } = await supabase
+      // 1. Fetch all questions for this exam to get their media_urls
+      const { data: questions, error: qError } = await supabase
         .from('questions')
         .select('media_url')
         .eq('exam_id', examId);
       
+      if (qError) throw qError;
+
+      // 2. Delete all question images from Cloudinary
       if (questions && questions.length > 0) {
         for (const q of questions) {
           if (q.media_url) {
@@ -337,6 +343,7 @@ export function useExamsSystem() {
 
   const fetchExamResults = useCallback(async (examId: string): Promise<ExamResults> => {
     try {
+      // 1. Fetch exam details
       const { data: examData, error: examError } = await supabase
         .from('exams')
         .select('*, subject:subjects(name)')
@@ -345,25 +352,19 @@ export function useExamsSystem() {
 
       if (examError) throw examError;
 
-      const { data: sectionsData } = await supabase
-        .from('exam_sections')
-        .select('section_id')
-        .eq('exam_id', examId);
-        
-      const sectionIds = sectionsData?.map(s => s.section_id) || [];
-
+      // 2. Fetch all students in the assigned sections
       let studentsData: { id: string, full_name: string, email: string, section_name: string }[] = [];
-      if (sectionIds.length > 0) {
-        const { data: students } = await supabase
+      if (examData?.section_ids && examData.section_ids.length > 0) {
+        const { data: students, error: studentsError } = await supabase
           .from('students')
           .select(`
             id,
             users(full_name, email),
             section:sections(name, classes(name))
           `)
-          .in('section_id', sectionIds);
+          .in('section_id', examData.section_ids);
         
-        if (students) {
+        if (!studentsError && students) {
           studentsData = (students as any[]).map(s => {
             const sectionData = s.section;
             const className = Array.isArray(sectionData?.classes) ? sectionData?.classes[0]?.name : sectionData?.classes?.name;
@@ -379,7 +380,8 @@ export function useExamsSystem() {
         }
       }
 
-      const { data: attemptsData } = await supabase
+      // 3. Fetch attempts
+      const { data: attemptsData, error: attemptsError } = await supabase
         .from('exam_attempts')
         .select(`
           *,
@@ -391,24 +393,32 @@ export function useExamsSystem() {
         `)
         .eq('exam_id', examId);
 
-      const { data: qData } = await supabase
+      if (attemptsError) throw attemptsError;
+
+      // 4. Fetch questions
+      const { data: qData, error: qError } = await supabase
         .from('questions')
         .select('*')
         .eq('exam_id', examId);
 
+      if (qError) throw qError;
+
+      // 5. Fetch answers
       let aData: any[] = [];
       if (attemptsData && attemptsData.length > 0) {
         const attemptIds = attemptsData.map(a => a.id);
-        const { data: answers } = await supabase
+        const { data: answers, error: aError } = await supabase
           .from('student_answers')
           .select('*')
           .in('attempt_id', attemptIds);
           
-        if (answers) aData = answers;
+        if (!aError && answers) {
+          aData = answers;
+        }
       }
 
       return {
-        exam: { ...examData, section_ids: sectionIds } as Exam,
+        exam: examData as Exam,
         students: studentsData,
         attempts: (attemptsData || []) as ExamAttempt[],
         questions: (qData || []).map((q: any) => normalizeQuestion(q)),
@@ -433,7 +443,8 @@ export function useExamsSystem() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to delete attempt');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to delete attempt');
 
       return { success: true };
     } catch (err) {
@@ -444,6 +455,7 @@ export function useExamsSystem() {
 
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
+      // 1. Fetch exam details
       const { data: examData, error: examError } = await supabase
         .from('exams')
         .select('*')
@@ -452,6 +464,7 @@ export function useExamsSystem() {
 
       if (examError) throw examError;
 
+      // 2. Fetch student details
       const { data: studentData, error: studentError } = await supabase
         .from('students')
         .select('*, users(full_name)')
@@ -460,6 +473,7 @@ export function useExamsSystem() {
 
       if (studentError) throw studentError;
 
+      // 3. Fetch attempt
       const { data: attemptData, error: attemptError } = await supabase
         .from('exam_attempts')
         .select('*')
@@ -469,17 +483,20 @@ export function useExamsSystem() {
         .limit(1)
         .single();
 
+      // It's possible the student hasn't attempted the exam yet
       if (attemptError && attemptError.code !== 'PGRST116') {
         throw attemptError;
       }
 
+      // 4. Fetch answers if attempt exists
       let answersData: any[] = [];
       if (attemptData) {
-        const { data: answers } = await supabase
+        const { data: answers, error: answersError } = await supabase
           .from('student_answers')
           .select('*, question:questions(*, options:question_options(*))')
           .eq('attempt_id', attemptData.id);
 
+        if (answersError) throw answersError;
         answersData = (answers || []).map(a => ({
           ...a,
           question: a.question ? normalizeQuestion(a.question) : null
@@ -500,4 +517,3 @@ export function useExamsSystem() {
 
   return { data, loading, error, refetch: fetchExams, deleteExam, deleteExamWithMedia, fetchExamDetails, saveExam, fetchExamForStudent, submitExam, fetchExamResults, deleteAttempt, fetchStudentExamResult };
 }
-

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSubjectsSystem } from '@/hooks/useSubjectsSystem';
 import { BookOpen, Plus, Search, Edit2, Trash2, Users, X, Check, User, AlertCircle } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 type Teacher = {
   id: string;

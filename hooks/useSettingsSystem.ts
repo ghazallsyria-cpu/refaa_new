@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { PlatformSettings } from '@/types';
+export type { PlatformSettings };
 
 export interface ProfileSettings {
   full_name: string;

@@ -25,7 +25,8 @@ export async function POST(req: Request) {
       .from('students')
       .update({
         national_id: updateData.national_id,
-        parent_id: updateData.parent_id || null
+        parent_id: updateData.parent_id || null,
+        next_year_track: updateData.next_year_track || null
       })
       .eq('id', studentId);
 
