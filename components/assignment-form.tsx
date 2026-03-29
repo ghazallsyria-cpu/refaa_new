@@ -145,8 +145,8 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         type="radio"
                         className="hidden"
                         name={question.id}
-                        value={option}
-                        checked={answers[question.id] === option}
+                       value={option.content}
+                       checked={answers[question.id] === option.content}
                         onChange={() => handleAnswerChange(question.id, option)}
                         disabled={readOnly}
                       />
