@@ -105,7 +105,13 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       const type = e.target.value as QuestionType;
                       const updates: Partial<Question> = { type };
                       if ((type === 'multiple_choice' || type === 'checkbox') && !question.options) {
-                        updates.options = ['خيار 1'];
+                        updates.options = [
+  {
+    id: crypto.randomUUID(),
+    content: 'خيار 1',
+    is_correct: false
+  }
+];
                       }
                       updateQuestion(question.id, updates);
                     }}
