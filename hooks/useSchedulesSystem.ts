@@ -31,6 +31,7 @@ export interface ScheduleConflict {
   period: number;
   subjects?: { name: string };
   sections?: { name: string, classes: { name: string } };
+  teachers?: { users: { full_name: string } };
 }
 
 export function useSchedulesSystem() {
@@ -185,7 +186,7 @@ export function useSchedulesSystem() {
     try {
       let query = supabase
         .from('schedules')
-        .select('id, teacher_id, section_id, day_of_week, period, subjects(name), sections(name, classes(name))')
+        .select('id, teacher_id, section_id, day_of_week, period, subjects(name), sections(name, classes(name)), teachers(users(full_name))')
         .eq('day_of_week', day)
         .eq('period', period)
         .or(`teacher_id.eq.${teacherId},section_id.eq.${sectionId}`);
@@ -199,7 +200,8 @@ export function useSchedulesSystem() {
       return (data as any[] || []).map(d => ({
         ...d,
         subjects: Array.isArray(d.subjects) ? d.subjects[0] : d.subjects,
-        sections: Array.isArray(d.sections) ? d.sections[0] : d.sections
+        sections: Array.isArray(d.sections) ? d.sections[0] : d.sections,
+        teachers: Array.isArray(d.teachers) ? d.teachers[0] : d.teachers
       })) as ScheduleConflict[];
     } catch (error) {
       console.error('Error checking conflicts:', error);
