@@ -153,7 +153,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                       <span className={`text-sm font-bold transition-colors ${
                         answers[question.id] === option ? 'text-indigo-900' : 'text-slate-600'
                       }`}>
-                        {option}
+                       {option.content}
                       </span>
                     </label>
                   ))}
