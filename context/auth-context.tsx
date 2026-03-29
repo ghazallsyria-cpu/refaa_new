@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (parentData && parentData.users) {
-          authEmail = (parentData.users as { email: string }).email;
+          authEmail = parentData.users?.[0]?.email;
         }
       }
     }
