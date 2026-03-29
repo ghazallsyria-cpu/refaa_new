@@ -7,7 +7,6 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // 1. قراءة البيانات مباشرة لتجنب أخطاء Zod Schema الصارمة القديمة
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
@@ -17,7 +16,6 @@ export async function POST(req: Request) {
 
     let finalExamId = examData.id;
 
-    // 2. تجهيز بيانات الاختبار (تنظيف وحماية من القيم الفارغة)
     const examPayload = {
       title: examData.title,
       description: examData.description || null,
@@ -26,7 +24,7 @@ export async function POST(req: Request) {
       duration: examData.duration || 30,
       max_attempts: examData.max_attempts || 1,
       max_score: examData.max_score || 100,
-      total_marks: examData.max_score || 100, // لضمان التوافق مع قواعد البيانات القديمة
+      total_marks: examData.max_score || 100, // لضمان التوافق القديم
       exam_date: examData.exam_date || new Date().toISOString().split('T')[0],
       start_time: examData.start_time || '08:00',
       end_time: examData.end_time || '23:59',
@@ -34,7 +32,6 @@ export async function POST(req: Request) {
       settings: examData.settings || {}
     };
 
-    // 3. حفظ أو تحديث الاختبار
     if (isNew || !finalExamId) {
       const { data: newExam, error: insertError } = await adminSupabase
         .from('exams')
@@ -53,7 +50,6 @@ export async function POST(req: Request) {
       if (updateError) throw new Error(`فشل تحديث الاختبار: ${updateError.message}`);
     }
 
-    // 4. معالجة الفصول المستهدفة (Sections)
     if (!isNew && finalExamId) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
     }
@@ -67,18 +63,15 @@ export async function POST(req: Request) {
       if (sectionsError) throw new Error(`فشل ربط الفصول: ${sectionsError.message}`);
     }
 
-    // 5. معالجة الأسئلة (حذف القديم لتجنب التكرار)
     if (!isNew && finalExamId) {
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
         const oldQuestionIds = oldQuestions.map(q => q.id);
-        // حذف الخيارات أولاً ثم الأسئلة
         await adminSupabase.from('question_options').delete().in('question_id', oldQuestionIds);
         await adminSupabase.from('questions').delete().in('id', oldQuestionIds);
       }
     }
 
-    // 6. إدخال الأسئلة الجديدة بذكاء (يدعم المسميات الجديدة والقديمة)
     if (questions && Array.isArray(questions)) {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
@@ -86,7 +79,7 @@ export async function POST(req: Request) {
         const questionPayload = {
           exam_id: finalExamId,
           type: q.type || 'multiple_choice',
-          content: q.content || q.text || 'سؤال بدون نص', // يدعم content و text
+          content: q.content || q.text || 'سؤال بدون نص',
           points: Number(q.points) || 1,
           explanation: q.explanation || null,
           media_url: q.media_url || null,
@@ -100,9 +93,8 @@ export async function POST(req: Request) {
           .select()
           .single();
 
-        if (qError) throw new Error(`فشل حفظ السؤال رقم ${i + 1}: ${qError.message}`);
+        if (qError) throw new Error(`فشل حفظ السؤال: ${qError.message}`);
 
-        // 7. إدخال الخيارات (يدعم المصفوفات النصية أو الكائنات)
         if (q.options && Array.isArray(q.options) && q.options.length > 0) {
           const optionsPayload = q.options.map((opt: any) => ({
             question_id: newQ.id,
@@ -111,31 +103,8 @@ export async function POST(req: Request) {
           }));
           
           const { error: optError } = await adminSupabase.from('question_options').insert(optionsPayload);
-          if (optError) throw new Error(`فشل حفظ خيارات السؤال رقم ${i + 1}: ${optError.message}`);
+          if (optError) throw new Error(`فشل حفظ الخيارات: ${optError.message}`);
         }
-      }
-    }
-
-    // 8. إرسال الإشعارات للطلاب (فقط إذا تم النشر)
-    if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0) {
-      try {
-        const { data: students } = await adminSupabase
-          .from('students')
-          .select('id')
-          .in('section_id', examData.section_ids);
-
-        if (students && students.length > 0) {
-          const notificationPayloads = students.map(student => ({
-            user_id: student.id,
-            title: 'اختبار جديد متاح 📝',
-            content: `تم نشر اختبار جديد بعنوان: ${examData.title}`,
-            type: 'exam',
-            link: `/dashboard/student`
-          }));
-          await adminSupabase.from('notifications').insert(notificationPayloads);
-        }
-      } catch (notifErr) {
-        console.error('Error sending exam notifications:', notifErr);
       }
     }
 
@@ -146,4 +115,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message || 'حدث خطأ غير متوقع أثناء الحفظ' }, { status: 500 });
   }
 }
+
 
