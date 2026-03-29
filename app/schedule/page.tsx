@@ -190,9 +190,21 @@ export default function SchedulePage() {
         
         const sConflict = conflicts.find(c => c.section_id === formData.section_id);
         if (sConflict) {
-          const teacher = (Array.isArray(sConflict.teachers) ? sConflict.teachers[0] : sConflict.teachers) as any;
-          const subject = (Array.isArray(sConflict.subjects) ? sConflict.subjects[0] : sConflict.subjects) as any;
-          const teacherName = (teacher?.users && Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher?.users?.full_name);
+          // عمل Type Casting آمن مؤقت للوصول إلى الحقول المتداخلة
+          const conflictData = sConflict as typeof sConflict & { 
+            teachers?: any, 
+            subjects?: any 
+          };
+          
+          const teacher = Array.isArray(conflictData.teachers) ? conflictData.teachers[0] : conflictData.teachers;
+          const subject = Array.isArray(conflictData.subjects) ? conflictData.subjects[0] : conflictData.subjects;
+          
+          // استخراج الأسماء بأمان
+          const teacherName = teacher?.users ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name) : 'غير معروف';
+          const subjectName = subject?.name || 'مادة غير معروفة';
+
+          alert(`تضارب: هذا الفصل لديه حصة (${subjectName}) مع المعلم (${teacherName}) في هذا الوقت.`);
+
           alert(`تضارب: هذا الفصل لديه حصة (${subject?.name}) مع المعلم (${teacherName}) في هذا الوقت.`);
           return;
         }
