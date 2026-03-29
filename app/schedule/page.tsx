@@ -204,8 +204,6 @@ export default function SchedulePage() {
           const subjectName = subject?.name || 'مادة غير معروفة';
 
           alert(`تضارب: هذا الفصل لديه حصة (${subjectName}) مع المعلم (${teacherName}) في هذا الوقت.`);
-
-          alert(`تضارب: هذا الفصل لديه حصة (${subject?.name}) مع المعلم (${teacherName}) في هذا الوقت.`);
           return;
         }
       }
@@ -363,7 +361,7 @@ export default function SchedulePage() {
       </div>
 
       {/* Swapping Indicator */}
-      {isAdmin && userRole !== 'teacher' && swappingFrom && (
+      {isAdmin && authRole !== 'teacher' && swappingFrom && (
         <div className="bg-indigo-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-pulse sticky top-4 z-40 no-print">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2 rounded-lg">
@@ -388,7 +386,7 @@ export default function SchedulePage() {
       )}
 
       {/* Copied Lesson Indicator */}
-      {isAdmin && userRole !== 'teacher' && copiedLesson && (
+      {isAdmin && authRole !== 'teacher' && copiedLesson && (
         <div className="bg-emerald-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between sticky top-4 z-40 no-print mt-4">
           <div className="flex items-center gap-3">
             <div className="bg-white/20 p-2 rounded-lg">
@@ -412,7 +410,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {isAdmin && userRole !== 'teacher' && (
+      {isAdmin && authRole !== 'teacher' && (
         <div className="bg-white p-4 rounded-xl shadow-sm ring-1 ring-slate-200 print:hidden">
           <div className="flex flex-col sm:flex-row gap-4 items-center">
             <div className="flex rounded-md shadow-sm" role="group">
@@ -577,7 +575,7 @@ export default function SchedulePage() {
           </div>
           <h3 className="text-xl font-bold text-slate-900 mb-2">لا يوجد جدول متاح</h3>
           <p className="text-slate-500">
-            {userRole === 'student' 
+            {authRole === 'student' 
               ? 'لم يتم تعيينك في فصل دراسي بعد، أو لا يوجد جدول متاح لصفك.' 
               : 'يرجى اختيار معلم أو فصل لعرض الجدول الدراسي.'}
           </p>
@@ -774,7 +772,6 @@ export default function SchedulePage() {
             </div>
           </div>
         </div>
-        </div>
 
         {/* Vertical Table for Print (Days as Rows) */}
         <div className="hidden print:block p-4">
@@ -851,3 +848,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+
