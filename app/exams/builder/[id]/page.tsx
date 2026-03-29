@@ -43,7 +43,7 @@ type ExamData = {
 };
 
 export default function App() {
-  const params = useParams();
+  const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user, userRole } = useAuth();
   const isNew = params.id === 'new';
@@ -573,8 +573,10 @@ export default function App() {
                       <div className="pt-2">
                          <ImageUpload 
                            label="إرفاق صورة للسؤال" 
-                           onUploadSuccess={(url: string) => updateQuestion(q.id, { media_url: url, media_type: 'image' })} 
-                         />
+onUploadSuccess={(url: string | null) => {
+  if (!url) return;
+  updateQuestion(q.id, { media_url: url, media_type: 'image' });
+}}                         />
                       </div>
                     </div>
                     <div className="w-full md:w-56 space-y-2 shrink-0">
