@@ -37,7 +37,7 @@ export default function SchedulePage() {
   const [swappingFrom, setSwappingFrom] = useState<any | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false); // تم إضافة المتغير هنا ✅
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { 
     fetchInitialScheduleData, 
@@ -90,20 +90,20 @@ export default function SchedulePage() {
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
   const availableSections = (viewType === 'teacher' && selectedId)
-    ? sections.filter(s => assignments.some(a => a.teacher_id === selectedId && a.section_id === s.id))
+    ? sections.filter(s => assignments.some(a => String(a.teacher_id) === String(selectedId) && String(a.section_id) === String(s.id)))
     : sections;
 
   const modalAvailableTeachers = (viewType === 'section' && selectedId)
-    ? teachers.filter(t => assignments.some(a => a.section_id === selectedId && a.teacher_id === t.id))
+    ? teachers.filter(t => assignments.some(a => String(a.section_id) === String(selectedId) && String(a.teacher_id) === String(t.id)))
     : (formData.section_id 
-        ? teachers.filter(t => assignments.some(a => a.section_id === formData.section_id && a.teacher_id === t.id))
+        ? teachers.filter(t => assignments.some(a => String(a.section_id) === String(formData.section_id) && String(a.teacher_id) === String(t.id)))
         : teachers);
 
   const availableSubjects = (formData.section_id && formData.teacher_id)
     ? subjects.filter(sub => assignments.some(a => 
-        a.section_id === formData.section_id && 
-        a.teacher_id === formData.teacher_id && 
-        a.subject_id === sub.id
+        String(a.section_id) === String(formData.section_id) && 
+        String(a.teacher_id) === String(formData.teacher_id) && 
+        String(a.subject_id) === String(sub.id)
       ))
     : [];
 
@@ -124,7 +124,7 @@ export default function SchedulePage() {
       
       const targetConflicts = conflicts.filter(c => 
         c.id !== targetSlot?.id && 
-        (c.teacher_id === swappingFrom.teacher_id || c.section_id === swappingFrom.section_id)
+        (String(c.teacher_id) === String(swappingFrom.teacher_id) || String(c.section_id) === String(swappingFrom.section_id))
       );
 
       if (targetConflicts.length > 0) {
@@ -137,7 +137,7 @@ export default function SchedulePage() {
         const sourceConflicts = await checkConflicts(sourceDay, sourcePeriod, targetSlot.teacher_id, targetSlot.section_id, targetSlot.id);
         const filteredSourceConflicts = sourceConflicts.filter(c => 
           c.id !== swappingFrom.id && 
-          (c.teacher_id === targetSlot.teacher_id || c.section_id === targetSlot.section_id)
+          (String(c.teacher_id) === String(targetSlot.teacher_id) || String(c.section_id) === String(targetSlot.section_id))
         );
 
         if (filteredSourceConflicts.length > 0) {
@@ -178,7 +178,7 @@ export default function SchedulePage() {
       const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
 
       if (conflicts.length > 0) {
-        const tConflict = conflicts.find(c => c.teacher_id === formData.teacher_id);
+        const tConflict = conflicts.find(c => String(c.teacher_id) === String(formData.teacher_id));
         if (tConflict) {
           const conflictData = tConflict as any;
           const section = safeObj(conflictData.sections);
@@ -189,7 +189,7 @@ export default function SchedulePage() {
           return;
         }
         
-        const sConflict = conflicts.find(c => c.section_id === formData.section_id);
+        const sConflict = conflicts.find(c => String(c.section_id) === String(formData.section_id));
         if (sConflict) {
           const conflictData = sConflict as any;
           const teacher = safeObj(conflictData.teachers);
@@ -272,6 +272,16 @@ export default function SchedulePage() {
   const handlePrint = () => {
     window.print();
   };
+
+  // --- الفلتر الذكي للحصص ---
+  // نحسب أقصى رقم حصة تم تسجيله في الجدول (مع إبقاء 5 كحد أدنى للجمالية)
+  const maxScheduledPeriod = scheduleData.length > 0 
+    ? Math.max(...scheduleData.map(s => Number(s.period) || 0)) 
+    : 5;
+
+  // نقوم بتصفية الحصص وإخفاء الحصص الفارغة بعد الحصة الخامسة (مثل 6، 7، 8)
+  const displayPeriods = periods.filter(p => Number(p.period_number) <= Math.max(maxScheduledPeriod, 5));
+
 
   return (
     <div className="space-y-6 print:m-0 print:p-0">
@@ -532,8 +542,8 @@ export default function SchedulePage() {
         </h3>
         <p className="text-lg font-medium mt-2">
           {viewType === 'teacher' 
-            ? safeObj(teachers.find(t => t.id === selectedId)?.users)?.full_name 
-            : safeObj(sections.find(s => s.id === selectedId)?.classes)?.name + ' - ' + sections.find(s => s.id === selectedId)?.name}
+            ? safeObj(teachers.find(t => String(t.id) === String(selectedId))?.users)?.full_name 
+            : safeObj(sections.find(s => String(s.id) === String(selectedId))?.classes)?.name + ' - ' + sections.find(s => String(s.id) === String(selectedId))?.name}
         </p>
       </div>
 
@@ -549,7 +559,7 @@ export default function SchedulePage() {
               : 'يرجى اختيار معلم أو فصل لعرض الجدول الدراسي.'}
           </p>
         </div>
-      ) : periods.length === 0 ? (
+      ) : displayPeriods.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-12 text-center">
           <div className="mx-auto h-24 w-24 bg-amber-50 rounded-full flex items-center justify-center mb-4">
             <AlertCircle className="h-10 w-10 text-amber-500" />
@@ -574,12 +584,12 @@ export default function SchedulePage() {
               <div className="min-w-[800px] p-6">
                 <div 
                   className="grid gap-3"
-                  style={{ gridTemplateColumns: `minmax(120px, 1fr) repeat(${periods.length}, minmax(140px, 1.5fr))` }}
+                  style={{ gridTemplateColumns: `minmax(120px, 1fr) repeat(${displayPeriods.length}, minmax(140px, 1.5fr))` }}
                 >
                   <div className="h-14 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
                     <span className="text-xs font-black text-slate-400 uppercase tracking-widest">اليوم / الحصة</span>
                   </div>
-                  {periods.map(p => (
+                  {displayPeriods.map(p => (
                     <div key={p.id} className="h-14 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
                       <span className="text-xs font-black text-slate-900">الحصة {p.period_number}</span>
                       <span className="text-[10px] text-slate-400 font-bold">
@@ -598,24 +608,26 @@ export default function SchedulePage() {
                         <div className="font-bold text-center p-4 bg-slate-50 rounded-lg flex items-center justify-center">
                           {day.name}
                         </div>
-                        {periods.map(p => {
+                        {displayPeriods.map(p => {
                           const period = p.period_number;
                           
+                          // مطابقة الخلية مع الحصة المطلوبة بشكل آمن
                           const slot = scheduleData.find(s => {
                             const isSameDay = String(s.day_of_week) === String(day.id);
                             const isSamePeriod = String(s.period) === String(period);
-                            const t = safeObj(s.teachers);
-                            const sec = safeObj(s.sections);
-                            const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                            // تم إصلاح المطابقة هنا لتتم مباشرة من الـ IDs الجذرية
+                            const isSameTarget = viewType === 'teacher' 
+                                ? String(s.teacher_id) === String(selectedId) 
+                                : String(s.section_id) === String(selectedId);
                             return isSameDay && isSamePeriod && isSameTarget;
                           });
 
                           const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => {
                             const isSameDay = String(s.day_of_week) === String(day.id);
                             const isSamePeriod = String(s.period) === String(period);
-                            const t = safeObj(s.teachers);
-                            const sec = safeObj(s.sections);
-                            const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                            const isSameTarget = viewType === 'teacher' 
+                                ? String(s.teacher_id) === String(selectedId) 
+                                : String(s.section_id) === String(selectedId);
                             return isSameDay && isSamePeriod && !isSameTarget;
                           }) : [];
 
@@ -710,8 +722,8 @@ export default function SchedulePage() {
                                           e.stopPropagation(); 
                                           setEditingId(displaySlot.id);
                                           setFormData({ 
-                                            teacher_id: safeTeacher?.id || '', 
-                                            section_id: safeSection?.id || '', 
+                                            teacher_id: displaySlot.teacher_id || '', 
+                                            section_id: displaySlot.section_id || '', 
                                             subject_id: safeSubj?.id || '' 
                                           });
                                           setSelectedSlot({day: day.id, period: period});
@@ -761,30 +773,30 @@ export default function SchedulePage() {
               <thead>
                 <tr>
                   <th className="w-32">اليوم / الحصة</th>
-                  {periods.map(p => <th key={p.id}>الحصة {p.period_number}</th>)}
+                  {displayPeriods.map(p => <th key={p.id}>الحصة {p.period_number}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {DAYS.map((day) => (
                   <tr key={day.id}>
                     <td className="font-bold bg-slate-50">{day.name}</td>
-                    {periods.map(p => {
+                    {displayPeriods.map(p => {
                       const period = p.period_number;
                       const slot = scheduleData.find(s => {
                         const isSameDay = String(s.day_of_week) === String(day.id);
                         const isSamePeriod = String(s.period) === String(period);
-                        const t = safeObj(s.teachers);
-                        const sec = safeObj(s.sections);
-                        const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                        const isSameTarget = viewType === 'teacher' 
+                                ? String(s.teacher_id) === String(selectedId) 
+                                : String(s.section_id) === String(selectedId);
                         return isSameDay && isSamePeriod && isSameTarget;
                       });
 
                       const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => {
                         const isSameDay = String(s.day_of_week) === String(day.id);
                         const isSamePeriod = String(s.period) === String(period);
-                        const t = safeObj(s.teachers);
-                        const sec = safeObj(s.sections);
-                        const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                        const isSameTarget = viewType === 'teacher' 
+                                ? String(s.teacher_id) === String(selectedId) 
+                                : String(s.section_id) === String(selectedId);
                         return isSameDay && isSamePeriod && !isSameTarget;
                       }) : [];
 
