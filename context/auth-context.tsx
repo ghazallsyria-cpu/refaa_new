@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
       
     if (studentData && studentData.users) {
-      authEmail = (studentData.users as { email: string }).email;
+      authEmail = studentData.users?.[0]?.email;
     } else {
       // Check teachers
       const { data: teacherData } = await supabase
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (teacherData && teacherData.users) {
-        authEmail = (teacherData.users as { email: string }).email;
+       authEmail = teacherData.users?.[0]?.email;
       } else {
         // Check parents
         const { data: parentData } = await supabase
