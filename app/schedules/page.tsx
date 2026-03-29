@@ -64,7 +64,9 @@ export default function SchedulesPage() {
   
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [scheduleToDelete, setScheduleToDelete] = useState<string | null>(null);
-  const { fetchInitialScheduleData, fetchSchedules: fetchSchedulesData, addSchedule, deleteSchedule: deleteScheduleAction } = useSchedulesSystem();
+  
+  // تم إضافة updateSchedule هنا ↓
+  const { fetchInitialScheduleData, fetchSchedules: fetchSchedulesData, addSchedule, updateSchedule, deleteSchedule: deleteScheduleAction } = useSchedulesSystem();
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -450,3 +452,4 @@ export default function SchedulesPage() {
     </div>
   );
 }
+
