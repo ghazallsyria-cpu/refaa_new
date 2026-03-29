@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSettingsSystem, PlatformSettings, ProfileSettings } from '@/hooks/useSettingsSystem';
+import { useSettingsSystem, ProfileSettings } from '@/hooks/useSettingsSystem';
+import { PlatformSettings } from '@/types'; // ← تم نقل الاستيراد إلى مصدره الصحيح
 import { useAuth } from '@/context/auth-context';
 import { 
   Building2, 
@@ -563,3 +564,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+
