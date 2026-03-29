@@ -185,7 +185,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                           className="hidden"
                           value={option.content}
                           checked={isChecked}
-                          onChange={(e) => handleCheckboxChange(question.id, option, e.target.checked)}
+                          onChange={(e) => handleCheckboxChange(question.id, option.content, e.target.checked)}
                           disabled={readOnly}
                         />
                         <span className={`text-sm font-bold transition-colors ${
