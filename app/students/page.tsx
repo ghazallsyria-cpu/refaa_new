@@ -133,7 +133,7 @@ export default function StudentsPage() {
       'الاسم الرباعي': student.users?.full_name,
       'الرقم المدني': student.national_id,
       'البريد الإلكتروني': student.users?.email,
-      'رقم الهاتف': student.users?.phone,
+      'رقم الهاتف': (student.users as { phone?: string })?.phone, // ← تم التعديل هنا
       'الصف': student.sections?.classes?.name,
       'الشعبة': student.sections?.name,
       'ولي الأمر': student.parents?.users?.full_name || 'غير مسجل'
@@ -448,7 +448,7 @@ export default function StudentsPage() {
                   </div>
                   <div className="bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">رقم الهاتف</span>
-                    <span className="text-sm font-bold text-slate-900">{student.users?.phone || '-'}</span>
+                    <span className="text-sm font-bold text-slate-900">{(student.users as { phone?: string })?.phone || '-'}</span> {/* ← تم التعديل هنا */}
                   </div>
                   <div className="col-span-2 bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">ولي الأمر</span>
@@ -772,3 +772,4 @@ export default function StudentsPage() {
     </div>
   );
 }
+
