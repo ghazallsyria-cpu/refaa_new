@@ -2,14 +2,12 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-// تم تصحيح قائمة الاستيراد لتشمل Trash2 و Video وكافة الأيقونات المستخدمة
 import { 
   Printer, User, Users, Info, X, Plus, 
   Calendar, AlertCircle, Clock, Video, Trash2 
 } from 'lucide-react';
 import { motion } from 'motion/react'; 
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 
 const DAYS = [
@@ -84,7 +82,7 @@ export default function SchedulePage() {
         setSelectedId(data.teachers[0].id);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching filters:', err);
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
@@ -256,12 +254,29 @@ export default function SchedulePage() {
                   <td className="py-10 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80 sticky right-0 z-10 shadow-sm">{day.name}</td>
                   {displayPeriods.map(p => {
                     const period = p.period_number;
-                    const slot = scheduleData.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period) && (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId)));
-                    const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period) && (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))) : [];
+                    const slot = scheduleData.find(s => 
+                      String(s.day_of_week) === String(day.id) && 
+                      String(s.period) === String(period) && 
+                      (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
+                    );
+                    
+                    const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
+                      String(s.day_of_week) === String(day.id) && 
+                      String(s.period) === String(period) && 
+                      (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))
+                    ) : [];
+                    
                     const displaySlot = slot || others[0];
 
+                    // --- منطق استخراج رابط الزووم الذكي ---
                     const teacher = safeObj(displaySlot?.teachers);
-                    const zoomLink = displaySlot?.zoom_link || teacher?.zoom_link || safeObj(teacher?.users)?.zoom_link;
+                    const userRel = safeObj(teacher?.users);
+                    
+                    // البحث عن الرابط في كل مكان محتمل
+                    const zoomLink = displaySlot?.zoom_link || 
+                                     teacher?.zoom_link || 
+                                     userRel?.zoom_link || 
+                                     safeObj(displaySlot?.users)?.zoom_link;
 
                     return (
                       <td key={`${day.id}-${period}`} className="p-3 border-l border-slate-200 h-40 align-top">
@@ -279,29 +294,41 @@ export default function SchedulePage() {
                                 <div className="h-1.5 w-1.5 rounded-full bg-white/40" />
                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-70">{safeObj(displaySlot.subjects)?.name}</span>
                               </div>
-                              <span className="font-black text-xs block leading-tight">{viewType === 'teacher' ? `${safeObj(safeObj(displaySlot.sections)?.classes)?.name} - ${safeObj(displaySlot.sections)?.name}` : safeObj(safeObj(displaySlot.teachers)?.users)?.full_name}</span>
+                              <span className="font-black text-xs block leading-tight">
+                                {viewType === 'teacher' 
+                                  ? `${safeObj(safeObj(displaySlot.sections)?.classes)?.name || ''} - ${safeObj(displaySlot.sections)?.name || ''}` 
+                                  : safeObj(safeObj(displaySlot.teachers)?.users)?.full_name || 'معلم غير محدد'}
+                              </span>
                             </div>
                             
                             <div className="mt-4 pt-3 border-t border-white/10 flex flex-col gap-2">
-                              {zoomLink && slot && (
-                                <div className="flex items-center gap-1.5 text-[8px] font-black bg-white/20 py-1 px-2 rounded-lg w-fit">
-                                  <Video className="h-2.5 w-2.5 animate-pulse text-emerald-300" />
-                                  <span>زوم مدمج</span>
+                              {/* وسم رابط الزووم - يظهر فقط إذا وجد رابط فعلي */}
+                              {zoomLink && zoomLink.trim() !== "" && (
+                                <div className="flex items-center gap-1.5 text-[8px] font-black bg-emerald-500/20 py-1 px-2 rounded-lg w-fit text-emerald-100">
+                                  <Video className="h-2.5 w-2.5 animate-pulse" />
+                                  <span>بث مباشر متاح</span>
                                 </div>
                               )}
-                              {zoomLink && (
+                              
+                              {zoomLink && zoomLink.trim() !== "" && (
                                 <button 
-                                  onClick={(e) => { e.stopPropagation(); window.open(zoomLink, '_blank'); }}
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    window.open(zoomLink, '_blank'); 
+                                  }}
                                   className="w-full py-1.5 bg-white/10 hover:bg-white/20 rounded-xl text-[9px] font-black transition-colors border border-white/5"
                                 >
-                                  دخول البث
+                                  دخول البث الآن
                                 </button>
                               )}
+
                               {isAdmin && (
                                 <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button onClick={(e) => { 
                                     e.stopPropagation(); 
-                                    if(confirm('حذف؟')) deleteSchedule(displaySlot.id).then(() => fetchSchedule()); 
+                                    if(confirm('هل أنت متأكد من حذف هذه الحصة؟')) {
+                                      deleteSchedule(displaySlot.id).then(() => fetchSchedule());
+                                    }
                                   }} className="p-1.5 bg-red-500/20 hover:bg-red-500 text-white rounded-lg transition-colors">
                                     <Trash2 className="h-3 w-3" />
                                   </button>
@@ -341,9 +368,9 @@ export default function SchedulePage() {
             </div>
             
             <form onSubmit={(e) => { e.preventDefault(); handleAddSchedule(); }} className="space-y-5">
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4 flex items-center gap-3">
+              <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 mb-4 flex items-center gap-3">
                  <Calendar className="h-5 w-5 text-indigo-600" />
-                 <span className="text-sm font-bold text-slate-600">{DAYS.find(d => d.id === selectedSlot?.day)?.name} - الحصة {selectedSlot?.period}</span>
+                 <span className="text-sm font-bold text-indigo-900">{DAYS.find(d => d.id === selectedSlot?.day)?.name} - الحصة {selectedSlot?.period}</span>
               </div>
 
               <div>
@@ -357,7 +384,7 @@ export default function SchedulePage() {
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">المعلم المسند</label>
                 <select required className="w-full rounded-2xl border-slate-200 py-4 text-sm font-bold focus:ring-indigo-600 bg-slate-50/50" value={formData.teacher_id} onChange={(e) => setFormData({...formData, teacher_id: e.target.value})}>
                   <option value="">اختر المعلم</option>
-                  {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name}</option>)}
+                  {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name || 'معلم غير محدد'}</option>)}
                 </select>
               </div>
               
