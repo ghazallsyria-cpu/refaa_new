@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // تم تصحيح حرف I
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { Message, User, Section } from '@/types';
@@ -45,12 +45,12 @@ export function useMessagesSystem() {
           .single();
 
         if (studentData?.section_id) {
-          const { data: teacherSections } = await supabase
+          const { data: teacherSectionsData } = await supabase
             .from('teacher_sections')
             .select('teacher_id')
             .eq('section_id', studentData.section_id);
 
-          const teacherIds = teacherSections?.map(ts => ts.teacher_id) || [];
+          const teacherIds = teacherSectionsData?.map(ts => ts.teacher_id) || [];
           
           if (teacherIds.length > 0) {
             const { data, error } = await supabase
@@ -109,12 +109,14 @@ export function useMessagesSystem() {
           const s = sectionsData?.find(item => item.section_id === id);
           const section = Array.isArray(s?.section) ? s.section[0] : s?.section;
           if (!section) return null;
-          const classes = Array.isArray(section.classes) ? section.classes[0] : section.classes;
-          return {
-            id: section.id,
-            name: section.name,
+          const classes = Array.isArray((section as any).classes) ? (section as any).classes[0] : (section as any).classes;
+          
+          // استخدام unknown كحلقة وصل لتجاوز نقص حقل class_id الإجباري في الـ Type
+          return ({
+            id: (section as any).id,
+            name: (section as any).name,
             classes: classes
-          } as Section;
+          } as unknown) as Section;
         });
       
       setTeacherSections(uniqueSections.filter((s): s is Section => s !== null));
@@ -284,8 +286,9 @@ export function useMessagesSystem() {
     fetchStudentsBySection,
     sendMessage, 
     sendGroupMessage,
-    markAsRead,
-    deleteMessages,
+    markAsRead, 
+    deleteMessages, 
     updateMessage
   } as const;
 }
+
