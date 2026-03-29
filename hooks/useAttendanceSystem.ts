@@ -24,7 +24,7 @@ export interface AttendanceRecord {
 export interface SectionData {
   id: string;
   name: string;
-  classes: { name: string };
+  classes: { name: string }[];
   subject_id?: string;
   subject_name?: string;
 }
@@ -33,7 +33,7 @@ export interface StudentData {
   id: string;
   users: {
     full_name: string;
-  };
+  }[];
 }
 
 export interface AttendanceStats {
@@ -61,7 +61,14 @@ export interface AttendanceStats {
     total: number;
     rate: number;
   };
-  students: Record<string, unknown>;
+  students: Record<
+    string,
+    {
+      present: number;
+      late: number;
+      total: number;
+    }
+  >;
 }
 
 type ScheduleRow = {
@@ -71,7 +78,7 @@ type ScheduleRow = {
   section: {
     id: string;
     name: string;
-    classes: { name: string };
+    classes: { name: string }[];
   } | null;
   subject: {
     id: string;
@@ -121,7 +128,10 @@ export function useAttendanceSystem() {
     return schedule;
   }, [user, authRole]);
 
-  const fetchSections = useCallback(async (targetDate: string, targetPeriod: number): Promise<SectionData[]> => {
+  const fetchSections = useCallback(async (
+    targetDate: string,
+    targetPeriod: number
+  ): Promise<SectionData[]> => {
     if (!user) return [];
 
     const isTeacher = authRole === 'teacher';
@@ -153,7 +163,7 @@ export function useAttendanceSystem() {
           return {
             id: r.section.id,
             name: r.section.name,
-            classes: r.section.classes,
+            classes: r.section.classes ?? [],
             subject_id: r.subject_id,
             subject_name: r.subject?.name
           };
@@ -165,7 +175,10 @@ export function useAttendanceSystem() {
         .from('sections')
         .select('id, name, classes(name)');
 
-      result = (data ?? []) as SectionData[];
+      result = ((data ?? []) as SectionData[]).map(s => ({
+        ...s,
+        classes: s.classes ?? []
+      }));
     }
 
     setSections(result);
