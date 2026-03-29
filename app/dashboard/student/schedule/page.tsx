@@ -52,6 +52,12 @@ export default function StudentSchedulePage() {
     );
   }
 
+  // استخراج آمن لبيانات الصف والشعبة
+  const sectionData = Array.isArray(studentInfo?.sections) ? studentInfo.sections[0] : studentInfo?.sections;
+  const classData = Array.isArray(sectionData?.classes) ? sectionData.classes[0] : sectionData?.classes;
+  const sectionName = sectionData?.name || '';
+  const className = classData?.name || '';
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -67,7 +73,7 @@ export default function StudentSchedulePage() {
             جدولي الدراسي الأسبوعي
           </h1>
           <p className="text-slate-500 mt-2 font-medium">
-            عرض الحصص الدراسية لصفك: <span className="text-indigo-600 font-bold">{studentInfo?.sections?.classes?.name} - {studentInfo?.sections?.name}</span>
+            عرض الحصص الدراسية لصفك: <span className="text-indigo-600 font-bold">{className} - {sectionName}</span>
           </p>
         </div>
       </div>
@@ -97,8 +103,24 @@ export default function StudentSchedulePage() {
                   <td className="py-6 px-4 text-sm font-black text-slate-900 border-l border-slate-200 text-center bg-slate-50/80">{day.name}</td>
                   {periods.map(period => {
                     const cellData = getCellData(day.id, period.period_number);
+                    
+                    // استخراج آمن لبيانات المادة والمعلم
+                    let subjectName = '';
+                    let teacherName = '';
+                    let zoomLink = '';
+
+                    if (cellData) {
+                      const subject = Array.isArray(cellData.subjects) ? cellData.subjects[0] : cellData.subjects;
+                      subjectName = subject?.name || 'بدون مادة';
+
+                      const teacher = Array.isArray(cellData.teachers) ? cellData.teachers[0] : cellData.teachers;
+                      const teacherUser = Array.isArray(teacher?.users) ? teacher.users[0] : teacher?.users;
+                      teacherName = teacherUser?.full_name || 'غير محدد';
+                      zoomLink = teacher?.zoom_link || '';
+                    }
+
                     return (
-                      <td key={`${day.id}-${period}`} className="p-3 border-l border-slate-200 h-32 align-top min-w-[140px]">
+                      <td key={`${day.id}-${period.id || period.period_number}`} className="p-3 border-l border-slate-200 h-32 align-top min-w-[140px]">
                         {cellData ? (
                           <motion.div 
                             whileHover={{ scale: 1.02 }}
@@ -109,16 +131,16 @@ export default function StudentSchedulePage() {
                                 <BookOpen className="h-3.5 w-3.5" />
                                 <span className="text-[10px] font-black uppercase tracking-wider">مادة</span>
                               </div>
-                              <div className="font-black text-slate-900 text-sm leading-tight">{cellData.subjects?.name}</div>
+                              <div className="font-black text-slate-900 text-sm leading-tight">{subjectName}</div>
                             </div>
                             <div className="mt-3 pt-2 border-t border-indigo-100/50 flex flex-col gap-2">
                               <div className="flex items-center gap-1.5 text-slate-400">
                                 <User className="h-3 w-3" />
-                                <div className="text-[11px] font-bold text-slate-600 truncate">{cellData.teachers?.users?.full_name}</div>
+                                <div className="text-[11px] font-bold text-slate-600 truncate" title={teacherName}>{teacherName}</div>
                               </div>
-                              {cellData.teachers?.zoom_link && (
+                              {zoomLink && (
                                 <a 
-                                  href={cellData.teachers.zoom_link}
+                                  href={zoomLink}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center justify-center gap-1.5 py-1 px-2 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors"
@@ -155,3 +177,4 @@ export default function StudentSchedulePage() {
     </motion.div>
   );
 }
+
