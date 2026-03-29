@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle } from 'lucide-react';
+// تمت إضافة Clock هنا 👇
+import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
@@ -471,68 +472,50 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              {viewType === 'teacher' ? (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">المعلم</label>
-                  <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                    {safeObj(teachers.find(t => t.id === selectedId)?.users)?.full_name}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">الفصل</label>
-                  <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                    {safeObj(sections.find(s => s.id === selectedId)?.classes)?.name} - {sections.find(s => s.id === selectedId)?.name}
-                  </div>
-                </div>
-              )}
-
+            <form onSubmit={handleSaveSchedule} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {viewType === 'teacher' ? 'الفصل' : 'المعلم'}
-                </label>
-                {viewType === 'teacher' ? (
-                  <select 
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
-                    value={formData.section_id}
-                    onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}
-                  >
-                    <option value="">اختر الفصل</option>
-                    {availableSections.map(s => <option key={s.id} value={s.id}>{safeObj(s.classes)?.name} - {s.name}</option>)}
-                  </select>
-                ) : (
-                  <select 
-                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
-                    value={formData.teacher_id}
-                    onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}
-                  >
-                    <option value="">اختر المعلم</option>
-                    {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name}</option>)}
-                  </select>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">المادة</label>
+                <label className="block text-sm font-medium leading-6 text-slate-900">المادة الدراسية</label>
                 <select 
-                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400" 
+                  required
+                  className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                   value={formData.subject_id}
-                  disabled={!formData.section_id || !formData.teacher_id}
                   onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
                 >
                   <option value="">اختر المادة</option>
                   {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-                {(!formData.section_id || !formData.teacher_id) && <p className="text-[10px] text-slate-400 mt-1">يرجى اختيار {viewType === 'teacher' ? 'الفصل' : 'المعلم'} أولاً</p>}
-                {formData.section_id && formData.teacher_id && availableSubjects.length === 0 && <p className="text-[10px] text-amber-600 mt-1">لا توجد مواد مسندة لهذا الربط في تعيينات المعلمين</p>}
               </div>
-            </div>
-
-            <div className="flex gap-3 justify-end pt-4">
-              <button className="px-6 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium" onClick={() => { setIsModalOpen(false); setEditingId(null); }}>إلغاء</button>
-              <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-sm" onClick={handleAddSchedule}>{editingId ? 'تحديث الحصة' : 'حفظ الحصة'}</button>
-            </div>
+              
+              <div>
+                <label className="block text-sm font-medium leading-6 text-slate-900">المعلم</label>
+                <select 
+                  required
+                  className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                  value={formData.teacher_id}
+                  onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
+                >
+                  <option value="">اختر المعلم</option>
+                  {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name}</option>)}
+                </select>
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'جاري الحفظ...' : 'حفظ الحصة'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
