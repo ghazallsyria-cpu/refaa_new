@@ -15,7 +15,6 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-// دالة مساعدة لفك التغليف الآمن للبيانات القادمة من قاعدة البيانات (كائن أو مصفوفة)
 const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
 
 export default function SchedulePage() {
@@ -179,7 +178,7 @@ export default function SchedulePage() {
       if (conflicts.length > 0) {
         const tConflict = conflicts.find(c => c.teacher_id === formData.teacher_id);
         if (tConflict) {
-          const conflictData = tConflict as any; // تجاوز فحص النوع الصارم هنا
+          const conflictData = tConflict as any;
           const section = safeObj(conflictData.sections);
           const subject = safeObj(conflictData.subjects);
           const className = safeObj(section?.classes)?.name;
@@ -189,7 +188,7 @@ export default function SchedulePage() {
         
         const sConflict = conflicts.find(c => c.section_id === formData.section_id);
         if (sConflict) {
-          const conflictData = sConflict as any; // تجاوز فحص النوع الصارم هنا
+          const conflictData = sConflict as any;
           const teacher = safeObj(conflictData.teachers);
           const subject = safeObj(conflictData.subjects);
           const teacherName = safeObj(teacher?.users)?.full_name || 'غير معروف';
@@ -466,81 +465,396 @@ export default function SchedulePage() {
             <div className="mb-6 bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-center gap-3 text-sm text-slate-700">
               <Clock className="h-5 w-5 text-indigo-500" />
               <div>
-                <span className="font-semibold">{DAYS.find(d => d.id === currentCell.day)?.name}</span>
+                <span className="font-semibold">{DAYS.find(d => d.id === selectedSlot?.day)?.name}</span>
                 <span className="mx-2">-</span>
-                <span>الحصة {currentCell.period}</span>
+                <span>الحصة {selectedSlot?.period}</span>
               </div>
             </div>
 
-            <form onSubmit={handleSaveSchedule} className="space-y-4">
+            <div className="space-y-4">
+              {viewType === 'teacher' ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">المعلم</label>
+                  <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                    {safeObj(teachers.find(t => t.id === selectedId)?.users)?.full_name}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">الفصل</label>
+                  <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                    {safeObj(sections.find(s => s.id === selectedId)?.classes)?.name} - {sections.find(s => s.id === selectedId)?.name}
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className="block text-sm font-medium leading-6 text-slate-900">المادة الدراسية</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  {viewType === 'teacher' ? 'الفصل' : 'المعلم'}
+                </label>
+                {viewType === 'teacher' ? (
+                  <select 
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
+                    value={formData.section_id}
+                    onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}
+                  >
+                    <option value="">اختر الفصل</option>
+                    {availableSections.map(s => <option key={s.id} value={s.id}>{safeObj(s.classes)?.name} - {s.name}</option>)}
+                  </select>
+                ) : (
+                  <select 
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500" 
+                    value={formData.teacher_id}
+                    onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}
+                  >
+                    <option value="">اختر المعلم</option>
+                    {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">المادة</label>
                 <select 
-                  required
-                  className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                  value={currentCell.subjectId || ''}
-                  onChange={(e) => setCurrentCell({...currentCell, subjectId: e.target.value})}
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400" 
+                  value={formData.subject_id}
+                  disabled={!formData.section_id || !formData.teacher_id}
+                  onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
                 >
                   <option value="">اختر المادة</option>
-                  {subjects
-                    .filter(s => {
-                      if (currentCell.teacherId) {
-                        return teacherAssignments.some(a => String(a.subject_id) === String(s.id) && String(a.teacher_id) === String(currentCell.teacherId) && String(a.section_id) === String(selectedSectionId));
-                      }
-                      return teacherAssignments.some(a => String(a.subject_id) === String(s.id) && String(a.section_id) === String(selectedSectionId));
-                    })
-                    .map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
+                  {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
+                {(!formData.section_id || !formData.teacher_id) && <p className="text-[10px] text-slate-400 mt-1">يرجى اختيار {viewType === 'teacher' ? 'الفصل' : 'المعلم'} أولاً</p>}
+                {formData.section_id && formData.teacher_id && availableSubjects.length === 0 && <p className="text-[10px] text-amber-600 mt-1">لا توجد مواد مسندة لهذا الربط في تعيينات المعلمين</p>}
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium leading-6 text-slate-900">المعلم</label>
-                <select 
-                  required
-                  className="mt-2 block w-full rounded-md border-0 py-2 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                  value={currentCell.teacherId || ''}
-                  onChange={(e) => setCurrentCell({...currentCell, teacherId: e.target.value})}
+            </div>
+
+            <div className="flex gap-3 justify-end pt-4">
+              <button className="px-6 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium" onClick={() => { setIsModalOpen(false); setEditingId(null); }}>إلغاء</button>
+              <button className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-sm" onClick={handleAddSchedule}>{editingId ? 'تحديث الحصة' : 'حفظ الحصة'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="hidden print:block text-center mb-8">
+        <h2 className="text-2xl font-bold text-slate-900">مدرسة الرفعة النموذجية</h2>
+        <h3 className="text-xl text-slate-700 mt-2">
+          {viewType === 'teacher' ? 'الجدول الدراسي للمعلم' : 'الجدول الدراسي للفصل'}
+        </h3>
+        <p className="text-lg font-medium mt-2">
+          {viewType === 'teacher' 
+            ? safeObj(teachers.find(t => t.id === selectedId)?.users)?.full_name 
+            : safeObj(sections.find(s => s.id === selectedId)?.classes)?.name + ' - ' + sections.find(s => s.id === selectedId)?.name}
+        </p>
+      </div>
+
+      {!selectedId && !showAllSchedules ? (
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-12 text-center">
+          <div className="mx-auto h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+            <Calendar className="h-10 w-10 text-slate-400" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">لا يوجد جدول متاح</h3>
+          <p className="text-slate-500">
+            {authRole === 'student' 
+              ? 'لم يتم تعيينك في فصل دراسي بعد، أو لا يوجد جدول متاح لصفك.' 
+              : 'يرجى اختيار معلم أو فصل لعرض الجدول الدراسي.'}
+          </p>
+        </div>
+      ) : periods.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 p-12 text-center">
+          <div className="mx-auto h-24 w-24 bg-amber-50 rounded-full flex items-center justify-center mb-4">
+            <AlertCircle className="h-10 w-10 text-amber-500" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">لم يتم إعداد توقيت الحصص</h3>
+          <p className="text-slate-500 mb-6">
+            يجب على المدير إعداد توقيت الحصص (Lesson Timings) أولاً ليظهر الجدول.
+          </p>
+          {isAdmin && (
+            <Link 
+              href="/admin/periods"
+              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+            >
+              انتقل إلى إعداد توقيت الحصص
+            </Link>
+          )}
+        </div>
+      ) : (
+        <React.Fragment>
+          <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 overflow-hidden print:shadow-none print:ring-0 print:border-0">
+            <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-transparent print:hidden">
+              <div className="min-w-[800px] p-6">
+                <div 
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: `minmax(120px, 1fr) repeat(${periods.length}, minmax(140px, 1.5fr))` }}
                 >
-                  <option value="">اختر المعلم</option>
-                  {teachers
-                    .filter(t => {
-                      if (currentCell.subjectId) {
-                        return teacherAssignments.some(a => String(a.teacher_id) === String(t.id) && String(a.subject_id) === String(currentCell.subjectId) && String(a.section_id) === String(selectedSectionId));
-                      }
-                      return teacherAssignments.some(a => String(a.teacher_id) === String(t.id) && String(a.section_id) === String(selectedSectionId));
-                    })
-                    .map(t => {
-                      const safeUser = safeObj(t.users);
+                  <div className="h-14 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">اليوم / الحصة</span>
+                  </div>
+                  {periods.map(p => (
+                    <div key={p.id} className="h-14 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-xs font-black text-slate-900">الحصة {p.period_number}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        {p.start_time ? String(p.start_time).substring(0, 5) : ''} - {p.end_time ? String(p.end_time).substring(0, 5) : ''}
+                      </span>
+                    </div>
+                  ))}
+
+                  {loading ? (
+                    <div className="col-span-full py-20 text-center text-slate-500">
+                      جاري تحميل الجدول...
+                    </div>
+                  ) : (
+                    DAYS.map((day) => (
+                      <React.Fragment key={day.id}>
+                        <div className="font-bold text-center p-4 bg-slate-50 rounded-lg flex items-center justify-center">
+                          {day.name}
+                        </div>
+                        {periods.map(p => {
+                          const period = p.period_number;
+                          
+                          const slot = scheduleData.find(s => {
+                            const isSameDay = String(s.day_of_week) === String(day.id);
+                            const isSamePeriod = String(s.period) === String(period);
+                            const t = safeObj(s.teachers);
+                            const sec = safeObj(s.sections);
+                            const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                            return isSameDay && isSamePeriod && isSameTarget;
+                          });
+
+                          const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => {
+                            const isSameDay = String(s.day_of_week) === String(day.id);
+                            const isSamePeriod = String(s.period) === String(period);
+                            const t = safeObj(s.teachers);
+                            const sec = safeObj(s.sections);
+                            const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                            return isSameDay && isSamePeriod && !isSameTarget;
+                          }) : [];
+
+                          const isSwappingFromThisSlot = swappingFrom && others.find(o => o.id === swappingFrom.id);
+                          const isCopiedFromThisSlot = copiedLesson && others.find(o => o.id === copiedLesson.id);
+                          const displaySlot = slot || (isSwappingFromThisSlot ? swappingFrom : (isCopiedFromThisSlot ? copiedLesson : others[0]));
+
+                          const safeSubj = safeObj(displaySlot?.subjects);
+                          const safeTeacher = safeObj(displaySlot?.teachers);
+                          const safeUser = safeObj(safeTeacher?.users);
+                          const safeSection = safeObj(displaySlot?.sections);
+                          const safeClass = safeObj(safeSection?.classes);
+
+                          const subjectName = safeSubj?.name || 'بدون مادة';
+                          const teacherName = safeUser?.full_name || 'غير محدد';
+                          const sectionName = safeSection ? `${safeClass?.name || ''} - ${safeSection?.name || ''}` : 'غير محدد';
+
+                          return (
+                            <div key={`${day.id}-${period}`} className={`group p-3 border rounded-xl min-h-[110px] flex flex-col items-center justify-center text-center transition-all relative overflow-hidden
+                              ${slot 
+                                ? 'bg-gradient-to-br from-indigo-600 to-violet-700 text-white shadow-lg shadow-indigo-200 border-transparent scale-[1.02] z-10' 
+                                : displaySlot 
+                                  ? 'bg-slate-100 border-slate-200 text-slate-400' 
+                                  : 'bg-slate-50/50 border-dashed border-slate-200 text-slate-300'
+                              }
+                              ${isAdmin ? 'cursor-pointer hover:ring-2 hover:ring-indigo-300' : ''} 
+                              ${safeTeacher?.zoom_link ? 'cursor-pointer hover:brightness-110' : ''} 
+                              ${swappingFrom?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-amber-500 bg-amber-50 z-20 scale-105 shadow-xl' : ''} 
+                              ${copiedLesson?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-emerald-500 bg-emerald-50 z-20' : ''}`}
+                              onClick={() => {
+                                if (isAdmin) {
+                                  if (swappingFrom) {
+                                    if (swappingFrom.id === displaySlot?.id) {
+                                      setSwappingFrom(null); 
+                                    } else {
+                                      handleSwap(day.id, period, displaySlot);
+                                    }
+                                  } else if (displaySlot) {
+                                    // Empty
+                                  } else {
+                                    setFormData({ 
+                                      teacher_id: viewType === 'teacher' ? selectedId : (safeObj(copiedLesson?.teachers)?.id || ''), 
+                                      section_id: viewType === 'section' ? selectedId : (safeObj(copiedLesson?.sections)?.id || ''), 
+                                      subject_id: safeObj(copiedLesson?.subjects)?.id || '' 
+                                    });
+                                    setSelectedSlot({day: day.id, period: period});
+                                    setIsModalOpen(true);
+                                  }
+                                } else if (safeTeacher?.zoom_link) {
+                                  window.open(safeTeacher.zoom_link, '_blank');
+                                }
+                              }}
+                            >
+                              {displaySlot ? (
+                                <div className="w-full">
+                                  <span className={`font-black text-sm block mb-1 ${slot ? 'text-white' : 'text-slate-500'}`}>
+                                    {subjectName}
+                                  </span>
+                                  <div className={`text-[10px] font-bold uppercase tracking-wider ${slot ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                    {viewType === 'teacher' ? sectionName : teacherName}
+                                  </div>
+                                  {safeTeacher?.zoom_link && slot && (
+                                    <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-bold text-white backdrop-blur-sm">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                      رابط زوم
+                                    </div>
+                                  )}
+                                  {isAdmin && (
+                                    <div className="mt-3 flex flex-wrap justify-center gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-indigo-500 hover:bg-indigo-600 text-white'}`}
+                                        onClick={(e) => { 
+                                          e.stopPropagation(); 
+                                          setCopiedLesson(displaySlot);
+                                          alert('تم نسخ تفاصيل الحصة');
+                                        }}
+                                      >
+                                        نسخ
+                                      </button>
+                                      <button 
+                                        className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`}
+                                        onClick={(e) => { 
+                                          e.stopPropagation(); 
+                                          setSwappingFrom(displaySlot);
+                                        }}
+                                      >
+                                        تبديل
+                                      </button>
+                                      <button 
+                                        className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
+                                        onClick={(e) => { 
+                                          e.stopPropagation(); 
+                                          setEditingId(displaySlot.id);
+                                          setFormData({ 
+                                            teacher_id: safeTeacher?.id || '', 
+                                            section_id: safeSection?.id || '', 
+                                            subject_id: safeSubj?.id || '' 
+                                          });
+                                          setSelectedSlot({day: day.id, period: period});
+                                          setIsModalOpen(true);
+                                        }}
+                                      >
+                                        تعديل
+                                      </button>
+                                      <button 
+                                        className={`text-[9px] font-bold px-2 py-1 rounded shadow-sm transition-all ${slot ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-red-500 hover:bg-red-600 text-white'}`}
+                                        onClick={(e) => { 
+                                          e.stopPropagation(); 
+                                          handleDeleteSchedule(displaySlot.id); 
+                                        }}
+                                      >
+                                        حذف
+                                      </button>
+                                    </div>
+                                  )}
+                                  {!slot && others.length > 1 && (
+                                    <span className="text-[8px] text-slate-400 block mt-1">+{others.length - 1} أخرى</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-slate-300 text-xs font-medium">فارغ</span>
+                                  {isAdmin && (
+                                    <div className="p-1.5 rounded-lg bg-slate-100 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Plus className="w-4 h-4" />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden print:block p-4">
+            <table className="print-table table-fixed w-full">
+              <thead>
+                <tr>
+                  <th className="w-32">اليوم / الحصة</th>
+                  {periods.map(p => <th key={p.id}>الحصة {p.period_number}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((day) => (
+                  <tr key={day.id}>
+                    <td className="font-bold bg-slate-50">{day.name}</td>
+                    {periods.map(p => {
+                      const period = p.period_number;
+                      const slot = scheduleData.find(s => {
+                        const isSameDay = String(s.day_of_week) === String(day.id);
+                        const isSamePeriod = String(s.period) === String(period);
+                        const t = safeObj(s.teachers);
+                        const sec = safeObj(s.sections);
+                        const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                        return isSameDay && isSamePeriod && isSameTarget;
+                      });
+
+                      const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => {
+                        const isSameDay = String(s.day_of_week) === String(day.id);
+                        const isSamePeriod = String(s.period) === String(period);
+                        const t = safeObj(s.teachers);
+                        const sec = safeObj(s.sections);
+                        const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                        return isSameDay && isSamePeriod && !isSameTarget;
+                      }) : [];
+
+                      const safeSubj = safeObj(slot?.subjects);
+                      const safeTeacher = safeObj(slot?.teachers);
+                      const safeUser = safeObj(safeTeacher?.users);
+                      const safeSection = safeObj(slot?.sections);
+                      const safeClass = safeObj(safeSection?.classes);
+
                       return (
-                        <option key={t.id} value={t.id}>{safeUser?.full_name || 'غير محدد'}</option>
+                        <td key={p.id} className="h-28">
+                          {slot ? (
+                            <div className="flex flex-col items-center justify-center h-full gap-1">
+                              <div className="font-bold text-sm text-indigo-800">{safeSubj?.name}</div>
+                              <div className="text-[10px] text-slate-700">
+                                {viewType === 'teacher' 
+                                  ? `${safeClass?.name} - ${safeSection?.name}`
+                                  : safeUser?.full_name}
+                              </div>
+                            </div>
+                          ) : others.length > 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full opacity-60">
+                              <span className="text-[8px] text-slate-500 mb-1">مشغول:</span>
+                              {others.slice(0, 2).map(o => {
+                                const oTeacher = safeObj(o.teachers);
+                                const oUser = safeObj(oTeacher?.users);
+                                const oSection = safeObj(o.sections);
+                                return (
+                                  <div key={o.id} className="text-[8px] leading-tight text-slate-600">
+                                    {viewType === 'teacher' ? oSection?.name : oUser?.full_name}
+                                  </div>
+                                )
+                              })}
+                              {others.length > 2 && <span className="text-[7px] text-slate-400">+{others.length - 2}</span>}
+                            </div>
+                          ) : (
+                            <div className="text-slate-200">-</div>
+                          )}
+                        </td>
                       );
                     })}
-                </select>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            <div className="mt-8 pt-6 border-t border-slate-200 flex justify-between items-center">
+              <div className="text-right">
+                <p className="text-xs font-bold text-slate-900">منصة مدرستي الرقمية</p>
+                <p className="text-[10px] text-slate-500 mt-1">نظام إدارة التعليم المتكامل</p>
               </div>
-              
-              <div className="mt-6 flex justify-end gap-3">
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
-                  >
-                    إلغاء
-                  </button>
-                </Dialog.Close>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'جاري الحفظ...' : 'حفظ الحصة'}
-                </button>
+              <div className="text-left">
+                <p className="text-[10px] text-slate-400">تم استخراج هذا الجدول بتاريخ {new Date().toLocaleDateString('ar-EG')}</p>
               </div>
-            </form>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+            </div>
+          </div>
+        </React.Fragment>
+      )}
     </div>
   );
 }
