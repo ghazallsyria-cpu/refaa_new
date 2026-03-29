@@ -283,7 +283,7 @@ export default function AttendancePage() {
                 daySchedule.length > 0 ? (
                   daySchedule.map(s => (
                     <option key={s.period} value={s.period}>
-                      الحصة {s.period} ({s.section.classes.name} - {s.section.name})
+                     الحصة {s.period} ({s.section ? (Array.isArray(s.section.classes) ? s.section.classes[0]?.name : (s.section.classes as any)?.name) : 'غير محدد'} - {s.section?.name || 'غير محدد'})
                     </option>
                   ))
                 ) : (
