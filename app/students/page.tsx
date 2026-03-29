@@ -601,8 +601,8 @@ export default function StudentsPage() {
                       <div className="sm:col-span-2 space-y-2">
                         <label className="text-sm font-bold text-slate-700 mr-1">المسار الأكاديمي (للصف العاشر)</label>
                         <select 
-                          value={editForm.next_year_track}
-                          onChange={(e) => setEditForm({...editForm, next_year_track: e.target.value})}
+                          value={editForm.next_year_track ?? ''}
+                          onChange={(e) => setEditForm({...editForm, next_year_track: e.target.value as any})}
                           className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all"
                         >
                           <option value="">لم يحدد بعد</option>
