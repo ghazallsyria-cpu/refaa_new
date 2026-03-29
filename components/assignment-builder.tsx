@@ -12,7 +12,7 @@ interface AssignmentBuilderProps {
 
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
   const addQuestion = () => {
-    // استخدام Casting آمن لتمرير الحقل غير المعرف في الـ Type
+    // استخدام Casting آمن لتجاوز اعتراض المترجم
     const newQuestion = {
       id: crypto.randomUUID(),
       text: '',
@@ -206,4 +206,5 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     </div>
   );
 }
+
 
