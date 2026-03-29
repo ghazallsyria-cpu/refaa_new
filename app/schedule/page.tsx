@@ -15,6 +15,9 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
+// دالة مساعدة لفك التغليف الآمن للبيانات القادمة من قاعدة البيانات (كائن أو مصفوفة)
+const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
+
 export default function SchedulePage() {
   const { user, userRole: authRole, isChecking } = useAuth();
   const [viewType, setViewType] = useState<'teacher' | 'section'>('teacher');
@@ -65,7 +68,7 @@ export default function SchedulePage() {
       setSections(data.sections);
       setSubjects(data.subjects);
       setAssignments(data.assignments);
-      setPeriods(data.periods);
+      setPeriods(data.periods || []);
 
       if (currentUserRole === 'teacher' && user) {
         setSelectedId(user.id);
@@ -86,19 +89,16 @@ export default function SchedulePage() {
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
-  // تصفية الفصول المتاحة بناءً على المعلم المختار (في حال عرض جدول المعلم)
   const availableSections = (viewType === 'teacher' && selectedId)
     ? sections.filter(s => assignments.some(a => a.teacher_id === selectedId && a.section_id === s.id))
     : sections;
 
-  // تصفية المعلمين المتاحين بناءً على الفصل المختار (في حال عرض جدول الفصل)
   const modalAvailableTeachers = (viewType === 'section' && selectedId)
     ? teachers.filter(t => assignments.some(a => a.section_id === selectedId && a.teacher_id === t.id))
     : (formData.section_id 
         ? teachers.filter(t => assignments.some(a => a.section_id === formData.section_id && a.teacher_id === t.id))
         : teachers);
 
-  // تصفية المواد بناءً على الفصل والمعلم المختارين في النموذج
   const availableSubjects = (formData.section_id && formData.teacher_id)
     ? subjects.filter(sub => assignments.some(a => 
         a.section_id === formData.section_id && 
@@ -179,24 +179,18 @@ export default function SchedulePage() {
       if (conflicts.length > 0) {
         const tConflict = conflicts.find(c => c.teacher_id === formData.teacher_id);
         if (tConflict) {
-          const section = (Array.isArray(tConflict.sections) ? tConflict.sections[0] : tConflict.sections) as any;
-          const subject = (Array.isArray(tConflict.subjects) ? tConflict.subjects[0] : tConflict.subjects) as any;
-          const className = (section?.classes && Array.isArray(section.classes) ? section.classes[0]?.name : section?.classes?.name);
+          const section = safeObj(tConflict.sections);
+          const subject = safeObj(tConflict.subjects);
+          const className = safeObj(section?.classes)?.name;
           alert(`تضارب: المعلم لديه حصة (${subject?.name}) مع فصل (${className} - ${section?.name}) في هذا الوقت.`);
           return;
         }
         
         const sConflict = conflicts.find(c => c.section_id === formData.section_id);
         if (sConflict) {
-          const conflictData = sConflict as typeof sConflict & { 
-            teachers?: any, 
-            subjects?: any 
-          };
-          
-          const teacher = Array.isArray(conflictData.teachers) ? conflictData.teachers[0] : conflictData.teachers;
-          const subject = Array.isArray(conflictData.subjects) ? conflictData.subjects[0] : conflictData.subjects;
-          
-          const teacherName = teacher?.users ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name) : 'غير معروف';
+          const teacher = safeObj(sConflict.teachers);
+          const subject = safeObj(sConflict.subjects);
+          const teacherName = safeObj(teacher?.users)?.full_name || 'غير معروف';
           const subjectName = subject?.name || 'مادة غير معروفة';
 
           alert(`تضارب: هذا الفصل لديه حصة (${subjectName}) مع المعلم (${teacherName}) في هذا الوقت.`);
@@ -254,7 +248,6 @@ export default function SchedulePage() {
       }
 
       const data = await fetchSchedulesData(filters);
-      console.log('Fetched schedule data:', data);
       setScheduleData(data || []);
     } catch (err: any) {
       console.error('Error fetching schedule:', err);
@@ -272,13 +265,6 @@ export default function SchedulePage() {
   const handlePrint = () => {
     window.print();
   };
-
-  const groupedTeachers = teachers.reduce((acc, teacher) => {
-    const spec = teacher.specialization || 'غير محدد';
-    if (!acc[spec]) acc[spec] = [];
-    acc[spec].push(teacher);
-    return acc;
-  }, {} as Record<string, any[]>);
 
   return (
     <div className="space-y-6 print:m-0 print:p-0">
@@ -314,13 +300,6 @@ export default function SchedulePage() {
           .print-table th {
             background-color: #f1f5f9 !important;
             font-weight: bold !important;
-          }
-          .print-others-text {
-            font-size: 8px !important;
-            color: #444 !important;
-            border-top: 1px dashed #ccc !important;
-            margin-top: 2px !important;
-            display: block !important;
           }
         }
       `}</style>
@@ -364,7 +343,7 @@ export default function SchedulePage() {
             <div>
               <p className="font-bold">وضع تبديل الحصص نشط</p>
               <p className="text-xs text-indigo-100">
-                أنت تقوم بنقل حصة: <span className="font-bold underline">{swappingFrom.subjects?.name}</span> ({swappingFrom.teachers?.users?.full_name})
+                أنت تقوم بنقل حصة: <span className="font-bold underline">{safeObj(swappingFrom.subjects)?.name}</span> ({safeObj(safeObj(swappingFrom.teachers)?.users)?.full_name})
                 <br />
                 انقر على أي خانة أخرى (فارغة أو مشغولة) لإتمام التبديل.
               </p>
@@ -388,7 +367,7 @@ export default function SchedulePage() {
             <div>
               <p className="font-bold">تم نسخ الحصة</p>
               <p className="text-xs text-emerald-100">
-                الحصة المنسوخة: <span className="font-bold underline">{copiedLesson.subjects?.name}</span> ({copiedLesson.teachers?.users?.full_name})
+                الحصة المنسوخة: <span className="font-bold underline">{safeObj(copiedLesson.subjects)?.name}</span> ({safeObj(safeObj(copiedLesson.teachers)?.users)?.full_name})
                 <br />
                 انقر على أي خانة فارغة للصق هذه الحصة.
               </p>
@@ -448,11 +427,11 @@ export default function SchedulePage() {
                 <option value="">-- اختر {viewType === 'teacher' ? 'المعلم' : 'الفصل'} --</option>
                 {viewType === 'teacher' ? (
                   teachers.map(t => (
-                    <option key={t.id} value={t.id}>{t.users?.full_name || 'معلم غير معروف'}</option>
+                    <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name || 'معلم غير معروف'}</option>
                   ))
                 ) : (
                   sections.map(s => (
-                    <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>
+                    <option key={s.id} value={s.id}>{safeObj(s.classes)?.name} - {s.name}</option>
                   ))
                 )}
               </select>
@@ -487,14 +466,14 @@ export default function SchedulePage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">المعلم</label>
                   <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                    {teachers.find(t => t.id === selectedId)?.users?.full_name}
+                    {safeObj(teachers.find(t => t.id === selectedId)?.users)?.full_name}
                   </div>
                 </div>
               ) : (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">الفصل</label>
                   <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                    {sections.find(s => s.id === selectedId)?.classes?.name} - {sections.find(s => s.id === selectedId)?.name}
+                    {safeObj(sections.find(s => s.id === selectedId)?.classes)?.name} - {sections.find(s => s.id === selectedId)?.name}
                   </div>
                 </div>
               )}
@@ -510,7 +489,7 @@ export default function SchedulePage() {
                     onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}
                   >
                     <option value="">اختر الفصل</option>
-                    {availableSections.map(s => <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>)}
+                    {availableSections.map(s => <option key={s.id} value={s.id}>{safeObj(s.classes)?.name} - {s.name}</option>)}
                   </select>
                 ) : (
                   <select 
@@ -519,7 +498,7 @@ export default function SchedulePage() {
                     onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}
                   >
                     <option value="">اختر المعلم</option>
-                    {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}
+                    {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{safeObj(t.users)?.full_name}</option>)}
                   </select>
                 )}
               </div>
@@ -555,8 +534,8 @@ export default function SchedulePage() {
         </h3>
         <p className="text-lg font-medium mt-2">
           {viewType === 'teacher' 
-            ? teachers.find(t => t.id === selectedId)?.users?.full_name 
-            : sections.find(s => s.id === selectedId)?.classes?.name + ' - ' + sections.find(s => s.id === selectedId)?.name}
+            ? safeObj(teachers.find(t => t.id === selectedId)?.users)?.full_name 
+            : safeObj(sections.find(s => s.id === selectedId)?.classes)?.name + ' - ' + sections.find(s => s.id === selectedId)?.name}
         </p>
       </div>
 
@@ -593,21 +572,27 @@ export default function SchedulePage() {
       ) : (
         <React.Fragment>
           <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-200 overflow-hidden print:shadow-none print:ring-0 print:border-0">
-            <div className="overflow-x-auto print:hidden">
+            <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-transparent print:hidden">
               <div className="min-w-[800px] p-6">
-                <div className="grid grid-cols-6 gap-3">
+                {/* التصميم المرن بناءً على عدد الحصص */}
+                <div 
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: `minmax(120px, 1fr) repeat(${periods.length}, minmax(140px, 1.5fr))` }}
+                >
                   <div className="h-14 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
                     <span className="text-xs font-black text-slate-400 uppercase tracking-widest">اليوم / الحصة</span>
                   </div>
                   {periods.map(p => (
                     <div key={p.id} className="h-14 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-100">
                       <span className="text-xs font-black text-slate-900">الحصة {p.period_number}</span>
-                      <span className="text-[10px] text-slate-400 font-bold">{p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}</span>
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        {p.start_time ? String(p.start_time).substring(0, 5) : ''} - {p.end_time ? String(p.end_time).substring(0, 5) : ''}
+                      </span>
                     </div>
                   ))}
 
                   {loading ? (
-                    <div className="col-span-6 py-20 text-center text-slate-500">
+                    <div className="col-span-full py-20 text-center text-slate-500">
                       جاري تحميل الجدول...
                     </div>
                   ) : (
@@ -618,21 +603,40 @@ export default function SchedulePage() {
                         </div>
                         {periods.map(p => {
                           const period = p.period_number;
-                          const slot = scheduleData.find(s => 
-                            s.day_of_week === day.id && 
-                            s.period === period && 
-                            (viewType === 'teacher' ? s.teachers?.id === selectedId : s.sections?.id === selectedId)
-                          );
+                          
+                          // المطابقة الآمنة
+                          const slot = scheduleData.find(s => {
+                            const isSameDay = String(s.day_of_week) === String(day.id);
+                            const isSamePeriod = String(s.period) === String(period);
+                            const t = safeObj(s.teachers);
+                            const sec = safeObj(s.sections);
+                            const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                            return isSameDay && isSamePeriod && isSameTarget;
+                          });
 
-                          const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
-                            s.day_of_week === day.id && 
-                            s.period === period && 
-                            (viewType === 'teacher' ? s.teachers?.id !== selectedId : s.sections?.id !== selectedId)
-                          ) : [];
+                          const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => {
+                            const isSameDay = String(s.day_of_week) === String(day.id);
+                            const isSamePeriod = String(s.period) === String(period);
+                            const t = safeObj(s.teachers);
+                            const sec = safeObj(s.sections);
+                            const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                            return isSameDay && isSamePeriod && !isSameTarget;
+                          }) : [];
 
                           const isSwappingFromThisSlot = swappingFrom && others.find(o => o.id === swappingFrom.id);
                           const isCopiedFromThisSlot = copiedLesson && others.find(o => o.id === copiedLesson.id);
                           const displaySlot = slot || (isSwappingFromThisSlot ? swappingFrom : (isCopiedFromThisSlot ? copiedLesson : others[0]));
+
+                          // استخراج آمن للعرض
+                          const safeSubj = safeObj(displaySlot?.subjects);
+                          const safeTeacher = safeObj(displaySlot?.teachers);
+                          const safeUser = safeObj(safeTeacher?.users);
+                          const safeSection = safeObj(displaySlot?.sections);
+                          const safeClass = safeObj(safeSection?.classes);
+
+                          const subjectName = safeSubj?.name || 'بدون مادة';
+                          const teacherName = safeUser?.full_name || 'غير محدد';
+                          const sectionName = safeSection ? `${safeClass?.name || ''} - ${safeSection?.name || ''}` : 'غير محدد';
 
                           return (
                             <div key={`${day.id}-${period}`} className={`group p-3 border rounded-xl min-h-[110px] flex flex-col items-center justify-center text-center transition-all relative overflow-hidden
@@ -643,7 +647,7 @@ export default function SchedulePage() {
                                   : 'bg-slate-50/50 border-dashed border-slate-200 text-slate-300'
                               }
                               ${isAdmin ? 'cursor-pointer hover:ring-2 hover:ring-indigo-300' : ''} 
-                              ${slot?.teachers?.zoom_link ? 'cursor-pointer hover:brightness-110' : ''} 
+                              ${safeTeacher?.zoom_link ? 'cursor-pointer hover:brightness-110' : ''} 
                               ${swappingFrom?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-amber-500 bg-amber-50 z-20 scale-105 shadow-xl' : ''} 
                               ${copiedLesson?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-emerald-500 bg-emerald-50 z-20' : ''}`}
                               onClick={() => {
@@ -658,31 +662,27 @@ export default function SchedulePage() {
                                     // Empty
                                   } else {
                                     setFormData({ 
-                                      teacher_id: viewType === 'teacher' ? selectedId : (copiedLesson?.teachers?.id || ''), 
-                                      section_id: viewType === 'section' ? selectedId : (copiedLesson?.sections?.id || ''), 
-                                      subject_id: copiedLesson?.subjects?.id || '' 
+                                      teacher_id: viewType === 'teacher' ? selectedId : (safeObj(copiedLesson?.teachers)?.id || ''), 
+                                      section_id: viewType === 'section' ? selectedId : (safeObj(copiedLesson?.sections)?.id || ''), 
+                                      subject_id: safeObj(copiedLesson?.subjects)?.id || '' 
                                     });
                                     setSelectedSlot({day: day.id, period: period});
                                     setIsModalOpen(true);
                                   }
-                                } else if (slot?.teachers?.zoom_link) {
-                                  window.open(slot.teachers.zoom_link, '_blank');
+                                } else if (safeTeacher?.zoom_link) {
+                                  window.open(safeTeacher.zoom_link, '_blank');
                                 }
                               }}
                             >
                               {displaySlot ? (
                                 <div className="w-full">
                                   <span className={`font-black text-sm block mb-1 ${slot ? 'text-white' : 'text-slate-500'}`}>
-                                    {displaySlot.subjects?.name}
+                                    {subjectName}
                                   </span>
                                   <div className={`text-[10px] font-bold uppercase tracking-wider ${slot ? 'text-indigo-100' : 'text-slate-400'}`}>
-                                    {viewType === 'teacher' ? (
-                                      `${displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}`
-                                    ) : (
-                                      displaySlot.teachers?.users?.full_name
-                                    )}
+                                    {viewType === 'teacher' ? sectionName : teacherName}
                                   </div>
-                                  {displaySlot.teachers?.zoom_link && slot && (
+                                  {safeTeacher?.zoom_link && slot && (
                                     <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-bold text-white backdrop-blur-sm">
                                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                       رابط زوم
@@ -715,9 +715,9 @@ export default function SchedulePage() {
                                           e.stopPropagation(); 
                                           setEditingId(displaySlot.id);
                                           setFormData({ 
-                                            teacher_id: displaySlot.teachers?.id || '', 
-                                            section_id: displaySlot.sections?.id || '', 
-                                            subject_id: displaySlot.subjects?.id || '' 
+                                            teacher_id: safeTeacher?.id || '', 
+                                            section_id: safeSection?.id || '', 
+                                            subject_id: safeSubj?.id || '' 
                                           });
                                           setSelectedSlot({day: day.id, period: period});
                                           setIsModalOpen(true);
@@ -775,37 +775,54 @@ export default function SchedulePage() {
                     <td className="font-bold bg-slate-50">{day.name}</td>
                     {periods.map(p => {
                       const period = p.period_number;
-                      const slot = scheduleData.find(s => 
-                        s.day_of_week === day.id && 
-                        s.period === period && 
-                        (viewType === 'teacher' ? s.teachers?.id === selectedId : s.sections?.id === selectedId)
-                      );
+                      const slot = scheduleData.find(s => {
+                        const isSameDay = String(s.day_of_week) === String(day.id);
+                        const isSamePeriod = String(s.period) === String(period);
+                        const t = safeObj(s.teachers);
+                        const sec = safeObj(s.sections);
+                        const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                        return isSameDay && isSamePeriod && isSameTarget;
+                      });
 
-                      const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
-                        s.day_of_week === day.id && 
-                        s.period === period && 
-                        (viewType === 'teacher' ? s.teachers?.id !== selectedId : s.sections?.id !== selectedId)
-                      ) : [];
+                      const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => {
+                        const isSameDay = String(s.day_of_week) === String(day.id);
+                        const isSamePeriod = String(s.period) === String(period);
+                        const t = safeObj(s.teachers);
+                        const sec = safeObj(s.sections);
+                        const isSameTarget = viewType === 'teacher' ? String(t?.id) === String(selectedId) : String(sec?.id) === String(selectedId);
+                        return isSameDay && isSamePeriod && !isSameTarget;
+                      }) : [];
+
+                      const safeSubj = safeObj(slot?.subjects);
+                      const safeTeacher = safeObj(slot?.teachers);
+                      const safeUser = safeObj(safeTeacher?.users);
+                      const safeSection = safeObj(slot?.sections);
+                      const safeClass = safeObj(safeSection?.classes);
 
                       return (
                         <td key={p.id} className="h-28">
                           {slot ? (
                             <div className="flex flex-col items-center justify-center h-full gap-1">
-                              <div className="font-bold text-sm text-indigo-800">{slot.subjects?.name}</div>
+                              <div className="font-bold text-sm text-indigo-800">{safeSubj?.name}</div>
                               <div className="text-[10px] text-slate-700">
                                 {viewType === 'teacher' 
-                                  ? `${slot.sections?.classes?.name} - ${slot.sections?.name}`
-                                  : slot.teachers?.users?.full_name}
+                                  ? `${safeClass?.name} - ${safeSection?.name}`
+                                  : safeUser?.full_name}
                               </div>
                             </div>
                           ) : others.length > 0 ? (
                             <div className="flex flex-col items-center justify-center h-full opacity-60">
                               <span className="text-[8px] text-slate-500 mb-1">مشغول:</span>
-                              {others.slice(0, 2).map(o => (
-                                <div key={o.id} className="text-[8px] leading-tight text-slate-600">
-                                  {viewType === 'teacher' ? o.sections?.name : o.teachers?.users?.full_name}
-                                </div>
-                              ))}
+                              {others.slice(0, 2).map(o => {
+                                const oTeacher = safeObj(o.teachers);
+                                const oUser = safeObj(oTeacher?.users);
+                                const oSection = safeObj(o.sections);
+                                return (
+                                  <div key={o.id} className="text-[8px] leading-tight text-slate-600">
+                                    {viewType === 'teacher' ? oSection?.name : oUser?.full_name}
+                                  </div>
+                                )
+                              })}
                               {others.length > 2 && <span className="text-[7px] text-slate-400">+{others.length - 2}</span>}
                             </div>
                           ) : (
