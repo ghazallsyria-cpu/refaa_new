@@ -95,7 +95,7 @@ export function usePerformanceSystem() {
         : 0;
 
       return {
-        student,
+       student: student as any,
         examAttempts: attempts || [],
         assignmentSubmissions: submissions || [],
         stats: {
