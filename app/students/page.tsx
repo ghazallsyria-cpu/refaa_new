@@ -133,10 +133,10 @@ export default function StudentsPage() {
       'الاسم الرباعي': student.users?.full_name,
       'الرقم المدني': student.national_id,
       'البريد الإلكتروني': student.users?.email,
-      'رقم الهاتف': (student.users as { phone?: string })?.phone, // ← تم التعديل هنا
-      'الصف': student.sections?.classes?.name,
+      'رقم الهاتف': (student.users as { phone?: string })?.phone,
+      'الصف': (student.sections as { classes?: { name?: string } })?.classes?.name,
       'الشعبة': student.sections?.name,
-      'ولي الأمر': student.parents?.users?.full_name || 'غير مسجل'
+      'ولي الأمر': (student.parents as { users?: { full_name?: string } })?.users?.full_name || 'غير مسجل'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -249,7 +249,9 @@ export default function StudentsPage() {
             >
               <option value="all">جميع الفصول</option>
               {sections.map(s => (
-                <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>
+                <option key={s.id} value={s.id}>
+                  {(s as { classes?: { name?: string } }).classes?.name} - {s.name}
+                </option>
               ))}
             </select>
           </div>
@@ -332,7 +334,9 @@ export default function StudentsPage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-6">
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-900">{student.sections?.classes?.name}</span>
+                        <span className="text-sm font-bold text-slate-900">
+                          {(student.sections as { classes?: { name?: string } })?.classes?.name}
+                        </span>
                         <span className="text-[10px] text-indigo-500 font-black uppercase tracking-widest mt-0.5">{student.sections?.name}</span>
                       </div>
                     </td>
@@ -342,7 +346,7 @@ export default function StudentsPage() {
                           <Users className="h-3 w-3 text-slate-400" />
                         </div>
                         <span className="text-sm font-bold text-slate-600">
-                          {student.parents?.users?.full_name || '-'}
+                          {(student.parents as { users?: { full_name?: string } })?.users?.full_name || '-'}
                         </span>
                       </div>
                     </td>
@@ -443,12 +447,14 @@ export default function StudentsPage() {
                 <div className="grid grid-cols-2 gap-4 relative z-10">
                   <div className="bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">الصف والشعبة</span>
-                    <span className="text-sm font-bold text-slate-900">{student.sections?.classes?.name}</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {(student.sections as { classes?: { name?: string } })?.classes?.name}
+                    </span>
                     <span className="text-[10px] text-indigo-500 font-black block mt-1">{student.sections?.name}</span>
                   </div>
                   <div className="bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">رقم الهاتف</span>
-                    <span className="text-sm font-bold text-slate-900">{(student.users as { phone?: string })?.phone || '-'}</span> {/* ← تم التعديل هنا */}
+                    <span className="text-sm font-bold text-slate-900">{(student.users as { phone?: string })?.phone || '-'}</span>
                   </div>
                   <div className="col-span-2 bg-white/60 backdrop-blur-sm p-5 rounded-3xl border border-white/20 shadow-sm">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">ولي الأمر</span>
@@ -456,7 +462,9 @@ export default function StudentsPage() {
                       <div className="h-8 w-8 rounded-xl bg-white/50 flex items-center justify-center border border-white/20">
                         <Users className="h-4 w-4 text-slate-400" />
                       </div>
-                      <span className="text-sm font-bold text-slate-900">{student.parents?.users?.full_name || 'غير مسجل'}</span>
+                      <span className="text-sm font-bold text-slate-900">
+                        {(student.parents as { users?: { full_name?: string } })?.users?.full_name || 'غير مسجل'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -726,7 +734,7 @@ export default function StudentsPage() {
                         <option value="">اختر الشعبة</option>
                         {sections.map(section => (
                           <option key={section.id} value={section.id}>
-                            {section.classes?.name} - {section.name}
+                            {(section as { classes?: { name?: string } }).classes?.name} - {section.name}
                           </option>
                         ))}
                       </select>
@@ -772,4 +780,5 @@ export default function StudentsPage() {
     </div>
   );
 }
+
 
