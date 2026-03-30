@@ -12,7 +12,7 @@ export interface PerformanceData {
     score: number;
     status: string;
     completed_at: string;
-    exams: { id: string, title: string, total_marks: number, max_score: number, subjects: { name: string } };
+    exams: { id: string, title: string, total_marks: number, max_score: number, subjects: { name: string } }[];
   }[];
   assignmentSubmissions: {
     id: string;
@@ -20,7 +20,7 @@ export interface PerformanceData {
     feedback: string;
     submitted_at: string;
     status: string;
-    assignments: { title: string, total_marks: number, subjects: { name: string } };
+    assignments: { title: string, total_marks: number, subjects: { name: string } }[];
   }[];
   stats: {
     avgExamScore: number;
@@ -96,8 +96,14 @@ export function usePerformanceSystem() {
 
       return {
         student,
-        examAttempts: attempts || [],
-        assignmentSubmissions: submissions || [],
+        examAttempts: (attempts || []).map(a => ({
+          ...a,
+          exams: Array.isArray(a.exams) ? a.exams[0] : a.exams
+        })),
+        assignmentSubmissions: (submissions || []).map(s => ({
+          ...s,
+          assignments: Array.isArray(s.assignments) ? s.assignments[0] : s.assignments
+        })),
         stats: {
           avgExamScore: Math.round(avgExam),
           avgAssignmentScore: Math.round(avgAssignment),
