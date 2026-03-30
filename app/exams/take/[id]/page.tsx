@@ -84,13 +84,12 @@ export default function TakeQuiz() {
       let requiresManualGrading = false;
 
       for (const q of questions) {
-        const studentAnswer = answers[q.id]; // قد تكون undefined إذا لم يجب الطالب
+        const studentAnswer = answers[q.id];
         let isCorrect = false;
         let pointsEarned = 0;
         
         const qType = (q.type as string || '').toLowerCase();
         
-        // 💡 رادار قوي جداً لاكتشاف أي نوع مقالي
         const isManualQuestion = qType.includes('essay') || qType.includes('open') || qType.includes('text') || qType.includes('paragraph') || qType.includes('fill_in');
 
         if (isManualQuestion) {
@@ -108,7 +107,6 @@ export default function TakeQuiz() {
 
         totalScore += pointsEarned;
 
-        // حماية من القيم الفارغة (undefined)
         formattedAnswers[q.id] = {
           optionId: (qType.includes('multiple_choice') || qType.includes('true_false')) ? (studentAnswer || null) : null,
           text: isManualQuestion ? (studentAnswer || "") : (qType.includes('multi_select') || qType.includes('checkbox')) ? JSON.stringify(studentAnswer || []) : (typeof studentAnswer === 'string' ? studentAnswer : ""),
@@ -118,8 +116,9 @@ export default function TakeQuiz() {
       }
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
-      // إذا كان هناك سؤال مقالي، الحالة تصبح 'submitted' (ينتظر التصحيح)
-      const attemptStatus = requiresManualGrading ? 'submitted' : 'graded';
+      
+      // ✅ تم تغيير submitted إلى completed لإرضاء قاعدة البيانات!
+      const attemptStatus = requiresManualGrading ? 'completed' : 'graded';
 
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
       setIsFinished(true);
@@ -153,7 +152,7 @@ export default function TakeQuiz() {
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
              لقد استلمنا إجاباتك. 
-             {questions.some(q => ['essay', 'open', 'text', 'paragraph'].some(t => (q.type as string).toLowerCase().includes(t))) 
+             {questions.some(q => ['essay', 'open', 'text', 'paragraph', 'fill_in_blank'].some(t => (q.type as string).toLowerCase().includes(t))) 
                && <span className="block mt-2 text-amber-600 font-bold bg-amber-50 p-2 rounded-lg">سيتم إعلان نتيجتك بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.</span>}
           </p>
           <button onClick={() => router.push(`/exams`)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">العودة للرئيسية</button>
