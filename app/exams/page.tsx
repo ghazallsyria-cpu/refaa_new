@@ -8,7 +8,7 @@ import {
   TrendingUp, ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
@@ -26,9 +26,12 @@ export default function ExamsDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
+  // إصلاح 1: إضافة حماية للفلترة حتى لا تنهار الصفحة إذا كان العنوان مفقوداً
   const filteredExams = exams.filter(exam => {
-    const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!exam) return false;
+    const titleMatch = exam.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    const subjectMatch = exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    const matchesSearch = titleMatch || subjectMatch;
     const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -64,23 +67,28 @@ export default function ExamsDashboard() {
   const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
   
   const getExamStatus = (exam: any) => {
-    if (exam.status !== 'published') return null;
+    if (exam?.status !== 'published') return null;
+    if (!exam?.exam_date) return 'available';
     
-    const now = new Date();
-    const examDate = new Date(exam.exam_date);
-    
-    const startTimeParts = (exam.start_time || '00:00').split(':');
-    const endTimeParts = (exam.end_time || '23:59').split(':');
-    
-    const startDateTime = new Date(examDate);
-    startDateTime.setHours(parseInt(startTimeParts[0]), parseInt(startTimeParts[1]), 0);
-    
-    const endDateTime = new Date(examDate);
-    endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
-    
-    if (now < startDateTime) return 'not_started';
-    if (now > endDateTime) return 'expired';
-    return 'available';
+    try {
+      const now = new Date();
+      const examDate = new Date(exam.exam_date);
+      
+      const startTimeParts = (exam.start_time || '00:00').split(':');
+      const endTimeParts = (exam.end_time || '23:59').split(':');
+      
+      const startDateTime = new Date(examDate);
+      startDateTime.setHours(parseInt(startTimeParts[0] || '0'), parseInt(startTimeParts[1] || '0'), 0);
+      
+      const endDateTime = new Date(examDate);
+      endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
+      
+      if (now < startDateTime) return 'not_started';
+      if (now > endDateTime) return 'expired';
+      return 'available';
+    } catch(e) {
+       return 'available';
+    }
   };
 
   if (!mounted || authLoading) {
@@ -257,7 +265,8 @@ export default function ExamsDashboard() {
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Portal>
                             <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
-                              {(authRole === 'admin' || authRole === 'management' || exam.teacher_id === user?.id) && (
+                              {/* إصلاح 2: تبسيط شرط ظهور قوائم التحكم لتظهر للمعلم والمدير بشكل صحيح */}
+                              {isTeacherOrAdmin && (
                                 <>
                                   <DropdownMenu.Item asChild>
                                     <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
@@ -423,3 +432,5 @@ export default function ExamsDashboard() {
     </div>
   );
 }
+
+
