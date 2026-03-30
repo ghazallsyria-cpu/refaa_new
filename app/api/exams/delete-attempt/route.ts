@@ -18,22 +18,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing attemptId' }, { status: 400 });
     }
 
-    // Delete associated student answers first to avoid foreign key constraint errors
-    const { error: answersError } = await adminSupabase
+    // 1. تنظيف الجدول الأول (student_answers)
+    const { error: ansErr1 } = await adminSupabase
       .from('student_answers')
       .delete()
       .eq('attempt_id', attemptId);
 
-    if (answersError) throw answersError;
+    if (ansErr1) console.warn('Warning cleaning student_answers:', ansErr1);
 
-    const { error } = await adminSupabase.from('exam_attempts').delete().eq('id', attemptId);
+    // 2. تنظيف الجدول الثاني الخفي (exam_answers) لفك الارتباط نهائياً
+    const { error: ansErr2 } = await adminSupabase
+      .from('exam_answers')
+      .delete()
+      .eq('attempt_id', attemptId);
+
+    if (ansErr2) console.warn('Warning cleaning exam_answers:', ansErr2);
+
+    // 3. الآن يمكننا حذف المحاولة بأمان تام وبدون انهيار قاعدة البيانات
+    const { error: attemptError } = await adminSupabase
+      .from('exam_attempts')
+      .delete()
+      .eq('id', attemptId);
     
-    if (error) throw error;
+    if (attemptError) throw attemptError;
 
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
     console.error('Exam Attempt Delete Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'حدث خطأ أثناء الحذف' }, { status: 500 });
   }
 }
+
+
