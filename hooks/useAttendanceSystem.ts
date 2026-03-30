@@ -22,7 +22,7 @@ export interface AttendanceRecord {
 export interface SectionData {
   id: string;
   name: string;
-  classes: { name: string };
+  classes: { name: string }[];
   subject_id?: string;
   subject_name?: string;
 }
