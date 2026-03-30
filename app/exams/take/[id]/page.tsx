@@ -84,44 +84,48 @@ export default function TakeQuiz() {
       let requiresManualGrading = false;
 
       for (const q of questions) {
-        const studentAnswer = answers[q.id];
+        const studentAnswer = answers[q.id]; // قد تكون undefined إذا لم يجب الطالب
         let isCorrect = false;
         let pointsEarned = 0;
         
-        // ✅ تحويل النوع إلى نص عادي لإسكات TypeScript
-        const qType = q.type as string;
+        const qType = (q.type as string || '').toLowerCase();
+        
+        // 💡 رادار قوي جداً لاكتشاف أي نوع مقالي
+        const isManualQuestion = qType.includes('essay') || qType.includes('open') || qType.includes('text') || qType.includes('paragraph') || qType.includes('fill_in');
 
-        if (qType === 'essay' || qType === 'fill_in_blank' || qType === 'open' || qType === 'paragraph' || qType === 'text') {
-           requiresManualGrading = true; // سؤال مقالي
-        } else if (qType === 'multiple_choice' || qType === 'true_false') {
-          const correctOpt = q.options.find((o: any) => o.is_correct);
+        if (isManualQuestion) {
+           requiresManualGrading = true; 
+        } else if (qType.includes('multiple_choice') || qType.includes('true_false')) {
+          const correctOpt = q.options?.find((o: any) => o.is_correct);
           isCorrect = studentAnswer === correctOpt?.id;
           pointsEarned = isCorrect ? (q.points || 0) : 0;
-        } else if (qType === 'multi_select' || qType === 'checkbox') {
-          const correctOpts = q.options.filter((o: any) => o.is_correct).map((o: any) => o.id);
+        } else if (qType.includes('multi_select') || qType.includes('checkbox')) {
+          const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => o.id) || [];
           const studentOpts = studentAnswer || [];
-          isCorrect = correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
+          isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
           pointsEarned = isCorrect ? (q.points || 0) : 0;
         }
 
         totalScore += pointsEarned;
 
+        // حماية من القيم الفارغة (undefined)
         formattedAnswers[q.id] = {
-          optionId: (qType === 'multiple_choice' || qType === 'true_false') ? studentAnswer : null,
-          text: (qType === 'essay' || qType === 'fill_in_blank' || qType === 'open' || qType === 'paragraph' || qType === 'text') ? studentAnswer : (qType === 'multi_select' || qType === 'checkbox') ? JSON.stringify(studentAnswer) : (typeof studentAnswer === 'string' ? studentAnswer : ""),
+          optionId: (qType.includes('multiple_choice') || qType.includes('true_false')) ? (studentAnswer || null) : null,
+          text: isManualQuestion ? (studentAnswer || "") : (qType.includes('multi_select') || qType.includes('checkbox')) ? JSON.stringify(studentAnswer || []) : (typeof studentAnswer === 'string' ? studentAnswer : ""),
           isCorrect,
           pointsEarned
         };
       }
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
+      // إذا كان هناك سؤال مقالي، الحالة تصبح 'submitted' (ينتظر التصحيح)
       const attemptStatus = requiresManualGrading ? 'submitted' : 'graded';
 
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
       setIsFinished(true);
     } catch (err: any) {
       showNotification('error', err.message || 'حدث خطأ أثناء إرسال الاختبار');
-      alert("الرجاء تصوير هذه الرسالة للمعلم:\n" + err.message); 
+      alert("تنبيه خطأ:\n" + err.message); 
     } finally {
       setIsSubmitting(false);
     }
@@ -147,7 +151,11 @@ export default function TakeQuiz() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6">
           <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
-          <p className="text-slate-600">شكراً لك. تم حفظ إجاباتك بنجاح في النظام.</p>
+          <p className="text-slate-600 font-medium">
+             لقد استلمنا إجاباتك. 
+             {questions.some(q => ['essay', 'open', 'text', 'paragraph'].some(t => (q.type as string).toLowerCase().includes(t))) 
+               && <span className="block mt-2 text-amber-600 font-bold bg-amber-50 p-2 rounded-lg">سيتم إعلان نتيجتك بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.</span>}
+          </p>
           <button onClick={() => router.push(`/exams`)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">العودة للرئيسية</button>
         </motion.div>
       </div>
@@ -156,19 +164,10 @@ export default function TakeQuiz() {
 
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
-  
-  // المتغير الآمن لنوع السؤال
-  const currentQType = currentQuestion?.type as string;
+  const currentQType = (currentQuestion?.type as string || '').toLowerCase();
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
-      {notification && (
-        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 font-bold max-w-sm w-full text-center ${notification.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800 border-2 border-red-200'}`}>
-          <div className="flex-1">{notification.message}</div>
-          <button onClick={() => setNotification(null)}><X className="h-5 w-5" /></button>
-        </div>
-      )}
-
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -203,14 +202,14 @@ export default function TakeQuiz() {
             </div>
 
             <div className="space-y-3">
-              {(currentQType === 'multiple_choice' || currentQType === 'true_false') && currentQuestion.options.map((option) => (
+              {(currentQType.includes('multiple_choice') || currentQType.includes('true_false')) && currentQuestion.options?.map((option) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", answers[currentQuestion.id] === option.id ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", answers[currentQuestion.id] === option.id ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
                   <span className="text-lg font-medium">{option.content}</span>
                 </button>
               ))}
 
-              {(currentQType === 'multi_select' || currentQType === 'checkbox') && currentQuestion.options.map((option) => {
+              {(currentQType.includes('multi_select') || currentQType.includes('checkbox')) && currentQuestion.options?.map((option) => {
                 const isSelected = (answers[currentQuestion.id] || []).includes(option.id);
                 return (
                   <button key={option.id} onClick={() => {
@@ -223,10 +222,10 @@ export default function TakeQuiz() {
                 );
               })}
 
-              {(currentQType === 'essay' || currentQType === 'open' || currentQType === 'paragraph' || currentQType === 'text') && (
+              {(currentQType.includes('essay') || currentQType.includes('open') || currentQType.includes('paragraph') || currentQType.includes('text')) && (
                 <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed" />
               )}
-              {currentQType === 'fill_in_blank' && (
+              {currentQType.includes('fill_in_blank') && (
                 <input type="text" value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="أدخل الكلمة المفقودة..." className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg font-bold text-center" />
               )}
             </div>
@@ -247,4 +246,5 @@ export default function TakeQuiz() {
     </div>
   );
 }
+
 
