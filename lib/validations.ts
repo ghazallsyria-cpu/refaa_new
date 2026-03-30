@@ -268,6 +268,7 @@ export const SaveAssignmentRequestSchema = z.object({
   })),
   sectionIds: z.array(z.string().uuid()),
   subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
+  userId: z.string().uuid().optional(),
 });
 
 export const RawAssignmentAnswerSchema = z.object({

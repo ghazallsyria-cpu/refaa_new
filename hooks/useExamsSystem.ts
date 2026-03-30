@@ -72,12 +72,36 @@ export function useExamsSystem() {
           return;
         }
       } else if (authRole === 'teacher') {
-        const { data: teacherProfile, error: profileError } = await supabase
+        console.log('Fetching exams for teacher:', user.id);
+        
+        let { data: teacherProfile, error: profileError } = await supabase
           .from('teachers')
           .select('id')
           .eq('id', user.id)
           .single();
           
+        // Self-healing: If teacher record is missing but user is a teacher, create it
+        if ((profileError || !teacherProfile) && user.user_metadata?.role === 'teacher') {
+          console.log('Teacher profile missing in useExamsSystem, attempting self-healing...');
+          const { data: newTeacher, error: createError } = await supabase
+            .from('teachers')
+            .insert({
+              id: user.id,
+              national_id: 'TEMP_' + user.id.substring(0, 8),
+              specialization: 'غير محدد'
+            })
+            .select('id')
+            .single();
+          
+          if (!createError && newTeacher) {
+            console.log('Teacher profile created successfully via self-healing in useExamsSystem');
+            teacherProfile = newTeacher;
+            profileError = null;
+          } else {
+            console.error('Failed to self-heal teacher profile in useExamsSystem:', createError);
+          }
+        }
+
         if (teacherProfile) {
           const { data: teacherSections } = await supabase
             .from('teacher_sections')
@@ -93,7 +117,6 @@ export function useExamsSystem() {
           }
         } else {
           console.error('Teacher profile not found for user:', user.id, profileError);
-          // Teacher profile not found, return empty or handle error
           setData([]);
           setLoading(false);
           return;

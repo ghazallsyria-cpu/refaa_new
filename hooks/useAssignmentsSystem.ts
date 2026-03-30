@@ -58,17 +58,54 @@ export function useAssignmentsSystem() {
           return;
         }
       } else if (authRole === 'teacher') {
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
-          .select('section_id')
-          .eq('teacher_id', user.id);
-          
-        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+        console.log('Fetching assignments for teacher:', user.id);
         
-        if (sectionIds.length > 0) {
-          query = query.or(`teacher_id.eq.${user.id},assignment_sections.section_id.in.(${sectionIds.join(',')})`);
+        let { data: teacherProfile, error: profileError } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('id', user.id)
+          .single();
+          
+        // Self-healing: If teacher record is missing but user is a teacher, create it
+        if ((profileError || !teacherProfile) && user.user_metadata?.role === 'teacher') {
+          console.log('Teacher profile missing in useAssignmentsSystem, attempting self-healing...');
+          const { data: newTeacher, error: createError } = await supabase
+            .from('teachers')
+            .insert({
+              id: user.id,
+              national_id: 'TEMP_' + user.id.substring(0, 8),
+              specialization: 'غير محدد'
+            })
+            .select('id')
+            .single();
+          
+          if (!createError && newTeacher) {
+            console.log('Teacher profile created successfully via self-healing in useAssignmentsSystem');
+            teacherProfile = newTeacher;
+            profileError = null;
+          } else {
+            console.error('Failed to self-heal teacher profile in useAssignmentsSystem:', createError);
+          }
+        }
+
+        if (teacherProfile) {
+          const { data: teacherSections } = await supabase
+            .from('teacher_sections')
+            .select('section_id')
+            .eq('teacher_id', teacherProfile.id);
+            
+          const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+          
+          if (sectionIds.length > 0) {
+            query = query.or(`teacher_id.eq.${teacherProfile.id},assignment_sections.section_id.in.(${sectionIds.join(',')})`);
+          } else {
+            query = query.eq('teacher_id', teacherProfile.id);
+          }
         } else {
-          query = query.eq('teacher_id', user.id);
+          console.error('Teacher profile not found for user:', user.id, profileError);
+          setData([]);
+          setLoading(false);
+          return;
         }
       }
 
@@ -174,7 +211,8 @@ export function useAssignmentsSystem() {
         assignmentId,
         questions,
         sectionIds,
-        subjects
+        subjects,
+        userId: user.id
       }),
     });
 

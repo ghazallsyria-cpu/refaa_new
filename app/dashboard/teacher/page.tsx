@@ -405,6 +405,52 @@ export default function TeacherDashboard() {
           {/* Announcements Widget */}
           <AnnouncementsWidget authRole="teacher" />
 
+          {/* Recent Exams */}
+          <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-sm ring-1 ring-slate-200/50 overflow-hidden hover:shadow-md transition-all">
+            <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 rounded-xl">
+                  <FileText className="h-5 w-5 text-indigo-500" />
+                </div>
+                الاختبارات الأخيرة
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {recentExams.length > 0 ? (
+                recentExams.map((exam) => (
+                  <div key={exam.id} className="p-5 hover:bg-slate-50 transition-colors">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-slate-900 line-clamp-1">{exam.title}</h3>
+                      <span className="text-xs font-medium px-2 py-1 bg-indigo-50 text-indigo-700 rounded-md whitespace-nowrap ml-2">
+                        {exam.start_time ? format(new Date(`2000-01-01T${exam.start_time}`), 'hh:mm a', { locale: arSA }) : '...'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500 mb-3">
+                      {exam.subject_name} • {exam.section_name}
+                    </p>
+                    <div className="flex gap-2">
+                      <Link href={`/exams/builder/${exam.id}`} className="flex-1 text-center py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-indigo-600 transition-colors">
+                        تعديل
+                      </Link>
+                      <Link href={`/exams/results/${exam.id}`} className="flex-1 text-center py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+                        النتائج
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-slate-500 text-sm">
+                  لا توجد اختبارات حالياً
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+              <Link href="/exams" className="block w-full text-center text-sm font-medium text-indigo-600 hover:text-indigo-700">
+                عرض كل الاختبارات
+              </Link>
+            </div>
+          </div>
+
           {/* Recent Assignments */}
           <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-sm ring-1 ring-slate-200/50 overflow-hidden hover:shadow-md transition-all">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
@@ -426,7 +472,7 @@ export default function TeacherDashboard() {
                       </span>
                     </div>
                     <p className="text-sm text-slate-500 mb-3">
-                      {assignment.subjects?.name} • {assignment.sections?.classes?.name}
+                      {assignment.subject_name} • {assignment.section_name}
                     </p>
                     <div className="flex gap-2">
                       <Link href={`/assignments/${assignment.id}`} className="flex-1 text-center py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-indigo-600 transition-colors">

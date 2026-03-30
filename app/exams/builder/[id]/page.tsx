@@ -240,8 +240,8 @@ export default function QuizBuilder() {
     try {
       let finalTeacherId = exam.teacher_id;
 
-      if (userRole === 'teacher') {
-        finalTeacherId = formData?.teachers?.[0]?.id || exam.teacher_id;
+      if (userRole === 'teacher' && user) {
+        finalTeacherId = user.id;
       } else if (!finalTeacherId && (userRole === 'admin' || userRole === 'management')) {
         if (teachers.length > 0) {
           finalTeacherId = teachers[0].id;

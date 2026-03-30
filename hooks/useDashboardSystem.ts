@@ -75,13 +75,19 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: student } = await supabase
+      console.log('Fetching student dashboard data for user:', user.id);
+      const { data: student, error: studentError } = await supabase
         .from('students')
         .select('*, users(full_name), sections(name, classes(name))')
         .eq('id', user.id)
         .single();
       
-      if (!student) return null;
+      if (studentError || !student) {
+        console.error('Student profile not found:', studentError);
+        return null;
+      }
+
+      console.log('Student section ID:', student.section_id);
 
       const [
         { data: assignmentSections },
@@ -226,13 +232,63 @@ export function useDashboardSystem() {
   const fetchTeacherDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: teacher } = await supabase
+      console.log('Fetching teacher dashboard data for user:', user.id);
+      
+      // 1. Get teacher profile
+      let { data: teacher, error: teacherError } = await supabase
         .from('teachers')
         .select('*, users(*)')
         .eq('id', user.id)
         .single();
       
-      if (!teacher) return null;
+      // Self-healing: If teacher record is missing but user is a teacher, create it
+      if ((teacherError || !teacher) && user.user_metadata?.role === 'teacher') {
+        console.log('Teacher profile missing, attempting self-healing...');
+        const { data: newUser, error: userFetchError } = await supabase
+          .from('users')
+          .select('full_name, role')
+          .eq('id', user.id)
+          .single();
+        
+        if (!userFetchError && newUser?.role === 'teacher') {
+          const { data: newTeacher, error: createError } = await supabase
+            .from('teachers')
+            .insert({
+              id: user.id,
+              national_id: 'TEMP_' + user.id.substring(0, 8),
+              specialization: 'غير محدد'
+            })
+            .select('*, users(*)')
+            .single();
+          
+          if (!createError && newTeacher) {
+            console.log('Teacher profile created successfully via self-healing');
+            teacher = newTeacher;
+            teacherError = null;
+          } else {
+            console.error('Failed to self-heal teacher profile:', createError);
+          }
+        }
+      }
+
+      if (teacherError || !teacher) {
+        console.error('Teacher profile not found after self-healing attempt:', teacherError);
+        // We still want to return something so the dashboard doesn't crash
+        return {
+          teacher: null,
+          sections: [],
+          recentExams: [],
+          recentAssignments: [],
+          schedule: [],
+          periods: [],
+          messages: [],
+          stats: {
+            totalStudents: 0,
+            totalExams: 0,
+            totalAssignments: 0
+          }
+        };
+      }
 
       const { data: teacherSections } = await supabase
         .from('teacher_sections')
@@ -252,18 +308,28 @@ export function useDashboardSystem() {
         { count: examsCount },
         { count: assignmentsCount }
       ] = await Promise.all([
-        sectionIds.length > 0 ? supabase
+        // Fetch exams via exam_sections
+        supabase
           .from('exams')
-          .select('id, title, created_at, start_time, subject:subjects(name), section:sections(name)')
-          .in('section_id', sectionIds)
+          .select(`
+            id, title, created_at, start_time, 
+            subject:subjects(name),
+            exam_sections(section_id, section:sections(name))
+          `)
+          .or(`teacher_id.eq.${user.id}${sectionIds.length > 0 ? `,exam_sections.section_id.in.(${sectionIds.join(',')})` : ''}`)
           .order('created_at', { ascending: false })
-          .limit(5) : Promise.resolve({ data: [] }),
-        sectionIds.length > 0 ? supabase
+          .limit(5),
+        // Fetch assignments via assignment_sections
+        supabase
           .from('assignments')
-          .select('id, title, section_id, due_date, subjects(name), sections(name, classes(name))')
-          .in('section_id', sectionIds)
+          .select(`
+            id, title, due_date, 
+            subject:subjects(name), 
+            assignment_sections(section_id, section:sections(name, classes(name)))
+          `)
+          .or(`teacher_id.eq.${user.id}${sectionIds.length > 0 ? `,assignment_sections.section_id.in.(${sectionIds.join(',')})` : ''}`)
           .order('created_at', { ascending: false })
-          .limit(5) : Promise.resolve({ data: [] }),
+          .limit(5),
         supabase
           .from('schedules')
           .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(name, classes(name))')
@@ -284,21 +350,33 @@ export function useDashboardSystem() {
           .from('students')
           .select('id', { count: 'exact', head: true })
           .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
-        sectionIds.length > 0 ? supabase
+        supabase
           .from('exams')
           .select('id', { count: 'exact', head: true })
-          .in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
-        sectionIds.length > 0 ? supabase
+          .eq('teacher_id', user.id),
+        supabase
           .from('assignments')
           .select('id', { count: 'exact', head: true })
-          .in('section_id', sectionIds) : Promise.resolve({ count: 0 })
+          .eq('teacher_id', user.id)
       ]);
+
+      const exams = (recentExams || []).map((e: any) => ({
+        ...e,
+        subject_name: e.subject?.name || 'غير محدد',
+        section_name: e.exam_sections?.[0]?.section?.name || 'غير محدد'
+      }));
+
+      const assignments = (recentAssignments || []).map((a: any) => ({
+        ...a,
+        subject_name: a.subject?.name || 'غير محدد',
+        section_name: a.assignment_sections?.[0]?.section?.name || 'غير محدد'
+      }));
 
       return {
         teacher,
         sections,
-        recentExams: recentExams || [],
-        recentAssignments: recentAssignments || [],
+        recentExams: exams,
+        recentAssignments: assignments,
         schedule: schedule || [],
         periods: periods || [],
         messages: messages || [],

@@ -103,7 +103,7 @@ export default function StudentDashboard() {
 
   // Calculate average score
   const avgScore = recentGrades.length > 0 
-    ? Math.round(recentGrades.reduce((acc, curr) => acc + curr.score, 0) / recentGrades.length)
+    ? Math.round(recentGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / recentGrades.length)
     : 0;
 
   return (

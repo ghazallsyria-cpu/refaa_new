@@ -12,7 +12,12 @@ export async function POST(req: Request) {
 
   try {
     const validatedData = await validateRequest(req, SaveAssignmentRequestSchema);
-    const { payload, assignmentId, questions, sectionIds, subjects } = validatedData;
+    const { payload, assignmentId, questions, sectionIds, subjects, userId } = validatedData;
+
+    // Ensure teacher_id is set
+    if (!payload.teacher_id && userId) {
+      payload.teacher_id = userId;
+    }
 
     let finalAssignmentId = assignmentId;
 
