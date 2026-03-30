@@ -14,53 +14,48 @@ export async function POST(req: Request) {
     const validatedData = await validateRequest(req, SaveAssignmentRequestSchema);
     const { payload, assignmentId, questions, sectionIds, subjects, userId } = validatedData;
 
-    // ✅ الإصلاح الجذري والآمن لمعرف المعلم (متوافق مع كل هياكل البيانات)
-    if (!payload.teacher_id && userId) {
-      const { data: teacherProfile } = await adminSupabase
-        .from('teachers')
-        .select('id')
-        .or(`id.eq.${userId},user_id.eq.${userId}`) // بحث ذكي يمنع انهيار قاعدة البيانات
-        .limit(1)
-        .maybeSingle();
+    // ✅ بحث متسلسل وآمن عن المعلم لمنع خطأ قاعدة البيانات (500)
+    let finalTeacherId = payload.teacher_id;
 
-      // تعيين المعرف الحقيقي أو الاعتماد على معرف الدخول كحل أخير
-      payload.teacher_id = teacherProfile ? teacherProfile.id : userId; 
+    if (!finalTeacherId || finalTeacherId === userId) {
+      const { data: t1 } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
+      if (t1) {
+        finalTeacherId = t1.id;
+      } else {
+        const { data: t2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
+        if (t2) {
+          finalTeacherId = t2.id;
+        } else {
+          finalTeacherId = userId; // Fallback
+        }
+      }
     }
+    
+    payload.teacher_id = finalTeacherId;
 
     let finalAssignmentId = assignmentId;
     const normalizedPayload = normalizePayload(payload);
 
     if (finalAssignmentId) {
-      // عملية التحديث (Update)
-      const { error } = await adminSupabase
-        .from('assignments')
-        .update(normalizedPayload)
-        .eq('id', finalAssignmentId);
+      // Update
+      const { error } = await adminSupabase.from('assignments').update(normalizedPayload).eq('id', finalAssignmentId);
       if (error) throw error;
-
       await adminSupabase.from('assignment_questions').delete().eq('assignment_id', finalAssignmentId);
     } else {
-      // عملية الإنشاء (Insert)
-      const { data: newAssignment, error } = await adminSupabase
-        .from('assignments')
-        .insert([normalizedPayload])
-        .select()
-        .single();
-        
-      if (error) throw error;
+      // Insert
+      const { data: newAssignment, error } = await adminSupabase.from('assignments').insert([normalizedPayload]).select().single();
+      if (error) {
+        console.error("Insert Error DB:", error);
+        throw error;
+      }
       if (!newAssignment) throw new Error('Failed to create assignment');
       
       finalAssignmentId = newAssignment.id;
 
-      // إرسال الإشعارات للطلاب (بشكل آمن تماماً)
+      // Notifications
       try {
         if (sectionIds && sectionIds.length > 0) {
-            // جلب بيانات الطلاب بأمان (بدون طلب أعمدة قد تكون غير موجودة)
-            const { data: students } = await adminSupabase
-              .from('students')
-              .select('id') 
-              .in('section_id', sectionIds);
-
+            const { data: students } = await adminSupabase.from('students').select('id').in('section_id', sectionIds);
             if (students && students.length > 0) {
               const subjectName = subjects?.find((s: any) => s.id === payload.subject_id)?.name || 'المادة';
               const notificationPayloads = students.map((student: any) => ({
@@ -78,7 +73,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // حفظ الأسئلة التفاعلية
+    // Save Questions
     if (questions && questions.length > 0) {
       const questionsPayload = questions.map((q: any, index: number) => ({
         assignment_id: finalAssignmentId,
@@ -93,7 +88,7 @@ export async function POST(req: Request) {
       if (qError) throw qError;
     }
 
-    // حفظ الفصول المستهدفة
+    // Save Sections
     if (finalAssignmentId) {
       await adminSupabase.from('assignment_sections').delete().eq('assignment_id', finalAssignmentId);
       if (sectionIds && sectionIds.length > 0) {
@@ -108,9 +103,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: finalAssignmentId, success: true });
 
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('Save Assignment Error:', error);
-    return handleApiError(error, 'Save Assignment');
+    return NextResponse.json({ error: error.message || 'حدث خطأ أثناء الحفظ' }, { status: 500 });
   }
 }
 
