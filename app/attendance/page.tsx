@@ -262,7 +262,7 @@ export default function AttendancePage() {
               >
                 {sections.map((s, idx) => (
                   <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>
-                    {s.classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
+                    {s.classes?.[0]?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
                   </option>
                 ))}
               </select>
