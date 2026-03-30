@@ -135,25 +135,25 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                       } ${readOnly ? 'cursor-default' : ''}`}
                     >
                       <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                        answers[question.id] === option 
+                        answers[question.id] === option.content 
                           ? 'border-indigo-600 bg-indigo-600' 
                           : 'border-slate-300 group-hover:border-indigo-400'
                       }`}>
-                        {answers[question.id] === option && <div className="h-2 w-2 bg-white rounded-full" />}
+                        {answers[question.id] === option.content && <div className="h-2 w-2 bg-white rounded-full" />}
                       </div>
                       <input
                         type="radio"
                         className="hidden"
                         name={question.id}
-                        value={option}
-                        checked={answers[question.id] === option}
-                        onChange={() => handleAnswerChange(question.id, option)}
+                        value={option.content}
+                        checked={answers[question.id] === option.content}
+                        onChange={() => handleAnswerChange(question.id, option.content)}
                         disabled={readOnly}
                       />
                       <span className={`text-sm font-bold transition-colors ${
-                        answers[question.id] === option ? 'text-indigo-900' : 'text-slate-600'
+                        answers[question.id] === option.content ? 'text-indigo-900' : 'text-slate-600'
                       }`}>
-                        {option}
+                        {option.content}
                       </span>
                     </label>
                   ))}
