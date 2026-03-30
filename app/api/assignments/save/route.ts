@@ -14,29 +14,24 @@ export async function POST(req: Request) {
     const validatedData = await validateRequest(req, SaveAssignmentRequestSchema);
     const { payload, assignmentId, questions, sectionIds, subjects, userId } = validatedData;
 
-    // ✅ الإصلاح الجذري: البحث عن المعرف الحقيقي للمعلم قبل الحفظ
+    // ✅ الإصلاح الجذري والآمن لمعرف المعلم (متوافق مع كل هياكل البيانات)
     if (!payload.teacher_id && userId) {
-      const { data: teacherProfile, error: teacherError } = await adminSupabase
+      const { data: teacherProfile } = await adminSupabase
         .from('teachers')
         .select('id')
-        .eq('user_id', userId)
-        .single();
+        .or(`id.eq.${userId},user_id.eq.${userId}`) // بحث ذكي يمنع انهيار قاعدة البيانات
+        .limit(1)
+        .maybeSingle();
 
-      if (teacherError || !teacherProfile) {
-        return NextResponse.json(
-          { error: 'لم يتم العثور على ملف المعلم المرتبط بحسابك. لا يمكن حفظ الواجب.' },
-          { status: 400 }
-        );
-      }
-      // تعيين المعرف الحقيقي!
-      payload.teacher_id = teacherProfile.id; 
+      // تعيين المعرف الحقيقي أو الاعتماد على معرف الدخول كحل أخير
+      payload.teacher_id = teacherProfile ? teacherProfile.id : userId; 
     }
 
     let finalAssignmentId = assignmentId;
     const normalizedPayload = normalizePayload(payload);
 
     if (finalAssignmentId) {
-      // Update existing assignment
+      // عملية التحديث (Update)
       const { error } = await adminSupabase
         .from('assignments')
         .update(normalizedPayload)
@@ -45,7 +40,7 @@ export async function POST(req: Request) {
 
       await adminSupabase.from('assignment_questions').delete().eq('assignment_id', finalAssignmentId);
     } else {
-      // Insert new assignment
+      // عملية الإنشاء (Insert)
       const { data: newAssignment, error } = await adminSupabase
         .from('assignments')
         .insert([normalizedPayload])
@@ -57,35 +52,38 @@ export async function POST(req: Request) {
       
       finalAssignmentId = newAssignment.id;
 
-      // Send Notifications (✅ تم إصلاح الإشعارات لتصل للطلاب)
+      // إرسال الإشعارات للطلاب (بشكل آمن تماماً)
       try {
-        const { data: students } = await adminSupabase
-          .from('students')
-          .select('id, user_id')
-          .in('section_id', sectionIds || []);
+        if (sectionIds && sectionIds.length > 0) {
+            // جلب بيانات الطلاب بأمان (بدون طلب أعمدة قد تكون غير موجودة)
+            const { data: students } = await adminSupabase
+              .from('students')
+              .select('id') 
+              .in('section_id', sectionIds);
 
-        if (students && students.length > 0) {
-          const subjectName = subjects.find((s: any) => s.id === payload.subject_id)?.name || 'المادة';
-          const notificationPayloads = students.map((student: any) => ({
-            user_id: student.user_id || student.id, // نستخدم حساب الدخول للطالب
-            title: 'واجب جديد متاح',
-            content: `تمت إضافة واجب جديد في مادة ${subjectName}: ${payload.title}`,
-            type: 'assignment',
-            link: `/assignments/${finalAssignmentId}`
-          }));
-          await adminSupabase.from('notifications').insert(notificationPayloads);
+            if (students && students.length > 0) {
+              const subjectName = subjects?.find((s: any) => s.id === payload.subject_id)?.name || 'المادة';
+              const notificationPayloads = students.map((student: any) => ({
+                  user_id: student.id, 
+                  title: 'واجب جديد متاح',
+                  content: `تمت إضافة واجب جديد في مادة ${subjectName}: ${payload.title}`,
+                  type: 'assignment',
+                  link: `/assignments/${finalAssignmentId}`
+              }));
+              await adminSupabase.from('notifications').insert(notificationPayloads);
+            }
         }
       } catch (notifErr) {
         console.error('Error sending assignment notifications:', notifErr);
       }
     }
 
-    // Save Questions
+    // حفظ الأسئلة التفاعلية
     if (questions && questions.length > 0) {
       const questionsPayload = questions.map((q: any, index: number) => ({
         assignment_id: finalAssignmentId,
-        question_text: q.content,
-        question_type: q.type,
+        question_text: q.content || '',
+        question_type: q.type || 'open',
         options: q.options || null,
         points: q.points || 0,
         is_required: q.isRequired || false,
@@ -95,7 +93,7 @@ export async function POST(req: Request) {
       if (qError) throw qError;
     }
 
-    // Save Sections
+    // حفظ الفصول المستهدفة
     if (finalAssignmentId) {
       await adminSupabase.from('assignment_sections').delete().eq('assignment_id', finalAssignmentId);
       if (sectionIds && sectionIds.length > 0) {
@@ -108,10 +106,12 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ id: finalAssignmentId });
+    return NextResponse.json({ id: finalAssignmentId, success: true });
 
   } catch (error: unknown) {
+    console.error('Save Assignment Error:', error);
     return handleApiError(error, 'Save Assignment');
   }
 }
+
 
