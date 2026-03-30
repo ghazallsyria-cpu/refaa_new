@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Bell, Info, AlertTriangle, CheckCircle2, MessageSquare, BookOpen, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export type NotificationType = 'exam' | 'assignment' | 'attendance' | 'message' | 'announcement' | 'system';
+export type NotificationType = 'exam' | 'assignment' | 'attendance' | 'message' | 'announcement' | 'system' | 'success' | 'error';
 
 export interface Notification {
   id: string;
