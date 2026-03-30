@@ -15,6 +15,7 @@ export interface StudentExamResult {
   student: { id: string, users: { full_name: string } };
   attempt: ExamAttempt | null;
   answers: any[];
+  questions: any[]; // تمت إضافة الأسئلة هنا
 }
 
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
@@ -289,7 +290,6 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
-  // ✅ الاعتماد الكلي على الـ API، وإذا فشل سيظهر لك تنبيه صريح بالسبب!
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
       const response = await fetch('/api/exams/student-result', {
@@ -300,24 +300,16 @@ export function useExamsSystem() {
       const result = await response.json();
       
       if (!response.ok) {
-         // إذا كان هناك خطأ، أظهره فوراً كرسالة منبثقة
          alert("خطأ في الاتصال بالسيرفر: " + (result.error || 'Unknown Error'));
          throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
       }
-
-      const formattedAnswers = (result.answers || []).map((ans: any) => {
-        if (ans.question) {
-          const nq = normalizeQuestion(ans.question) as any;
-          ans.question = { ...nq, mediaUrl: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null, media_url: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null };
-        }
-        return ans;
-      });
 
       return {
         exam: result.exam,
         student: result.student || { id: studentId, users: { full_name: 'طالب' } },
         attempt: result.attempt || null,
-        answers: formattedAnswers
+        answers: result.answers || [],
+        questions: mapQuestionsWithMedia(result.questions || []) // استقبال الأسئلة هنا
       };
       
     } catch (err: any) { 
