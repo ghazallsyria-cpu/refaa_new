@@ -170,7 +170,6 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user, fetchExams]);
 
-  // ✅ الإصلاح الذكي لمعاينة المعلم: تخطي فحص الطالب إذا كان المستخدم معلماً
   const fetchExamForStudent = useCallback(async (examId: string): Promise<ExamForStudent> => {
     if (!user) throw new Error('User not authenticated');
     try {
@@ -290,6 +289,7 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
+  // ✅ استخدام حصري وأنيق للـ API الأصلي الذي بنيناه
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
       const response = await fetch('/api/exams/student-result', {
@@ -298,7 +298,9 @@ export function useExamsSystem() {
         body: JSON.stringify({ examId, studentId })
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to fetch result');
+      
+      if (!response.ok) throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
+
       const formattedAnswers = (result.answers || []).map((ans: any) => {
         if (ans.question) {
           const nq = normalizeQuestion(ans.question) as any;
@@ -306,12 +308,19 @@ export function useExamsSystem() {
         }
         return ans;
       });
-      const finalResult: any = { exam: result.exam, student: result.student || { id: studentId, users: { full_name: 'طالب غير محدد' } }, attempt: result.attempt || null, answers: formattedAnswers };
-      return finalResult;
-    } catch (err) { throw err; }
+
+      return {
+        exam: result.exam,
+        student: result.student || { id: studentId, users: { full_name: 'طالب' } },
+        attempt: result.attempt || null,
+        answers: formattedAnswers
+      };
+      
+    } catch (err: any) { 
+      throw err;
+    }
   }, []);
 
-  // ✅ دالة جديدة لإرسال التصحيح اليدوي لقاعدة البيانات
   const gradeAnswer = useCallback(async (attemptId: string, questionId: string, pointsEarned: number): Promise<void> => {
     try {
       const response = await fetch('/api/exams/grade', {
