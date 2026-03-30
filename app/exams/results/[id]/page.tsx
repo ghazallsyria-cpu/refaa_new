@@ -18,7 +18,7 @@ export default function TeacherExamResultsPage() {
   const [attempts, setAttempts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all'); 
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -112,7 +112,7 @@ export default function TeacherExamResultsPage() {
               <h2 className="text-sm font-bold text-indigo-600 tracking-widest uppercase">نتائج الاختبار</h2>
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-tight mb-4">{examData?.title || 'جاري التحميل...'}</h1>
-            <div className="flex flex-wrap items-center gap-4 text-sm font-bold text-slate-600">
+            <div className="flex items-center gap-4 text-sm font-bold text-slate-600">
                <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
                  العلامة الكاملة: {examData?.total_marks || examData?.max_score || 0}
                </span>
@@ -219,7 +219,7 @@ export default function TeacherExamResultsPage() {
                         {date.toLocaleDateString('en-GB')} {date.toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit'})}
                       </td>
                       <td className="px-6 py-4">
-                        {/* ✅ السر هنا: تم إزالة opacity-0 لتصبح الأزرار ظاهرة دائماً على الجوال */}
+                        {/* ✅ تم مسح opacity-0 لكي تظهر الأزرار للمستخدم سواء على الجوال أو الكمبيوتر */}
                         <div className="flex items-center justify-center gap-2 transition-opacity">
                           <button 
                             onClick={() => router.push(`/exams/results/${params.id}/student/${attempt.student_id}`)}
