@@ -102,7 +102,14 @@ export default function AnnouncementsWidget({ limit = 3, authRole }: { limit?: n
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
-                  {mounted ? new Date(announcement.created_at).toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' }) : '...'}
+                  {(() => {
+                    if (!mounted || !announcement.created_at) return '...';
+                    try {
+                      return new Date(announcement.created_at).toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' });
+                    } catch (e) {
+                      return '...';
+                    }
+                  })()}
                 </p>
                 <p className="text-sm text-slate-600 mt-2 line-clamp-2 leading-relaxed">
                   {announcement.content}
@@ -133,7 +140,14 @@ export default function AnnouncementsWidget({ limit = 3, authRole }: { limit?: n
                         {selectedAnnouncement.title}
                       </Dialog.Title>
                       <p className="text-sm text-slate-500 font-bold mt-1">
-                        {new Date(selectedAnnouncement.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        {(() => {
+                          if (!selectedAnnouncement.created_at) return '...';
+                          try {
+                            return new Date(selectedAnnouncement.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                          } catch (e) {
+                            return '...';
+                          }
+                        })()}
                       </p>
                     </div>
                   </div>

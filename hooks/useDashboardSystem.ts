@@ -120,7 +120,7 @@ export function useDashboardSystem() {
           .eq('student_id', student.id),
         supabase
           .from('exam_attempts')
-          .select('score, exam:exams(title, total_points)')
+          .select('score, completed_at, exam:exams(title, total_points, subject:subjects(name))')
           .eq('student_id', student.id)
           .order('completed_at', { ascending: false })
           .limit(5),

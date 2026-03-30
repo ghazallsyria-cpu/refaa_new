@@ -33,15 +33,23 @@ export async function POST(req: Request) {
 
     // Convert dates to ISO if they exist, or null if empty string
     if (settings.open_date !== undefined) {
-      updateData.open_date = settings.open_date && settings.open_date !== "" 
-        ? new Date(settings.open_date).toISOString() 
-        : null;
+      try {
+        updateData.open_date = (settings.open_date && settings.open_date.trim() !== "") 
+          ? new Date(settings.open_date).toISOString() 
+          : null;
+      } catch (e) {
+        updateData.open_date = null;
+      }
     }
 
     if (settings.close_date !== undefined) {
-      updateData.close_date = settings.close_date && settings.close_date !== "" 
-        ? new Date(settings.close_date).toISOString() 
-        : null;
+      try {
+        updateData.close_date = (settings.close_date && settings.close_date.trim() !== "") 
+          ? new Date(settings.close_date).toISOString() 
+          : null;
+      } catch (e) {
+        updateData.close_date = null;
+      }
     }
 
     if (settings.id) {

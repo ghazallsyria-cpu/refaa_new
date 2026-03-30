@@ -286,11 +286,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               let isOpen = settings.is_open;
               const now = new Date();
               
-              if (settings.open_date && new Date(settings.open_date) > now) {
-                isOpen = false;
+              if (settings.open_date) {
+                const openDate = new Date(settings.open_date);
+                if (!isNaN(openDate.getTime()) && openDate > now) {
+                  isOpen = false;
+                }
               }
-              if (settings.close_date && new Date(settings.close_date) < now) {
-                isOpen = false;
+              if (settings.close_date) {
+                const closeDate = new Date(settings.close_date);
+                if (!isNaN(closeDate.getTime()) && closeDate < now) {
+                  isOpen = false;
+                }
               }
 
               if (!isOpen && role !== 'admin' && role !== 'management') {

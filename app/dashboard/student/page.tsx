@@ -70,7 +70,23 @@ export default function StudentDashboard() {
     fetchData();
   }, [fetchData]);
 
-  if (loading) {
+  // Helper for safe date formatting
+  const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
+    if (!dateStr || !mounted) return fallback;
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        // If it's just a time string (HH:mm), it might fail. 
+        // But for exams we have exam_date.
+        return fallback;
+      }
+      return format(date, formatStr, { locale: arSA });
+    } catch (e) {
+      return fallback;
+    }
+  };
+
+  if (loading || !mounted) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -170,7 +186,7 @@ export default function StudentDashboard() {
             </div>
           </div>
           <p className="text-xs text-slate-400 font-medium">
-            تاريخ الاختيار: {mounted ? format(new Date(studentData.track_selection_date), 'd MMMM yyyy', { locale: arSA }) : '...'}
+            تاريخ الاختيار: {safeFormat(studentData.track_selection_date, 'd MMMM yyyy')}
           </p>
         </div>
       )}
@@ -231,7 +247,11 @@ export default function StudentDashboard() {
             <div className="h-[300px] w-full">
               {recentGrades.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={recentGrades.slice().reverse()}>
+                  <AreaChart data={recentGrades.map(g => ({
+                    ...g,
+                    displayTitle: g.exam?.title || 'اختبار',
+                    displayScore: g.score || 0
+                  })).reverse()}>
                     <defs>
                       <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2}/>
@@ -240,7 +260,7 @@ export default function StudentDashboard() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis 
-                      dataKey="exam.title" 
+                      dataKey="displayTitle" 
                       axisLine={false} 
                       tickLine={false} 
                       tick={{fill: '#64748b', fontSize: 12}}
@@ -257,7 +277,7 @@ export default function StudentDashboard() {
                     />
                     <Area 
                       type="monotone" 
-                      dataKey="score" 
+                      dataKey="displayScore" 
                       stroke="#4f46e5" 
                       strokeWidth={3}
                       fillOpacity={1} 
@@ -305,7 +325,7 @@ export default function StudentDashboard() {
                         {grade.score}%
                       </p>
                       <p className="text-xs text-slate-400 font-medium mt-1">
-                        {mounted ? format(new Date(grade.completed_at), 'd MMMM', { locale: arSA }) : '...'}
+                        {safeFormat(grade.completed_at, 'd MMMM')}
                       </p>
                     </div>
                   </div>
@@ -423,7 +443,7 @@ export default function StudentDashboard() {
                       <div className="flex items-start justify-between mb-2">
                         <p className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">{assignment.title}</p>
                         <span className="text-xs font-bold px-2 py-1 bg-amber-50 text-amber-700 rounded-md whitespace-nowrap ml-2">
-                          {mounted ? format(new Date(assignment.due_date), 'd MMM', { locale: arSA }) : '...'}
+                          {safeFormat(assignment.due_date, 'd MMM')}
                         </span>
                       </div>
                       <p className="text-sm text-slate-500">{assignment.subject?.name}</p>
@@ -462,7 +482,16 @@ export default function StudentDashboard() {
                       <p className="text-sm text-slate-500 mb-3">{exam.subject?.name}</p>
                       <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 p-2 rounded-lg">
                         <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                        <span>{mounted ? format(new Date(exam.start_time), 'EEEE، d MMMM - h:mm a', { locale: arSA }) : '...'}</span>
+                        <span>
+                          {(() => {
+                            if (!exam.exam_date) return '...';
+                            const datePart = exam.exam_date;
+                            const timePart = exam.start_time || '00:00';
+                            // Combine date and time for a valid Date object
+                            const fullDateStr = timePart.includes('T') ? timePart : `${datePart}T${timePart}`;
+                            return safeFormat(fullDateStr, 'EEEE، d MMMM - h:mm a');
+                          })()}
+                        </span>
                       </div>
                     </div>
                   </Link>
