@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('national_id', civilId)
         .maybeSingle();
         
-      if (studentData && studentData.users) {
-        authEmail = (studentData.users as { email: string }).email;
+      if (studentData && Array.isArray(studentData.users) && studentData.users.length > 0) {
+        authEmail = studentData.users[0].email;
       } else {
         // Try to find teacher
         const { data: teacherData } = await supabase
@@ -63,8 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('national_id', civilId)
           .maybeSingle();
           
-        if (teacherData && teacherData.users) {
-          authEmail = (teacherData.users as { email: string }).email;
+        if (teacherData && Array.isArray(teacherData.users) && teacherData.users.length > 0) {
+          authEmail = teacherData.users[0].email;
         } else {
           // Try to find parent
           const { data: parentData } = await supabase
@@ -73,8 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .eq('national_id', civilId)
             .maybeSingle();
             
-          if (parentData && parentData.users) {
-            authEmail = (parentData.users as { email: string }).email;
+          if (parentData && Array.isArray(parentData.users) && parentData.users.length > 0) {
+            authEmail = parentData.users[0].email;
           } else {
             // Default fallback
             authEmail = `${civilId}@alrefaa.edu`;
