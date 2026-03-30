@@ -1,116 +1,426 @@
-import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+'use client';
 
-export async function POST(req: Request) {
-  const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { 
+  Clock, ChevronLeft, ChevronRight, Send, 
+  AlertCircle, CheckCircle2, Timer, 
+  ArrowRight, BookOpen, X
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '@/lib/utils';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
+import { Question } from '@/types/question';
 
-  try {
-    const body = await req.json();
-    const { examId, answers, score, status, timeSpent, userId } = body;
+type Exam = {
+  id: string;
+  title: string;
+  description: string;
+  duration: number;
+  exam_date: string;
+  start_time: string;
+  end_time: string;
+  settings: any;
+};
 
-    // 1. البحث عن الطالب بأمان
-    let realStudentId = userId;
-    const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
-    if (st) realStudentId = st.id;
-    else {
-      const { data: st2 } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
-      if (st2) realStudentId = st2.id;
-    }
+export default function TakeQuiz() {
+  const params = useParams();
+  const router = useRouter();
+  const { fetchExamForStudent, submitExam } = useExamsSystem();
+  const [exam, setExam] = useState<Exam | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
-    // 2. إنشاء أو تحديث المحاولة (مع الخطة البديلة B لتجاوز عمود time_spent)
-    let attemptId;
-    const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 8000); // زيادة وقت ظهور الخطأ لنتمكن من قراءته
+  };
 
-    const attemptPayload: any = {
-        exam_id: examId,
-        student_id: realStudentId,
-        score: score || 0,
-        status: status === 'completed' ? 'graded' : 'submitted',
-        completed_at: new Date().toISOString(),
-        time_spent: timeSpent || 0
-    };
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-    if (existing) {
-      attemptId = existing.id;
-      const { error: updErr } = await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
+  const fetchQuiz = useCallback(async () => {
+    try {
+      const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
       
-      if (updErr) {
-          // الخطة البديلة: إذا اعترضت القاعدة على عمود time_spent، نحذفه ونرسل بدونه
-          delete attemptPayload.time_spent;
-          const retry = await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
-          if (retry.error) throw new Error('DB_UPDATE_ATTEMPT: ' + retry.error.message);
+      const now = new Date();
+      const examDate = new Date(examData.exam_date);
+      
+      const startTimeParts = (examData.start_time || '00:00').split(':');
+      const endTimeParts = (examData.end_time || '23:59').split(':');
+      
+      const startDateTime = new Date(examDate);
+      startDateTime.setHours(parseInt(startTimeParts[0]), parseInt(startTimeParts[1]), 0);
+      
+      const endDateTime = new Date(examDate);
+      endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+      
+      if (now < startDateTime) {
+        showNotification('error', `هذا الاختبار غير متاح بعد. سيبدأ في ${examData.start_time} بتاريخ ${examData.exam_date}`);
+        setTimeout(() => router.push('/exams'), 3000);
+        setLoading(false);
+        return;
       }
       
-      await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
-      await adminSupabase.from('exam_answers').delete().eq('attempt_id', attemptId);
-    } else {
-      attemptPayload.started_at = new Date().toISOString();
-      let { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([attemptPayload]).select('id').single();
-      
-      if (insErr) {
-          // الخطة البديلة: إذا اعترضت القاعدة على عمود time_spent، نحذفه ونرسل بدونه
-          delete attemptPayload.time_spent;
-          const retry = await adminSupabase.from('exam_attempts').insert([attemptPayload]).select('id').single();
-          if (retry.error) throw new Error('DB_INSERT_ATTEMPT: ' + retry.error.message);
-          newAtt = retry.data;
+      if (now > endDateTime) {
+        showNotification('error', 'انتهى الوقت المخصص لهذا الاختبار. تم إغلاق الاختبار تلقائياً.');
+        setTimeout(() => router.push('/exams'), 3000);
+        setLoading(false);
+        return;
       }
-      attemptId = newAtt.id;
+
+      setExam({
+        ...examData,
+        description: examData.description ?? "",
+        settings: {
+          shuffle_questions: examData.settings?.shuffle_questions ?? false,
+          shuffle_options: examData.settings?.shuffle_options ?? false,
+          show_results_immediately: examData.settings?.show_results_immediately ?? true,
+          allow_backtracking: examData.settings?.allow_backtracking ?? true,
+        }
+      });
+      setQuestions(questionsData || []);
+
+      if (examData.duration) {
+        const durationSeconds = examData.duration * 60;
+        const secondsUntilEnd = Math.floor((endDateTime.getTime() - now.getTime()) / 1000);
+        const finalTimeLeft = Math.min(durationSeconds, secondsUntilEnd);
+        setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
+      }
+
+    } catch (err) {
+      console.error('Error fetching quiz:', err);
+      showNotification('error', 'حدث خطأ أثناء تحميل الاختبار');
+      setTimeout(() => router.push('/exams'), 3000);
+    } finally {
+      setLoading(false);
     }
+  }, [params.id, router, fetchExamForStudent]);
 
-    // 3. إدخال الإجابات بأقصى درجات الأمان
-    if (answers && Object.keys(answers).length > 0) {
-      const formattedAnswers = Object.entries(answers).map(([qId, ans]: any) => {
-        let txt = null;
-        let optId = null;
-        let isCorr = false;
-        let pts = 0;
+  useEffect(() => {
+    fetchQuiz();
+  }, [fetchQuiz]);
 
-        if (typeof ans === 'string') {
-          if (ans.length === 36 && ans.includes('-')) optId = ans;
-          else txt = ans;
-        } else if (typeof ans === 'object' && ans !== null) {
-          txt = ans.text ? String(ans.text) : null;
-          optId = (ans.optionId && typeof ans.optionId === 'string' && ans.optionId.trim() !== '') ? ans.optionId : null;
-          isCorr = ans.isCorrect || false;
-          pts = ans.pointsEarned || 0;
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      let totalScore = 0;
+      const formattedAnswers: Record<string, any> = {};
+
+      for (const q of questions) {
+        const studentAnswer = answers[q.id];
+        let isCorrect = false;
+        let pointsEarned = 0;
+
+        if (q.type === 'multiple_choice' || q.type === 'true_false') {
+          const correctOpt = q.options.find((o: any) => o.is_correct);
+          isCorrect = studentAnswer === correctOpt?.id;
+          pointsEarned = isCorrect ? (q.points || 0) : 0;
+        } else if (q.type === 'multi_select') {
+          const correctOpts = q.options.filter((o: any) => o.is_correct).map((o: any) => o.id);
+          const studentOpts = studentAnswer || [];
+          isCorrect = correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
+          pointsEarned = isCorrect ? (q.points || 0) : 0;
         }
 
-        return {
-          attempt_id: attemptId,
-          question_id: qId,
-          text_answer: txt,
-          selected_option_id: optId,
-          is_correct: isCorr,
-          points_earned: pts
-        };
-      });
+        totalScore += pointsEarned;
 
-      // محاولة الحفظ في الجدول الأول
-      const { error: ansErr } = await adminSupabase.from('student_answers').insert(formattedAnswers);
-      
-      // إذا فشل الجدول الأول، نحفظ في الجدول الثاني إجبارياً!
-      if (ansErr) {
-         console.warn("Table student_answers failed, trying exam_answers. Error:", ansErr);
-         const fallbackAnswers = formattedAnswers.map(a => ({
-             attempt_id: a.attempt_id,
-             question_id: a.question_id,
-             answer: a.selected_option_id || a.text_answer || "بدون إجابة",
-             is_correct: a.is_correct,
-             points_earned: a.points_earned
-         }));
-         const { error: fallErr } = await adminSupabase.from('exam_answers').insert(fallbackAnswers);
-         // دمج رسائل الخطأ لكي تظهر لنا بالتفصيل إذا فشل كلاهما
-         if (fallErr) throw new Error(`Ans1: ${ansErr.message} | Ans2: ${fallErr.message}`);
+        formattedAnswers[q.id] = {
+          optionId: (q.type === 'multiple_choice' || q.type === 'true_false') ? studentAnswer : null,
+          text: (q.type === 'essay' || q.type === 'fill_in_blank') 
+            ? studentAnswer 
+            : q.type === 'multi_select' 
+              ? JSON.stringify(studentAnswer) 
+              : null,
+          isCorrect,
+          pointsEarned
+        };
       }
+
+      const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
+
+      await submitExam(params.id as string, formattedAnswers, totalScore, 'completed', timeSpent);
+
+      setIsFinished(true);
+    } catch (err: any) {
+      console.error('Error submitting quiz:', err);
+      // ✅ هنا السحر: إظهار الخطأ الدقيق للمستخدم بدلاً من إخفائه!
+      showNotification('error', err.message || 'حدث خطأ أثناء إرسال الاختبار');
+      alert("الرجاء تصوير هذه الرسالة:\n" + err.message); // إجبار ظهور نافذة تنبيه
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft]);
+
+  useEffect(() => {
+    if (timeLeft !== null && timeLeft > 0 && !isFinished) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => (prev !== null ? prev - 1 : null));
+      }, 1000);
+    } else if (timeLeft === 0 && !isFinished) {
+      handleSubmit();
     }
 
-    return NextResponse.json({ success: true, attemptId });
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [timeLeft, isFinished, handleSubmit]);
 
-  } catch (error: any) {
-    console.error('Submit API Failed:', error.message);
-    // إعادة الخطأ الحقيقي الدقيق إلى الواجهة
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  const handleAnswerChange = (questionId: string, value: any) => {
+    setAnswers(prev => ({ ...prev, [questionId]: value }));
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+      </div>
+    );
   }
+
+  if (isFinished) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6"
+        >
+          <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-12 w-12" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
+          <p className="text-slate-600">شكراً لك على إتمام الاختبار. تم حفظ إجاباتك.</p>
+          <button 
+            onClick={() => router.push(`/exams`)}
+            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all"
+          >
+            العودة للرئيسية
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const currentQuestion = questions[currentQuestionIdx];
+  const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
+      {notification && (
+        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all font-bold max-w-sm w-full text-center ${
+          notification.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-2 border-emerald-200' : 'bg-red-50 text-red-800 border-2 border-red-200'
+        }`}>
+          <div className="flex-1 break-words">{notification.message}</div>
+          <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600 p-2">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-50 rounded-xl">
+              <BookOpen className="h-5 w-5 text-indigo-600" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 truncate max-w-[200px] sm:max-w-md">
+                {exam?.title}
+              </h1>
+              <p className="text-xs text-slate-500">سؤال {currentQuestionIdx + 1} من {questions.length}</p>
+            </div>
+          </div>
+
+          {timeLeft !== null && (
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl border font-mono font-bold transition-all",
+              timeLeft < 60 ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : "bg-slate-50 text-slate-700 border-slate-200"
+            )}>
+              <Timer className="h-4 w-4" />
+              <span dir="ltr">{formatTime(timeLeft)}</span>
+            </div>
+          )}
+        </div>
+        
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100">
+          <motion.div 
+            className="h-full bg-indigo-600"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.3 }}
+          />
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentQuestion?.id}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-8"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm uppercase tracking-wider">
+                <span>سؤال {currentQuestionIdx + 1}</span>
+                <span className="w-1 h-1 rounded-full bg-slate-300" />
+                <span>{currentQuestion?.points} نقاط</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed">
+                {currentQuestion?.content}
+              </h2>
+              
+              {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (
+                <div className="relative w-full flex justify-center bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 p-2 mt-4">
+                  <img 
+                    src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} 
+                    alt="صورة السؤال" 
+                    className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {(currentQuestion?.type === 'multiple_choice' || currentQuestion?.type === 'true_false') && (
+                <div className="grid gap-3">
+                  {currentQuestion.options.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => handleAnswerChange(currentQuestion.id, option.id)}
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group",
+                        answers[currentQuestion.id] === option.id
+                          ? "bg-indigo-50 border-indigo-600 text-indigo-900 shadow-md shadow-indigo-100"
+                          : "bg-white border-slate-100 hover:border-slate-300 text-slate-700"
+                      )}
+                    >
+                      <div className={cn(
+                        "h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                        answers[currentQuestion.id] === option.id
+                          ? "bg-indigo-600 border-indigo-600 text-white"
+                          : "border-slate-200 group-hover:border-indigo-300"
+                      )}>
+                        {answers[currentQuestion.id] === option.id && <CheckCircle2 className="h-4 w-4" />}
+                      </div>
+                      <span className="text-lg font-medium">{option.content}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {currentQuestion?.type === 'multi_select' && (
+                <div className="grid gap-3">
+                  {currentQuestion.options.map((option) => {
+                    const isSelected = (answers[currentQuestion.id] || []).includes(option.id);
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          const current = answers[currentQuestion.id] || [];
+                          const next = isSelected 
+                            ? current.filter((id: string) => id !== option.id)
+                            : [...current, option.id];
+                          handleAnswerChange(currentQuestion.id, next);
+                        }}
+                        className={cn(
+                          "flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group",
+                          isSelected
+                            ? "bg-indigo-50 border-indigo-600 text-indigo-900 shadow-md shadow-indigo-100"
+                            : "bg-white border-slate-100 hover:border-slate-300 text-slate-700"
+                        )}
+                      >
+                        <div className={cn(
+                          "h-6 w-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all",
+                          isSelected
+                            ? "bg-indigo-600 border-indigo-600 text-white"
+                            : "border-slate-200 group-hover:border-indigo-300"
+                        )}>
+                          {isSelected && <CheckCircle2 className="h-4 w-4" />}
+                        </div>
+                        <span className="text-lg font-medium">{option.content}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {currentQuestion?.type === 'essay' && (
+                <textarea
+                  value={answers[currentQuestion.id] || ''}
+                  onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                  placeholder="اكتب إجابتك هنا بالتفصيل..."
+                  className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-lg leading-relaxed"
+                />
+              )}
+
+              {currentQuestion?.type === 'fill_in_blank' && (
+                <input
+                  type="text"
+                  value={answers[currentQuestion.id] || ''}
+                  onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+                  placeholder="أدخل الكلمة المفقودة..."
+                  className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-lg font-bold text-center"
+                />
+              )}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      <footer className="bg-white border-t border-slate-200 p-4 sticky bottom-0 z-40">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <button
+            disabled={currentQuestionIdx === 0}
+            onClick={() => setCurrentQuestionIdx(prev => prev - 1)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+          >
+            <ChevronRight className="h-5 w-5" />
+            <span>السابق</span>
+          </button>
+
+          {currentQuestionIdx === questions.length - 1 ? (
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+              <span>إرسال الاختبار</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setCurrentQuestionIdx(prev => prev + 1)}
+              className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
+            >
+              <span>التالي</span>
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+      </footer>
+    </div>
+  );
 }
 
 
