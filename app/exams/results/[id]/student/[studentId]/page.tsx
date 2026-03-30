@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, Clock, CheckCircle2, XCircle, Trophy, User, Image as ImageIcon, Check } from 'lucide-react';
+import { ArrowRight, BookOpen, Clock, CheckCircle2, XCircle, Trophy, User, Check, AlertCircle } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
 export default function StudentExamResult() {
   const params = useParams();
   const router = useRouter();
-  // التأكد من استخراج المتغيرات بشكل صحيح حسب مسار مشروعك
+  
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
@@ -46,7 +46,6 @@ export default function StudentExamResult() {
     );
   }
 
-  // حساب العلامات
   const totalEarned = answers.reduce((sum, ans) => sum + (ans.points_earned || 0), 0);
   const maxScore = exam?.total_marks || exam?.max_score || answers.reduce((sum, ans) => sum + (ans.question?.points || 0), 0);
 
@@ -56,7 +55,7 @@ export default function StudentExamResult() {
 
     if (question.type === 'multiple_choice' || question.type === 'true_false') {
       const selected = question.options?.find((o: any) => o.id === answer.selected_option_id);
-      return selected?.content || 'لم يتم الإجابة';
+      return selected?.content || answer.text_answer || 'لم يتم الإجابة';
     }
     
     if (question.type === 'multi_select') {
@@ -122,7 +121,7 @@ export default function StudentExamResult() {
           <Trophy className="h-10 w-10 text-yellow-300 mb-3 relative z-10" />
           <div className="text-sm font-bold text-indigo-100 mb-1 relative z-10">النتيجة النهائية</div>
           <div className="text-5xl font-black tracking-tighter relative z-10">
-            {attempt?.score !== undefined ? attempt.score : totalEarned} <span className="text-2xl text-indigo-200 font-bold">/ {maxScore}</span>
+            {attempt?.score !== undefined ? attempt.score : totalEarned} <span className="text-2xl text-indigo-200 font-bold">/ {maxScore || 0}</span>
           </div>
         </div>
       </div>
@@ -149,7 +148,6 @@ export default function StudentExamResult() {
               }`}
             >
               <div className="p-6 sm:p-8">
-                {/* Header: Question Number & Points */}
                 <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
                   <h3 className="font-black text-xl text-slate-800 flex items-center gap-3">
                     <span className="flex items-center justify-center bg-slate-100 w-10 h-10 rounded-xl text-indigo-600 text-sm">
@@ -164,20 +162,19 @@ export default function StudentExamResult() {
                   </div>
                 </div>
 
-                {/* Media / Image Display */}
+                {/* ✅ عرض الصورة إذا كانت موجودة */}
                 {question?.mediaUrl || question?.media_url ? (
                   <div className="mb-8 rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center max-w-2xl mx-auto p-2">
                     <img 
                       src={question.mediaUrl || question.media_url} 
-                      alt="صورة السؤال" 
-                      className="max-h-80 w-auto object-contain rounded-xl"
+                      alt="صورة مرفقة بالسؤال" 
+                      className="max-h-80 w-auto object-contain rounded-xl shadow-sm"
                     />
                   </div>
                 ) : null}
 
-                {/* Answers Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Student's Answer */}
+                  {/* إجابة الطالب */}
                   <div className={`p-5 rounded-2xl border ${
                     isManual ? 'bg-slate-50 border-slate-200' :
                     isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'
@@ -196,7 +193,7 @@ export default function StudentExamResult() {
                     </p>
                   </div>
 
-                  {/* Correct Answer (Shown if wrong or manual) */}
+                  {/* الإجابة الصحيحة */}
                   {(!isCorrect || isManual) && question?.type !== 'open' && question?.type !== 'paragraph' && (
                     <div className="p-5 rounded-2xl border bg-slate-50 border-slate-200">
                       <div className="flex items-center gap-2 mb-3">
@@ -214,10 +211,15 @@ export default function StudentExamResult() {
           );
         })}
 
+        {/* ✅ رسالة توضيحية ذكية في حال عدم وجود إجابات */}
         {answers.length === 0 && (
-          <div className="text-center py-20 bg-white rounded-3xl border border-slate-100">
-            <BookOpen className="h-16 w-16 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-slate-500">لا توجد إجابات مسجلة لهذا الاختبار</h3>
+          <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
+            <AlertCircle className="h-16 w-16 text-amber-400 mx-auto mb-4" />
+            <h3 className="text-2xl font-black text-slate-800 mb-2">لا توجد إجابات مسجلة لهذا الاختبار</h3>
+            <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">
+              إذا كنت قد قدمت هذا الاختبار وحصلت على النتيجة 0، فهذا يعني أنك قدمته أثناء وجود تحديثات في النظام ولم تحفظ إجاباتك. 
+              <br/> <strong className="text-indigo-600 mt-2 block">يرجى من المعلم حذف هذه المحاولة لكي تعيد الاختبار!</strong>
+            </p>
           </div>
         )}
       </div>
