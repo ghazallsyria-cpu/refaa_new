@@ -1,7 +1,5 @@
 import { z } from 'zod';
 import * as validations from '../lib/validations';
-// هذا هو السطر المهم الذي يحل المشكلة:
-import { Question } from './question'; 
 
 export * from './question';
 export * from '../lib/validations';

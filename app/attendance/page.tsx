@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users } from 'lucide-react';
@@ -262,7 +262,7 @@ export default function AttendancePage() {
               >
                 {sections.map((s, idx) => (
                   <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>
-                 {Array.isArray(s.classes) ? s.classes[0]?.name : (s.classes as any)?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
+                    {s.classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
                   </option>
                 ))}
               </select>
@@ -283,7 +283,7 @@ export default function AttendancePage() {
                 daySchedule.length > 0 ? (
                   daySchedule.map(s => (
                     <option key={s.period} value={s.period}>
-                     الحصة {s.period} ({s.section ? (Array.isArray(s.section.classes) ? s.section.classes[0]?.name : (s.section.classes as any)?.name) : 'غير محدد'} - {s.section?.name || 'غير محدد'})
+                      الحصة {s.period} ({s.section.classes.name} - {s.section.name})
                     </option>
                   ))
                 ) : (

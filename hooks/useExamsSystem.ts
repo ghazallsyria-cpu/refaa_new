@@ -18,13 +18,13 @@ export interface StudentExamResult {
 }
 
 export function useExamsSystem() {
-  const { user, userRole } = useAuth(); // التصحيح: استخدام userRole بدلاً من authRole
+  const { user, authRole } = useAuth();
   const [data, setData] = useState<ExamWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchExams = useCallback(async (): Promise<void> => {
-    if (!user || !userRole) return;
+    if (!user || !authRole) return;
     setLoading(true);
     setError(null);
     try {
@@ -34,7 +34,7 @@ export function useExamsSystem() {
           *,
           subject:subjects(name),
           teacher:teachers(users(full_name)),
-          exam_sections!inner(
+          exam_sections(
             section_id,
             sections(name, classes(name))
           )
@@ -42,11 +42,11 @@ export function useExamsSystem() {
         .order('created_at', { ascending: false });
 
       // If student, we only want published exams for their section
-      if (userRole === 'student') {
+      if (authRole === 'student') {
         const { data: studentProfile } = await supabase
           .from('students')
           .select('section_id')
-          .eq('user_id', user.id)
+          .eq('id', user.id)
           .single();
 
         if (studentProfile?.section_id) {
@@ -59,24 +59,18 @@ export function useExamsSystem() {
           setLoading(false);
           return;
         }
-      } else if (userRole === 'teacher') {
-        // جلب رقم ملف المعلم أولاً
-        const { data: teacherProfile } = await supabase
-          .from('teachers')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
-
-        if (teacherProfile) {
-          const teacherId = teacherProfile.id;
+      } else if (authRole === 'teacher') {
+        const { data: teacherSections } = await supabase
+          .from('teacher_sections')
+          .select('section_id')
+          .eq('teacher_id', user.id);
           
-          // استعلام آمن: البحث بالاختبارات التي يملكها المعلم
-          query = query.eq('teacher_id', teacherId);
+        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+        
+        if (sectionIds.length > 0) {
+          query = query.or(`teacher_id.eq.${user.id},exam_sections.section_id.in.(${sectionIds.join(',')})`);
         } else {
-           // لم يتم العثور على ملف المعلم
-           setData([]);
-           setLoading(false);
-           return;
+          query = query.eq('teacher_id', user.id);
         }
       }
 
@@ -91,7 +85,7 @@ export function useExamsSystem() {
       }));
 
       // Fetch stats for teacher/admin
-      if (['teacher', 'admin', 'management'].includes(userRole || '')) {
+      if (['teacher', 'admin', 'management'].includes(authRole || '')) {
         const examsWithStats = await Promise.all(mappedData.map(async (e) => {
           const [attemptsRes, questionsRes] = await Promise.all([
             supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
@@ -115,28 +109,20 @@ export function useExamsSystem() {
       }
 
       // Fetch submission status for student
-      if (userRole === 'student') {
-        const { data: studentProfile } = await supabase
-          .from('students')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
+      if (authRole === 'student') {
+        const { data: attemptsData } = await supabase
+          .from('exam_attempts')
+          .select('exam_id, score, status')
+          .eq('student_id', user.id);
 
-        if (studentProfile) {
-            const { data: attemptsData } = await supabase
-            .from('exam_attempts')
-            .select('exam_id, score, status')
-            .eq('student_id', studentProfile.id);
-
-            mappedData = mappedData.map(exam => {
-            const attempt = attemptsData?.find(a => a.exam_id === exam.id);
-            return {
-                ...exam,
-                submission_status: attempt ? (attempt.status === 'completed' || attempt.status === 'graded' ? 'submitted' : 'pending') : 'pending',
-                score: attempt?.score
-            };
-            });
-        }
+        mappedData = mappedData.map(exam => {
+          const attempt = attemptsData?.find(a => a.exam_id === exam.id);
+          return {
+            ...exam,
+            submission_status: attempt ? (attempt.status === 'completed' || attempt.status === 'graded' ? 'submitted' : 'pending') : 'pending',
+            score: attempt?.score
+          };
+        });
       }
 
       setData(mappedData);
@@ -147,7 +133,7 @@ export function useExamsSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   useEffect(() => {
     fetchExams();
@@ -531,5 +517,3 @@ export function useExamsSystem() {
 
   return { data, loading, error, refetch: fetchExams, deleteExam, deleteExamWithMedia, fetchExamDetails, saveExam, fetchExamForStudent, submitExam, fetchExamResults, deleteAttempt, fetchStudentExamResult };
 }
-
-

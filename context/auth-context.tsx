@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (studentData && studentData.users) {
-        authEmail = studentData.users?.[0]?.email;
+        authEmail = (studentData.users as { email: string }).email;
       } else {
         // Try to find teacher
         const { data: teacherData } = await supabase
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (teacherData && teacherData.users) {
-          authEmail = teacherData.users?.[0]?.email;
+          authEmail = (teacherData.users as { email: string }).email;
         } else {
           // Try to find parent
           const { data: parentData } = await supabase
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .maybeSingle();
             
           if (parentData && parentData.users) {
-            authEmail = parentData.users?.[0]?.email;
+            authEmail = (parentData.users as { email: string }).email;
           } else {
             // Default fallback
             authEmail = `${civilId}@alrefaa.edu`;
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
       
     if (studentData && studentData.users) {
-      authEmail = studentData.users?.[0]?.email;
+      authEmail = (studentData.users as { email: string }).email;
     } else {
       // Check teachers
       const { data: teacherData } = await supabase
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
         
       if (teacherData && teacherData.users) {
-       authEmail = teacherData.users?.[0]?.email;
+        authEmail = (teacherData.users as { email: string }).email;
       } else {
         // Check parents
         const { data: parentData } = await supabase
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
           
         if (parentData && parentData.users) {
-          authEmail = parentData.users?.[0]?.email;
+          authEmail = (parentData.users as { email: string }).email;
         }
       }
     }

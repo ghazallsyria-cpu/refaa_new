@@ -95,9 +95,9 @@ export function usePerformanceSystem() {
         : 0;
 
       return {
-       student: student as any,
-        examAttempts: attempts as any || [],
-        assignmentSubmissions: submissions as any || [],
+        student,
+        examAttempts: attempts || [],
+        assignmentSubmissions: submissions || [],
         stats: {
           avgExamScore: Math.round(avgExam),
           avgAssignmentScore: Math.round(avgAssignment),

@@ -105,13 +105,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       const type = e.target.value as QuestionType;
                       const updates: Partial<Question> = { type };
                       if ((type === 'multiple_choice' || type === 'checkbox') && !question.options) {
-                        updates.options = [
-  {
-    id: crypto.randomUUID(),
-    content: 'خيار 1',
-    is_correct: false
-  }
-];
+                        updates.options = ['خيار 1'];
                       }
                       updateQuestion(question.id, updates);
                     }}
@@ -137,7 +131,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       <input
                         type="text"
                         className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-indigo-600 focus:ring-0 p-1 text-sm font-medium text-slate-700 transition-all"
-                       value={option.content}
+                        value={option}
                         onChange={(e) => updateOption(question.id, optIndex, e.target.value)}
                       />
                       <button

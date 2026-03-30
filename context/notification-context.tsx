@@ -26,6 +26,7 @@ interface NotificationContextType {
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
   sendNotification: (userId: string, title: string, content: string, type: NotificationType, link?: string) => Promise<void>;
+  showNotification: (type: NotificationType, content: string) => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -169,6 +170,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   };
 
+  const showNotification = async (type: NotificationType, content: string) => {
+    if (!userId) return;
+    const title = type.charAt(0).toUpperCase() + type.slice(1);
+    await sendNotification(userId, title, content, type);
+  };
+
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
@@ -181,6 +188,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         markAllAsRead,
         deleteNotification,
         sendNotification,
+        showNotification,
       }}
     >
       {children}
@@ -190,5 +198,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
 export function useNotifications() {
   const context = useContext(NotificationContext);
+  if (context === undefined) {
+    throw new Error('useNotifications must be used within a NotificationProvider');
+  }
   return context;
 }

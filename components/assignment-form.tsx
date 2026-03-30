@@ -145,15 +145,15 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         type="radio"
                         className="hidden"
                         name={question.id}
-                       value={option.content}
-                       checked={answers[question.id] === option.content}
+                        value={option}
+                        checked={answers[question.id] === option}
                         onChange={() => handleAnswerChange(question.id, option)}
                         disabled={readOnly}
                       />
                       <span className={`text-sm font-bold transition-colors ${
                         answers[question.id] === option ? 'text-indigo-900' : 'text-slate-600'
                       }`}>
-                       {option.content}
+                        {option}
                       </span>
                     </label>
                   ))}
@@ -163,7 +163,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
               {question.type === 'checkbox' && (
                 <div className="space-y-3">
                   {question.options?.map((option, optIndex) => {
-                    const isChecked = (answers[question.id] as string[] || []).includes(option.content);
+                    const isChecked = (answers[question.id] as string[] || []).includes(option);
                     return (
                       <label
                         key={optIndex}
@@ -183,15 +183,15 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         <input
                           type="checkbox"
                           className="hidden"
-                          value={option.content}
+                          value={option}
                           checked={isChecked}
-                          onChange={(e) => handleCheckboxChange(question.id, option.content, e.target.checked)}
+                          onChange={(e) => handleCheckboxChange(question.id, option, e.target.checked)}
                           disabled={readOnly}
                         />
                         <span className={`text-sm font-bold transition-colors ${
                           isChecked ? 'text-indigo-900' : 'text-slate-600'
                         }`}>
-                          {option.content}
+                          {option}
                         </span>
                       </label>
                     );
