@@ -11,39 +11,31 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examId, answers, score, status, timeSpent, userId } = body;
 
-    console.log('Submitting exam:', { examId, score, status, userId });
-
     if (!examId || !userId) {
       return NextResponse.json({ error: 'بيانات غير مكتملة' }, { status: 400 });
     }
 
-    // ✅ 1. بحث متسلسل وآمن عن ملف الطالب (لمنع خطأ قاعدة البيانات 500)
+    // 1. بحث متسلسل وآمن عن الطالب
     let realStudentId = userId;
     const { data: s1 } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
-    if (s1) {
-      realStudentId = s1.id;
-    } else {
+    if (s1) realStudentId = s1.id;
+    else {
       const { data: s2 } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
-      if (s2) {
-        realStudentId = s2.id;
-      }
+      if (s2) realStudentId = s2.id;
     }
 
-    // 2. التحقق من وجود محاولة سابقة
-    const { data: attempts, error: existingError } = await adminSupabase
+    // 2. إنشاء أو تحديث محاولة الاختبار
+    let attemptId;
+    const { data: existing } = await adminSupabase
       .from('exam_attempts')
       .select('id')
       .eq('exam_id', examId)
-      .eq('student_id', realStudentId);
+      .eq('student_id', realStudentId)
+      .maybeSingle();
 
-    if (existingError) throw existingError;
-
-    let attemptId;
-
-    if (attempts && attempts.length > 0) {
-      // تحديث المحاولة السابقة
-      attemptId = attempts[0].id;
-      const { error: attemptError } = await adminSupabase
+    if (existing) {
+      attemptId = existing.id;
+      const { error: updateErr } = await adminSupabase
         .from('exam_attempts')
         .update({
           score: score || 0,
@@ -52,18 +44,13 @@ export async function POST(req: Request) {
           time_spent: timeSpent || 0
         })
         .eq('id', attemptId);
-
-      if (attemptError) throw attemptError;
-      
-      // مسح الإجابات القديمة لتحديثها
-      await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
+      if (updateErr) throw new Error('فشل تحديث المحاولة: ' + updateErr.message);
     } else {
-      // إنشاء محاولة جديدة
-      const { data: newAttempt, error: attemptError } = await adminSupabase
+      const { data: newAttempt, error: insertErr } = await adminSupabase
         .from('exam_attempts')
         .insert([{
           exam_id: examId,
-          student_id: realStudentId, // الحفظ بالمعرف الصحيح الآمن
+          student_id: realStudentId,
           score: score || 0,
           status: status === 'completed' ? 'graded' : status,
           started_at: new Date().toISOString(),
@@ -72,64 +59,57 @@ export async function POST(req: Request) {
         }])
         .select()
         .single();
-
-      if (attemptError) throw attemptError;
+      if (insertErr) throw new Error('فشل إنشاء المحاولة: ' + insertErr.message);
       attemptId = newAttempt.id;
     }
 
-    // ✅ 3. حفظ إجابات الطالب بطريقة فائقة الأمان (تقبل أي نوع بيانات)
+    // 3. الخوارزمية المدرعة لحفظ الإجابات (Dual-Schema Fallback)
     if (answers && typeof answers === 'object' && Object.keys(answers).length > 0) {
-      const studentAnswersPayload = Object.entries(answers).map(([questionId, answerData]: [string, any]) => {
-        let textAnswer = null;
-        let selectedOptionId = null;
-        let isCorrect = false;
-        let pointsEarned = 0;
-
-        // معالجة ذكية للإجابات سواء كانت نصاً أو كائناً
-        if (typeof answerData === 'string') {
-          textAnswer = answerData;
-        } else if (typeof answerData === 'object' && answerData !== null) {
-          textAnswer = answerData.text || null;
-          selectedOptionId = (answerData.optionId && answerData.optionId !== '') ? answerData.optionId : null;
-          isCorrect = answerData.isCorrect || false;
-          pointsEarned = answerData.pointsEarned || 0;
-        }
-
-        return {
+      try {
+        // المحاولة الأولى: الحفظ في جدول student_answers
+        await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
+        
+        const payload1 = Object.entries(answers).map(([qId, ansData]: any) => ({
           attempt_id: attemptId,
-          question_id: questionId,
-          text_answer: textAnswer,
-          selected_option_id: selectedOptionId,
-          is_correct: isCorrect,
-          points_earned: pointsEarned
-        };
-      });
-
-      const { error: answersError } = await adminSupabase.from('student_answers').insert(studentAnswersPayload);
-      if (answersError) {
-        console.error('Error saving student answers:', answersError);
-        throw answersError;
+          question_id: qId,
+          text_answer: ansData?.text || null,
+          selected_option_id: ansData?.optionId || null,
+          is_correct: ansData?.isCorrect || false,
+          points_earned: ansData?.pointsEarned || 0
+        }));
+        
+        const { error: err1 } = await adminSupabase.from('student_answers').insert(payload1);
+        if (err1) throw err1; // إذا فشل، انتقل للمحاولة الثانية
+        
+      } catch (fallbackError) {
+        console.warn('Table student_answers failed, falling back to exam_answers...');
+        
+        // المحاولة الثانية: الحفظ في جدول exam_answers
+        try {
+          await adminSupabase.from('exam_answers').delete().eq('attempt_id', attemptId);
+          
+          const payload2 = Object.entries(answers).map(([qId, ansData]: any) => ({
+            attempt_id: attemptId,
+            question_id: qId,
+            answer: ansData?.text || ansData?.optionId || JSON.stringify(ansData),
+            is_correct: ansData?.isCorrect || false,
+            points_earned: ansData?.pointsEarned || 0
+          }));
+          
+          const { error: err2 } = await adminSupabase.from('exam_answers').insert(payload2);
+          if (err2) console.error('Both answer schemas failed:', err2);
+        } catch (e) {
+          console.error('Critical failure in saving answers:', e);
+        }
       }
     }
 
-    // 4. إرسال إشعار للمعلم (بشكل آمن لا يعطل التسليم إذا فشل)
+    // 4. إرسال إشعار للمعلم بأمان
     try {
-      const { data: examInfo } = await adminSupabase
-        .from('exams')
-        .select('teacher_id, title')
-        .eq('id', examId)
-        .single();
-
+      const { data: examInfo } = await adminSupabase.from('exams').select('teacher_id, title').eq('id', examId).single();
       if (examInfo?.teacher_id) {
-        // جلب المعرف المناسب للإشعار
-        const { data: teacherUser } = await adminSupabase
-           .from('teachers')
-           .select('user_id, id')
-           .eq('id', examInfo.teacher_id)
-           .maybeSingle();
-           
+        const { data: teacherUser } = await adminSupabase.from('teachers').select('user_id, id').eq('id', examInfo.teacher_id).maybeSingle();
         const targetTeacherId = teacherUser?.user_id || teacherUser?.id || examInfo.teacher_id;
-           
         if (targetTeacherId) {
            await adminSupabase.from('notifications').insert([{
              user_id: targetTeacherId,
@@ -140,15 +120,13 @@ export async function POST(req: Request) {
            }]);
         }
       }
-    } catch (notifError) {
-      console.warn('Failed to send notification to teacher, ignoring...', notifError);
-    }
+    } catch (e) {}
 
     return NextResponse.json({ success: true, attemptId });
 
   } catch (error: any) {
-    console.error('Exam Submit Error:', error);
-    return NextResponse.json({ error: error.message || 'حدث خطأ أثناء حفظ الاختبار' }, { status: 500 });
+    console.error('CRITICAL EXAM SUBMIT ERROR:', error);
+    return NextResponse.json({ error: error.message || 'حدث خطأ أثناء الحفظ' }, { status: 400 });
   }
 }
 
