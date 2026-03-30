@@ -11,10 +11,12 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
-import { Teacher, Subject, Section } from '@/types';
 
 export default function AssignmentsPage() {
-  const { user, authRole, isChecking: authLoading } = useAuth();
+  // توحيد الدور ليعمل في كل الحالات (authRole أو userRole)
+  const { user, authRole, userRole, isChecking: authLoading } = useAuth() as any;
+  const currentRole = authRole || userRole;
+  
   const { data: assignments, loading: contentLoading, error: contentError, studentSubmissions, refetch: refresh, fetchAssignmentQuestions, saveAssignment, deleteAssignment } = useAssignmentsSystem();
 
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
@@ -42,10 +44,12 @@ export default function AssignmentsPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const filteredAssignments = assignments.filter(a =>
-    a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    a.subject_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredAssignments = assignments.filter(a => {
+    if(!a) return false;
+    const matchTitle = a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    const matchSubject = a.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    return matchTitle || matchSubject;
+  });
 
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +60,8 @@ export default function AssignmentsPage() {
         title: currentAssignment.title,
         description: currentAssignment.description,
         subject_id: currentAssignment.subject_id,
-        teacher_id: authRole === 'teacher' ? user.id : currentAssignment.teacher_id,
+        // نرسل user.id وسيقوم الـ API بترجمته إلى رقم المعلم الحقيقي
+        teacher_id: currentRole === 'teacher' ? user.id : currentAssignment.teacher_id,
         due_date: currentAssignment.due_date,
         file_url: currentAssignment.file_url,
         status: currentAssignment.status || 'draft'
@@ -72,6 +77,7 @@ export default function AssignmentsPage() {
 
       showNotification('success', currentAssignment.id ? 'تم تحديث الواجب بنجاح' : 'تم إضافة الواجب بنجاح');
       setIsModalOpen(false);
+      if (refresh) refresh();
     } catch (error: any) {
       console.error('Error saving assignment:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حفظ الواجب');
@@ -98,6 +104,7 @@ export default function AssignmentsPage() {
       
       showNotification('success', 'تم حذف الواجب بنجاح');
       setAssignmentToDelete(null);
+      if (refresh) refresh();
     } catch (error: any) {
       console.error('Error deleting assignment:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حذف الواجب');
@@ -141,7 +148,7 @@ export default function AssignmentsPage() {
       title: '',
       description: '',
       subject_id: subjects[0]?.id || '',
-      teacher_id: authRole === 'teacher' ? user?.id || '' : teachers[0]?.id || '',
+      teacher_id: currentRole === 'teacher' ? user?.id || '' : teachers[0]?.id || '',
       due_date: formattedDate,
       section_ids: [],
       file_url: ''
@@ -153,7 +160,7 @@ export default function AssignmentsPage() {
   if (!mounted || authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
@@ -163,7 +170,7 @@ export default function AssignmentsPage() {
   };
 
   return (
-    <div className="space-y-10 max-w-7xl mx-auto pb-24">
+    <div className="space-y-10 max-w-7xl mx-auto pb-24" dir="rtl">
       {/* Notification Toast */}
       {notification && (
         <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-50 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 transition-all animate-in fade-in slide-in-from-top-4 duration-500 ${
@@ -184,7 +191,7 @@ export default function AssignmentsPage() {
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">الواجبات المدرسية</h1>
           <p className="text-lg text-slate-500 font-medium">إدارة الواجبات والمهام المسندة للطلاب</p>
         </div>
-        {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
+        {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
           <button 
             onClick={openAddModal}
             className="inline-flex items-center justify-center gap-3 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 self-start md:self-end"
@@ -244,7 +251,7 @@ export default function AssignmentsPage() {
                       <span className="inline-flex items-center rounded-2xl bg-indigo-50 px-4 py-1.5 text-xs font-black text-indigo-700 uppercase tracking-widest border border-indigo-100 shadow-sm">
                         {assignment.subject_name}
                       </span>
-                      {authRole === 'student' && studentSubmissions[assignment.id] && (
+                      {currentRole === 'student' && studentSubmissions[assignment.id] && (
                         <span className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-50 px-4 py-1.5 text-xs font-black text-emerald-700 uppercase tracking-widest border border-emerald-100 shadow-sm">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           تم التسليم
@@ -256,7 +263,7 @@ export default function AssignmentsPage() {
                           انتهى الوقت
                         </span>
                       )}
-                      {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && assignment.submission_count !== undefined && assignment.submission_count > 0 && (
+                      {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && assignment.submission_count !== undefined && assignment.submission_count > 0 && (
                         <span className={`inline-flex items-center gap-1.5 rounded-2xl px-4 py-1.5 text-xs font-black uppercase tracking-widest border shadow-sm ${
                           assignment.graded_count === assignment.submission_count
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
@@ -271,7 +278,9 @@ export default function AssignmentsPage() {
                         </span>
                       )}
                     </div>
-                    {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
+                    
+                    {/* الإصلاح هنا: السماح للمعلم برؤية أدوات التعديل والحذف مباشرة */}
+                    {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
                       <div className="flex gap-2">
                         <Link 
                            href={`/assignments/${assignment.id}`}
@@ -291,24 +300,20 @@ export default function AssignmentsPage() {
                         >
                           <Share2 className="h-5 w-5" />
                         </button>
-                        {(authRole === 'admin' || authRole === 'management' || assignment.teacher_id === user?.id) && (
-                          <>
-                            <button 
-                              onClick={() => openEditModal(assignment)}
-                              className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
-                              title="تعديل الواجب"
-                            >
-                              <Edit2 className="h-5 w-5" />
-                            </button>
-                            <button 
-                              onClick={() => setAssignmentToDelete(assignment.id)}
-                              className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
-                              title="حذف الواجب"
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
-                          </>
-                        )}
+                        <button 
+                          onClick={() => openEditModal(assignment)}
+                          className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
+                          title="تعديل الواجب"
+                        >
+                          <Edit2 className="h-5 w-5" />
+                        </button>
+                        <button 
+                          onClick={() => setAssignmentToDelete(assignment.id)}
+                          className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
+                          title="حذف الواجب"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -358,13 +363,13 @@ export default function AssignmentsPage() {
                     <Link 
                       href={`/assignments/${assignment.id}`}
                       className={`h-10 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center gap-2 active:scale-95 ${
-                        authRole === 'student' && studentSubmissions[assignment.id]
+                        currentRole === 'student' && studentSubmissions[assignment.id]
                           ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100'
                           : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
                     >
                       <span>
-                        {authRole === 'student' 
+                        {currentRole === 'student' 
                           ? (studentSubmissions[assignment.id] ? 'عرض الإجابة' : 'عرض وتسليم') 
                           : 'التفاصيل'}
                       </span>
@@ -484,7 +489,7 @@ export default function AssignmentsPage() {
                           onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
                         >
                           <option value="">اختر المادة</option>
-                          {subjects.map(s => (
+                          {subjects.map((s: Subject) => (
                             <option key={s.id} value={s.id}>{s.name}</option>
                           ))}
                         </select>
@@ -511,7 +516,7 @@ export default function AssignmentsPage() {
                   <div>
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الشعب المستهدفة <span className="text-red-500">*</span></label>
                     <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto p-4 border border-slate-100 rounded-2xl bg-slate-50/50">
-                      {sections.map(s => (
+                      {sections.map((s: Section) => (
                         <label key={s.id} className="flex items-center gap-3 cursor-pointer group">
                           <input
                             type="checkbox"
@@ -524,13 +529,13 @@ export default function AssignmentsPage() {
                               setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
                             }}
                           />
-                          <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">{s.class?.name} - {s.name}</span>
+                          <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">{(s.class as any)?.name} - {s.name}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {(authRole === 'admin' || authRole === 'management') && (
+                  {(currentRole === 'admin' || currentRole === 'management') && (
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المعلم المسؤول <span className="text-red-500">*</span></label>
                       <div className="relative">
@@ -544,7 +549,7 @@ export default function AssignmentsPage() {
                           onChange={(e) => setCurrentAssignment({...currentAssignment, teacher_id: e.target.value})}
                         >
                           <option value="">اختر المعلم</option>
-                          {teachers.map(t => (
+                          {teachers.map((t: any) => (
                             <option key={t.id} value={t.id}>{t.user?.full_name}</option>
                           ))}
                         </select>
@@ -610,3 +615,4 @@ export default function AssignmentsPage() {
     </div>
   );
 }
+
