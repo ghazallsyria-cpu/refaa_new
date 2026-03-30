@@ -18,13 +18,13 @@ export interface StudentExamResult {
 }
 
 export function useExamsSystem() {
-  const { user, authRole } = useAuth();
+  const { user, userRole } = useAuth(); // التصحيح: استخدام userRole بدلاً من authRole
   const [data, setData] = useState<ExamWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchExams = useCallback(async (): Promise<void> => {
-    if (!user || !authRole) return;
+    if (!user || !userRole) return;
     setLoading(true);
     setError(null);
     try {
@@ -42,11 +42,11 @@ export function useExamsSystem() {
         .order('created_at', { ascending: false });
 
       // If student, we only want published exams for their section
-      if (authRole === 'student') {
+      if (userRole === 'student') {
         const { data: studentProfile } = await supabase
           .from('students')
           .select('section_id')
-          .eq('user_id', user.id) // تم التصحيح: البحث بـ user_id بدلاً من id
+          .eq('user_id', user.id)
           .single();
 
         if (studentProfile?.section_id) {
@@ -59,8 +59,8 @@ export function useExamsSystem() {
           setLoading(false);
           return;
         }
-      } else if (authRole === 'teacher') {
-        // تم التصحيح: جلب رقم ملف المعلم أولاً
+      } else if (userRole === 'teacher') {
+        // جلب رقم ملف المعلم أولاً
         const { data: teacherProfile } = await supabase
           .from('teachers')
           .select('id')
@@ -70,18 +70,8 @@ export function useExamsSystem() {
         if (teacherProfile) {
           const teacherId = teacherProfile.id;
           
-          const { data: teacherSections } = await supabase
-            .from('teacher_sections')
-            .select('section_id')
-            .eq('teacher_id', teacherId);
-            
-          const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-          
-          if (sectionIds.length > 0) {
-            query = query.or(`teacher_id.eq.${teacherId},exam_sections.section_id.in.(${sectionIds.join(',')})`);
-          } else {
-            query = query.eq('teacher_id', teacherId);
-          }
+          // استعلام آمن: البحث بالاختبارات التي يملكها المعلم
+          query = query.eq('teacher_id', teacherId);
         } else {
            // لم يتم العثور على ملف المعلم
            setData([]);
@@ -101,7 +91,7 @@ export function useExamsSystem() {
       }));
 
       // Fetch stats for teacher/admin
-      if (['teacher', 'admin', 'management'].includes(authRole || '')) {
+      if (['teacher', 'admin', 'management'].includes(userRole || '')) {
         const examsWithStats = await Promise.all(mappedData.map(async (e) => {
           const [attemptsRes, questionsRes] = await Promise.all([
             supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
@@ -125,8 +115,7 @@ export function useExamsSystem() {
       }
 
       // Fetch submission status for student
-      if (authRole === 'student') {
-        // جلب رقم ملف الطالب (Student ID) أولاً لجلـب المحاولات
+      if (userRole === 'student') {
         const { data: studentProfile } = await supabase
           .from('students')
           .select('id')
@@ -158,7 +147,7 @@ export function useExamsSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, authRole]);
+  }, [user, userRole]);
 
   useEffect(() => {
     fetchExams();
@@ -542,3 +531,5 @@ export function useExamsSystem() {
 
   return { data, loading, error, refetch: fetchExams, deleteExam, deleteExamWithMedia, fetchExamDetails, saveExam, fetchExamForStudent, submitExam, fetchExamResults, deleteAttempt, fetchStudentExamResult };
 }
+
+
