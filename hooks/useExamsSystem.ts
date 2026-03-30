@@ -17,6 +17,18 @@ export interface StudentExamResult {
   answers: any[];
 }
 
+// ✅ دالة سحرية لإجبار النظام على سحب الصور وعرضها للطلاب
+const mapQuestionsWithMedia = (questionsData: any[]) => {
+  return (questionsData || []).map((q: any) => {
+    const normalized = normalizeQuestion(q);
+    return {
+      ...normalized,
+      mediaUrl: q.media_url || q.mediaUrl || normalized.mediaUrl || null,
+      media_url: q.media_url || q.mediaUrl || normalized.mediaUrl || null
+    };
+  });
+};
+
 export function useExamsSystem() {
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
@@ -138,7 +150,7 @@ export function useExamsSystem() {
       
       const result: any = { 
         exam: { ...examData, section_ids: examSectionsData ? examSectionsData.map((es: any) => es.section_id) : [] }, 
-        questions: (questionsData || []).map(normalizeQuestion) 
+        questions: mapQuestionsWithMedia(questionsData) // ✅ استخدام الدالة السحرية
       };
       return result;
     } catch (err) { throw err; }
@@ -182,7 +194,7 @@ export function useExamsSystem() {
           subject_name: Array.isArray(examData.subject) ? examData.subject[0]?.name : examData.subject?.name,
           teacher_name: Array.isArray(examData.teacher?.users) ? examData.teacher.users[0]?.full_name : examData.teacher?.users?.full_name,
         },
-        questions: (questionsData || []).map(normalizeQuestion)
+        questions: mapQuestionsWithMedia(questionsData) // ✅ استخدام الدالة السحرية
       };
       return result;
     } catch (err) { throw err; }
@@ -247,7 +259,7 @@ export function useExamsSystem() {
       }
 
       const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
-      const { data: qData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId);
+      const { data: qData } = await supabase.from('questions').select('*').eq('exam_id', examId);
       
       let aData: any[] = [];
       if (attemptsData && attemptsData.length > 0) {
@@ -260,7 +272,7 @@ export function useExamsSystem() {
         exam: examData,
         students: studentsData,
         attempts: attemptsData || [],
-        questions: (qData || []).map((q: any) => normalizeQuestion(q)),
+        questions: mapQuestionsWithMedia(qData), // ✅ استخدام الدالة السحرية
         answers: aData || []
       };
       return result;
@@ -292,24 +304,22 @@ export function useExamsSystem() {
       
       let answersData: any[] = [];
       if (attemptData) {
-        // ✅ جلب الإجابات بشكل منفصل لمنع خطأ قاعدة البيانات!
         let { data: rawAnswers } = await supabase.from('student_answers').select('*').eq('attempt_id', attemptData.id);
         
-        // محاولة جلب الإجابات من الجدول الاحتياطي في حال فشل الجدول الأول
         if (!rawAnswers || rawAnswers.length === 0) {
           const { data: fAnswers } = await supabase.from('exam_answers').select('*').eq('attempt_id', attemptData.id);
           if (fAnswers) rawAnswers = fAnswers.map(a => ({ ...a, text_answer: a.answer, selected_option_id: a.answer }));
         }
 
         if (rawAnswers && rawAnswers.length > 0) {
-          // ✅ جلب الأسئلة بشكل منفصل ودمجها برمجياً لضمان ظهور التفاصيل!
           const { data: rawQuestions } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId);
           
           answersData = rawAnswers.map((ans: any) => {
             const matchedQ = rawQuestions?.find((q: any) => q.id === ans.question_id);
             return {
               ...ans,
-              question: matchedQ ? normalizeQuestion(matchedQ) : null
+              // ✅ دمج الصور هنا حتى تظهر في شاشة النتائج
+              question: matchedQ ? { ...normalizeQuestion(matchedQ), mediaUrl: matchedQ.media_url || matchedQ.mediaUrl || null } : null
             };
           });
         }
