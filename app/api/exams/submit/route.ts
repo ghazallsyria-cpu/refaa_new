@@ -6,8 +6,9 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { examId, answers, score, status, userId } = body;
+    const { examId, answers, score, status, timeSpent, userId } = body;
 
+    // 1. البحث عن الطالب بأمان
     let realStudentId = userId;
     const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
     if (st) realStudentId = st.id;
@@ -16,37 +17,50 @@ export async function POST(req: Request) {
       if (st2) realStudentId = st2.id;
     }
 
+    // 2. إنشاء أو تحديث المحاولة (مع الخطة البديلة B لتجاوز عمود time_spent)
     let attemptId;
     const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
 
-    if (existing) {
-      attemptId = existing.id;
-      await adminSupabase.from('exam_attempts').update({
-        score: score || 0,
-        status: status === 'completed' ? 'graded' : 'submitted',
-        completed_at: new Date().toISOString()
-      }).eq('id', attemptId);
-      
-      await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
-      await adminSupabase.from('exam_answers').delete().eq('attempt_id', attemptId);
-    } else {
-      const { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([{
+    const attemptPayload: any = {
         exam_id: examId,
         student_id: realStudentId,
         score: score || 0,
         status: status === 'completed' ? 'graded' : 'submitted',
-        started_at: new Date().toISOString(),
-        completed_at: new Date().toISOString()
-      }]).select('id').single();
+        completed_at: new Date().toISOString(),
+        time_spent: timeSpent || 0
+    };
+
+    if (existing) {
+      attemptId = existing.id;
+      const { error: updErr } = await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
       
-      if (insErr) throw new Error('DB_INSERT_ATTEMPT: ' + insErr.message);
+      if (updErr) {
+          // الخطة البديلة: إذا اعترضت القاعدة على عمود time_spent، نحذفه ونرسل بدونه
+          delete attemptPayload.time_spent;
+          const retry = await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
+          if (retry.error) throw new Error('DB_UPDATE_ATTEMPT: ' + retry.error.message);
+      }
+      
+      await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
+      await adminSupabase.from('exam_answers').delete().eq('attempt_id', attemptId);
+    } else {
+      attemptPayload.started_at = new Date().toISOString();
+      let { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([attemptPayload]).select('id').single();
+      
+      if (insErr) {
+          // الخطة البديلة: إذا اعترضت القاعدة على عمود time_spent، نحذفه ونرسل بدونه
+          delete attemptPayload.time_spent;
+          const retry = await adminSupabase.from('exam_attempts').insert([attemptPayload]).select('id').single();
+          if (retry.error) throw new Error('DB_INSERT_ATTEMPT: ' + retry.error.message);
+          newAtt = retry.data;
+      }
       attemptId = newAtt.id;
     }
 
-    // ✅ نظام إدخال الإجابات الإجباري والآمن
+    // 3. إدخال الإجابات بأقصى درجات الأمان
     if (answers && Object.keys(answers).length > 0) {
       const formattedAnswers = Object.entries(answers).map(([qId, ans]: any) => {
-        let txt = "";
+        let txt = null;
         let optId = null;
         let isCorr = false;
         let pts = 0;
@@ -55,8 +69,8 @@ export async function POST(req: Request) {
           if (ans.length === 36 && ans.includes('-')) optId = ans;
           else txt = ans;
         } else if (typeof ans === 'object' && ans !== null) {
-          txt = ans.text || "";
-          optId = (ans.optionId && ans.optionId.trim() !== '') ? ans.optionId : null;
+          txt = ans.text ? String(ans.text) : null;
+          optId = (ans.optionId && typeof ans.optionId === 'string' && ans.optionId.trim() !== '') ? ans.optionId : null;
           isCorr = ans.isCorrect || false;
           pts = ans.pointsEarned || 0;
         }
@@ -71,11 +85,12 @@ export async function POST(req: Request) {
         };
       });
 
+      // محاولة الحفظ في الجدول الأول
       const { error: ansErr } = await adminSupabase.from('student_answers').insert(formattedAnswers);
       
-      // إذا فشل الجدول الأول، نجبر الجدول الثاني على القبول
+      // إذا فشل الجدول الأول، نحفظ في الجدول الثاني إجبارياً!
       if (ansErr) {
-         console.warn("Table 1 failed, trying Table 2");
+         console.warn("Table student_answers failed, trying exam_answers. Error:", ansErr);
          const fallbackAnswers = formattedAnswers.map(a => ({
              attempt_id: a.attempt_id,
              question_id: a.question_id,
@@ -83,7 +98,9 @@ export async function POST(req: Request) {
              is_correct: a.is_correct,
              points_earned: a.points_earned
          }));
-         await adminSupabase.from('exam_answers').insert(fallbackAnswers);
+         const { error: fallErr } = await adminSupabase.from('exam_answers').insert(fallbackAnswers);
+         // دمج رسائل الخطأ لكي تظهر لنا بالتفصيل إذا فشل كلاهما
+         if (fallErr) throw new Error(`Ans1: ${ansErr.message} | Ans2: ${fallErr.message}`);
       }
     }
 
@@ -91,6 +108,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('Submit API Failed:', error.message);
+    // إعادة الخطأ الحقيقي الدقيق إلى الواجهة
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
