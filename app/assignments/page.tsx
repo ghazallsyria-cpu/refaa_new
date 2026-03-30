@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, User, AlertCircle, Share2, Eye, CheckCircle2, Sparkles, Layout } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, User, AlertCircle, Share2, Eye, CheckCircle2, Sparkles, Layout, Filter } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
@@ -13,7 +13,6 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 
 export default function AssignmentsPage() {
-  // توحيد الدور ليعمل في كل الحالات (authRole أو userRole)
   const { user, authRole, userRole, isChecking: authLoading } = useAuth() as any;
   const currentRole = authRole || userRole;
   
@@ -23,7 +22,10 @@ export default function AssignmentsPage() {
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
   const teachers = formData?.teachers || [];
+  
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // ✅ فلتر الحالة الجديد
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [currentAssignment, setCurrentAssignment] = useState<any>({});
@@ -44,11 +46,13 @@ export default function AssignmentsPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
+  // ✅ تطبيق الفلتر المزدوج (بحث نصي + حالة الواجب)
   const filteredAssignments = assignments.filter(a => {
     if(!a) return false;
     const matchTitle = a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
     const matchSubject = a.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
-    return matchTitle || matchSubject;
+    const matchStatus = statusFilter === 'all' || a.status === statusFilter;
+    return (matchTitle || matchSubject) && matchStatus;
   });
 
   const handleSaveAssignment = async (e: React.FormEvent) => {
@@ -60,20 +64,13 @@ export default function AssignmentsPage() {
         title: currentAssignment.title,
         description: currentAssignment.description,
         subject_id: currentAssignment.subject_id,
-        // نرسل user.id وسيقوم الـ API بترجمته إلى رقم المعلم الحقيقي
         teacher_id: currentRole === 'teacher' ? user.id : currentAssignment.teacher_id,
         due_date: currentAssignment.due_date,
         file_url: currentAssignment.file_url,
         status: currentAssignment.status || 'draft'
       };
 
-      await saveAssignment(
-        payload, 
-        currentAssignment.id || null, 
-        questions, 
-        currentAssignment.section_ids || [],
-        subjects
-      );
+      await saveAssignment(payload, currentAssignment.id || null, questions, currentAssignment.section_ids || [], subjects);
 
       showNotification('success', currentAssignment.id ? 'تم تحديث الواجب بنجاح' : 'تم إضافة الواجب بنجاح');
       setIsModalOpen(false);
@@ -91,22 +88,14 @@ export default function AssignmentsPage() {
     setLoading(true);
     try {
       const assignment = assignments.find(a => a.id === assignmentToDelete);
-      
       if (assignment?.file_url) {
-        try {
-          await deleteFromCloudinary(assignment.file_url, 'raw');
-        } catch (cloudinaryError) {
-          console.error('Error deleting from Cloudinary:', cloudinaryError);
-        }
+        try { await deleteFromCloudinary(assignment.file_url, 'raw'); } catch (e) { console.error(e); }
       }
-
       await deleteAssignment(assignmentToDelete);
-      
       showNotification('success', 'تم حذف الواجب بنجاح');
       setAssignmentToDelete(null);
       if (refresh) refresh();
     } catch (error: any) {
-      console.error('Error deleting assignment:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حذف الواجب');
     } finally {
       setLoading(false);
@@ -115,23 +104,15 @@ export default function AssignmentsPage() {
 
   const openEditModal = async (assignment: any) => {
     setEditingAssignment(assignment);
-    
-    // Format date for datetime-local input
     const dateObj = new Date(assignment.due_date);
-    const formattedDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000))
-      .toISOString()
-      .slice(0, 16);
-
+    const formattedDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
     setCurrentAssignment({
       ...assignment,
       due_date: formattedDate,
       section_ids: assignment.assignment_sections?.map((as: any) => as.section_id) || []
     });
-
-    // Fetch questions using hook
     const qData = await fetchAssignmentQuestions(assignment.id);
     setQuestions(qData);
-
     setIsModalOpen(true);
   };
 
@@ -140,10 +121,7 @@ export default function AssignmentsPage() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(8, 0, 0, 0);
-    const formattedDate = new Date(tomorrow.getTime() - (tomorrow.getTimezoneOffset() * 60000))
-      .toISOString()
-      .slice(0, 16);
-
+    const formattedDate = new Date(tomorrow.getTime() - (tomorrow.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
     setCurrentAssignment({
       title: '',
       description: '',
@@ -151,7 +129,8 @@ export default function AssignmentsPage() {
       teacher_id: currentRole === 'teacher' ? user?.id || '' : teachers[0]?.id || '',
       due_date: formattedDate,
       section_ids: [],
-      file_url: ''
+      file_url: '',
+      status: 'draft' // الافتراضي مسودة
     });
     setQuestions([]);
     setIsModalOpen(true);
@@ -165,13 +144,10 @@ export default function AssignmentsPage() {
     );
   }
 
-  const isOverdue = (dueDateStr: string) => {
-    return new Date(dueDateStr) < new Date();
-  };
+  const isOverdue = (dueDateStr: string) => new Date(dueDateStr) < new Date();
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto pb-24" dir="rtl">
-      {/* Notification Toast */}
       {notification && (
         <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-50 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 transition-all animate-in fade-in slide-in-from-top-4 duration-500 ${
           notification.type === 'success' ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-red-500 text-white shadow-red-100'
@@ -203,17 +179,37 @@ export default function AssignmentsPage() {
       </div>
 
       <div className="glass-card p-6 rounded-4xl shadow-2xl shadow-slate-200/50 border border-white/60">
-        <div className="relative max-w-2xl group">
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
-            <Search className="h-5 w-5" aria-hidden="true" />
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="relative flex-1 group">
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+              <Search className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <input
+              type="text"
+              className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
+              placeholder="البحث بعنوان الواجب أو المادة..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-          <input
-            type="text"
-            className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
-            placeholder="البحث بعنوان الواجب أو المادة..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          
+          {/* ✅ فلتر الحالة للمعلم والمدير */}
+          {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
+            <div className="relative md:w-64 group">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+                <Filter className="h-5 w-5" />
+              </div>
+              <select
+                className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">جميع الواجبات</option>
+                <option value="published">منشور</option>
+                <option value="draft">مسودة</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -228,53 +224,47 @@ export default function AssignmentsPage() {
             <FileText className="h-12 w-12 text-slate-300" />
           </div>
           <h3 className="text-2xl font-black text-slate-900 tracking-tight">لا توجد واجبات مسجلة</h3>
-          <p className="text-slate-500 mt-2 font-medium">قم بإضافة واجبات جديدة للطلاب للبدء.</p>
+          <p className="text-slate-500 mt-2 font-medium">
+             {statusFilter === 'draft' ? 'لا يوجد مسودات مسجلة حالياً.' : 'قم بإضافة واجبات جديدة للطلاب للبدء.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredAssignments.map((assignment) => {
             const overdue = isOverdue(assignment.due_date!);
             const dueDateObj = new Date(assignment.due_date!);
-            const isNew = new Date().getTime() - new Date(assignment.created_at).getTime() < 24 * 60 * 60 * 1000;
             
             return (
               <div key={assignment.id} className="group glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
                 <div className="p-8 flex-1">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex flex-wrap gap-2">
-                      {isNew && (
-                        <span className="inline-flex items-center gap-1.5 rounded-2xl bg-amber-50 px-4 py-1.5 text-xs font-black text-amber-700 uppercase tracking-widest border border-amber-100 shadow-sm">
-                          <Sparkles className="h-3.5 w-3.5" />
-                          جديد
-                        </span>
-                      )}
                       <span className="inline-flex items-center rounded-2xl bg-indigo-50 px-4 py-1.5 text-xs font-black text-indigo-700 uppercase tracking-widest border border-indigo-100 shadow-sm">
                         {assignment.subject_name}
                       </span>
+                      
+                      {/* ✅ عرض حالة الواجب كشريط ملون */}
+                      {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
+                         <span className={`inline-flex items-center gap-1.5 rounded-2xl px-4 py-1.5 text-xs font-black uppercase tracking-widest border shadow-sm ${
+                           assignment.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                           assignment.status === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                           'bg-slate-50 text-slate-700 border-slate-100'
+                         }`}>
+                           {assignment.status === 'published' ? 'منشور' :
+                            assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
+                         </span>
+                      )}
+
                       {currentRole === 'student' && studentSubmissions[assignment.id] && (
                         <span className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-50 px-4 py-1.5 text-xs font-black text-emerald-700 uppercase tracking-widest border border-emerald-100 shadow-sm">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           تم التسليم
                         </span>
                       )}
-                      {overdue && (
+                      {overdue && assignment.status === 'published' && (
                         <span className="inline-flex items-center gap-1.5 rounded-2xl bg-red-50 px-4 py-1.5 text-xs font-black text-red-700 uppercase tracking-widest border border-red-100 shadow-sm">
                           <AlertCircle className="h-3.5 w-3.5" />
                           انتهى الوقت
-                        </span>
-                      )}
-                      {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && assignment.submission_count !== undefined && assignment.submission_count > 0 && (
-                        <span className={`inline-flex items-center gap-1.5 rounded-2xl px-4 py-1.5 text-xs font-black uppercase tracking-widest border shadow-sm ${
-                          assignment.graded_count === assignment.submission_count
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            : 'bg-amber-50 text-amber-700 border-amber-100'
-                        }`}>
-                          {assignment.graded_count === assignment.submission_count ? (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          ) : (
-                            <Clock className="h-3.5 w-3.5" />
-                          )}
-                          {assignment.graded_count === assignment.submission_count ? 'مكتمل التقييم' : `تم تقييم ${assignment.graded_count}/${assignment.submission_count}`}
                         </span>
                       )}
                     </div>
@@ -288,17 +278,6 @@ export default function AssignmentsPage() {
                         >
                           <Eye className="h-5 w-5" />
                         </Link>
-                        <button 
-                          onClick={() => {
-                            const url = `${window.location.origin}/assignments/${assignment.id}`;
-                            navigator.clipboard.writeText(url);
-                            showNotification('success', 'تم نسخ رابط الواجب');
-                          }}
-                          className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
-                          title="نسخ الرابط"
-                        >
-                          <Share2 className="h-5 w-5" />
-                        </button>
                         <button 
                           onClick={() => openEditModal(assignment)}
                           className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
@@ -332,15 +311,11 @@ export default function AssignmentsPage() {
                         {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join(', ') || 'لا يوجد فصول'}
                       </span>
                     </div>
-                    <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
-                      <User className="h-5 w-5 text-emerald-500" />
-                      <span>أ. {assignment.teacher_name}</span>
-                    </div>
                   </div>
                 </div>
                 
-                <div className={`px-8 py-4 border-t flex items-center justify-between ${overdue ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
-                  <div className={`flex items-center gap-2 text-sm font-black ${overdue ? 'text-red-600' : 'text-slate-700'}`}>
+                <div className={`px-8 py-4 border-t flex items-center justify-between ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                  <div className={`flex items-center gap-2 text-sm font-black ${overdue && assignment.status === 'published' ? 'text-red-600' : 'text-slate-700'}`}>
                     <Clock className="h-5 w-5" />
                     <span dir="ltr">
                       {format(dueDateObj, 'yyyy/MM/dd HH:mm')}
@@ -392,7 +367,7 @@ export default function AssignmentsPage() {
             <Dialog.Title className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
               تأكيد الحذف
             </Dialog.Title>
-            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذفه نهائياً من النظام.</p>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟</p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <Dialog.Close asChild>
                 <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
@@ -402,7 +377,7 @@ export default function AssignmentsPage() {
               <button
                 onClick={handleDeleteAssignment}
                 disabled={loading}
-                className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl shadow-red-100 hover:bg-red-700 hover:shadow-red-200 transition-all active:scale-95 disabled:opacity-50"
+                className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl shadow-red-100 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
               >
                 {loading ? 'جاري الحذف...' : 'تأكيد الحذف'}
               </button>
@@ -439,17 +414,16 @@ export default function AssignmentsPage() {
                   <div className="space-y-6">
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">حالة الواجب <span className="text-red-500">*</span></label>
-                    <select 
-                      required
-                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
-                      value={currentAssignment.status || 'draft'}
-                      onChange={(e) => setCurrentAssignment({...currentAssignment, status: e.target.value})}
-                    >
-                      <option value="draft">مسودة</option>
-                      <option value="published">منشور</option>
-                      <option value="archived">مؤرشف</option>
-                    </select>
-                  </div>
+                      <select 
+                        required
+                        className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
+                        value={currentAssignment.status || 'draft'}
+                        onChange={(e) => setCurrentAssignment({...currentAssignment, status: e.target.value})}
+                      >
+                        <option value="draft">مسودة</option>
+                        <option value="published">منشور</option>
+                      </select>
+                    </div>
                   
                   <div>
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">عنوان الواجب <span className="text-red-500">*</span></label>
@@ -457,7 +431,7 @@ export default function AssignmentsPage() {
                       type="text" 
                       required
                       placeholder="مثال: حل تمارين الفصل الأول" 
-                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
+                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
                       value={currentAssignment.title || ''}
                       onChange={(e) => setCurrentAssignment({...currentAssignment, title: e.target.value})}
                     />
@@ -468,7 +442,7 @@ export default function AssignmentsPage() {
                     <textarea 
                       rows={4}
                       placeholder="اكتب تفاصيل الواجب هنا..." 
-                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none"
+                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none"
                       value={currentAssignment.description || ''}
                       onChange={(e) => setCurrentAssignment({...currentAssignment, description: e.target.value})}
                     />
@@ -478,9 +452,6 @@ export default function AssignmentsPage() {
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المادة <span className="text-red-500">*</span></label>
                       <div className="relative">
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">
-                          <BookOpen className="h-5 w-5" />
-                        </div>
                         <select 
                           required
                           className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
@@ -488,7 +459,6 @@ export default function AssignmentsPage() {
                           onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
                         >
                           <option value="">اختر المادة</option>
-                          {/* ✅ الإصلاح هنا: إزالة نوع Subject من الماب */}
                           {subjects.map((s: any) => (
                             <option key={s.id} value={s.id}>{s.name}</option>
                           ))}
@@ -497,19 +467,14 @@ export default function AssignmentsPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">
-                          <Clock className="h-5 w-5" />
-                        </div>
-                        <input 
-                          type="datetime-local" 
-                          required
-                          className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
-                          dir="ltr"
-                          value={currentAssignment.due_date || ''}
-                          onChange={(e) => setCurrentAssignment({...currentAssignment, due_date: e.target.value})}
-                        />
-                      </div>
+                      <input 
+                        type="datetime-local" 
+                        required
+                        className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
+                        dir="ltr"
+                        value={currentAssignment.due_date || ''}
+                        onChange={(e) => setCurrentAssignment({...currentAssignment, due_date: e.target.value})}
+                      />
                     </div>
                   </div>
 
@@ -529,53 +494,25 @@ export default function AssignmentsPage() {
                               setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
                             }}
                           />
-                          <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">{(s.class as any)?.name} - {s.name}</span>
+                          <span className="text-sm font-bold text-slate-600">{(s.class as any)?.name} - {s.name}</span>
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  {(currentRole === 'admin' || currentRole === 'management') && (
-                    <div>
-                      <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المعلم المسؤول <span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">
-                          <User className="h-5 w-5" />
-                        </div>
-                        <select 
-                          required
-                          className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
-                          value={currentAssignment.teacher_id || ''}
-                          onChange={(e) => setCurrentAssignment({...currentAssignment, teacher_id: e.target.value})}
-                        >
-                          <option value="">اختر المعلم</option>
-                          {teachers.map((t: any) => (
-                            <option key={t.id} value={t.id}>{t.user?.full_name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
                   <div>
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">رابط الملف المرفق (اختياري)</label>
-                    <div className="relative group">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
-                        <LinkIcon className="h-5 w-5" />
-                      </div>
-                      <input
-                        type="url"
-                        className="block w-full rounded-2xl border-0 py-4 pl-12 pr-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
-                        dir="ltr"
-                        placeholder="https://..."
-                        value={currentAssignment.file_url || ''}
-                        onChange={(e) => setCurrentAssignment({...currentAssignment, file_url: e.target.value})}
-                      />
-                    </div>
+                    <input
+                      type="url"
+                      className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
+                      dir="ltr"
+                      placeholder="https://..."
+                      value={currentAssignment.file_url || ''}
+                      onChange={(e) => setCurrentAssignment({...currentAssignment, file_url: e.target.value})}
+                    />
                   </div>
                 </div>
                 </div>
-                {/* End of Grid */}
 
                 <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
                   <h4 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
@@ -598,14 +535,9 @@ export default function AssignmentsPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                  className="rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      جاري الحفظ...
-                    </>
-                  ) : 'حفظ الواجب'}
+                  {isSubmitting ? 'جاري الحفظ...' : 'حفظ الواجب'}
                 </button>
               </div>
             </form>
