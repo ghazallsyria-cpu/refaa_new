@@ -18,17 +18,20 @@ export interface StudentExamResult {
 }
 
 export function useExamsSystem() {
-  const { user, authRole } = useAuth();
+  // ✅ توحيد الدور لتفادي الانهيار
+  const { user, authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
+  
   const [data, setData] = useState<ExamWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchExams = useCallback(async (): Promise<void> => {
-    if (!user || !authRole) return;
+    if (!user || !currentRole) return;
     setLoading(true);
     setError(null);
     try {
-      const selectQuery = authRole === 'student' 
+      const selectQuery = currentRole === 'student' 
         ? `
           *,
           subject:subjects(name),
@@ -53,15 +56,18 @@ export function useExamsSystem() {
         .select(selectQuery)
         .order('created_at', { ascending: false });
 
+      let currentStudentProfileId = null;
+
       // If student, we only want published exams for their section
-      if (authRole === 'student') {
+      if (currentRole === 'student') {
         const { data: studentProfile } = await supabase
           .from('students')
-          .select('section_id')
-          .eq('id', user.id)
+          .select('id, section_id')
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`) // ✅ بحث آمن
           .single();
 
         if (studentProfile?.section_id) {
+          currentStudentProfileId = studentProfile.id;
           query = query
             .eq('exam_sections.section_id', studentProfile.section_id)
             .eq('status', 'published');
@@ -70,13 +76,13 @@ export function useExamsSystem() {
           setLoading(false);
           return;
         }
-      } else if (authRole === 'teacher') {
+      } else if (currentRole === 'teacher') {
         console.log('Fetching exams for teacher:', user.id);
         
         let { data: teacherProfile, error: profileError } = await supabase
           .from('teachers')
           .select('id')
-          .eq('id', user.id)
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`) // ✅ بحث آمن
           .single();
           
         if ((profileError || !teacherProfile) && user.user_metadata?.role === 'teacher') {
@@ -84,7 +90,7 @@ export function useExamsSystem() {
           const { data: newTeacher, error: createError } = await supabase
             .from('teachers')
             .insert({
-              id: user.id,
+              user_id: user.id, // استخدام user_id للمعلم الجديد
               national_id: 'TEMP_' + user.id.substring(0, 8),
               specialization: 'غير محدد'
             })
@@ -98,7 +104,6 @@ export function useExamsSystem() {
         }
 
         if (teacherProfile) {
-          // ✅ الإصلاح السحري هنا: نجلب الاختبارات التي تخص هذا المعلم مباشرة (بدون استعلامات OR المكسورة)
           query = query.eq('teacher_id', teacherProfile.id);
         } else {
           console.error('Teacher profile not found for user:', user.id, profileError);
@@ -120,7 +125,7 @@ export function useExamsSystem() {
       }));
 
       // Fetch stats for teacher/admin
-      if (['teacher', 'admin', 'management'].includes(authRole || '')) {
+      if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const examsWithStats = await Promise.all(mappedData.map(async (e) => {
           const [attemptsRes, questionsRes] = await Promise.all([
             supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
@@ -144,11 +149,12 @@ export function useExamsSystem() {
       }
 
       // Fetch submission status for student
-      if (authRole === 'student') {
+      if (currentRole === 'student' && currentStudentProfileId) {
+        // ✅ جلب محاولات الطالب باستخدام رقمه الحقيقي
         const { data: attemptsData } = await supabase
           .from('exam_attempts')
           .select('exam_id, score, status')
-          .eq('student_id', user.id);
+          .eq('student_id', currentStudentProfileId);
 
         mappedData = mappedData.map(exam => {
           const attempt = attemptsData?.find(a => a.exam_id === exam.id);
@@ -167,7 +173,7 @@ export function useExamsSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, authRole]);
+  }, [user, currentRole]);
 
   useEffect(() => {
     fetchExams();
@@ -203,7 +209,11 @@ export function useExamsSystem() {
         body: JSON.stringify({ examData, questions, isNew, userId: user.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to save exam');
+      if (!response.ok) {
+        const error = new Error(result.error || 'Failed to save exam');
+        (error as any).details = result.details;
+        throw error;
+      }
       await fetchExams();
       return result.examId;
     } catch (err) {
@@ -215,7 +225,12 @@ export function useExamsSystem() {
   const fetchExamForStudent = useCallback(async (examId: string): Promise<ExamForStudent> => {
     if (!user) throw new Error('User not authenticated');
     try {
-      const { data: studentProfile } = await supabase.from('students').select('section_id').eq('id', user.id).single();
+      const { data: studentProfile } = await supabase
+        .from('students')
+        .select('section_id')
+        .or(`id.eq.${user.id},user_id.eq.${user.id}`) // ✅ بحث آمن
+        .single();
+        
       if (!studentProfile) throw new Error('Student profile not found');
 
       const { data: examSection, error: sectionError } = await supabase.from('exam_sections').select('id').eq('exam_id', examId).eq('section_id', studentProfile.section_id).maybeSingle();
@@ -244,7 +259,8 @@ export function useExamsSystem() {
   const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
     try {
-      const response = await fetch('/api/exams/submit-exam', {
+      // ✅ تم استخدام الرابط الجديد الآمن
+      const response = await fetch('/api/exams/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ examId, answers, score, status, timeSpent, userId: user.id }),
@@ -378,10 +394,15 @@ export function useExamsSystem() {
       const { data: examData, error: examError } = await supabase.from('exams').select('*').eq('id', examId).single();
       if (examError) throw examError;
 
-      const { data: studentData, error: studentError } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).single();
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select('*, users(full_name)')
+        .or(`id.eq.${studentId},user_id.eq.${studentId}`) // ✅ بحث آمن
+        .single();
+        
       if (studentError) throw studentError;
 
-      const { data: attemptData, error: attemptError } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentId).order('created_at', { ascending: false }).limit(1).single();
+      const { data: attemptData, error: attemptError } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentData.id).order('created_at', { ascending: false }).limit(1).single();
       if (attemptError && attemptError.code !== 'PGRST116') throw attemptError;
 
       let answersData: any[] = [];
