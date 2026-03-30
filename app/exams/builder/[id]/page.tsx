@@ -240,7 +240,9 @@ export default function QuizBuilder() {
     try {
       let finalTeacherId = exam.teacher_id;
 
-      if (!finalTeacherId && userRole === 'admin') {
+      if (userRole === 'teacher') {
+        finalTeacherId = formData?.teachers?.[0]?.id || exam.teacher_id;
+      } else if (!finalTeacherId && (userRole === 'admin' || userRole === 'management')) {
         if (teachers.length > 0) {
           finalTeacherId = teachers[0].id;
         } else {
@@ -250,9 +252,9 @@ export default function QuizBuilder() {
 
       const examPayload = {
         ...exam,
-        teacher_id: userRole === 'teacher' ? (formData?.teachers?.[0]?.id || exam.teacher_id) : exam.teacher_id,
-        max_score: Number(exam.max_score) || 100,
-        total_marks: Number(exam.max_score) || 100
+        teacher_id: finalTeacherId,
+        max_score: maxScore,
+        total_marks: maxScore
       };
 
       await saveExam(examPayload, questions, isNew);

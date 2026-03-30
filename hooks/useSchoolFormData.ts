@@ -14,7 +14,7 @@ export function useSchoolFormData() {
       if (authRole === 'admin' || authRole === 'management') {
         const [subjectsRes, sectionsRes, teachersRes] = await Promise.all([
           supabase.from('subjects').select('*').order('name'),
-          supabase.from('sections').select('*, classes:classes(name)').order('name'),
+          supabase.from('sections').select('*, classes(name)').order('name'),
           supabase.from('teachers').select('id, user:users(full_name)')
         ]);
         
@@ -34,14 +34,14 @@ export function useSchoolFormData() {
         const { data: teacherProfile } = await supabase
           .from('teachers')
           .select('id')
-          .eq('user_id', user.id)
+          .eq('id', user.id)
           .single();
 
         if (!teacherProfile) return { subjects: [], sections: [], teachers: [] };
 
         const [subjectsRes, sectionsRes, teacherSectionsRes, schedulesRes] = await Promise.all([
           supabase.from('subjects').select('*').order('name'),
-          supabase.from('sections').select('*, classes:classes(name)').order('name'),
+          supabase.from('sections').select('*, classes(name)').order('name'),
           supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherProfile.id),
           supabase.from('schedules').select('subject_id').eq('teacher_id', teacherProfile.id)
         ]);

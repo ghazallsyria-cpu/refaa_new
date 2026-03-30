@@ -16,13 +16,33 @@ export async function POST(req: Request) {
 
     const updateData: any = {
       updated_by: userId,
-      updated_at: new Date().toISOString(),
-      ...settings
+      updated_at: new Date().toISOString()
     };
 
-    // Convert dates to ISO if they exist
-    if (settings.open_date) updateData.open_date = new Date(settings.open_date).toISOString();
-    if (settings.close_date) updateData.close_date = new Date(settings.close_date).toISOString();
+    // Only include fields that are present in settings
+    const fields = [
+      'is_open', 'message', 'school_name', 'academic_year', 
+      'semester', 'address', 'phone', 'email'
+    ];
+
+    fields.forEach(field => {
+      if (settings[field] !== undefined) {
+        updateData[field] = settings[field];
+      }
+    });
+
+    // Convert dates to ISO if they exist, or null if empty string
+    if (settings.open_date !== undefined) {
+      updateData.open_date = settings.open_date && settings.open_date !== "" 
+        ? new Date(settings.open_date).toISOString() 
+        : null;
+    }
+
+    if (settings.close_date !== undefined) {
+      updateData.close_date = settings.close_date && settings.close_date !== "" 
+        ? new Date(settings.close_date).toISOString() 
+        : null;
+    }
 
     if (settings.id) {
       const { error } = await adminSupabase
