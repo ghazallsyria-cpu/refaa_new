@@ -9,7 +9,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
-    // 1. تحديد المعلم بقوة (استخدام أي معرف متاح لمنع ضياع الاختبار)
     let realTeacherId = userId;
     const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
     if (tProfile) {
@@ -19,21 +18,17 @@ export async function POST(req: Request) {
         if (tProfile2) realTeacherId = tProfile2.id;
     }
 
-    // تجهيز بيانات الاختبار
     const rawPayload = {
       ...examData,
       teacher_id: realTeacherId, 
     };
 
-    // ✅ الإصلاح الجذري: استخراج الفصول ثم حذفها من بيانات الاختبار حتى لا تنهار قاعدة البيانات!
     const savedSectionIds = rawPayload.section_ids || [];
     delete rawPayload.section_ids;
 
     const payload = normalizePayload(rawPayload);
-
     let finalExamId = payload.id;
 
-    // 2. الحفظ المباشر في جدول الاختبارات
     if (isNew || !finalExamId) {
       const { data: newEx, error: insertErr } = await adminSupabase.from('exams').insert([payload]).select().single();
       if (insertErr) throw new Error('DB_INSERT_EXAM: ' + insertErr.message);
@@ -41,20 +36,15 @@ export async function POST(req: Request) {
     } else {
       const { error: updateErr } = await adminSupabase.from('exams').update(payload).eq('id', finalExamId);
       if (updateErr) throw new Error('DB_UPDATE_EXAM: ' + updateErr.message);
-      
-      // تنظيف الأسئلة القديمة للتحديث
       await adminSupabase.from('questions').delete().eq('exam_id', finalExamId);
     }
 
-    // 3. حفظ الفصول في الجدول المخصص لها (exam_sections)
     if (savedSectionIds && savedSectionIds.length > 0) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
       const sections = savedSectionIds.map((sId: string) => ({ exam_id: finalExamId, section_id: sId }));
-      const { error: sectionsErr } = await adminSupabase.from('exam_sections').insert(sections);
-      if (sectionsErr) throw new Error('DB_INSERT_SECTIONS: ' + sectionsErr.message);
+      await adminSupabase.from('exam_sections').insert(sections);
     }
 
-    // 4. حفظ الأسئلة
     if (questions && questions.length > 0) {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
@@ -62,6 +52,7 @@ export async function POST(req: Request) {
           exam_id: finalExamId,
           type: q.type || 'open',
           content: q.content || '',
+          media_url: q.mediaUrl || q.media_url || null, // ✅ تمت إضافة الصور هنا لكي لا تختفي!
           points: q.points || 1,
           order_index: i
         }]).select().single();
