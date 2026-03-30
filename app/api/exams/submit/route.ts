@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { SubmitExamRequestSchema } from '@/lib/validations';
-import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -10,93 +8,131 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const validatedData = await validateRequest(req, SubmitExamRequestSchema);
-    const { attemptId, answers } = validatedData;
+    const body = await req.json();
+    const { examId, answers, score, status, timeSpent, userId } = body;
 
-    // 1. Get the attempt and exam details
-    const { data: attempt, error: attemptError } = await adminSupabase
-      .from('exam_attempts')
-      .select(`
-        *,
-        exam:exams (
-          id,
-          title,
-          questions (
-            id,
-            type,
-            correct_answer,
-            points
-          )
-        )
-      `)
-      .eq('id', attemptId)
+    console.log('Submitting exam:', { examId, score, status, userId });
+
+    if (!examId || !userId) {
+      return NextResponse.json({ error: 'بيانات غير مكتملة' }, { status: 400 });
+    }
+
+    // 1. البحث عن المعرف الحقيقي للطالب (تجنباً لرفض قاعدة البيانات)
+    const { data: studentProfile, error: studentError } = await adminSupabase
+      .from('students')
+      .select('id')
+      .eq('user_id', userId)
       .single();
 
-    if (attemptError || !attempt) {
-      throw new Error('Attempt not found');
+    if (studentError || !studentProfile) {
+      console.error('Student profile not found for user_id:', userId);
+      return NextResponse.json({ error: 'لم يتم العثور على ملف الطالب في قاعدة البيانات' }, { status: 400 });
     }
 
-    const typedAttempt = attempt as any; // Supabase join types are complex, casting to any for now but logic is safe
+    const realStudentId = studentProfile.id;
 
-    if (typedAttempt.status === 'completed' || typedAttempt.status === 'graded') {
-      return NextResponse.json({ error: 'Exam already submitted' }, { status: 400 });
-    }
-
-    const questions = typedAttempt.exam.questions;
-    let totalPoints = 0;
-    let earnedPoints = 0;
-
-    // 2. Grade the answers
-    const gradedAnswers = questions.map((q: any) => {
-      const studentAnswer = answers[q.id];
-      const isCorrect = q.type === 'multiple_choice' 
-        ? studentAnswer === q.correct_answer 
-        : false; // Open questions need manual grading
-
-      totalPoints += q.points || 0;
-      if (isCorrect) {
-        earnedPoints += q.points || 0;
-      }
-
-      return {
-        attempt_id: attemptId,
-        question_id: q.id,
-        answer: studentAnswer,
-        is_correct: isCorrect,
-        points_earned: isCorrect ? q.points : 0
-      };
-    });
-
-    // 3. Save graded answers
-    const { error: answersError } = await adminSupabase
-      .from('exam_answers')
-      .upsert(gradedAnswers);
-
-    if (answersError) throw answersError;
-
-    // 4. Calculate final score
-    const finalScore = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
-
-    // 5. Update attempt status
-    const isAutoGraded = !questions.some((q: any) => q.type === 'open' || q.type === 'paragraph');
-    const { error: updateError } = await adminSupabase
+    // 2. التحقق من وجود محاولة سابقة
+    const { data: attempts, error: existingError } = await adminSupabase
       .from('exam_attempts')
-      .update({
-        status: isAutoGraded ? 'graded' : 'submitted',
-        score: finalScore,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', attemptId);
+      .select('id')
+      .eq('exam_id', examId)
+      .eq('student_id', realStudentId);
 
-    if (updateError) throw updateError;
+    if (existingError) throw existingError;
 
-    return NextResponse.json({ 
-      success: true, 
-      score: finalScore,
-      status: isAutoGraded ? 'graded' : 'submitted'
-    });
+    let attemptId;
 
-  } catch (error: unknown) {
-    return handleApiError(error, 'Submit Exam');
+    if (attempts && attempts.length > 0) {
+      // تحديث المحاولة السابقة
+      attemptId = attempts[0].id;
+      const { error: attemptError } = await adminSupabase
+        .from('exam_attempts')
+        .update({
+          score,
+          status: status === 'completed' ? 'graded' : status,
+          completed_at: new Date().toISOString(),
+          time_spent: timeSpent
+        })
+        .eq('id', attemptId);
+
+      if (attemptError) throw attemptError;
+      
+      // مسح الإجابات القديمة لتحديثها
+      await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
+    } else {
+      // إنشاء محاولة جديدة
+      const { data: newAttempt, error: attemptError } = await adminSupabase
+        .from('exam_attempts')
+        .insert([{
+          exam_id: examId,
+          student_id: realStudentId, // الحفظ بالمعرف الصحيح
+          score,
+          status: status === 'completed' ? 'graded' : status,
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          time_spent: timeSpent
+        }])
+        .select()
+        .single();
+
+      if (attemptError) throw attemptError;
+      attemptId = newAttempt.id;
+    }
+
+    // 3. حفظ إجابات الطالب
+    if (answers && Object.keys(answers).length > 0) {
+      const studentAnswersPayload = Object.entries(answers).map(([questionId, answerData]: [string, any]) => ({
+        attempt_id: attemptId,
+        question_id: questionId,
+        text_answer: answerData.text || null,
+        selected_option_id: (answerData.optionId && answerData.optionId !== '') ? answerData.optionId : null,
+        is_correct: answerData.isCorrect || false,
+        points_earned: answerData.pointsEarned || 0
+      }));
+
+      const { error: answersError } = await adminSupabase.from('student_answers').insert(studentAnswersPayload);
+      if (answersError) {
+        console.error('Error saving student answers:', answersError);
+        throw answersError;
+      }
+    }
+
+    // 4. إرسال إشعار للمعلم (بشكل آمن لا يعطل التسليم إذا فشل)
+    try {
+      const { data: examInfo } = await adminSupabase
+        .from('exams')
+        .select('teacher_id, title')
+        .eq('id', examId)
+        .single();
+
+      if (examInfo?.teacher_id) {
+        // جلب معرف الدخول الخاص بالمعلم لكي يصله الإشعار
+        const { data: teacherUser } = await adminSupabase
+           .from('teachers')
+           .select('user_id')
+           .eq('id', examInfo.teacher_id)
+           .single();
+           
+        if (teacherUser?.user_id) {
+           await adminSupabase.from('notifications').insert([{
+             user_id: teacherUser.user_id,
+             title: 'تسليم اختبار جديد',
+             content: `قام طالب بتسليم اختبار: ${examInfo.title}`,
+             type: 'exam',
+             link: `/exams/results/${examId}`
+           }]);
+        }
+      }
+    } catch (notifError) {
+      console.warn('Failed to send notification to teacher, ignoring...', notifError);
+    }
+
+    return NextResponse.json({ success: true, attemptId });
+
+  } catch (error: any) {
+    console.error('Exam Submit Error:', error);
+    return NextResponse.json({ error: error.message || 'حدث خطأ أثناء حفظ الاختبار' }, { status: 500 });
   }
 }
+
+
