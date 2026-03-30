@@ -7,7 +7,7 @@ import {
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer
@@ -17,6 +17,18 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
+
+// دالة مساعدة لتنسيق التواريخ بشكل آمن ومنع الانهيار عند وجود تواريخ فارغة
+const safeFormatDate = (dateString: string | null | undefined, formatStr: string) => {
+  if (!dateString) return 'غير محدد';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'تاريخ غير صالح';
+    return format(date, formatStr, { locale: arSA });
+  } catch (e) {
+    return 'تاريخ غير صالح';
+  }
+};
 
 export default function StudentDashboard() {
   const [studentData, setStudentData] = useState<any>(null);
@@ -41,13 +53,13 @@ export default function StudentDashboard() {
       const data = await fetchStudentDashboardData();
       
       if (data) {
-        setStudentData(data.student);
-        setAttendanceStats({ rate: data.attendanceRate });
-        setRecentGrades(data.grades);
-        setUpcomingExams(data.exams);
-        setUpcomingAssignments(data.assignments);
-        setTodaysSchedule(data.todaysSchedule);
-        setPeriods(data.periods);
+        setStudentData(data.student || null);
+        setAttendanceStats({ rate: data.attendanceRate || 0, ...data.attendanceStats });
+        setRecentGrades(data.grades || []);
+        setUpcomingExams(data.exams || []);
+        setUpcomingAssignments(data.assignments || []);
+        setTodaysSchedule(data.todaysSchedule || []);
+        setPeriods(data.periods || []);
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
@@ -70,6 +82,9 @@ export default function StudentDashboard() {
     fetchData();
   }, [fetchData]);
 
+  // منع الـ Hydration Error بالانتظار حتى يتم بناء المكون
+  if (!mounted) return null;
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -81,13 +96,13 @@ export default function StudentDashboard() {
     );
   }
 
-  // Check if student is in 10th grade and hasn't selected a track
-  const isTenthGrade = studentData?.sections?.classes?.name?.includes('العاشر');
+  // Check if student is in 10th grade and hasn't selected a track safely
+  const isTenthGrade = studentData?.sections?.classes?.name?.includes('العاشر') || false;
   const hasSelectedTrack = !!studentData?.next_year_track;
 
-  // Calculate average score
-  const avgScore = recentGrades.length > 0 
-    ? Math.round(recentGrades.reduce((acc, curr) => acc + curr.score, 0) / recentGrades.length)
+  // Calculate average score safely
+  const avgScore = (recentGrades && recentGrades.length > 0)
+    ? Math.round(recentGrades.reduce((acc, curr) => acc + (curr?.score || 0), 0) / recentGrades.length)
     : 0;
 
   return (
@@ -100,10 +115,10 @@ export default function StudentDashboard() {
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 to-violet-600 p-8 text-white shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-bold mb-2">مرحباً، {studentData?.users?.full_name} 👋</h1>
+            <h1 className="text-3xl font-bold mb-2">مرحباً، {studentData?.users?.full_name || 'طالب'} 👋</h1>
             <p className="text-indigo-100 text-lg flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
-              أنت مسجل في {studentData?.sections?.classes?.name} - {studentData?.sections?.name}
+              أنت مسجل في {studentData?.sections?.classes?.name || 'غير محدد'} - {studentData?.sections?.name || 'غير محدد'}
             </p>
           </div>
           <div className="flex flex-wrap gap-4">
@@ -165,12 +180,12 @@ export default function StudentDashboard() {
             <div>
               <p className="font-bold text-slate-900">تم تحديد المسار الأكاديمي للعام القادم</p>
               <p className="text-sm text-slate-500">
-                المسار المختار: <span className="font-black text-indigo-600">{studentData.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}</span>
+                المسار المختار: <span className="font-black text-indigo-600">{studentData?.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}</span>
               </p>
             </div>
           </div>
           <p className="text-xs text-slate-400 font-medium">
-            تاريخ الاختيار: {mounted ? format(new Date(studentData.track_selection_date), 'd MMMM yyyy', { locale: arSA }) : '...'}
+            تاريخ الاختيار: {safeFormatDate(studentData?.track_selection_date, 'd MMMM yyyy')}
           </p>
         </div>
       )}
@@ -224,14 +239,14 @@ export default function StudentDashboard() {
                 </div>
                 تطور المستوى الأكاديمي
               </h2>
-              <Link href="/reports" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">
+              <Link href="/student/performance" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">
                 التقارير المفصلة <ChevronLeft className="h-4 w-4" />
               </Link>
             </div>
             <div className="h-[300px] w-full">
-              {recentGrades.length > 0 ? (
+              {(recentGrades && recentGrades.length > 0) ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={recentGrades.slice().reverse()}>
+                  <AreaChart data={[...recentGrades].reverse()}>
                     <defs>
                       <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2}/>
@@ -288,24 +303,24 @@ export default function StudentDashboard() {
               </Link>
             </div>
             <div className="space-y-4">
-              {recentGrades.length > 0 ? (
+              {(recentGrades && recentGrades.length > 0) ? (
                 recentGrades.map((grade) => (
-                  <div key={grade.id} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all">
+                  <div key={grade?.id || Math.random()} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all">
                     <div className="flex items-center gap-4">
-                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${grade.score >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${(grade?.score || 0) >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
                         <FileText className="h-6 w-6" />
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900">{grade.exam?.title}</p>
-                        <p className="text-sm text-slate-500">{grade.exam?.subject?.name}</p>
+                        <p className="font-bold text-slate-900">{grade?.exam?.title || 'اختبار غير معروف'}</p>
+                        <p className="text-sm text-slate-500">{grade?.exam?.subject?.name || 'مادة غير معروفة'}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`text-xl font-bold ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {grade.score}%
+                      <p className={`text-xl font-bold ${(grade?.score || 0) >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {grade?.score || 0}%
                       </p>
                       <p className="text-xs text-slate-400 font-medium mt-1">
-                        {mounted ? format(new Date(grade.completed_at), 'd MMMM', { locale: arSA }) : '...'}
+                        {safeFormatDate(grade?.completed_at, 'd MMMM')}
                       </p>
                     </div>
                   </div>
@@ -334,23 +349,26 @@ export default function StudentDashboard() {
               <Link href="/dashboard/student/schedule" className="text-xs font-bold text-indigo-600 hover:underline">عرض الكل</Link>
             </div>
             <div className="space-y-3">
-              {todaysSchedule.length > 0 ? (
+              {(todaysSchedule && todaysSchedule.length > 0) ? (
                 todaysSchedule.map((item, i) => (
                   <div key={i} className="flex items-center gap-4 p-3 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-indigo-200 transition-all">
                     <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-sm font-black text-slate-900 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all shadow-sm">
-                      {item.period}
+                      {item?.period || '-'}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-slate-900 line-clamp-1">{item.subjects?.name}</p>
+                      <p className="text-sm font-bold text-slate-900 line-clamp-1">{item?.subjects?.name || 'مادة غير محددة'}</p>
                       <div className="flex flex-col gap-0.5 mt-0.5">
                         <p className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
                           <GraduationCap className="h-3 w-3" />
-                          {item.teachers?.users?.full_name}
+                          {item?.teachers?.users?.full_name || 'معلم غير محدد'}
                         </p>
                         {(() => {
-                          const periodInfo = periods.find(p => p.period_number === item.period);
-                          const startTime = item.start_time || periodInfo?.start_time;
-                          const endTime = item.end_time || periodInfo?.end_time;
+                          const periodInfo = (periods || []).find(p => p.period_number === item?.period);
+                          const rawStartTime = item?.start_time || periodInfo?.start_time;
+                          const rawEndTime = item?.end_time || periodInfo?.end_time;
+                          
+                          const startTime = typeof rawStartTime === 'string' ? rawStartTime : '';
+                          const endTime = typeof rawEndTime === 'string' ? rawEndTime : '';
                           
                           if (startTime && endTime) {
                             return (
@@ -416,17 +434,17 @@ export default function StudentDashboard() {
               </h2>
             </div>
             <div className="space-y-4">
-              {upcomingAssignments.length > 0 ? (
+              {(upcomingAssignments && upcomingAssignments.length > 0) ? (
                 upcomingAssignments.map((assignment) => (
-                  <Link href={`/assignments/${assignment.id}`} key={assignment.id} className="block group">
+                  <Link href={`/assignments/${assignment?.id}`} key={assignment?.id || Math.random()} className="block group">
                     <div className="p-4 rounded-2xl border border-slate-100 hover:border-amber-200 hover:shadow-sm transition-all bg-white">
                       <div className="flex items-start justify-between mb-2">
-                        <p className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">{assignment.title}</p>
+                        <p className="font-bold text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">{assignment?.title || 'واجب'}</p>
                         <span className="text-xs font-bold px-2 py-1 bg-amber-50 text-amber-700 rounded-md whitespace-nowrap ml-2">
-                          {mounted ? format(new Date(assignment.due_date), 'd MMM', { locale: arSA }) : '...'}
+                          {safeFormatDate(assignment?.due_date, 'd MMM')}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-500">{assignment.subject?.name}</p>
+                      <p className="text-sm text-slate-500">{assignment?.subject?.name || 'مادة غير محددة'}</p>
                     </div>
                   </Link>
                 ))
@@ -449,20 +467,20 @@ export default function StudentDashboard() {
               </h2>
             </div>
             <div className="space-y-4">
-              {upcomingExams.length > 0 ? (
+              {(upcomingExams && upcomingExams.length > 0) ? (
                 upcomingExams.map((exam) => (
-                  <Link href={`/exams/take/${exam.id}`} key={exam.id} className="block group">
+                  <Link href={`/exams/take/${exam?.id}`} key={exam?.id || Math.random()} className="block group">
                     <div className="p-4 rounded-2xl border border-slate-100 hover:border-indigo-200 hover:shadow-sm transition-all bg-white">
                       <div className="flex items-start justify-between mb-2">
-                        <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">{exam.title}</p>
+                        <p className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">{exam?.title || 'اختبار'}</p>
                         <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
                           <Clock className="h-4 w-4" />
                         </div>
                       </div>
-                      <p className="text-sm text-slate-500 mb-3">{exam.subject?.name}</p>
+                      <p className="text-sm text-slate-500 mb-3">{exam?.subject?.name || 'مادة غير محددة'}</p>
                       <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 p-2 rounded-lg">
                         <Calendar className="h-3.5 w-3.5 text-indigo-500" />
-                        <span>{mounted ? format(new Date(exam.start_time), 'EEEE، d MMMM - h:mm a', { locale: arSA }) : '...'}</span>
+                        <span>{safeFormatDate(exam?.start_time, 'EEEE، d MMMM - h:mm a')}</span>
                       </div>
                     </div>
                   </Link>
@@ -480,3 +498,5 @@ export default function StudentDashboard() {
     </motion.div>
   );
 }
+
+
