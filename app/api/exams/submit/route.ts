@@ -17,19 +17,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'بيانات غير مكتملة' }, { status: 400 });
     }
 
-    // 1. البحث عن المعرف الحقيقي للطالب (تجنباً لرفض قاعدة البيانات)
-    const { data: studentProfile, error: studentError } = await adminSupabase
-      .from('students')
-      .select('id')
-      .eq('user_id', userId)
-      .single();
-
-    if (studentError || !studentProfile) {
-      console.error('Student profile not found for user_id:', userId);
-      return NextResponse.json({ error: 'لم يتم العثور على ملف الطالب في قاعدة البيانات' }, { status: 400 });
+    // ✅ 1. بحث متسلسل وآمن عن ملف الطالب (لمنع خطأ قاعدة البيانات 500)
+    let realStudentId = userId;
+    const { data: s1 } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
+    if (s1) {
+      realStudentId = s1.id;
+    } else {
+      const { data: s2 } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
+      if (s2) {
+        realStudentId = s2.id;
+      }
     }
-
-    const realStudentId = studentProfile.id;
 
     // 2. التحقق من وجود محاولة سابقة
     const { data: attempts, error: existingError } = await adminSupabase
@@ -48,10 +46,10 @@ export async function POST(req: Request) {
       const { error: attemptError } = await adminSupabase
         .from('exam_attempts')
         .update({
-          score,
+          score: score || 0,
           status: status === 'completed' ? 'graded' : status,
           completed_at: new Date().toISOString(),
-          time_spent: timeSpent
+          time_spent: timeSpent || 0
         })
         .eq('id', attemptId);
 
@@ -65,12 +63,12 @@ export async function POST(req: Request) {
         .from('exam_attempts')
         .insert([{
           exam_id: examId,
-          student_id: realStudentId, // الحفظ بالمعرف الصحيح
-          score,
+          student_id: realStudentId, // الحفظ بالمعرف الصحيح الآمن
+          score: score || 0,
           status: status === 'completed' ? 'graded' : status,
           started_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
-          time_spent: timeSpent
+          time_spent: timeSpent || 0
         }])
         .select()
         .single();
@@ -79,16 +77,33 @@ export async function POST(req: Request) {
       attemptId = newAttempt.id;
     }
 
-    // 3. حفظ إجابات الطالب
-    if (answers && Object.keys(answers).length > 0) {
-      const studentAnswersPayload = Object.entries(answers).map(([questionId, answerData]: [string, any]) => ({
-        attempt_id: attemptId,
-        question_id: questionId,
-        text_answer: answerData.text || null,
-        selected_option_id: (answerData.optionId && answerData.optionId !== '') ? answerData.optionId : null,
-        is_correct: answerData.isCorrect || false,
-        points_earned: answerData.pointsEarned || 0
-      }));
+    // ✅ 3. حفظ إجابات الطالب بطريقة فائقة الأمان (تقبل أي نوع بيانات)
+    if (answers && typeof answers === 'object' && Object.keys(answers).length > 0) {
+      const studentAnswersPayload = Object.entries(answers).map(([questionId, answerData]: [string, any]) => {
+        let textAnswer = null;
+        let selectedOptionId = null;
+        let isCorrect = false;
+        let pointsEarned = 0;
+
+        // معالجة ذكية للإجابات سواء كانت نصاً أو كائناً
+        if (typeof answerData === 'string') {
+          textAnswer = answerData;
+        } else if (typeof answerData === 'object' && answerData !== null) {
+          textAnswer = answerData.text || null;
+          selectedOptionId = (answerData.optionId && answerData.optionId !== '') ? answerData.optionId : null;
+          isCorrect = answerData.isCorrect || false;
+          pointsEarned = answerData.pointsEarned || 0;
+        }
+
+        return {
+          attempt_id: attemptId,
+          question_id: questionId,
+          text_answer: textAnswer,
+          selected_option_id: selectedOptionId,
+          is_correct: isCorrect,
+          points_earned: pointsEarned
+        };
+      });
 
       const { error: answersError } = await adminSupabase.from('student_answers').insert(studentAnswersPayload);
       if (answersError) {
@@ -106,16 +121,18 @@ export async function POST(req: Request) {
         .single();
 
       if (examInfo?.teacher_id) {
-        // جلب معرف الدخول الخاص بالمعلم لكي يصله الإشعار
+        // جلب المعرف المناسب للإشعار
         const { data: teacherUser } = await adminSupabase
            .from('teachers')
-           .select('user_id')
+           .select('user_id, id')
            .eq('id', examInfo.teacher_id)
-           .single();
+           .maybeSingle();
            
-        if (teacherUser?.user_id) {
+        const targetTeacherId = teacherUser?.user_id || teacherUser?.id || examInfo.teacher_id;
+           
+        if (targetTeacherId) {
            await adminSupabase.from('notifications').insert([{
-             user_id: teacherUser.user_id,
+             user_id: targetTeacherId,
              title: 'تسليم اختبار جديد',
              content: `قام طالب بتسليم اختبار: ${examInfo.title}`,
              type: 'exam',
