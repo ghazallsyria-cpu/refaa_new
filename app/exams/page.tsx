@@ -5,7 +5,7 @@ import {
   Plus, Search, Filter, BookOpen, Users, 
   BarChart2, Clock, MoreVertical, Edit2, 
   Trash2, Eye, Play, FileText, CheckCircle,
-  TrendingUp, ArrowRight
+  TrendingUp, ArrowRight, AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,7 +26,6 @@ export default function ExamsDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  // الحماية من الانهيار إذا كان عنوان الاختبار مفقوداً
   const filteredExams = exams.filter(exam => {
     if (!exam) return false;
     const matchesSearch = (exam.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -225,176 +224,209 @@ export default function ExamsDashboard() {
             ))
           ) : filteredExams.length > 0 ? (
             <AnimatePresence mode="popLayout">
-              {filteredExams.map((exam, index) => (
-                <motion.div
-                  key={exam.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col"
-                >
-                  <div className="p-10 flex-1">
-                    <div className="flex items-start justify-between mb-8">
-                      <div className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border shadow-sm ${getStatusColor(exam.status)}`}>
-                        {getStatusLabel(exam.status)}
-                      </div>
-                      {!isTeacherOrAdmin && exam.status === 'published' && (
-                        <div className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border shadow-sm ${
-                          getExamStatus(exam) === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                          getExamStatus(exam) === 'not_started' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                          'bg-red-50 text-red-700 border-red-100'
-                        }`}>
-                          {getExamStatus(exam) === 'available' ? 'متاح الآن' :
-                           getExamStatus(exam) === 'not_started' ? 'لم يبدأ بعد' :
-                           'منتهي'}
+              {filteredExams.map((exam, index) => {
+                // 💡 المتغيرات الذكية لاكتشاف حالات التصحيح
+                const pendingGradesCount = (exam.submission_count || 0) - (exam.graded_count || 0);
+                const needsTeacherGrading = isTeacherOrAdmin && pendingGradesCount > 0;
+
+                return (
+                  <motion.div
+                    key={exam.id}
+                    layout
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col"
+                  >
+                    <div className="p-10 flex-1">
+                      <div className="flex items-start justify-between mb-8 gap-2">
+                        <div className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border shadow-sm whitespace-nowrap ${getStatusColor(exam.status)}`}>
+                          {getStatusLabel(exam.status)}
                         </div>
-                      )}
-                      
-                      {/* ✅ الإصلاح: إظهار قائمة التعديلات للمعلم والمدير بشكل مباشر */}
-                      {isTeacherOrAdmin && (
-                        <DropdownMenu.Root>
-                          <DropdownMenu.Trigger asChild>
-                            <motion.button 
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              className="h-12 w-12 flex items-center justify-center rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-all bg-slate-50 border border-slate-100"
-                            >
-                              <MoreVertical className="h-6 w-6" />
-                            </motion.button>
-                          </DropdownMenu.Trigger>
-                          <DropdownMenu.Portal>
-                            <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
-                              <DropdownMenu.Item asChild>
-                                <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                  <Edit2 className="h-5 w-5" />
-                                  <span>تعديل الاختبار</span>
-                                </Link>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item asChild>
-                                <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                  <BarChart2 className="h-5 w-5" />
-                                  <span>النتائج والتحليلات</span>
-                                </Link>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
-                              <DropdownMenu.Item 
-                                className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
-                                onClick={() => handleDelete(exam.id)}
+
+                        {/* 🎯 وسام التنبيه للمعلم إذا كان هناك طلاب بانتظار التصحيح اليدوي */}
+                        {needsTeacherGrading && (
+                          <div className="flex-1 flex justify-end">
+                            <div className="px-3 py-2 rounded-2xl text-[10px] font-black border shadow-sm bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1.5 animate-pulse">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              <span>{pendingGradesCount} بحاجة لتصحيحك</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {!isTeacherOrAdmin && exam.status === 'published' && (
+                          <div className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border shadow-sm whitespace-nowrap ${
+                            getExamStatus(exam) === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                            getExamStatus(exam) === 'not_started' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                            'bg-red-50 text-red-700 border-red-100'
+                          }`}>
+                            {getExamStatus(exam) === 'available' ? 'متاح الآن' :
+                             getExamStatus(exam) === 'not_started' ? 'لم يبدأ بعد' :
+                             'منتهي'}
+                          </div>
+                        )}
+                        
+                        {isTeacherOrAdmin && (
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild>
+                              <motion.button 
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                className="h-12 w-12 flex items-center justify-center rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-all bg-slate-50 border border-slate-100 shrink-0"
                               >
-                                <Trash2 className="h-5 w-5" />
-                                <span>حذف الاختبار</span>
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item asChild>
-                                <Link href={`/exams/take/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                  <Eye className="h-5 w-5" />
-                                  <span>معاينة الاختبار</span>
-                                </Link>
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Content>
-                          </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
-                      )}
+                                <MoreVertical className="h-6 w-6" />
+                              </motion.button>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Portal>
+                              <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
+                                <DropdownMenu.Item asChild>
+                                  <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                    <Edit2 className="h-5 w-5" />
+                                    <span>تعديل الاختبار</span>
+                                  </Link>
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item asChild>
+                                  <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                    <BarChart2 className="h-5 w-5" />
+                                    <span>النتائج والتحليلات</span>
+                                  </Link>
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
+                                <DropdownMenu.Item 
+                                  className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
+                                  onClick={() => handleDelete(exam.id)}
+                                >
+                                  <Trash2 className="h-5 w-5" />
+                                  <span>حذف الاختبار</span>
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item asChild>
+                                  <Link href={`/exams/take/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                    <Eye className="h-5 w-5" />
+                                    <span>معاينة الاختبار</span>
+                                  </Link>
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                          </DropdownMenu.Root>
+                        )}
+                      </div>
+
+                      <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
+                        {exam.title}
+                      </h3>
+                      <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-lg leading-relaxed">
+                        {exam.description || 'لا يوجد وصف لهذا الاختبار'}
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-5">
+                        <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
+                          <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                            <BookOpen className="h-5 w-5 text-indigo-500" />
+                          </div>
+                          <span className="truncate">{exam.subject_name}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
+                          <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center">
+                            <Clock className="h-5 w-5 text-amber-500" />
+                          </div>
+                          <span>{exam.duration ? `${exam.duration} د` : 'مفتوح'}</span>
+                        </div>
+                        {isTeacherOrAdmin && (
+                          <>
+                            <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
+                              <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
+                                <FileText className="h-5 w-5 text-blue-500" />
+                              </div>
+                              <span>{exam.question_count || 0} سؤال</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
+                              <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
+                                <Users className="h-5 w-5 text-emerald-500" />
+                              </div>
+                              <span>{exam.submission_count || 0} محاولة</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
-                      {exam.title}
-                    </h3>
-                    <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-lg leading-relaxed">
-                      {exam.description || 'لا يوجد وصف لهذا الاختبار'}
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-5">
-                      <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                        <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center">
-                          <BookOpen className="h-5 w-5 text-indigo-500" />
-                        </div>
-                        <span className="truncate">{exam.subject_name}</span>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                        <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center">
-                          <Clock className="h-5 w-5 text-amber-500" />
-                        </div>
-                        <span>{exam.duration ? `${exam.duration} د` : 'مفتوح'}</span>
-                      </div>
-                      {isTeacherOrAdmin && (
+                    <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
+                      {isTeacherOrAdmin ? (
                         <>
-                          <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
-                              <FileText className="h-5 w-5 text-blue-500" />
+                          <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
+                              <TrendingUp className="h-6 w-6 text-indigo-600" />
                             </div>
-                            <span>{exam.question_count || 0} سؤال</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
-                              <Users className="h-5 w-5 text-emerald-500" />
+                            <div>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">متوسط الأداء</p>
+                              <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score || 0}%</p>
                             </div>
-                            <span>{exam.submission_count || 0} محاولة</span>
                           </div>
+                          <Link href={`/exams/results/${exam.id}`}>
+                            {/* 🎯 التعديل الذكي للمعلم: تغيير الزر لـ "صحح الآن" لون برتقالي */}
+                            <motion.button 
+                              whileHover={{ x: -5 }}
+                              className={`h-14 px-6 rounded-2xl text-sm font-black shadow-sm transition-all flex items-center gap-3 active:scale-95 ${
+                                needsTeacherGrading
+                                ? 'bg-amber-500 text-white hover:bg-amber-600 border border-transparent'
+                                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-indigo-600'
+                              }`}
+                            >
+                              <span>{needsTeacherGrading ? 'صحح الآن' : 'النتائج'}</span>
+                              <ArrowRight className="h-5 w-5 rotate-180" />
+                            </motion.button>
+                          </Link>
                         </>
+                      ) : (
+                        (exam.submission_status === 'submitted' || exam.submission_status === 'graded') ? (
+                          exam.submission_status === 'submitted' ? (
+                            /* 🎯 التعديل الذكي للطالب: إظهار حالة "قيد المراجعة" باللون الأصفر */
+                            <div className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 rounded-2xl border border-amber-100">
+                              <div className="flex items-center gap-3">
+                                <Clock className="h-5 w-5 text-amber-600" />
+                                <span className="text-sm font-black text-amber-700">قيد المراجعة</span>
+                              </div>
+                              <span className="text-sm font-black text-amber-600">بانتظار المعلم</span>
+                            </div>
+                          ) : (
+                            /* الحالة الأصلية المكتملة */
+                            <div className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 rounded-2xl border border-emerald-100">
+                              <div className="flex items-center gap-3">
+                                <CheckCircle className="h-5 w-5 text-emerald-600" />
+                                <span className="text-sm font-black text-emerald-700">مقيّم ومكتمل</span>
+                              </div>
+                              <span className="text-lg font-black text-emerald-600">
+                                {exam.score !== null && exam.score !== undefined ? `${exam.score}%` : ''}
+                              </span>
+                            </div>
+                          )
+                        ) : (
+                          <Link href={`/exams/take/${exam.id}`} className="w-full">
+                            <motion.button 
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              disabled={getExamStatus(exam) !== 'available'}
+                              className={`w-full h-14 rounded-2xl text-white text-sm font-black shadow-lg transition-all flex items-center justify-center gap-3 ${
+                                getExamStatus(exam) === 'available' 
+                                  ? 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700' 
+                                  : 'bg-slate-400 shadow-slate-200 cursor-not-allowed'
+                              }`}
+                            >
+                              <Play className="h-5 w-5" />
+                              <span>
+                                {getExamStatus(exam) === 'not_started' ? 'لم يبدأ بعد' :
+                                 getExamStatus(exam) === 'expired' ? 'انتهى الوقت' :
+                                 'بدء الاختبار'}
+                              </span>
+                            </motion.button>
+                          </Link>
+                        )
                       )}
                     </div>
-                  </div>
-
-                  <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                    {isTeacherOrAdmin ? (
-                      <>
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
-                            <TrendingUp className="h-6 w-6 text-indigo-600" />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">متوسط الأداء</p>
-                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score || 0}%</p>
-                          </div>
-                        </div>
-                        <Link href={`/exams/results/${exam.id}`}>
-                          <motion.button 
-                            whileHover={{ x: -5 }}
-                            className="h-14 px-8 rounded-2xl bg-white text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 transition-all flex items-center gap-3 active:scale-95"
-                          >
-                            <span>النتائج</span>
-                            <ArrowRight className="h-5 w-5 rotate-180" />
-                          </motion.button>
-                        </Link>
-                      </>
-                    ) : (
-                      (exam.submission_status === 'submitted' || exam.submission_status === 'graded') ? (
-                        <div className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 rounded-2xl border border-emerald-100">
-                          <div className="flex items-center gap-3">
-                            <CheckCircle className="h-5 w-5 text-emerald-600" />
-                            <span className="text-sm font-black text-emerald-700">مكتمل</span>
-                          </div>
-                          <span className="text-lg font-black text-emerald-600">
-                            {exam.score !== null && exam.score !== undefined ? `${exam.score}%` : 'قيد التقييم'}
-                          </span>
-                        </div>
-                      ) : (
-                        <Link href={`/exams/take/${exam.id}`} className="w-full">
-                          <motion.button 
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            disabled={getExamStatus(exam) !== 'available'}
-                            className={`w-full h-14 rounded-2xl text-white text-sm font-black shadow-lg transition-all flex items-center justify-center gap-3 ${
-                              getExamStatus(exam) === 'available' 
-                                ? 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700' 
-                                : 'bg-slate-400 shadow-slate-200 cursor-not-allowed'
-                            }`}
-                          >
-                            <Play className="h-5 w-5" />
-                            <span>
-                              {getExamStatus(exam) === 'not_started' ? 'لم يبدأ بعد' :
-                               getExamStatus(exam) === 'expired' ? 'انتهى الوقت' :
-                               'بدء الاختبار'}
-                            </span>
-                          </motion.button>
-                        </Link>
-                      )
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           ) : (
             <motion.div 
@@ -428,4 +460,5 @@ export default function ExamsDashboard() {
     </div>
   );
 }
+
 
