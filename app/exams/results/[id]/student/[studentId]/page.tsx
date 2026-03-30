@@ -13,20 +13,25 @@ export default function StudentExamResult() {
   const studentId = params.studentId as string; 
   
   const { fetchStudentExamResult } = useExamsSystem();
-  const [exam, setExam] = useState<any>(null);
-  const [student, setStudent] = useState<any>(null);
-  const [attempt, setAttempt] = useState<any>(null);
+  
+  // ✅ وضع قيم افتراضية آمنة لمنع انهيار الصفحة
+  const [exam, setExam] = useState<any>({});
+  const [student, setStudent] = useState<any>({});
+  const [attempt, setAttempt] = useState<any>({});
   const [answers, setAnswers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const { exam: examData, student: studentData, attempt: attemptData, answers: answersData } = await fetchStudentExamResult(examId, studentId);
-      setExam(examData);
-      setStudent(studentData);
-      setAttempt(attemptData);
-      setAnswers(answersData);
+      const data = await fetchStudentExamResult(examId, studentId);
+      // حماية فائقة من القيم الفارغة
+      if (data) {
+        setExam(data.exam || {});
+        setStudent(data.student || {});
+        setAttempt(data.attempt || {});
+        setAnswers(data.answers || []);
+      }
     } catch (err) {
       console.error('Error fetching student exam result:', err);
     } finally {
@@ -46,12 +51,14 @@ export default function StudentExamResult() {
     );
   }
 
-  const totalEarned = answers.reduce((sum, ans) => sum + (ans.points_earned || 0), 0);
-  const maxScore = exam?.total_marks || exam?.max_score || answers.reduce((sum, ans) => sum + (ans.question?.points || 0), 0);
+  // حساب العلامات بأمان
+  const totalEarned = answers.reduce((sum, ans) => sum + (ans?.points_earned || 0), 0);
+  const maxScore = exam?.total_marks || exam?.max_score || answers.reduce((sum, ans) => sum + (ans?.question?.points || 0), 0) || 0;
 
   const renderStudentAnswer = (answer: any) => {
+    if (!answer) return 'بدون إجابة';
     const question = answer.question;
-    if (!question) return 'السؤال محذوف';
+    if (!question) return answer.text_answer || 'بدون إجابة';
 
     if (question.type === 'multiple_choice' || question.type === 'true_false') {
       const selected = question.options?.find((o: any) => o.id === answer.selected_option_id);
@@ -91,7 +98,7 @@ export default function StudentExamResult() {
           className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100"
         >
           <ArrowRight className="h-5 w-5" />
-          العودة
+          العودة للنتائج
         </button>
       </div>
 
@@ -104,7 +111,7 @@ export default function StudentExamResult() {
             <div className="flex items-center gap-4 mt-6 text-slate-600 font-bold">
               <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl">
                 <User className="h-5 w-5 text-indigo-500" />
-                <span>{(student?.users as any)?.full_name || 'طالب'}</span>
+                <span>{student?.users?.full_name || student?.full_name || 'طالب'}</span>
               </div>
               {attempt?.status && (
                 <div className={`flex items-center gap-2 px-4 py-2 rounded-xl ${attempt.status === 'graded' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -121,7 +128,7 @@ export default function StudentExamResult() {
           <Trophy className="h-10 w-10 text-yellow-300 mb-3 relative z-10" />
           <div className="text-sm font-bold text-indigo-100 mb-1 relative z-10">النتيجة النهائية</div>
           <div className="text-5xl font-black tracking-tighter relative z-10">
-            {attempt?.score !== undefined ? attempt.score : totalEarned} <span className="text-2xl text-indigo-200 font-bold">/ {maxScore || 0}</span>
+            {attempt?.score !== undefined ? attempt.score : totalEarned} <span className="text-2xl text-indigo-200 font-bold">/ {maxScore}</span>
           </div>
         </div>
       </div>
@@ -133,14 +140,14 @@ export default function StudentExamResult() {
           تفاصيل الإجابات
         </h2>
 
-        {answers.map((answer, index) => {
-          const question = answer.question;
-          const isCorrect = answer.is_correct;
+        {answers && answers.length > 0 ? answers.map((answer, index) => {
+          const question = answer?.question;
+          const isCorrect = answer?.is_correct;
           const isManual = question?.type === 'open' || question?.type === 'paragraph';
 
           return (
             <div 
-              key={answer.id} 
+              key={answer?.id || index} 
               className={`bg-white rounded-3xl overflow-hidden shadow-lg shadow-slate-100 border transition-all ${
                 isManual ? 'border-slate-200 border-r-4 border-r-slate-400' : 
                 isCorrect ? 'border-emerald-100 border-r-4 border-r-emerald-500' : 
@@ -156,22 +163,22 @@ export default function StudentExamResult() {
                     {question?.content || 'نص السؤال غير متوفر'}
                   </h3>
                   <div className="flex items-center gap-1.5 bg-slate-50 px-4 py-1.5 rounded-xl font-black text-sm text-slate-600">
-                    <span>{answer.points_earned || 0}</span>
+                    <span>{answer?.points_earned || 0}</span>
                     <span className="text-slate-400">/</span>
                     <span>{question?.points || 0} نقطة</span>
                   </div>
                 </div>
 
-                {/* ✅ عرض الصورة إذا كانت موجودة */}
-                {question?.mediaUrl || question?.media_url ? (
+                {/* ✅ عرض الصورة في صفحة النتائج */}
+                {(question?.mediaUrl || question?.media_url) && (
                   <div className="mb-8 rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center max-w-2xl mx-auto p-2">
                     <img 
                       src={question.mediaUrl || question.media_url} 
-                      alt="صورة مرفقة بالسؤال" 
+                      alt="صورة السؤال" 
                       className="max-h-80 w-auto object-contain rounded-xl shadow-sm"
                     />
                   </div>
-                ) : null}
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* إجابة الطالب */}
@@ -193,7 +200,7 @@ export default function StudentExamResult() {
                     </p>
                   </div>
 
-                  {/* الإجابة الصحيحة */}
+                  {/* الإجابة النموذجية */}
                   {(!isCorrect || isManual) && question?.type !== 'open' && question?.type !== 'paragraph' && (
                     <div className="p-5 rounded-2xl border bg-slate-50 border-slate-200">
                       <div className="flex items-center gap-2 mb-3">
@@ -209,16 +216,13 @@ export default function StudentExamResult() {
               </div>
             </div>
           );
-        })}
-
-        {/* ✅ رسالة توضيحية ذكية في حال عدم وجود إجابات */}
-        {answers.length === 0 && (
+        }) : (
           <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
             <AlertCircle className="h-16 w-16 text-amber-400 mx-auto mb-4" />
             <h3 className="text-2xl font-black text-slate-800 mb-2">لا توجد إجابات مسجلة لهذا الاختبار</h3>
             <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">
-              إذا كنت قد قدمت هذا الاختبار وحصلت على النتيجة 0، فهذا يعني أنك قدمته أثناء وجود تحديثات في النظام ولم تحفظ إجاباتك. 
-              <br/> <strong className="text-indigo-600 mt-2 block">يرجى من المعلم حذف هذه المحاولة لكي تعيد الاختبار!</strong>
+              يبدو أن الطالب فتح الاختبار ولم يقم بحفظ إجاباته بشكل صحيح.<br/>
+              <strong className="text-indigo-600 mt-2 block">يرجى حذف هذه النتيجة (المحاولة) من لوحة تحكم المعلم ليتمكن الطالب من الإعادة.</strong>
             </p>
           </div>
         )}
