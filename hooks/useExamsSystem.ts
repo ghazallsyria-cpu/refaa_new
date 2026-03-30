@@ -222,7 +222,11 @@ export function useExamsSystem() {
       });
 
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to save exam');
+      if (!response.ok) {
+        const error = new Error(result.error || 'Failed to save exam');
+        (error as any).details = result.details;
+        throw error;
+      }
 
       await fetchExams();
       return result.examId;

@@ -175,9 +175,9 @@ export const ExamSchema = z.object({
   description: nullableString,
   subject_id: z.string().uuid(),
   teacher_id: z.string().uuid(),
-  duration: z.number().int().min(1),
-  max_attempts: z.number().int().min(1).default(1),
-  max_score: z.number().min(0),
+  duration: z.coerce.number().int().min(1),
+  max_attempts: z.coerce.number().int().min(1).default(1),
+  max_score: z.coerce.number().min(0),
   exam_date: z.string(),
   start_time: z.string(),
   end_time: z.string(),
@@ -186,7 +186,7 @@ export const ExamSchema = z.object({
   created_at: z.string().optional(),
 });
 
-export const QuestionTypeSchema = z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox', 'true_false']);
+export const QuestionTypeSchema = z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'matching', 'ordering', 'file']);
 
 export const SaveExamRequestSchema = z.object({
   examData: ExamSchema.partial().extend({
@@ -197,9 +197,9 @@ export const SaveExamRequestSchema = z.object({
     id: z.string().uuid().optional(),
     type: QuestionTypeSchema,
     content: z.string(),
-    points: z.number().min(0),
+    points: z.coerce.number().min(0),
     explanation: z.string().optional().nullable(),
-    media_url: z.string().url().optional().nullable(),
+    media_url: z.string().optional().nullable().transform(v => v === "" ? null : v),
     media_type: z.enum(['image', 'video', 'audio']).optional().nullable(),
     options: z.array(z.object({
       content: z.string(),

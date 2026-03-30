@@ -14,6 +14,7 @@ import { motion, Reorder, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import * as Switch from '@radix-ui/react-switch';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 
@@ -144,6 +145,12 @@ export default function QuizBuilder() {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  useEffect(() => {
+    if (isNew && formData?.teachers && formData.teachers.length > 0 && !exam.teacher_id) {
+      setExam(prev => ({ ...prev, teacher_id: formData.teachers[0].id }));
+    }
+  }, [isNew, formData, exam.teacher_id]);
+
   const updateQuestion = (id: string, updates: Partial<Question>) => {
     setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q));
   };
@@ -243,9 +250,9 @@ export default function QuizBuilder() {
 
       const examPayload = {
         ...exam,
-        teacher_id: userRole === 'teacher' ? user?.id : finalTeacherId,
-        max_score: exam.max_score || 100,
-        total_marks: exam.max_score || 100
+        teacher_id: userRole === 'teacher' ? (formData?.teachers?.[0]?.id || exam.teacher_id) : exam.teacher_id,
+        max_score: Number(exam.max_score) || 100,
+        total_marks: Number(exam.max_score) || 100
       };
 
       await saveExam(examPayload, questions, isNew);
@@ -254,9 +261,25 @@ export default function QuizBuilder() {
       router.push('/exams');
     } catch (err: any) {
       console.error('Error saving quiz:', err);
-      const errorMessage = (err && typeof err === 'object') ? JSON.stringify(err, Object.getOwnPropertyNames(err)) : String(err);
-      console.error('Full error details:', errorMessage);
-      showNotification('error', `حدث خطأ أثناء حفظ الاختبار: ${err.message || errorMessage}`);
+      
+      let errorMessage = 'حدث خطأ غير معروف';
+      if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      // If it's a validation error from our API, it might have details
+      if (err.details) {
+        console.error('Validation details:', err.details);
+        // Try to make a more user-friendly message from Zod errors
+        if (typeof err.details === 'object') {
+          const firstError = Object.values(err.details).find((v: any) => v._errors && v._errors.length > 0) as any;
+          if (firstError) {
+            errorMessage += `: ${firstError._errors[0]}`;
+          }
+        }
+      }
+
+      showNotification('error', `حدث خطأ أثناء حفظ الاختبار: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -399,7 +422,7 @@ export default function QuizBuilder() {
                           <input 
                             type="number" 
                             value={exam.duration}
-                            onChange={(e) => setExam({...exam, duration: parseInt(e.target.value)})}
+                            onChange={(e) => setExam({...exam, duration: parseInt(e.target.value) || 0})}
                             className="w-full pr-12 pl-4 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-900 transition-all"
                           />
                         </div>
@@ -411,7 +434,7 @@ export default function QuizBuilder() {
                           <input 
                             type="number" 
                             value={exam.max_attempts}
-                            onChange={(e) => setExam({...exam, max_attempts: parseInt(e.target.value)})}
+                            onChange={(e) => setExam({...exam, max_attempts: parseInt(e.target.value) || 0})}
                             className="w-full pr-12 pl-4 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-900 transition-all"
                           />
                         </div>
@@ -423,7 +446,7 @@ export default function QuizBuilder() {
                           <input 
                             type="number" 
                             value={exam.max_score}
-                            onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value)})}
+                            onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value) || 0})}
                             className="w-full pr-12 pl-4 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-900 transition-all"
                           />
                         </div>
@@ -500,7 +523,7 @@ export default function QuizBuilder() {
               <input 
                 type="number"
                 value={exam.max_score}
-                onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value)})}
+                onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value) || 0})}
                 className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 outline-none font-bold text-slate-700 transition-all appearance-none"
               />
             </div>
@@ -548,8 +571,14 @@ export default function QuizBuilder() {
                 <label className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer">
                   <input 
                     type="checkbox"
-                    checked={exam.section_ids?.length === 0}
-                    onChange={(e) => e.target.checked ? setExam({...exam, section_ids: []}) : null}
+                    checked={exam.section_ids?.length === sections.length && sections.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setExam({...exam, section_ids: sections.map(s => s.id)});
+                      } else {
+                        setExam({...exam, section_ids: []});
+                      }
+                    }}
                     className="rounded text-indigo-600 focus:ring-indigo-500"
                   />
                   <span className="text-sm font-bold text-slate-700">الجميع</span>
