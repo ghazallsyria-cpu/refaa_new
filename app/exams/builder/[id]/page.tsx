@@ -819,6 +819,3 @@ export default function QuizBuilder() {
     </div>
   );
 }
-
-// Radix Dropdown Components (Simplified import for this demo)
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
