@@ -14,7 +14,6 @@ export async function POST(req: Request) {
     const validatedData = await validateRequest(req, SaveExamRequestSchema);
     const { examData, questions, isNew, userId } = validatedData;
 
-    // Validation: Check if total question points equal exam max_score
     const totalPoints = questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0);
     if (totalPoints !== Number(examData.max_score)) {
       return NextResponse.json(
@@ -26,34 +25,30 @@ export async function POST(req: Request) {
     let finalExamId = examData.id;
     let finalTeacherId = examData.teacher_id;
 
-    // ✅ الإصلاح الجذري: إذا لم يكن هناك معرف معلم مرسل، نبحث عنه باستخدام معرف الدخول
+    // ✅ التعديل الأهم: نضمن الحفظ باسم المعلم الحقيقي
     if (!finalTeacherId && userId) {
-      const { data: teacherProfile, error: teacherError } = await adminSupabase
+      const { data: teacherProfile } = await adminSupabase
         .from('teachers')
         .select('id')
-        .eq('user_id', userId)
+        .eq('id', userId) // متوافق مع هيكليتك حيث teacher.id هو نفسه user.id
         .single();
-
-      if (teacherError || !teacherProfile) {
-        // إذا كان المستخدم ليس معلماً (مثلاً مدير)، ولا يوجد finalTeacherId، نوقف العملية
-        return NextResponse.json(
-          { error: 'لم يتم العثور على ملف المعلم المرتبط بحسابك. لا يمكن حفظ الاختبار.' },
-          { status: 400 }
-        );
+        
+      if (teacherProfile) {
+        finalTeacherId = teacherProfile.id;
+      } else {
+        finalTeacherId = userId; // Fallback
       }
-      // نعين المعرف الحقيقي للمعلم
-      finalTeacherId = teacherProfile.id;
     }
 
     const examPayload = normalizePayload({
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: finalTeacherId, // سيتم الحفظ الآن بالمعرف الصحيح!
+      teacher_id: finalTeacherId, // يحفظ الآن بشكل صحيح!
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
-      total_marks: examData.max_score, // Keep in sync with max_score
+      total_marks: examData.max_score,
       exam_date: examData.exam_date,
       start_time: examData.start_time,
       end_time: examData.end_time,
@@ -62,25 +57,15 @@ export async function POST(req: Request) {
     });
 
     if (isNew) {
-      const { data: newExam, error } = await adminSupabase
-        .from('exams')
-        .insert([examPayload])
-        .select()
-        .single();
-
+      const { data: newExam, error } = await adminSupabase.from('exams').insert([examPayload]).select().single();
       if (error) throw error;
       if (!newExam) throw new Error('Failed to create exam');
       finalExamId = newExam.id;
     } else {
-      const { error } = await adminSupabase
-        .from('exams')
-        .update(examPayload)
-        .eq('id', finalExamId);
-
+      const { error } = await adminSupabase.from('exams').update(examPayload).eq('id', finalExamId);
       if (error) throw error;
     }
 
-    // Handle sections
     if (!isNew && finalExamId) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
     }
@@ -94,7 +79,6 @@ export async function POST(req: Request) {
       if (sectionsError) throw sectionsError;
     }
 
-    // Handle questions
     if (!isNew && finalExamId) {
       const { data: oldQuestions } = await adminSupabase.from('questions').select('id').eq('exam_id', finalExamId);
       if (oldQuestions && oldQuestions.length > 0) {
@@ -117,12 +101,7 @@ export async function POST(req: Request) {
         order_index: i
       });
 
-      const { data: newQ, error: qError } = await adminSupabase
-        .from('questions')
-        .insert([questionPayload])
-        .select()
-        .single();
-
+      const { data: newQ, error: qError } = await adminSupabase.from('questions').insert([questionPayload]).select().single();
       if (qError) throw qError;
 
       if (q.options && q.options.length > 0) {
@@ -137,10 +116,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Send notifications if published
     if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0 && finalExamId) {
       try {
-        let studentsQuery = adminSupabase.from('students').select('id, user_id');
+        let studentsQuery = adminSupabase.from('students').select('id');
         if (examData.section_ids.length > 0) {
           studentsQuery = studentsQuery.in('section_id', examData.section_ids);
         }
@@ -148,11 +126,11 @@ export async function POST(req: Request) {
 
         if (students && students.length > 0) {
           const notificationPayloads = students.map(student => ({
-            user_id: student.user_id || student.id, // Ensure we use auth user_id for notifications
+            user_id: student.id,
             title: 'اختبار جديد متاح',
             content: `تم نشر اختبار جديد: ${examData.title}`,
             type: 'exam',
-            link: `/exams/take/${finalExamId}`
+            link: `/exams/${finalExamId}`
           }));
           await adminSupabase.from('notifications').insert(notificationPayloads);
         }
