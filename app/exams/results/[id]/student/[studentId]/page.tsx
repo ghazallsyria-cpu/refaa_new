@@ -2,35 +2,46 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, Clock, CheckCircle2, XCircle, Trophy, User, Check, AlertCircle } from 'lucide-react';
+import { ArrowRight, BookOpen, Clock, CheckCircle2, XCircle, Trophy, User, Check, AlertCircle, Edit3, Save } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
+import { useAuth } from '@/context/auth-context';
 
 export default function StudentExamResult() {
   const params = useParams();
   const router = useRouter();
+  const { authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
   
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
-  const { fetchStudentExamResult } = useExamsSystem();
+  const { fetchStudentExamResult, gradeAnswer } = useExamsSystem();
   
-  // ✅ وضع قيم افتراضية آمنة لمنع انهيار الصفحة
   const [exam, setExam] = useState<any>({});
   const [student, setStudent] = useState<any>({});
   const [attempt, setAttempt] = useState<any>({});
   const [answers, setAnswers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // حالة (State) لتتبع إدخال الدرجات اليدوية
+  const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const data = await fetchStudentExamResult(examId, studentId);
-      // حماية فائقة من القيم الفارغة
       if (data) {
         setExam(data.exam || {});
         setStudent(data.student || {});
         setAttempt(data.attempt || {});
         setAnswers(data.answers || []);
+        
+        // تجهيز القيم المبدئية للدرجات
+        const initialGrading: any = {};
+        (data.answers || []).forEach(ans => {
+           initialGrading[ans.question_id] = { points: ans.points_earned || 0, isSubmitting: false };
+        });
+        setGradingState(initialGrading);
       }
     } catch (err) {
       console.error('Error fetching student exam result:', err);
@@ -43,6 +54,24 @@ export default function StudentExamResult() {
     fetchData();
   }, [fetchData]);
 
+  const handleSaveGrade = async (questionId: string) => {
+    if (!attempt?.id) return;
+    
+    const newPoints = gradingState[questionId].points;
+    setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
+    
+    try {
+      await gradeAnswer(attempt.id, questionId, newPoints);
+      // إعادة تحميل البيانات بعد التصحيح لتحديث النتيجة النهائية
+      await fetchData(); 
+      alert('تم حفظ الدرجة بنجاح وتحديث النتيجة النهائية!');
+    } catch (err: any) {
+      alert(err.message || 'حدث خطأ أثناء حفظ الدرجة');
+    } finally {
+      setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -51,7 +80,6 @@ export default function StudentExamResult() {
     );
   }
 
-  // حساب العلامات بأمان
   const totalEarned = answers.reduce((sum, ans) => sum + (ans?.points_earned || 0), 0);
   const maxScore = exam?.total_marks || exam?.max_score || answers.reduce((sum, ans) => sum + (ans?.question?.points || 0), 0) || 0;
 
@@ -86,19 +114,18 @@ export default function StudentExamResult() {
     if (question.type === 'multi_select') {
       return question.options?.filter((o: any) => o.is_correct).map((o: any) => o.content).join('، ') || 'غير محدد';
     }
-    return 'تُقيّم يدوياً من قبل المعلم';
+    return 'هذا السؤال مقالي ويُقيّم يدوياً من قبل المعلم';
   };
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
-      {/* Header & Back Button */}
       <div className="flex items-center justify-between">
         <button 
           onClick={() => router.back()}
           className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100"
         >
           <ArrowRight className="h-5 w-5" />
-          العودة للنتائج
+          العودة
         </button>
       </div>
 
@@ -137,19 +164,20 @@ export default function StudentExamResult() {
       <div className="space-y-6 mt-8">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 mb-6">
           <BookOpen className="h-6 w-6 text-indigo-600" />
-          تفاصيل الإجابات
+          تفاصيل الإجابات {currentRole === 'teacher' && '(وضع التصحيح)'}
         </h2>
 
         {answers && answers.length > 0 ? answers.map((answer, index) => {
           const question = answer?.question;
           const isCorrect = answer?.is_correct;
-          const isManual = question?.type === 'open' || question?.type === 'paragraph';
+          const isManual = question?.type === 'open' || question?.type === 'essay' || question?.type === 'paragraph' || question?.type === 'fill_in_blank';
 
           return (
             <div 
               key={answer?.id || index} 
               className={`bg-white rounded-3xl overflow-hidden shadow-lg shadow-slate-100 border transition-all ${
-                isManual ? 'border-slate-200 border-r-4 border-r-slate-400' : 
+                isManual && attempt?.status !== 'graded' ? 'border-amber-200 border-r-4 border-r-amber-400' :
+                isManual ? 'border-indigo-100 border-r-4 border-r-indigo-400' : 
                 isCorrect ? 'border-emerald-100 border-r-4 border-r-emerald-500' : 
                 'border-red-100 border-r-4 border-r-red-500'
               }`}
@@ -162,14 +190,13 @@ export default function StudentExamResult() {
                     </span>
                     {question?.content || 'نص السؤال غير متوفر'}
                   </h3>
-                  <div className="flex items-center gap-1.5 bg-slate-50 px-4 py-1.5 rounded-xl font-black text-sm text-slate-600">
+                  <div className="flex items-center gap-1.5 bg-slate-50 px-4 py-1.5 rounded-xl font-black text-sm text-slate-600 border border-slate-100">
                     <span>{answer?.points_earned || 0}</span>
                     <span className="text-slate-400">/</span>
                     <span>{question?.points || 0} نقطة</span>
                   </div>
                 </div>
 
-                {/* ✅ عرض الصورة في صفحة النتائج */}
                 {(question?.mediaUrl || question?.media_url) && (
                   <div className="mb-8 rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center max-w-2xl mx-auto p-2">
                     <img 
@@ -195,21 +222,60 @@ export default function StudentExamResult() {
                         isCorrect ? 'text-emerald-700' : 'text-red-700'
                       }`}>إجابة الطالب</span>
                     </div>
-                    <p className="text-lg font-bold text-slate-800 leading-relaxed">
+                    <p className="text-lg font-bold text-slate-800 leading-relaxed whitespace-pre-wrap">
                       {renderStudentAnswer(answer)}
                     </p>
                   </div>
 
-                  {/* الإجابة النموذجية */}
-                  {(!isCorrect || isManual) && question?.type !== 'open' && question?.type !== 'paragraph' && (
+                  {/* الإجابة النموذجية أو واجهة التصحيح للمعلم */}
+                  {(!isCorrect || isManual) && (
                     <div className="p-5 rounded-2xl border bg-slate-50 border-slate-200">
                       <div className="flex items-center gap-2 mb-3">
                         <Check className="h-5 w-5 text-slate-500" />
-                        <span className="text-sm font-black text-slate-700">الإجابة النموذجية</span>
+                        <span className="text-sm font-black text-slate-700">
+                           {isManual ? 'التصحيح اليدوي (للمعلم)' : 'الإجابة النموذجية'}
+                        </span>
                       </div>
-                      <p className="text-lg font-bold text-slate-800 leading-relaxed">
-                        {renderCorrectAnswer(question)}
-                      </p>
+                      
+                      {/* عرض الإجابة النموذجية إذا كان السؤال اختياراً */}
+                      {!isManual && (
+                        <p className="text-lg font-bold text-slate-800 leading-relaxed">
+                          {renderCorrectAnswer(question)}
+                        </p>
+                      )}
+
+                      {/* ✅ واجهة التصحيح اليدوي للمعلم (تظهر للمعلم فقط وفي الأسئلة المقالية) */}
+                      {isManual && currentRole === 'teacher' && question && gradingState[question.id] && (
+                        <div className="mt-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center gap-4">
+                          <div className="flex-1 flex items-center gap-3 w-full">
+                            <label className="text-sm font-bold text-slate-600 whitespace-nowrap">قيّم الإجابة:</label>
+                            <input 
+                              type="number" 
+                              min="0" 
+                              max={question.points}
+                              value={gradingState[question.id].points}
+                              onChange={(e) => setGradingState(prev => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))}
+                              className="w-20 p-2 text-center rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-600 font-bold"
+                            />
+                            <span className="text-sm text-slate-500 font-medium">من {question.points}</span>
+                          </div>
+                          
+                          <button 
+                            onClick={() => handleSaveGrade(question.id)}
+                            disabled={gradingState[question.id].isSubmitting}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-indigo-700 transition-all disabled:opacity-50"
+                          >
+                            {gradingState[question.id].isSubmitting ? 'جاري الحفظ...' : 'حفظ الدرجة'}
+                            {!gradingState[question.id].isSubmitting && <Save className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      )}
+                      
+                      {isManual && currentRole === 'student' && (
+                        <p className="text-sm font-bold text-slate-500 mt-2">
+                           يتم تقييم هذا السؤال من قبل المعلم.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
