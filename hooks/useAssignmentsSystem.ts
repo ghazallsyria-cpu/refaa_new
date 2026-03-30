@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
-import { normalizePayload } from '@/lib/utils';
 
 export interface AssignmentDetails {
   assignment: AssignmentWithMeta;
@@ -14,18 +13,21 @@ export interface AssignmentDetails {
 }
 
 export function useAssignmentsSystem() {
-  const { user, authRole } = useAuth();
+  // توحيد الدور لتفادي أي مشاكل في التسمية
+  const { user, authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
+  
   const [data, setData] = useState<AssignmentWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
   const fetchAssignments = useCallback(async (): Promise<void> => {
-    if (!user || !authRole) return;
+    if (!user || !currentRole) return;
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch assignments with joins
+      // 1. Fetch assignments with joins (Base Query)
       let query = supabase
         .from('assignments')
         .select(`
@@ -42,33 +44,45 @@ export function useAssignmentsSystem() {
         `)
         .order('due_date', { ascending: true });
 
-      if (authRole === 'student') {
-        // Fetch student's section
+      if (currentRole === 'student') {
         const { data: studentData } = await supabase
           .from('students')
           .select('section_id')
-          .eq('id', user.id)
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`) // بحث ذكي وآمن
           .single();
         
         if (studentData?.section_id) {
-          query = query.eq('assignment_sections.section_id', studentData.section_id);
+          // ✅ إصلاح للطالب: استخدام !inner لضمان فلترة الواجبات المخصصة لصفه فقط
+          query = supabase
+            .from('assignments')
+            .select(`
+              *,
+              subject:subjects(name),
+              teacher:teachers(user:users(full_name)),
+              assignment_sections!inner(
+                section_id,
+                section:sections(
+                  name,
+                  class:classes(name)
+                )
+              )
+            `)
+            .eq('assignment_sections.section_id', studentData.section_id)
+            .eq('status', 'published')
+            .order('due_date', { ascending: true });
         } else {
           setData([]);
           setLoading(false);
           return;
         }
-      } else if (authRole === 'teacher') {
-        console.log('Fetching assignments for teacher:', user.id);
-        
+      } else if (currentRole === 'teacher') {
         let { data: teacherProfile, error: profileError } = await supabase
           .from('teachers')
           .select('id')
-          .eq('id', user.id)
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
           .single();
           
-        // Self-healing: If teacher record is missing but user is a teacher, create it
         if ((profileError || !teacherProfile) && user.user_metadata?.role === 'teacher') {
-          console.log('Teacher profile missing in useAssignmentsSystem, attempting self-healing...');
           const { data: newTeacher, error: createError } = await supabase
             .from('teachers')
             .insert({
@@ -80,29 +94,15 @@ export function useAssignmentsSystem() {
             .single();
           
           if (!createError && newTeacher) {
-            console.log('Teacher profile created successfully via self-healing in useAssignmentsSystem');
             teacherProfile = newTeacher;
             profileError = null;
-          } else {
-            console.error('Failed to self-heal teacher profile in useAssignmentsSystem:', createError);
           }
         }
 
         if (teacherProfile) {
-          const { data: teacherSections } = await supabase
-            .from('teacher_sections')
-            .select('section_id')
-            .eq('teacher_id', teacherProfile.id);
-            
-          const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-          
-          if (sectionIds.length > 0) {
-            query = query.or(`teacher_id.eq.${teacherProfile.id},assignment_sections.section_id.in.(${sectionIds.join(',')})`);
-          } else {
-            query = query.eq('teacher_id', teacherProfile.id);
-          }
+          // ✅ الإصلاح السحري للمعلم: إزالة شرط OR المكسور، وجلب واجبات المعلم مباشرة
+          query = query.eq('teacher_id', teacherProfile.id);
         } else {
-          console.error('Teacher profile not found for user:', user.id, profileError);
           setData([]);
           setLoading(false);
           return;
@@ -123,7 +123,7 @@ export function useAssignmentsSystem() {
       setData(mappedData);
 
       // 2. Fetch submissions if student
-      if (authRole === 'student') {
+      if (currentRole === 'student') {
         const { data: subData, error: subError } = await supabase
           .from('assignment_submissions')
           .select('assignment_id, status, grade, id, student_id, submitted_at')
@@ -139,7 +139,7 @@ export function useAssignmentsSystem() {
       }
 
       // 3. Fetch submission counts if teacher/admin
-      if (['teacher', 'admin', 'management'].includes(authRole)) {
+      if (['teacher', 'admin', 'management'].includes(currentRole)) {
         const { data: countsData, error: countsError } = await supabase
           .from('assignment_submissions')
           .select('assignment_id, status');
@@ -164,7 +164,7 @@ export function useAssignmentsSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, authRole]);
+  }, [user, currentRole]);
 
   useEffect(() => {
     fetchAssignments();
@@ -265,7 +265,7 @@ export function useAssignmentsSystem() {
       let answersData: AssignmentAnswer[] = [];
       let allSubmissionsData: SubmissionWithStudent[] = [];
 
-      if (authRole === 'student' && user) {
+      if (currentRole === 'student' && user) {
         const { data: subData } = await supabase
           .from('assignment_submissions')
           .select('*')
@@ -281,7 +281,7 @@ export function useAssignmentsSystem() {
             .eq('submission_id', subData.id);
           answersData = (aData as AssignmentAnswer[]) || [];
         }
-      } else if (['teacher', 'admin', 'management'].includes(authRole || '')) {
+      } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const { data: subsData, error: subsError } = await supabase
           .from('assignment_submissions')
           .select(`
@@ -314,7 +314,7 @@ export function useAssignmentsSystem() {
       console.error('Error fetching assignment details:', err);
       throw err;
     }
-  }, [user, authRole]);
+  }, [user, currentRole]);
 
   const submitAssignment = useCallback(async (assignmentId: string, answers: RawAssignmentAnswer[], submissionId?: string): Promise<string> => {
     if (!user) throw new Error('Not authenticated');
@@ -426,3 +426,4 @@ export function useAssignmentsSystem() {
     updateSubmissionGrade
   } as const;
 }
+
