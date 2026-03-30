@@ -279,7 +279,6 @@ export default function AssignmentsPage() {
                       )}
                     </div>
                     
-                    {/* الإصلاح هنا: السماح للمعلم برؤية أدوات التعديل والحذف مباشرة */}
                     {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
                       <div className="flex gap-2">
                         <Link 
@@ -330,7 +329,7 @@ export default function AssignmentsPage() {
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <Users className="h-5 w-5 text-indigo-500" />
                       <span className="line-clamp-1">
-                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name} - ${as.section?.name}`).join(', ') || 'لا يوجد فصول'}
+                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join(', ') || 'لا يوجد فصول'}
                       </span>
                     </div>
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
@@ -489,7 +488,8 @@ export default function AssignmentsPage() {
                           onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
                         >
                           <option value="">اختر المادة</option>
-                          {subjects.map((s: Subject) => (
+                          {/* ✅ الإصلاح هنا: إزالة نوع Subject من الماب */}
+                          {subjects.map((s: any) => (
                             <option key={s.id} value={s.id}>{s.name}</option>
                           ))}
                         </select>
@@ -516,7 +516,7 @@ export default function AssignmentsPage() {
                   <div>
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الشعب المستهدفة <span className="text-red-500">*</span></label>
                     <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto p-4 border border-slate-100 rounded-2xl bg-slate-50/50">
-                      {sections.map((s: Section) => (
+                      {sections.map((s: any) => (
                         <label key={s.id} className="flex items-center gap-3 cursor-pointer group">
                           <input
                             type="checkbox"
@@ -615,4 +615,5 @@ export default function AssignmentsPage() {
     </div>
   );
 }
+
 
