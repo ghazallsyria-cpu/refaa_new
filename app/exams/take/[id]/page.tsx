@@ -81,20 +81,23 @@ export default function TakeQuiz() {
     try {
       let totalScore = 0;
       const formattedAnswers: Record<string, any> = {};
-      let requiresManualGrading = false; // 🔍 البحث عن أسئلة مقالية
+      let requiresManualGrading = false;
 
       for (const q of questions) {
         const studentAnswer = answers[q.id];
         let isCorrect = false;
         let pointsEarned = 0;
+        
+        // ✅ تحويل النوع إلى نص عادي لإسكات TypeScript
+        const qType = q.type as string;
 
-        if (q.type === 'essay' || q.type === 'fill_in_blank' || q.type === 'open' || q.type === 'paragraph') {
-           requiresManualGrading = true; // وجدنا سؤال مقالي
-        } else if (q.type === 'multiple_choice' || q.type === 'true_false') {
+        if (qType === 'essay' || qType === 'fill_in_blank' || qType === 'open' || qType === 'paragraph' || qType === 'text') {
+           requiresManualGrading = true; // سؤال مقالي
+        } else if (qType === 'multiple_choice' || qType === 'true_false') {
           const correctOpt = q.options.find((o: any) => o.is_correct);
           isCorrect = studentAnswer === correctOpt?.id;
           pointsEarned = isCorrect ? (q.points || 0) : 0;
-        } else if (q.type === 'multi_select') {
+        } else if (qType === 'multi_select' || qType === 'checkbox') {
           const correctOpts = q.options.filter((o: any) => o.is_correct).map((o: any) => o.id);
           const studentOpts = studentAnswer || [];
           isCorrect = correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
@@ -104,15 +107,14 @@ export default function TakeQuiz() {
         totalScore += pointsEarned;
 
         formattedAnswers[q.id] = {
-          optionId: (q.type === 'multiple_choice' || q.type === 'true_false') ? studentAnswer : null,
-          text: (q.type === 'essay' || q.type === 'fill_in_blank') ? studentAnswer : q.type === 'multi_select' ? JSON.stringify(studentAnswer) : (typeof studentAnswer === 'string' ? studentAnswer : ""),
+          optionId: (qType === 'multiple_choice' || qType === 'true_false') ? studentAnswer : null,
+          text: (qType === 'essay' || qType === 'fill_in_blank' || qType === 'open' || qType === 'paragraph' || qType === 'text') ? studentAnswer : (qType === 'multi_select' || qType === 'checkbox') ? JSON.stringify(studentAnswer) : (typeof studentAnswer === 'string' ? studentAnswer : ""),
           isCorrect,
           pointsEarned
         };
       }
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
-      // 💡 تحديد حالة الاختبار بناءً على نوع الأسئلة
       const attemptStatus = requiresManualGrading ? 'submitted' : 'graded';
 
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
@@ -154,6 +156,9 @@ export default function TakeQuiz() {
 
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
+  
+  // المتغير الآمن لنوع السؤال
+  const currentQType = currentQuestion?.type as string;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
@@ -198,14 +203,14 @@ export default function TakeQuiz() {
             </div>
 
             <div className="space-y-3">
-              {(currentQuestion?.type === 'multiple_choice' || currentQuestion?.type === 'true_false') && currentQuestion.options.map((option) => (
+              {(currentQType === 'multiple_choice' || currentQType === 'true_false') && currentQuestion.options.map((option) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", answers[currentQuestion.id] === option.id ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", answers[currentQuestion.id] === option.id ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
                   <span className="text-lg font-medium">{option.content}</span>
                 </button>
               ))}
 
-              {currentQuestion?.type === 'multi_select' && currentQuestion.options.map((option) => {
+              {(currentQType === 'multi_select' || currentQType === 'checkbox') && currentQuestion.options.map((option) => {
                 const isSelected = (answers[currentQuestion.id] || []).includes(option.id);
                 return (
                   <button key={option.id} onClick={() => {
@@ -218,10 +223,10 @@ export default function TakeQuiz() {
                 );
               })}
 
-              {(currentQuestion?.type === 'essay' || currentQuestion?.type === 'open' || currentQuestion?.type === 'paragraph') && (
+              {(currentQType === 'essay' || currentQType === 'open' || currentQType === 'paragraph' || currentQType === 'text') && (
                 <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed" />
               )}
-              {currentQuestion?.type === 'fill_in_blank' && (
+              {currentQType === 'fill_in_blank' && (
                 <input type="text" value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="أدخل الكلمة المفقودة..." className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg font-bold text-center" />
               )}
             </div>
@@ -242,5 +247,4 @@ export default function TakeQuiz() {
     </div>
   );
 }
-
 
