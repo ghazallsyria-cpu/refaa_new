@@ -24,8 +24,12 @@ export async function POST(req: Request) {
     }
 
     let finalExamId = examData.id;
-
     let finalTeacherId = examData.teacher_id;
+
+    // Ensure teacher_id is set if missing
+    if (!finalTeacherId && userId) {
+      finalTeacherId = userId;
+    }
 
     const examPayload = normalizePayload({
       title: examData.title,
@@ -35,6 +39,7 @@ export async function POST(req: Request) {
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
+      total_marks: examData.max_score, // Keep in sync with max_score
       exam_date: examData.exam_date,
       start_time: examData.start_time,
       end_time: examData.end_time,

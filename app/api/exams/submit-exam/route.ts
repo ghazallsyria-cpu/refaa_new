@@ -9,6 +9,7 @@ export async function POST(req: Request) {
 
   try {
     const { examId, answers, score, status, timeSpent, userId } = await req.json();
+    console.log('Submitting exam:', { examId, score, status, userId });
 
     if (!userId) {
       return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
@@ -21,13 +22,17 @@ export async function POST(req: Request) {
       .eq('exam_id', examId)
       .eq('student_id', userId);
 
-    if (existingError) throw existingError;
+    if (existingError) {
+      console.error('Error checking existing attempt:', existingError);
+      throw existingError;
+    }
 
     let attemptId;
 
     if (attempts && attempts.length > 0) {
       // Update existing attempt
       attemptId = attempts[0].id;
+      console.log('Updating existing attempt:', attemptId);
       const { error: attemptError } = await adminSupabase
         .from('exam_attempts')
         .update({
@@ -38,12 +43,16 @@ export async function POST(req: Request) {
         })
         .eq('id', attemptId);
 
-      if (attemptError) throw attemptError;
+      if (attemptError) {
+        console.error('Error updating attempt:', attemptError);
+        throw attemptError;
+      }
       
       // Delete old answers
       await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
     } else {
       // Create new attempt
+      console.log('Creating new attempt for exam:', examId);
       const { data: newAttempt, error: attemptError } = await adminSupabase
         .from('exam_attempts')
         .insert([{
@@ -58,7 +67,10 @@ export async function POST(req: Request) {
         .select()
         .single();
 
-      if (attemptError) throw attemptError;
+      if (attemptError) {
+        console.error('Error creating attempt:', attemptError);
+        throw attemptError;
+      }
       attemptId = newAttempt.id;
     }
 
@@ -67,14 +79,18 @@ export async function POST(req: Request) {
       attempt_id: attemptId,
       question_id: questionId,
       text_answer: answerData.text || null,
-      selected_option_id: answerData.optionId || null,
+      selected_option_id: (answerData.optionId && answerData.optionId !== '') ? answerData.optionId : null,
       is_correct: answerData.isCorrect || false,
       points_earned: answerData.pointsEarned || 0
     }));
 
     if (studentAnswersPayload.length > 0) {
+      console.log('Saving student answers, count:', studentAnswersPayload.length);
       const { error: answersError } = await adminSupabase.from('student_answers').insert(studentAnswersPayload);
-      if (answersError) throw answersError;
+      if (answersError) {
+        console.error('Error saving student answers:', answersError);
+        throw answersError;
+      }
     }
 
     // Send notification to teacher

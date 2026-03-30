@@ -32,7 +32,7 @@ export function useAssignmentsSystem() {
           *,
           subject:subjects(name),
           teacher:teachers(user:users(full_name)),
-          assignment_sections!inner(
+          assignment_sections(
             section_id,
             section:sections(
               name,

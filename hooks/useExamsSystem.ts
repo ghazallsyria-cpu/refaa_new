@@ -128,6 +128,7 @@ export function useExamsSystem() {
 
       let mappedData: ExamWithMeta[] = (examsData || []).map((e: any) => ({
         ...e,
+        total_marks: e.total_marks || e.max_score || 0,
         subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name,
         teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
         section_name: e.exam_sections && e.exam_sections.length > 0 ? e.exam_sections.map((es: any) => es.sections?.name).join(', ') : 'غير محدد',
