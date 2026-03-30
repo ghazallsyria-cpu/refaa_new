@@ -54,7 +54,7 @@ export default function StudentDashboard() {
       
       if (data) {
         setStudentData(data.student || null);
-        setAttendanceStats({ rate: data.attendanceRate || 0, ...data.attendanceStats });
+        setAttendanceStats({ rate: data.attendanceRate || 0, ...((data as any).attendanceStats || {}) });
         setRecentGrades(data.grades || []);
         setUpcomingExams(data.exams || []);
         setUpcomingAssignments(data.assignments || []);
