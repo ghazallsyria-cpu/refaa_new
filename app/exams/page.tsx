@@ -8,7 +8,7 @@ import {
   TrendingUp, ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
@@ -26,9 +26,11 @@ export default function ExamsDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
+  // الحماية من الانهيار إذا كان عنوان الاختبار مفقوداً
   const filteredExams = exams.filter(exam => {
-    const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         exam.subject_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!exam) return false;
+    const matchesSearch = (exam.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         (exam.subject_name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -64,23 +66,28 @@ export default function ExamsDashboard() {
   const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
   
   const getExamStatus = (exam: any) => {
-    if (exam.status !== 'published') return null;
+    if (exam?.status !== 'published') return null;
+    if (!exam?.exam_date) return 'available';
     
-    const now = new Date();
-    const examDate = new Date(exam.exam_date);
-    
-    const startTimeParts = (exam.start_time || '00:00').split(':');
-    const endTimeParts = (exam.end_time || '23:59').split(':');
-    
-    const startDateTime = new Date(examDate);
-    startDateTime.setHours(parseInt(startTimeParts[0]), parseInt(startTimeParts[1]), 0);
-    
-    const endDateTime = new Date(examDate);
-    endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
-    
-    if (now < startDateTime) return 'not_started';
-    if (now > endDateTime) return 'expired';
-    return 'available';
+    try {
+      const now = new Date();
+      const examDate = new Date(exam.exam_date);
+      
+      const startTimeParts = (exam.start_time || '00:00').split(':');
+      const endTimeParts = (exam.end_time || '23:59').split(':');
+      
+      const startDateTime = new Date(examDate);
+      startDateTime.setHours(parseInt(startTimeParts[0] || '0'), parseInt(startTimeParts[1] || '0'), 0);
+      
+      const endDateTime = new Date(examDate);
+      endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
+      
+      if (now < startDateTime) return 'not_started';
+      if (now > endDateTime) return 'expired';
+      return 'available';
+    } catch(e) {
+      return 'available';
+    }
   };
 
   if (!mounted || authLoading) {
@@ -92,7 +99,7 @@ export default function ExamsDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 space-y-12">
         
         {/* Header Section */}
@@ -133,15 +140,15 @@ export default function ExamsDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               { label: 'إجمالي الاختبارات', value: exams.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', shadow: 'shadow-blue-100' },
-              { label: 'اختبارات منشورة', value: exams.filter(e => e.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
-              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
+              { label: 'اختبارات منشورة', value: exams.filter(e => e?.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
+              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
               { 
                 label: 'متوسط النجاح', 
                 value: (() => {
-                  const totalAttempts = exams.reduce((acc, e) => acc + (e.submission_count || 0), 0);
+                  const totalAttempts = exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0);
                   if (totalAttempts === 0) return '0%';
                   const totalScore = exams.reduce((acc, e) => {
-                    return acc + (e.avg_score || 0) * (e.submission_count || 0);
+                    return acc + (e?.avg_score || 0) * (e?.submission_count || 0);
                   }, 0);
                   return `${Math.round(totalScore / totalAttempts)}%`;
                 })(), 
@@ -244,6 +251,8 @@ export default function ExamsDashboard() {
                            'منتهي'}
                         </div>
                       )}
+                      
+                      {/* ✅ الإصلاح: إظهار قائمة التعديلات للمعلم والمدير بشكل مباشر */}
                       {isTeacherOrAdmin && (
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger asChild>
@@ -257,30 +266,26 @@ export default function ExamsDashboard() {
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Portal>
                             <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
-                              {(authRole === 'admin' || authRole === 'management' || exam.teacher_id === user?.id) && (
-                                <>
-                                  <DropdownMenu.Item asChild>
-                                    <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                      <Edit2 className="h-5 w-5" />
-                                      <span>تعديل الاختبار</span>
-                                    </Link>
-                                  </DropdownMenu.Item>
-                                  <DropdownMenu.Item asChild>
-                                    <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                      <BarChart2 className="h-5 w-5" />
-                                      <span>النتائج والتحليلات</span>
-                                    </Link>
-                                  </DropdownMenu.Item>
-                                  <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
-                                  <DropdownMenu.Item 
-                                    className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
-                                    onClick={() => handleDelete(exam.id)}
-                                  >
-                                    <Trash2 className="h-5 w-5" />
-                                    <span>حذف الاختبار</span>
-                                  </DropdownMenu.Item>
-                                </>
-                              )}
+                              <DropdownMenu.Item asChild>
+                                <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                  <Edit2 className="h-5 w-5" />
+                                  <span>تعديل الاختبار</span>
+                                </Link>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item asChild>
+                                <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
+                                  <BarChart2 className="h-5 w-5" />
+                                  <span>النتائج والتحليلات</span>
+                                </Link>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
+                              <DropdownMenu.Item 
+                                className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
+                                onClick={() => handleDelete(exam.id)}
+                              >
+                                <Trash2 className="h-5 w-5" />
+                                <span>حذف الاختبار</span>
+                              </DropdownMenu.Item>
                               <DropdownMenu.Item asChild>
                                 <Link href={`/exams/take/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
                                   <Eye className="h-5 w-5" />
@@ -319,13 +324,13 @@ export default function ExamsDashboard() {
                             <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
                               <FileText className="h-5 w-5 text-blue-500" />
                             </div>
-                            <span>{exam.question_count} سؤال</span>
+                            <span>{exam.question_count || 0} سؤال</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
                             <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
                               <Users className="h-5 w-5 text-emerald-500" />
                             </div>
-                            <span>{exam.submission_count} محاولة</span>
+                            <span>{exam.submission_count || 0} محاولة</span>
                           </div>
                         </>
                       )}
@@ -341,7 +346,7 @@ export default function ExamsDashboard() {
                           </div>
                           <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">متوسط الأداء</p>
-                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score}%</p>
+                            <p className="text-xl font-black text-indigo-600 leading-none">{exam.avg_score || 0}%</p>
                           </div>
                         </div>
                         <Link href={`/exams/results/${exam.id}`}>
@@ -423,3 +428,5 @@ export default function ExamsDashboard() {
     </div>
   );
 }
+
+
