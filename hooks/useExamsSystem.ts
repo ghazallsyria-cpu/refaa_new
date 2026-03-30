@@ -17,7 +17,7 @@ export interface StudentExamResult {
   answers: any[];
 }
 
-// ✅ تم تحصين الدالة لتقبل الفراغ (null) بدون أن يتوقف البناء!
+// ✅ تم تحصين الدالة لتقبل الفراغ (null) وعرض الصور بشكل صحيح
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   return (questionsData || []).map((q: any) => {
     const normalized = normalizeQuestion(q) as any; 
@@ -150,7 +150,7 @@ export function useExamsSystem() {
       
       const result: any = { 
         exam: { ...examData, section_ids: examSectionsData ? examSectionsData.map((es: any) => es.section_id) : [] }, 
-        questions: mapQuestionsWithMedia(questionsData || []) // ✅ تأمين إضافي بـ || []
+        questions: mapQuestionsWithMedia(questionsData || []) 
       };
       return result;
     } catch (err) { throw err; }
@@ -194,12 +194,13 @@ export function useExamsSystem() {
           subject_name: Array.isArray(examData.subject) ? examData.subject[0]?.name : examData.subject?.name,
           teacher_name: Array.isArray(examData.teacher?.users) ? examData.teacher.users[0]?.full_name : examData.teacher?.users?.full_name,
         },
-        questions: mapQuestionsWithMedia(questionsData || []) // ✅ تأمين إضافي
+        questions: mapQuestionsWithMedia(questionsData || [])
       };
       return result;
     } catch (err) { throw err; }
   }, [user]);
 
+  // ✅ دالة التسليم المحدثة التي ستظهر تفاصيل الخطأ في نافذة منبثقة (Alert)
   const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
     try {
@@ -209,10 +210,14 @@ export function useExamsSystem() {
         body: JSON.stringify({ examId, answers, score, status, timeSpent, userId: user.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to submit exam');
+      if (!response.ok) {
+        // هذه النافذة ستخبرنا بالخطأ الدقيق من قاعدة البيانات!
+        alert("تفاصيل الخطأ من قاعدة البيانات:\n\n" + (result.error || 'Failed to submit'));
+        throw new Error(result.error || 'Failed to submit exam');
+      }
       await fetchExams();
       return result.attemptId;
-    } catch (err) { throw err; }
+    } catch (err: any) { throw err; }
   }, [user, fetchExams]);
 
   const deleteExam = useCallback(async (examId: string): Promise<void> => {
@@ -272,7 +277,7 @@ export function useExamsSystem() {
         exam: examData,
         students: studentsData,
         attempts: attemptsData || [],
-        questions: mapQuestionsWithMedia(qData || []), // ✅ تأمين إضافي
+        questions: mapQuestionsWithMedia(qData || []), 
         answers: aData || []
       };
       return result;
@@ -288,6 +293,7 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
+  // ✅ جلب نتائج الطالب بطريقة منفصلة (Decoupled Queries) لمنع انهيار قاعدة البيانات
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
       const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
