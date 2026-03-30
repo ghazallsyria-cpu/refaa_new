@@ -70,8 +70,6 @@ export function useSchedulesSystem() {
         id, 
         day_of_week, 
         period, 
-        start_time, 
-        end_time, 
         teacher_id,
         section_id,
         subject_id,

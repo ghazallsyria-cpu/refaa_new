@@ -45,7 +45,10 @@ export default function TeachersReportPage() {
 
   useEffect(() => {
     const now = new Date();
-    setTodayStr(now.toISOString().split("T")[0]);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    setTodayStr(`${year}-${month}-${day}`);
     setTodayName(DAY_MAP[now.getDay()]);
     setDateLabel(`${now.getDate()} ${MONTH_MAP[now.getMonth()]} ${now.getFullYear()}`);
   }, []);
@@ -57,7 +60,10 @@ export default function TeachersReportPage() {
       const now = new Date();
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
-      const weekAgoStr = weekAgo.toISOString().split("T")[0];
+      const wYear = weekAgo.getFullYear();
+      const wMonth = String(weekAgo.getMonth() + 1).padStart(2, '0');
+      const wDay = String(weekAgo.getDate()).padStart(2, '0');
+      const weekAgoStr = `${wYear}-${wMonth}-${wDay}`;
       
       const jsDay = now.getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
@@ -71,7 +77,8 @@ export default function TeachersReportPage() {
 
         const recorded = scheduleData?.filter((slot: any) =>
           attendanceData?.some((a: any) => {
-            const aDate = new Date(a.date);
+            const [year, month, day] = a.date.split('-').map(Number);
+            const aDate = new Date(year, month - 1, day);
             const aDay = aDate.getDay();
             const aDbDay = aDay === 0 ? 1 : aDay === 1 ? 2 : aDay === 2 ? 3 : aDay === 3 ? 4 : aDay === 4 ? 5 : 0;
             return a.section_id === slot.section_id && a.period_number === slot.period && aDbDay === slot.day_of_week;

@@ -262,9 +262,9 @@ export const SaveAssignmentRequestSchema = z.object({
     id: z.string().uuid().optional(),
     content: z.string().min(1),
     type: QuestionTypeSchema,
-    options: z.array(z.string()).optional().nullable(),
+    options: z.array(z.any()).optional().nullable(),
     points: z.number().min(0),
-    isRequired: z.boolean(),
+    isRequired: z.boolean().optional(),
   })),
   sectionIds: z.array(z.string().uuid()),
   subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
@@ -316,7 +316,7 @@ export const SaveScheduleRequestSchema = z.object({
   subject_id: z.string().uuid(),
   teacher_id: z.string().uuid(),
   day_of_week: z.number().int().min(0).max(6),
-  period_number: z.number().int().min(1).max(12),
+  period: z.number().int().min(1).max(12),
   room_number: z.string().optional().nullable(),
 });
 

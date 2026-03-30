@@ -28,9 +28,17 @@ export function useExamsSystem() {
     setLoading(true);
     setError(null);
     try {
-      let query = supabase
-        .from('exams')
-        .select(`
+      const selectQuery = authRole === 'student' 
+        ? `
+          *,
+          subject:subjects(name),
+          teacher:teachers(users(full_name)),
+          exam_sections!inner(
+            section_id,
+            sections(name, classes(name))
+          )
+        `
+        : `
           *,
           subject:subjects(name),
           teacher:teachers(users(full_name)),
@@ -38,7 +46,11 @@ export function useExamsSystem() {
             section_id,
             sections(name, classes(name))
           )
-        `)
+        `;
+
+      let query = supabase
+        .from('exams')
+        .select(selectQuery)
         .order('created_at', { ascending: false });
 
       // If student, we only want published exams for their section

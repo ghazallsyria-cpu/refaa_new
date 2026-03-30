@@ -30,10 +30,11 @@ export function useSchoolFormData() {
           }))
         };
       } else if (authRole === 'teacher') {
-        const [subjectsRes, sectionsRes, teacherSectionsRes] = await Promise.all([
+        const [subjectsRes, sectionsRes, teacherSectionsRes, schedulesRes] = await Promise.all([
           supabase.from('subjects').select('*').order('name'),
           supabase.from('sections').select('*, class:classes(name)').order('name'),
-          supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id)
+          supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id),
+          supabase.from('schedules').select('subject_id').eq('teacher_id', user.id)
         ]);
 
         const assignedSectionIds = teacherSectionsRes.data?.map(ts => ts.section_id) || [];
@@ -44,8 +45,11 @@ export function useSchoolFormData() {
             class: Array.isArray(s.class) ? s.class[0] : s.class
           }));
 
+        const assignedSubjectIds = Array.from(new Set(schedulesRes.data?.map(s => s.subject_id) || []));
+        const assignedSubjects = (subjectsRes.data || []).filter(s => assignedSubjectIds.includes(s.id));
+
         return {
-          subjects: subjectsRes.data || [],
+          subjects: assignedSubjects,
           sections: assignedSections,
           teachers: [{ id: user.id, user: { full_name: user.user_metadata?.full_name || 'أنا' } }]
         };

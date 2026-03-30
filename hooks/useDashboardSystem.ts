@@ -323,7 +323,7 @@ export function useDashboardSystem() {
       ] = await Promise.all([
         supabase
           .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
+          .select('id, day_of_week, period, subjects(name), sections(id, name, classes(name))')
           .eq('teacher_id', user.id)
           .order('day_of_week')
           .order('period'),

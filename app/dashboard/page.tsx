@@ -367,8 +367,8 @@ export default function AdminDashboard() {
               {[
                 { name: 'متابعة المعلمين', icon: Activity, href: '/admin/teachers-monitor', color: 'text-rose-600', bg: 'bg-rose-50' },
                 { name: 'تقرير المعلمين', icon: FileText, href: '/admin/teachers-report', color: 'text-violet-600', bg: 'bg-violet-50' },
+                { name: 'تقرير المسارات', icon: Target, href: '/admin/students-track-report', color: 'text-amber-600', bg: 'bg-amber-50' },
                 { name: 'إضافة طالب', icon: Users, href: '/students', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                { name: 'إضافة معلم', icon: GraduationCap, href: '/teachers', color: 'text-emerald-600', bg: 'bg-emerald-50' },
               ].map((action) => (
                 <Link 
                   key={action.name} 

@@ -411,7 +411,7 @@ export default function AssignmentsPage() {
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300" dir="rtl">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300" dir="rtl">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center">
@@ -430,10 +430,11 @@ export default function AssignmentsPage() {
             </div>
             
             <form onSubmit={handleSaveAssignment} className="space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">حالة الواجب <span className="text-red-500">*</span></label>
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-black text-slate-700 mb-2 mr-1">حالة الواجب <span className="text-red-500">*</span></label>
                     <select 
                       required
                       className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
@@ -568,6 +569,8 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
                 </div>
+                </div>
+                {/* End of Grid */}
 
                 <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
                   <h4 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
