@@ -27,8 +27,6 @@ export default function StudentExamResult() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      // 🔥 تأكد من أنك قمت بإنشاء ملف API في: app/api/exams/student-result/route.ts 
-      // كما طلبنا في الرسالة السابقة لكي يتم جلب الإجابات بنجاح
       const data = await fetchStudentExamResult(examId, studentId);
       if (data) {
         setExam(data.exam || {});
@@ -71,7 +69,6 @@ export default function StudentExamResult() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
-  // 💡 إذا كانت الحالة submitted، فهذا يعني أن هناك أسئلة مقالية لم تصحح
   const isPendingGrading = attempt?.status !== 'graded';
   
   const totalEarned = attempt?.score || 0;
@@ -106,7 +103,6 @@ export default function StudentExamResult() {
         </button>
       </div>
 
-      {/* التنبيه الحاسم: إخفاء الدرجة ووضع ملاحظة للطالب والمعلم */}
       {isPendingGrading && (
         <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
            <div className="bg-amber-200/50 p-3 rounded-2xl text-amber-600 shrink-0"><Clock className="w-8 h-8" /></div>
@@ -144,7 +140,6 @@ export default function StudentExamResult() {
           <Trophy className="h-10 w-10 text-yellow-300 mb-3 relative z-10" />
           <div className="text-sm font-bold text-white/90 mb-1 relative z-10">النتيجة النهائية</div>
           <div className="text-5xl font-black tracking-tighter relative z-10 flex items-baseline gap-2">
-            {/* 🛑 إخفاء العلامة تماماً للطالب إذا كان قيد المراجعة */}
             {isPendingGrading && currentRole === 'student' ? (
                <span className="text-2xl text-white">قيد المراجعة</span>
             ) : (
@@ -164,7 +159,6 @@ export default function StudentExamResult() {
           const question = answer?.question;
           const qType = (question?.type || '').toLowerCase();
           const isManual = qType.includes('essay') || qType.includes('open') || qType.includes('text') || qType.includes('paragraph') || qType.includes('fill_in');
-          
           const isCorrect = isManual ? (answer?.points_earned > 0) : answer?.is_correct;
 
           return (
@@ -180,7 +174,6 @@ export default function StudentExamResult() {
                     {question?.content || 'نص السؤال غير متوفر'}
                   </h3>
                   <div className="flex items-center gap-1.5 bg-slate-50 px-4 py-1.5 rounded-xl font-black text-sm text-slate-600 border border-slate-100">
-                    {/* إخفاء الدرجة للطالب في الأسئلة المقالية إذا لم تُصحح بعد */}
                     <span>{isManual && isPendingGrading && currentRole === 'student' ? '؟' : (answer?.points_earned || 0)}</span>
                     <span className="text-slate-400">/</span>
                     <span>{question?.points || 0} نقطة</span>
@@ -211,7 +204,6 @@ export default function StudentExamResult() {
                       
                       {!isManual && <p className="text-lg font-bold text-slate-800 leading-relaxed">{question?.options?.find((o:any)=>o.is_correct)?.content || ''}</p>}
 
-                      {/* ✅ واجهة التصحيح تظهر فقط للمعلم */}
                       {isManual && currentRole === 'teacher' && question && gradingState[question.id] && (
                         <div className="mt-2 bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                           <div className="flex-1 flex items-center gap-3">
@@ -241,7 +233,7 @@ export default function StudentExamResult() {
             <AlertCircle className="h-16 w-16 text-amber-400 mx-auto mb-4" />
             <h3 className="text-2xl font-black text-slate-800 mb-2">لا توجد إجابات مسجلة</h3>
             <p className="text-slate-500 font-medium max-w-md mx-auto leading-relaxed">
-              يرجى التأكد من أنك تملك ملف API في المسار الصحيح (app/api/exams/student-result/route.ts) لجلب الإجابات!
+              لم يقم الطالب بحفظ أي إجابات في هذه المحاولة، أو أن الإجابات فُقدت بسبب خطأ سابق في الحفظ. <br/> يرجى حذف هذه النتيجة (من زر سلة المهملات) ليتمكن الطالب من إعادة الاختبار.
             </p>
           </div>
         )}
