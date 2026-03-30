@@ -35,33 +35,29 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
 
-    let answersData: any[] = [];
+    // 4. السحر هنا: جلب أسئلة الاختبار الأساسية دائماً وبشكل مستقل!
+    const { data: rawQuestions } = await adminSupabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
 
+    // 5. جلب الإجابات إن وجدت
+    let answersData: any[] = [];
     if (attemptData) {
       let { data: rawAnswers } = await adminSupabase.from('student_answers').select('*').eq('attempt_id', attemptData.id);
 
-      // الخطة البديلة
       if (!rawAnswers || rawAnswers.length === 0) {
         const { data: fAnswers } = await adminSupabase.from('exam_answers').select('*').eq('attempt_id', attemptData.id);
         if (fAnswers && fAnswers.length > 0) {
            rawAnswers = fAnswers.map(a => ({ ...a, text_answer: a.answer, selected_option_id: a.answer }));
         }
       }
-
-      if (rawAnswers && rawAnswers.length > 0) {
-        const { data: rawQuestions } = await adminSupabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId);
-        answersData = rawAnswers.map((ans: any) => {
-          const matchedQ = rawQuestions?.find((q: any) => q.id === ans.question_id);
-          return { ...ans, question: matchedQ || null };
-        });
-      }
+      answersData = rawAnswers || [];
     }
 
     return NextResponse.json({
       exam: examData,
       student: studentData,
       attempt: attemptData,
-      answers: answersData
+      answers: answersData,
+      questions: rawQuestions || [] // إرسال الأسئلة للواجهة
     });
 
   } catch (error: any) {
