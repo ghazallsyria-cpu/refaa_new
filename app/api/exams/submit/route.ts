@@ -1,14 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+// دالة للتحقق من أن النص هو UUID حقيقي وليس كلمة عادية
+const isValidUUID = (uuid: string) => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+};
+
 export async function POST(req: Request) {
   const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
   try {
     const body = await req.json();
-    const { examId, answers, score, status, timeSpent, userId } = body;
+    const { examId, answers, score, status, userId } = body;
 
-    // 1. البحث عن الطالب بأمان
     let realStudentId = userId;
     const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
     if (st) realStudentId = st.id;
@@ -17,98 +21,60 @@ export async function POST(req: Request) {
       if (st2) realStudentId = st2.id;
     }
 
-    // 2. إنشاء أو تحديث المحاولة (مع الخطة البديلة B لتجاوز عمود time_spent)
     let attemptId;
     const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
 
-    const attemptPayload: any = {
+    const attemptPayload = {
         exam_id: examId,
         student_id: realStudentId,
         score: score || 0,
-        status: status === 'completed' ? 'graded' : 'submitted',
+        status: status, // status now comes perfectly from the frontend (graded or submitted)
         completed_at: new Date().toISOString(),
-        time_spent: timeSpent || 0
     };
 
     if (existing) {
       attemptId = existing.id;
-      const { error: updErr } = await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
-      
-      if (updErr) {
-          // الخطة البديلة: إذا اعترضت القاعدة على عمود time_spent، نحذفه ونرسل بدونه
-          delete attemptPayload.time_spent;
-          const retry = await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
-          if (retry.error) throw new Error('DB_UPDATE_ATTEMPT: ' + retry.error.message);
-      }
-      
+      await adminSupabase.from('exam_attempts').update(attemptPayload).eq('id', attemptId);
       await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
-      await adminSupabase.from('exam_answers').delete().eq('attempt_id', attemptId);
     } else {
-      attemptPayload.started_at = new Date().toISOString();
-      let { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([attemptPayload]).select('id').single();
-      
-      if (insErr) {
-          // الخطة البديلة: إذا اعترضت القاعدة على عمود time_spent، نحذفه ونرسل بدونه
-          delete attemptPayload.time_spent;
-          const retry = await adminSupabase.from('exam_attempts').insert([attemptPayload]).select('id').single();
-          if (retry.error) throw new Error('DB_INSERT_ATTEMPT: ' + retry.error.message);
-          newAtt = retry.data;
-      }
+      const { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([{...attemptPayload, started_at: new Date().toISOString()}]).select('id').single();
+      if (insErr) throw new Error('فشل إنشاء محاولة الاختبار: ' + insErr.message);
       attemptId = newAtt.id;
     }
 
-    // 3. إدخال الإجابات بأقصى درجات الأمان
+    // تجهيز الإجابات بطريقة آمنة جداً تمنع انهيار قاعدة البيانات
     if (answers && Object.keys(answers).length > 0) {
       const formattedAnswers = Object.entries(answers).map(([qId, ans]: any) => {
-        let txt = null;
         let optId = null;
-        let isCorr = false;
-        let pts = 0;
+        let textAns = "";
 
-        if (typeof ans === 'string') {
-          if (ans.length === 36 && ans.includes('-')) optId = ans;
-          else txt = ans;
-        } else if (typeof ans === 'object' && ans !== null) {
-          txt = ans.text ? String(ans.text) : null;
-          optId = (ans.optionId && typeof ans.optionId === 'string' && ans.optionId.trim() !== '') ? ans.optionId : null;
-          isCorr = ans.isCorrect || false;
-          pts = ans.pointsEarned || 0;
+        if (typeof ans === 'object' && ans !== null) {
+          // إذا كان optionId موجوداً وهو UUID حقيقي، نحفظه. وإلا نتركه null.
+          if (ans.optionId && typeof ans.optionId === 'string' && isValidUUID(ans.optionId)) {
+            optId = ans.optionId;
+          }
+          // نحفظ النص دائماً لتجنب ضياع الإجابة
+          textAns = ans.text ? String(ans.text) : "";
         }
 
         return {
           attempt_id: attemptId,
           question_id: qId,
-          text_answer: txt,
+          text_answer: textAns,
           selected_option_id: optId,
-          is_correct: isCorr,
-          points_earned: pts
+          is_correct: ans?.isCorrect || false,
+          points_earned: ans?.pointsEarned || 0
         };
       });
 
-      // محاولة الحفظ في الجدول الأول
       const { error: ansErr } = await adminSupabase.from('student_answers').insert(formattedAnswers);
-      
-      // إذا فشل الجدول الأول، نحفظ في الجدول الثاني إجبارياً!
-      if (ansErr) {
-         console.warn("Table student_answers failed, trying exam_answers. Error:", ansErr);
-         const fallbackAnswers = formattedAnswers.map(a => ({
-             attempt_id: a.attempt_id,
-             question_id: a.question_id,
-             answer: a.selected_option_id || a.text_answer || "بدون إجابة",
-             is_correct: a.is_correct,
-             points_earned: a.points_earned
-         }));
-         const { error: fallErr } = await adminSupabase.from('exam_answers').insert(fallbackAnswers);
-         // دمج رسائل الخطأ لكي تظهر لنا بالتفصيل إذا فشل كلاهما
-         if (fallErr) throw new Error(`Ans1: ${ansErr.message} | Ans2: ${fallErr.message}`);
-      }
+      if (ansErr) throw new Error('فشل حفظ الإجابات: ' + ansErr.message);
     }
 
     return NextResponse.json({ success: true, attemptId });
 
   } catch (error: any) {
     console.error('Submit API Failed:', error.message);
-    // إعادة الخطأ الحقيقي الدقيق إلى الواجهة
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
