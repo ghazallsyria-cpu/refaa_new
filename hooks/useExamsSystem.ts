@@ -289,7 +289,7 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
-  // ✅ استخدام حصري وأنيق للـ API الأصلي الذي بنيناه
+  // ✅ الاعتماد الكلي على الـ API، وإذا فشل سيظهر لك تنبيه صريح بالسبب!
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
       const response = await fetch('/api/exams/student-result', {
@@ -299,7 +299,11 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       
-      if (!response.ok) throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
+      if (!response.ok) {
+         // إذا كان هناك خطأ، أظهره فوراً كرسالة منبثقة
+         alert("خطأ في الاتصال بالسيرفر: " + (result.error || 'Unknown Error'));
+         throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
+      }
 
       const formattedAnswers = (result.answers || []).map((ans: any) => {
         if (ans.question) {
