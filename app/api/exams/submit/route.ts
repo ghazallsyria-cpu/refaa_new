@@ -24,11 +24,14 @@ export async function POST(req: Request) {
     let attemptId;
     const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
 
+    // ✅ الحل السحري لتجاوز قيد قاعدة البيانات: ضمان إرسال (completed أو graded) فقط!
+    const validStatus = status === 'graded' ? 'graded' : 'completed';
+
     const attemptPayload = {
         exam_id: examId,
         student_id: realStudentId,
         score: score || 0,
-        status: status, // status now comes perfectly from the frontend (graded or submitted)
+        status: validStatus,
         completed_at: new Date().toISOString(),
     };
 
@@ -49,11 +52,9 @@ export async function POST(req: Request) {
         let textAns = "";
 
         if (typeof ans === 'object' && ans !== null) {
-          // إذا كان optionId موجوداً وهو UUID حقيقي، نحفظه. وإلا نتركه null.
           if (ans.optionId && typeof ans.optionId === 'string' && isValidUUID(ans.optionId)) {
             optId = ans.optionId;
           }
-          // نحفظ النص دائماً لتجنب ضياع الإجابة
           textAns = ans.text ? String(ans.text) : "";
         }
 
