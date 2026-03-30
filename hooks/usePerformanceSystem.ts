@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 export interface PerformanceData {
   student: {
     id: string;
-    sections: { name: string, classes: { name: string } };
+    sections: { name: string, classes: { name: string }[] }[];
   };
   examAttempts: {
     id: string;
