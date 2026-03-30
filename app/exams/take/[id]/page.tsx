@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { 
   Clock, ChevronLeft, ChevronRight, Send, 
   AlertCircle, CheckCircle2, Timer, 
@@ -50,11 +49,9 @@ export default function TakeQuiz() {
     try {
       const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
       
-      // Check if exam is available based on date and time
       const now = new Date();
       const examDate = new Date(examData.exam_date);
       
-      // Combine date and time for start and end
       const startTimeParts = (examData.start_time || '00:00').split(':');
       const endTimeParts = (examData.end_time || '23:59').split(':');
       
@@ -81,7 +78,6 @@ export default function TakeQuiz() {
       setExam({
         ...examData,
         description: examData.description ?? "",
-        // إضافة إعدادات افتراضية كاملة لإرضاء النوع (Type) المطلوب
         settings: {
           shuffle_questions: examData.settings?.shuffle_questions ?? false,
           shuffle_options: examData.settings?.shuffle_options ?? false,
@@ -93,19 +89,10 @@ export default function TakeQuiz() {
 
       if (examData.duration) {
         const durationSeconds = examData.duration * 60;
-        
-        // Also check if end_time is sooner than duration
         const secondsUntilEnd = Math.floor((endDateTime.getTime() - now.getTime()) / 1000);
-        
-        // Use the smaller of the two
         const finalTimeLeft = Math.min(durationSeconds, secondsUntilEnd);
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
       }
-
-      // Note: We are not handling the attempt creation here anymore, 
-      // submitExam will handle creating/updating the attempt.
-      // For a real production app, we should probably still create an 'ongoing' attempt here.
-      // But for this refactor, we'll let submitExam handle it to simplify.
 
     } catch (err) {
       console.error('Error fetching quiz:', err);
@@ -215,9 +202,9 @@ export default function TakeQuiz() {
             <CheckCircle2 className="h-12 w-12" />
           </div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
-          <p className="text-slate-600">شكراً لك على إتمام الاختبار. سيتم مراجعة إجاباتك وإبلاغك بالنتيجة قريباً.</p>
+          <p className="text-slate-600">شكراً لك على إتمام الاختبار. تم حفظ إجاباتك.</p>
           <button 
-            onClick={() => router.push('/exams')}
+            onClick={() => router.push(`/exams`)}
             className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all"
           >
             العودة للرئيسية
@@ -231,8 +218,7 @@ export default function TakeQuiz() {
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col relative">
-      {/* Notification Toast */}
+    <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
       {notification && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transition-all ${
           notification.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -244,7 +230,6 @@ export default function TakeQuiz() {
         </div>
       )}
 
-      {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -265,12 +250,11 @@ export default function TakeQuiz() {
               timeLeft < 60 ? "bg-red-50 text-red-600 border-red-200 animate-pulse" : "bg-slate-50 text-slate-700 border-slate-200"
             )}>
               <Timer className="h-4 w-4" />
-              <span>{formatTime(timeLeft)}</span>
+              <span dir="ltr">{formatTime(timeLeft)}</span>
             </div>
           )}
         </div>
         
-        {/* Progress Bar */}
         <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100">
           <motion.div 
             className="h-full bg-indigo-600"
@@ -291,7 +275,6 @@ export default function TakeQuiz() {
             transition={{ duration: 0.2 }}
             className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-8"
           >
-            {/* Question Content */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm uppercase tracking-wider">
                 <span>سؤال {currentQuestionIdx + 1}</span>
@@ -301,20 +284,19 @@ export default function TakeQuiz() {
               <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed">
                 {currentQuestion?.content}
               </h2>
-              {currentQuestion?.media_url && (
-                <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-slate-100">
-                  <Image 
-                    src={currentQuestion.media_url} 
-                    alt="Question media" 
-                    fill 
-                    className="object-contain"
-                    referrerPolicy="no-referrer"
+              
+              {/* ✅ الحل السحري: استخدام <img> بدلاً من <Image> لعرض الصور الخارجية بذكاء */}
+              {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (
+                <div className="relative w-full flex justify-center bg-slate-50 rounded-2xl overflow-hidden border border-slate-100 p-2 mt-4">
+                  <img 
+                    src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} 
+                    alt="صورة السؤال" 
+                    className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm"
                   />
                 </div>
               )}
             </div>
 
-            {/* Answer Options */}
             <div className="space-y-3">
               {(currentQuestion?.type === 'multiple_choice' || currentQuestion?.type === 'true_false') && (
                 <div className="grid gap-3">
@@ -402,7 +384,6 @@ export default function TakeQuiz() {
         </AnimatePresence>
       </main>
 
-      {/* Footer Navigation */}
       <footer className="bg-white border-t border-slate-200 p-4 sticky bottom-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <button
@@ -441,3 +422,5 @@ export default function TakeQuiz() {
     </div>
   );
 }
+
+
