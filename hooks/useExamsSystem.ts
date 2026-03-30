@@ -136,7 +136,6 @@ export function useExamsSystem() {
       const { data: examSectionsData } = await supabase.from('exam_sections').select('section_id').eq('exam_id', examId);
       const { data: questionsData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
       
-      // ✅ تجاوز التدقيق بالقوة لإنجاح البناء
       const result: any = { 
         exam: { ...examData, section_ids: examSectionsData ? examSectionsData.map((es: any) => es.section_id) : [] }, 
         questions: (questionsData || []).map(normalizeQuestion) 
@@ -177,7 +176,6 @@ export function useExamsSystem() {
 
       const { data: questionsData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
 
-      // ✅ تجاوز التدقيق بالقوة لإنجاح البناء
       const result: any = {
         exam: {
           ...examData,
@@ -249,7 +247,7 @@ export function useExamsSystem() {
       }
 
       const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
-      const { data: qData } = await supabase.from('questions').select('*').eq('exam_id', examId);
+      const { data: qData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId);
       
       let aData: any[] = [];
       if (attemptsData && attemptsData.length > 0) {
@@ -258,7 +256,6 @@ export function useExamsSystem() {
         if (answers) aData = answers;
       }
 
-      // ✅ تجاوز التدقيق بالقوة لإنجاح البناء
       const result: any = {
         exam: examData,
         students: studentsData,
@@ -295,11 +292,29 @@ export function useExamsSystem() {
       
       let answersData: any[] = [];
       if (attemptData) {
-        const { data: answers } = await supabase.from('student_answers').select('*, question:questions(*, options:question_options(*))').eq('attempt_id', attemptData.id);
-        answersData = (answers || []).map((a: any) => ({ ...a, question: a.question ? normalizeQuestion(a.question) : null }));
+        // ✅ جلب الإجابات بشكل منفصل لمنع خطأ قاعدة البيانات!
+        let { data: rawAnswers } = await supabase.from('student_answers').select('*').eq('attempt_id', attemptData.id);
+        
+        // محاولة جلب الإجابات من الجدول الاحتياطي في حال فشل الجدول الأول
+        if (!rawAnswers || rawAnswers.length === 0) {
+          const { data: fAnswers } = await supabase.from('exam_answers').select('*').eq('attempt_id', attemptData.id);
+          if (fAnswers) rawAnswers = fAnswers.map(a => ({ ...a, text_answer: a.answer, selected_option_id: a.answer }));
+        }
+
+        if (rawAnswers && rawAnswers.length > 0) {
+          // ✅ جلب الأسئلة بشكل منفصل ودمجها برمجياً لضمان ظهور التفاصيل!
+          const { data: rawQuestions } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId);
+          
+          answersData = rawAnswers.map((ans: any) => {
+            const matchedQ = rawQuestions?.find((q: any) => q.id === ans.question_id);
+            return {
+              ...ans,
+              question: matchedQ ? normalizeQuestion(matchedQ) : null
+            };
+          });
+        }
       }
 
-      // ✅ تجاوز التدقيق بالقوة لإنجاح البناء
       const result: any = {
         exam: examData,
         student: studentData || { id: studentId, users: { full_name: 'Student' } },
