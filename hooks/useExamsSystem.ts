@@ -170,17 +170,20 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user, fetchExams]);
 
+  // ✅ الإصلاح الذكي لمعاينة المعلم: تخطي فحص الطالب إذا كان المستخدم معلماً
   const fetchExamForStudent = useCallback(async (examId: string): Promise<ExamForStudent> => {
     if (!user) throw new Error('User not authenticated');
     try {
-      let studentProfile = null;
-      const { data: sp1 } = await supabase.from('students').select('section_id').eq('user_id', user.id).maybeSingle();
-      if (sp1) studentProfile = sp1;
-      else {
-        const { data: sp2 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
-        if (sp2) studentProfile = sp2;
+      if (currentRole === 'student') {
+        let studentProfile = null;
+        const { data: sp1 } = await supabase.from('students').select('section_id').eq('user_id', user.id).maybeSingle();
+        if (sp1) studentProfile = sp1;
+        else {
+          const { data: sp2 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
+          if (sp2) studentProfile = sp2;
+        }
+        if (!studentProfile) throw new Error('حساب الطالب غير مكتمل');
       }
-      if (!studentProfile) throw new Error('Student profile not found');
 
       const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name), teacher:teachers(users(full_name))').eq('id', examId).single();
       if (examError) throw examError;
@@ -197,7 +200,7 @@ export function useExamsSystem() {
       };
       return result;
     } catch (err) { throw err; }
-  }, [user]);
+  }, [user, currentRole]);
 
   const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
@@ -208,10 +211,7 @@ export function useExamsSystem() {
         body: JSON.stringify({ examId, answers, score, status, timeSpent, userId: user.id }),
       });
       const result = await response.json();
-      if (!response.ok) {
-        alert("تفاصيل الخطأ من قاعدة البيانات:\n\n" + (result.error || 'Failed to submit'));
-        throw new Error(result.error || 'Failed to submit exam');
-      }
+      if (!response.ok) throw new Error(result.error || 'Failed to submit exam');
       await fetchExams();
       return result.attemptId;
     } catch (err: any) { throw err; }
@@ -290,7 +290,6 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
-  // ✅ استخدام الـ API الخارق لجلب إجابات الطالب وتخطي حماية RLS لكي يراها المعلم فوراً
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
       const response = await fetch('/api/exams/student-result', {
@@ -299,33 +298,33 @@ export function useExamsSystem() {
         body: JSON.stringify({ examId, studentId })
       });
       const result = await response.json();
-      
       if (!response.ok) throw new Error(result.error || 'Failed to fetch result');
-
-      // معالجة الصور والتفاصيل للإجابات لضمان ظهورها في التصميم
       const formattedAnswers = (result.answers || []).map((ans: any) => {
         if (ans.question) {
           const nq = normalizeQuestion(ans.question) as any;
-          ans.question = {
-            ...nq,
-            mediaUrl: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null,
-            media_url: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null
-          };
+          ans.question = { ...nq, mediaUrl: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null, media_url: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null };
         }
         return ans;
       });
-
-      const finalResult: any = {
-        exam: result.exam,
-        student: result.student || { id: studentId, users: { full_name: 'طالب غير محدد' } },
-        attempt: result.attempt || null,
-        answers: formattedAnswers
-      };
+      const finalResult: any = { exam: result.exam, student: result.student || { id: studentId, users: { full_name: 'طالب غير محدد' } }, attempt: result.attempt || null, answers: formattedAnswers };
       return finalResult;
     } catch (err) { throw err; }
   }, []);
 
-  return { data, loading, error, refetch: fetchExams, saveExam, submitExam, deleteExamWithMedia, deleteExam, fetchExamDetails, fetchExamForStudent, fetchExamResults, deleteAttempt, fetchStudentExamResult };
+  // ✅ دالة جديدة لإرسال التصحيح اليدوي لقاعدة البيانات
+  const gradeAnswer = useCallback(async (attemptId: string, questionId: string, pointsEarned: number): Promise<void> => {
+    try {
+      const response = await fetch('/api/exams/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attemptId, questionId, pointsEarned })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'فشل تقييم الإجابة');
+    } catch (err) { throw err; }
+  }, []);
+
+  return { data, loading, error, refetch: fetchExams, saveExam, submitExam, deleteExamWithMedia, deleteExam, fetchExamDetails, fetchExamForStudent, fetchExamResults, deleteAttempt, fetchStudentExamResult, gradeAnswer };
 }
 
 
