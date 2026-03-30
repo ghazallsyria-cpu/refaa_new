@@ -17,10 +17,10 @@ export interface StudentExamResult {
   answers: any[];
 }
 
-// ✅ دالة سحرية لإجبار النظام على سحب الصور وعرضها للطلاب (تم تحصينها ضد TypeScript)
-const mapQuestionsWithMedia = (questionsData: any[]) => {
+// ✅ تم تحصين الدالة لتقبل الفراغ (null) بدون أن يتوقف البناء!
+const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   return (questionsData || []).map((q: any) => {
-    const normalized = normalizeQuestion(q) as any; // ✅ تعويذة الأمان هنا
+    const normalized = normalizeQuestion(q) as any; 
     return {
       ...normalized,
       mediaUrl: q.media_url || q.mediaUrl || normalized.mediaUrl || normalized.media_url || null,
@@ -150,7 +150,7 @@ export function useExamsSystem() {
       
       const result: any = { 
         exam: { ...examData, section_ids: examSectionsData ? examSectionsData.map((es: any) => es.section_id) : [] }, 
-        questions: mapQuestionsWithMedia(questionsData)
+        questions: mapQuestionsWithMedia(questionsData || []) // ✅ تأمين إضافي بـ || []
       };
       return result;
     } catch (err) { throw err; }
@@ -194,7 +194,7 @@ export function useExamsSystem() {
           subject_name: Array.isArray(examData.subject) ? examData.subject[0]?.name : examData.subject?.name,
           teacher_name: Array.isArray(examData.teacher?.users) ? examData.teacher.users[0]?.full_name : examData.teacher?.users?.full_name,
         },
-        questions: mapQuestionsWithMedia(questionsData)
+        questions: mapQuestionsWithMedia(questionsData || []) // ✅ تأمين إضافي
       };
       return result;
     } catch (err) { throw err; }
@@ -272,7 +272,7 @@ export function useExamsSystem() {
         exam: examData,
         students: studentsData,
         attempts: attemptsData || [],
-        questions: mapQuestionsWithMedia(qData),
+        questions: mapQuestionsWithMedia(qData || []), // ✅ تأمين إضافي
         answers: aData || []
       };
       return result;
