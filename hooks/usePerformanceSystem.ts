@@ -12,7 +12,7 @@ export interface PerformanceData {
     score: number;
     status: string;
     completed_at: string;
-    exams: { id: string, title: string, total_marks: number, max_score: number, subjects: { name: string } }[];
+    exams: { id: string, title: string, total_marks: number, max_score: number, subjects: { name: string } };
   }[];
   assignmentSubmissions: {
     id: string;
@@ -20,7 +20,7 @@ export interface PerformanceData {
     feedback: string;
     submitted_at: string;
     status: string;
-    assignments: { title: string, total_marks: number, subjects: { name: string } }[];
+    assignments: { title: string, total_marks: number, subjects: { name: string } };
   }[];
   stats: {
     avgExamScore: number;
