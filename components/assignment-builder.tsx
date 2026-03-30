@@ -131,7 +131,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       <input
                         type="text"
                         className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-indigo-600 focus:ring-0 p-1 text-sm font-medium text-slate-700 transition-all"
-                        value={option}
+                        value={option.content}
                         onChange={(e) => updateOption(question.id, optIndex, e.target.value)}
                       />
                       <button
