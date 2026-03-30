@@ -66,7 +66,6 @@ export function useExamsSystem() {
             .eq('exam_sections.section_id', studentProfile.section_id)
             .eq('status', 'published');
         } else {
-          // Student has no section, return empty
           setData([]);
           setLoading(false);
           return;
@@ -80,9 +79,8 @@ export function useExamsSystem() {
           .eq('id', user.id)
           .single();
           
-        // Self-healing: If teacher record is missing but user is a teacher, create it
         if ((profileError || !teacherProfile) && user.user_metadata?.role === 'teacher') {
-          console.log('Teacher profile missing in useExamsSystem, attempting self-healing...');
+          console.log('Teacher profile missing, self-healing...');
           const { data: newTeacher, error: createError } = await supabase
             .from('teachers')
             .insert({
@@ -94,27 +92,14 @@ export function useExamsSystem() {
             .single();
           
           if (!createError && newTeacher) {
-            console.log('Teacher profile created successfully via self-healing in useExamsSystem');
             teacherProfile = newTeacher;
             profileError = null;
-          } else {
-            console.error('Failed to self-heal teacher profile in useExamsSystem:', createError);
           }
         }
 
         if (teacherProfile) {
-          const { data: teacherSections } = await supabase
-            .from('teacher_sections')
-            .select('section_id')
-            .eq('teacher_id', teacherProfile.id);
-            
-          const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-          
-          if (sectionIds.length > 0) {
-            query = query.or(`teacher_id.eq.${teacherProfile.id},exam_sections.section_id.in.(${sectionIds.join(',')})`);
-          } else {
-            query = query.eq('teacher_id', teacherProfile.id);
-          }
+          // ✅ الإصلاح السحري هنا: نجلب الاختبارات التي تخص هذا المعلم مباشرة (بدون استعلامات OR المكسورة)
+          query = query.eq('teacher_id', teacherProfile.id);
         } else {
           console.error('Teacher profile not found for user:', user.id, profileError);
           setData([]);
@@ -177,9 +162,8 @@ export function useExamsSystem() {
 
       setData(mappedData);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Error fetching exams';
       console.error("Error fetching exams:", err);
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Error fetching exams');
     } finally {
       setLoading(false);
     }
@@ -191,37 +175,17 @@ export function useExamsSystem() {
 
   const fetchExamDetails = useCallback(async (examId: string): Promise<ExamDetails> => {
     try {
-      const { data: examData, error: examError } = await supabase
-        .from('exams')
-        .select('*')
-        .eq('id', examId)
-        .single();
-
+      const { data: examData, error: examError } = await supabase.from('exams').select('*').eq('id', examId).single();
       if (examError) throw examError;
 
-      const { data: examSectionsData, error: examSectionsError } = await supabase
-        .from('exam_sections')
-        .select('section_id')
-        .eq('exam_id', examId);
-      
+      const { data: examSectionsData, error: examSectionsError } = await supabase.from('exam_sections').select('section_id').eq('exam_id', examId);
       if (examSectionsError) throw examSectionsError;
 
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('questions')
-        .select(`
-          *,
-          options:question_options(*)
-        `)
-        .eq('exam_id', examId)
-        .order('order_index');
-
+      const { data: questionsData, error: questionsError } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
       if (questionsError) throw questionsError;
 
       return {
-        exam: {
-          ...examData,
-          section_ids: examSectionsData ? examSectionsData.map(es => es.section_id) : []
-        },
+        exam: { ...examData, section_ids: examSectionsData ? examSectionsData.map(es => es.section_id) : [] },
         questions: (questionsData || []).map(normalizeQuestion)
       };
     } catch (err) {
@@ -232,26 +196,14 @@ export function useExamsSystem() {
 
   const saveExam = useCallback(async (examData: Partial<Exam> & { section_ids?: string[] }, questions: Question[], isNew: boolean): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
-    
     try {
       const response = await fetch('/api/exams/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          examData,
-          questions,
-          isNew,
-          userId: user.id
-        }),
+        body: JSON.stringify({ examData, questions, isNew, userId: user.id }),
       });
-
       const result = await response.json();
-      if (!response.ok) {
-        const error = new Error(result.error || 'Failed to save exam');
-        (error as any).details = result.details;
-        throw error;
-      }
-
+      if (!response.ok) throw new Error(result.error || 'Failed to save exam');
       await fetchExams();
       return result.examId;
     } catch (err) {
@@ -263,47 +215,16 @@ export function useExamsSystem() {
   const fetchExamForStudent = useCallback(async (examId: string): Promise<ExamForStudent> => {
     if (!user) throw new Error('User not authenticated');
     try {
-      // 1. Get student section
-      const { data: studentProfile } = await supabase
-        .from('students')
-        .select('section_id')
-        .eq('id', user.id)
-        .single();
-      
+      const { data: studentProfile } = await supabase.from('students').select('section_id').eq('id', user.id).single();
       if (!studentProfile) throw new Error('Student profile not found');
 
-      // 2. Check if exam is assigned to student's section
-      const { data: examSection, error: sectionError } = await supabase
-        .from('exam_sections')
-        .select('id')
-        .eq('exam_id', examId)
-        .eq('section_id', studentProfile.section_id)
-        .maybeSingle();
-      
+      const { data: examSection, error: sectionError } = await supabase.from('exam_sections').select('id').eq('exam_id', examId).eq('section_id', studentProfile.section_id).maybeSingle();
       if (sectionError || !examSection) throw new Error('Exam not assigned to your section');
 
-      // 3. Fetch exam details
-      const { data: examData, error: examError } = await supabase
-        .from('exams')
-        .select(`
-          *,
-          subject:subjects(name),
-          teacher:teachers(users(full_name))
-        `)
-        .eq('id', examId)
-        .single();
-
+      const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name), teacher:teachers(users(full_name))').eq('id', examId).single();
       if (examError) throw examError;
 
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('questions')
-        .select(`
-          *,
-          options:question_options(*)
-        `)
-        .eq('exam_id', examId)
-        .order('order_index');
-
+      const { data: questionsData, error: questionsError } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
       if (questionsError) throw questionsError;
 
       return {
@@ -322,24 +243,14 @@ export function useExamsSystem() {
 
   const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
-
     try {
       const response = await fetch('/api/exams/submit-exam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          examId,
-          answers,
-          score,
-          status,
-          timeSpent,
-          userId: user.id
-        }),
+        body: JSON.stringify({ examId, answers, score, status, timeSpent, userId: user.id }),
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to submit exam');
-
       await fetchExams();
       return result.attemptId;
     } catch (err) {
@@ -350,20 +261,14 @@ export function useExamsSystem() {
 
   const deleteExam = useCallback(async (examId: string): Promise<void> => {
     if (!user) throw new Error('User not authenticated');
-    
     try {
       const response = await fetch('/api/exams/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          examId,
-          userId: user.id
-        }),
+        body: JSON.stringify({ examId, userId: user.id }),
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to delete exam');
-
       await fetchExams();
     } catch (err) {
       console.error('Error deleting exam:', err);
@@ -373,41 +278,23 @@ export function useExamsSystem() {
 
   const deleteExamWithMedia = useCallback(async (examId: string): Promise<{ success: boolean }> => {
     if (!user) throw new Error('User not authenticated');
-    
     try {
-      // 1. Fetch all questions for this exam to get their media_urls
-      const { data: questions, error: qError } = await supabase
-        .from('questions')
-        .select('media_url')
-        .eq('exam_id', examId);
-      
+      const { data: questions, error: qError } = await supabase.from('questions').select('media_url').eq('exam_id', examId);
       if (qError) throw qError;
-
-      // 2. Delete all question images from Cloudinary
       if (questions && questions.length > 0) {
         for (const q of questions) {
           if (q.media_url) {
-            try {
-              await deleteFromCloudinary(q.media_url);
-            } catch (e) {
-              console.error('Error deleting media:', e);
-            }
+            try { await deleteFromCloudinary(q.media_url); } catch (e) { console.error('Error deleting media:', e); }
           }
         }
       }
-
       const response = await fetch('/api/exams/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          examId,
-          userId: user.id
-        }),
+        body: JSON.stringify({ examId, userId: user.id }),
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to delete exam');
-
       await fetchExams();
       return { success: true };
     } catch (err: unknown) {
@@ -418,25 +305,14 @@ export function useExamsSystem() {
 
   const fetchExamResults = useCallback(async (examId: string): Promise<ExamResults> => {
     try {
-      // 1. Fetch exam details
-      const { data: examData, error: examError } = await supabase
-        .from('exams')
-        .select('*, subject:subjects(name)')
-        .eq('id', examId)
-        .single();
-
+      const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single();
       if (examError) throw examError;
 
-      // 2. Fetch all students in the assigned sections
       let studentsData: { id: string, full_name: string, email: string, section_name: string }[] = [];
       if (examData?.section_ids && examData.section_ids.length > 0) {
         const { data: students, error: studentsError } = await supabase
           .from('students')
-          .select(`
-            id,
-            users(full_name, email),
-            section:sections(name, classes(name))
-          `)
+          .select(`id, users(full_name, email), section:sections(name, classes(name))`)
           .in('section_id', examData.section_ids);
         
         if (!studentsError && students) {
@@ -444,7 +320,6 @@ export function useExamsSystem() {
             const sectionData = s.section;
             const className = Array.isArray(sectionData?.classes) ? sectionData?.classes[0]?.name : sectionData?.classes?.name;
             const sectionName = sectionData?.name ? `${className ? className + ' - ' : ''}${sectionData.name}` : 'غير محدد';
-            
             return {
               id: s.id,
               full_name: s.users?.full_name || 'طالب غير معروف',
@@ -455,41 +330,17 @@ export function useExamsSystem() {
         }
       }
 
-      // 3. Fetch attempts
-      const { data: attemptsData, error: attemptsError } = await supabase
-        .from('exam_attempts')
-        .select(`
-          *,
-          student:students(
-            id, 
-            users(full_name),
-            section:sections(name, classes(name))
-          )
-        `)
-        .eq('exam_id', examId);
-
+      const { data: attemptsData, error: attemptsError } = await supabase.from('exam_attempts').select(`*, student:students(id, users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
       if (attemptsError) throw attemptsError;
 
-      // 4. Fetch questions
-      const { data: qData, error: qError } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('exam_id', examId);
-
+      const { data: qData, error: qError } = await supabase.from('questions').select('*').eq('exam_id', examId);
       if (qError) throw qError;
 
-      // 5. Fetch answers
       let aData: any[] = [];
       if (attemptsData && attemptsData.length > 0) {
         const attemptIds = attemptsData.map(a => a.id);
-        const { data: answers, error: aError } = await supabase
-          .from('student_answers')
-          .select('*')
-          .in('attempt_id', attemptIds);
-          
-        if (!aError && answers) {
-          aData = answers;
-        }
+        const { data: answers, error: aError } = await supabase.from('student_answers').select('*').in('attempt_id', attemptIds);
+        if (!aError && answers) aData = answers;
       }
 
       return {
@@ -507,20 +358,14 @@ export function useExamsSystem() {
 
   const deleteAttempt = useCallback(async (attemptId: string): Promise<{ success: boolean }> => {
     if (!user) throw new Error('User not authenticated');
-    
     try {
       const response = await fetch('/api/exams/delete-attempt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          attemptId,
-          userId: user.id
-        }),
+        body: JSON.stringify({ attemptId, userId: user.id }),
       });
-
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to delete attempt');
-
       return { success: true };
     } catch (err) {
       console.error('Error deleting attempt:', err);
@@ -530,52 +375,20 @@ export function useExamsSystem() {
 
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
-      // 1. Fetch exam details
-      const { data: examData, error: examError } = await supabase
-        .from('exams')
-        .select('*')
-        .eq('id', examId)
-        .single();
-
+      const { data: examData, error: examError } = await supabase.from('exams').select('*').eq('id', examId).single();
       if (examError) throw examError;
 
-      // 2. Fetch student details
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .select('*, users(full_name)')
-        .eq('id', studentId)
-        .single();
-
+      const { data: studentData, error: studentError } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).single();
       if (studentError) throw studentError;
 
-      // 3. Fetch attempt
-      const { data: attemptData, error: attemptError } = await supabase
-        .from('exam_attempts')
-        .select('*')
-        .eq('exam_id', examId)
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const { data: attemptData, error: attemptError } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentId).order('created_at', { ascending: false }).limit(1).single();
+      if (attemptError && attemptError.code !== 'PGRST116') throw attemptError;
 
-      // It's possible the student hasn't attempted the exam yet
-      if (attemptError && attemptError.code !== 'PGRST116') {
-        throw attemptError;
-      }
-
-      // 4. Fetch answers if attempt exists
       let answersData: any[] = [];
       if (attemptData) {
-        const { data: answers, error: answersError } = await supabase
-          .from('student_answers')
-          .select('*, question:questions(*, options:question_options(*))')
-          .eq('attempt_id', attemptData.id);
-
+        const { data: answers, error: answersError } = await supabase.from('student_answers').select('*, question:questions(*, options:question_options(*))').eq('attempt_id', attemptData.id);
         if (answersError) throw answersError;
-        answersData = (answers || []).map(a => ({
-          ...a,
-          question: a.question ? normalizeQuestion(a.question) : null
-        }));
+        answersData = (answers || []).map(a => ({ ...a, question: a.question ? normalizeQuestion(a.question) : null }));
       }
 
       return {
@@ -592,3 +405,5 @@ export function useExamsSystem() {
 
   return { data, loading, error, refetch: fetchExams, deleteExam, deleteExamWithMedia, fetchExamDetails, saveExam, fetchExamForStudent, submitExam, fetchExamResults, deleteAttempt, fetchStudentExamResult };
 }
+
+
