@@ -25,11 +25,13 @@ export async function POST(req: Request) {
 
     let finalExamId = examData.id;
 
+    let finalTeacherId = examData.teacher_id;
+
     const examPayload = normalizePayload({
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: userId,
+      teacher_id: finalTeacherId,
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,

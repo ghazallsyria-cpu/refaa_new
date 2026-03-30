@@ -60,17 +60,31 @@ export function useExamsSystem() {
           return;
         }
       } else if (authRole === 'teacher') {
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
-          .select('section_id')
-          .eq('teacher_id', user.id);
+        const { data: teacherProfile, error: profileError } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('id', user.id)
+          .single();
           
-        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-        
-        if (sectionIds.length > 0) {
-          query = query.or(`teacher_id.eq.${user.id},exam_sections.section_id.in.(${sectionIds.join(',')})`);
+        if (teacherProfile) {
+          const { data: teacherSections } = await supabase
+            .from('teacher_sections')
+            .select('section_id')
+            .eq('teacher_id', teacherProfile.id);
+            
+          const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+          
+          if (sectionIds.length > 0) {
+            query = query.or(`teacher_id.eq.${teacherProfile.id},exam_sections.section_id.in.(${sectionIds.join(',')})`);
+          } else {
+            query = query.eq('teacher_id', teacherProfile.id);
+          }
         } else {
-          query = query.eq('teacher_id', user.id);
+          console.error('Teacher profile not found for user:', user.id, profileError);
+          // Teacher profile not found, return empty or handle error
+          setData([]);
+          setLoading(false);
+          return;
         }
       }
 
@@ -207,7 +221,28 @@ export function useExamsSystem() {
   }, [user, fetchExams]);
 
   const fetchExamForStudent = useCallback(async (examId: string): Promise<ExamForStudent> => {
+    if (!user) throw new Error('User not authenticated');
     try {
+      // 1. Get student section
+      const { data: studentProfile } = await supabase
+        .from('students')
+        .select('section_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!studentProfile) throw new Error('Student profile not found');
+
+      // 2. Check if exam is assigned to student's section
+      const { data: examSection, error: sectionError } = await supabase
+        .from('exam_sections')
+        .select('id')
+        .eq('exam_id', examId)
+        .eq('section_id', studentProfile.section_id)
+        .maybeSingle();
+      
+      if (sectionError || !examSection) throw new Error('Exam not assigned to your section');
+
+      // 3. Fetch exam details
       const { data: examData, error: examError } = await supabase
         .from('exams')
         .select(`
@@ -243,7 +278,7 @@ export function useExamsSystem() {
       console.error('Error fetching exam for student:', err);
       throw err;
     }
-  }, []);
+  }, [user]);
 
   const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');

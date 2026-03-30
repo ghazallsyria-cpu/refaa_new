@@ -156,7 +156,7 @@ export default function SchedulesPage() {
         subject_id: currentCell.subjectId,
         teacher_id: currentCell.teacherId,
         day_of_week: currentCell.day,
-        period: currentCell.period,
+        period_number: currentCell.period,
       };
 
       if (currentCell.scheduleId) {

@@ -244,9 +244,9 @@ export default function SchedulePage() {
       let filters: any = {};
       if (!(isAdmin && showAllSchedules)) {
         if (viewType === 'teacher') {
-          filters.teacher_id = selectedId;
+          filters.teacherId = selectedId;
         } else {
-          filters.section_id = selectedId;
+          filters.sectionId = selectedId;
         }
       }
 
@@ -623,13 +623,13 @@ export default function SchedulePage() {
                       const slot = scheduleData.find(s => 
                         s.day_of_week === day.id && 
                         s.period === period && 
-                        (viewType === 'teacher' ? s.teachers?.id === selectedId : s.sections?.id === selectedId)
+                        (viewType === 'teacher' ? s.teacher_id === selectedId : s.section_id === selectedId)
                       );
 
                       const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
                         s.day_of_week === day.id && 
                         s.period === period && 
-                        (viewType === 'teacher' ? s.teachers?.id !== selectedId : s.sections?.id !== selectedId)
+                        (viewType === 'teacher' ? s.teacher_id !== selectedId : s.section_id !== selectedId)
                       ) : [];
 
                       // Prioritize showing the swapping or copied lesson if it's in this slot
@@ -663,9 +663,9 @@ export default function SchedulePage() {
                                 // But they might want to edit. For now, let's keep the buttons for explicit actions but allow swap completion via cell click.
                               } else {
                                 setFormData({ 
-                                  teacher_id: viewType === 'teacher' ? selectedId : (copiedLesson?.teachers?.id || ''), 
-                                  section_id: viewType === 'section' ? selectedId : (copiedLesson?.sections?.id || ''), 
-                                  subject_id: copiedLesson?.subjects?.id || '' 
+                                  teacher_id: viewType === 'teacher' ? selectedId : (copiedLesson?.teacher_id || ''), 
+                                  section_id: viewType === 'section' ? selectedId : (copiedLesson?.section_id || ''), 
+                                  subject_id: copiedLesson?.subject_id || '' 
                                 });
                                 setSelectedSlot({day: day.id, period: period});
                                 setIsModalOpen(true);
@@ -720,9 +720,9 @@ export default function SchedulePage() {
                                       e.stopPropagation(); 
                                       setEditingId(displaySlot.id);
                                       setFormData({ 
-                                        teacher_id: displaySlot.teachers?.id || '', 
-                                        section_id: displaySlot.sections?.id || '', 
-                                        subject_id: displaySlot.subjects?.id || '' 
+                                        teacher_id: displaySlot.teacher_id || '', 
+                                        section_id: displaySlot.section_id || '', 
+                                        subject_id: displaySlot.subject_id || '' 
                                       });
                                       setSelectedSlot({day: day.id, period: period});
                                       setIsModalOpen(true);
@@ -784,13 +784,13 @@ export default function SchedulePage() {
                     const slot = scheduleData.find(s => 
                       s.day_of_week === day.id && 
                       s.period === period && 
-                      (viewType === 'teacher' ? s.teachers?.id === selectedId : s.sections?.id === selectedId)
+                      (viewType === 'teacher' ? s.teacher_id === selectedId : s.section_id === selectedId)
                     );
 
                     const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
                       s.day_of_week === day.id && 
                       s.period === period && 
-                      (viewType === 'teacher' ? s.teachers?.id !== selectedId : s.sections?.id !== selectedId)
+                      (viewType === 'teacher' ? s.teacher_id !== selectedId : s.section_id !== selectedId)
                     ) : [];
 
                     return (
