@@ -31,9 +31,11 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
+    const {
+    data: { session },
   } = await supabase.auth.getSession();
+  
+  const user = session?.user;
 
   const path = request.nextUrl.pathname;
 
