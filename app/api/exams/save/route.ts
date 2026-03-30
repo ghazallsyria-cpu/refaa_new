@@ -26,16 +26,30 @@ export async function POST(req: Request) {
     let finalExamId = examData.id;
     let finalTeacherId = examData.teacher_id;
 
-    // Ensure teacher_id is set if missing
+    // ✅ الإصلاح الجذري: إذا لم يكن هناك معرف معلم مرسل، نبحث عنه باستخدام معرف الدخول
     if (!finalTeacherId && userId) {
-      finalTeacherId = userId;
+      const { data: teacherProfile, error: teacherError } = await adminSupabase
+        .from('teachers')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      if (teacherError || !teacherProfile) {
+        // إذا كان المستخدم ليس معلماً (مثلاً مدير)، ولا يوجد finalTeacherId، نوقف العملية
+        return NextResponse.json(
+          { error: 'لم يتم العثور على ملف المعلم المرتبط بحسابك. لا يمكن حفظ الاختبار.' },
+          { status: 400 }
+        );
+      }
+      // نعين المعرف الحقيقي للمعلم
+      finalTeacherId = teacherProfile.id;
     }
 
     const examPayload = normalizePayload({
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: finalTeacherId,
+      teacher_id: finalTeacherId, // سيتم الحفظ الآن بالمعرف الصحيح!
       duration: examData.duration,
       max_attempts: examData.max_attempts,
       max_score: examData.max_score,
@@ -126,7 +140,7 @@ export async function POST(req: Request) {
     // Send notifications if published
     if (examData.status === 'published' && examData.section_ids && examData.section_ids.length > 0 && finalExamId) {
       try {
-        let studentsQuery = adminSupabase.from('students').select('id');
+        let studentsQuery = adminSupabase.from('students').select('id, user_id');
         if (examData.section_ids.length > 0) {
           studentsQuery = studentsQuery.in('section_id', examData.section_ids);
         }
@@ -134,11 +148,11 @@ export async function POST(req: Request) {
 
         if (students && students.length > 0) {
           const notificationPayloads = students.map(student => ({
-            user_id: student.id,
+            user_id: student.user_id || student.id, // Ensure we use auth user_id for notifications
             title: 'اختبار جديد متاح',
             content: `تم نشر اختبار جديد: ${examData.title}`,
             type: 'exam',
-            link: `/exams/${finalExamId}`
+            link: `/exams/take/${finalExamId}`
           }));
           await adminSupabase.from('notifications').insert(notificationPayloads);
         }
@@ -153,3 +167,5 @@ export async function POST(req: Request) {
     return handleApiError(error, 'Save Exam');
   }
 }
+
+
