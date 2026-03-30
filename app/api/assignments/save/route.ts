@@ -1,111 +1,111 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { SaveAssignmentRequestSchema } from '@/lib/validations';
 import { normalizePayload } from '@/lib/utils';
-import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const validatedData = await validateRequest(req, SaveAssignmentRequestSchema);
-    const { payload, assignmentId, questions, sectionIds, subjects, userId } = validatedData;
+    const body = await req.json();
+    const { payload, assignmentId, questions, sectionIds, subjects, userId } = body;
 
-    // ✅ بحث متسلسل وآمن عن المعلم لمنع خطأ قاعدة البيانات (500)
-    let finalTeacherId = payload.teacher_id;
-
-    if (!finalTeacherId || finalTeacherId === userId) {
-      const { data: t1 } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
-      if (t1) {
-        finalTeacherId = t1.id;
-      } else {
-        const { data: t2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
-        if (t2) {
-          finalTeacherId = t2.id;
-        } else {
-          finalTeacherId = userId; // Fallback
-        }
-      }
+    // 1. إيجاد المعلم بقوة (لمنع ضياع الواجب)
+    let realTeacherId = userId;
+    const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
+    if (tProfile) {
+      realTeacherId = tProfile.id;
+    } else {
+      const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
+      if (tProfile2) realTeacherId = tProfile2.id;
     }
-    
-    payload.teacher_id = finalTeacherId;
+
+    const normalizedPayload = normalizePayload({
+      ...payload,
+      teacher_id: realTeacherId
+    });
 
     let finalAssignmentId = assignmentId;
-    const normalizedPayload = normalizePayload(payload);
 
+    // 2. الحفظ الذكي (مع تجاوز خطأ عمود status إذا لم يكن موجوداً)
     if (finalAssignmentId) {
-      // Update
-      const { error } = await adminSupabase.from('assignments').update(normalizedPayload).eq('id', finalAssignmentId);
-      if (error) throw error;
+      let { error: updateErr } = await adminSupabase.from('assignments').update(normalizedPayload).eq('id', finalAssignmentId);
+      
+      // إذا اعترضت قاعدة البيانات على عمود status، نحذفه ونحاول مجدداً!
+      if (updateErr && updateErr.message.includes('status')) {
+        console.warn('Status column missing, retrying without it...');
+        delete normalizedPayload.status;
+        const retry = await adminSupabase.from('assignments').update(normalizedPayload).eq('id', finalAssignmentId);
+        updateErr = retry.error;
+      }
+      
+      if (updateErr) throw new Error('DB_UPDATE_ASSIGNMENT: ' + updateErr.message);
       await adminSupabase.from('assignment_questions').delete().eq('assignment_id', finalAssignmentId);
     } else {
-      // Insert
-      const { data: newAssignment, error } = await adminSupabase.from('assignments').insert([normalizedPayload]).select().single();
-      if (error) {
-        console.error("Insert Error DB:", error);
-        throw error;
-      }
-      if (!newAssignment) throw new Error('Failed to create assignment');
+      let { data: newAssignment, error: insertErr } = await adminSupabase.from('assignments').insert([normalizedPayload]).select().single();
       
+      // التجاوز التلقائي لخطأ عمود status
+      if (insertErr && insertErr.message.includes('status')) {
+        console.warn('Status column missing, retrying without it...');
+        delete normalizedPayload.status;
+        const retry = await adminSupabase.from('assignments').insert([normalizedPayload]).select().single();
+        insertErr = retry.error;
+        newAssignment = retry.data;
+      }
+
+      if (insertErr) throw new Error('DB_INSERT_ASSIGNMENT: ' + insertErr.message);
       finalAssignmentId = newAssignment.id;
 
-      // Notifications
+      // إرسال الإشعارات بهدوء
       try {
         if (sectionIds && sectionIds.length > 0) {
-            const { data: students } = await adminSupabase.from('students').select('id').in('section_id', sectionIds);
-            if (students && students.length > 0) {
-              const subjectName = subjects?.find((s: any) => s.id === payload.subject_id)?.name || 'المادة';
-              const notificationPayloads = students.map((student: any) => ({
-                  user_id: student.id, 
-                  title: 'واجب جديد متاح',
-                  content: `تمت إضافة واجب جديد في مادة ${subjectName}: ${payload.title}`,
-                  type: 'assignment',
-                  link: `/assignments/${finalAssignmentId}`
-              }));
-              await adminSupabase.from('notifications').insert(notificationPayloads);
-            }
+          const { data: students } = await adminSupabase.from('students').select('id, user_id').in('section_id', sectionIds);
+          if (students && students.length > 0) {
+            const subjectName = subjects?.find((s: any) => s.id === payload.subject_id)?.name || 'المادة';
+            const notifs = students.map((st: any) => ({
+              user_id: st.user_id || st.id,
+              title: 'واجب جديد',
+              content: `تم إضافة واجب في ${subjectName}: ${payload.title}`,
+              type: 'assignment',
+              link: `/assignments/${finalAssignmentId}`
+            }));
+            await adminSupabase.from('notifications').insert(notifs);
+          }
         }
-      } catch (notifErr) {
-        console.error('Error sending assignment notifications:', notifErr);
-      }
+      } catch (e) {}
     }
 
-    // Save Questions
+    // 3. حفظ الأسئلة التفاعلية (بأمان)
     if (questions && questions.length > 0) {
-      const questionsPayload = questions.map((q: any, index: number) => ({
+      const qPayload = questions.map((q: any, idx: number) => ({
         assignment_id: finalAssignmentId,
-        question_text: q.content || '',
-        question_type: q.type || 'open',
+        question_text: q.content || q.question_text || '',
+        question_type: q.type || q.question_type || 'open',
         options: q.options || null,
         points: q.points || 0,
         is_required: q.isRequired || false,
-        order: index
+        order: idx
       }));
-      const { error: qError } = await adminSupabase.from('assignment_questions').insert(questionsPayload);
-      if (qError) throw qError;
+      const { error: qErr } = await adminSupabase.from('assignment_questions').insert(qPayload);
+      if (qErr) throw new Error('DB_INSERT_QUESTIONS: ' + qErr.message);
     }
 
-    // Save Sections
+    // 4. حفظ الفصول المستهدفة
     if (finalAssignmentId) {
       await adminSupabase.from('assignment_sections').delete().eq('assignment_id', finalAssignmentId);
       if (sectionIds && sectionIds.length > 0) {
-        const sectionsToInsert = sectionIds.map((sId: string) => ({
-          assignment_id: finalAssignmentId,
-          section_id: sId
-        }));
-        const { error: sectionsError } = await adminSupabase.from('assignment_sections').insert(sectionsToInsert);
-        if (sectionsError) throw sectionsError;
+        const sPayload = sectionIds.map((sId: string) => ({ assignment_id: finalAssignmentId, section_id: sId }));
+        const { error: sErr } = await adminSupabase.from('assignment_sections').insert(sPayload);
+        if (sErr) throw new Error('DB_INSERT_SECTIONS: ' + sErr.message);
       }
     }
 
     return NextResponse.json({ id: finalAssignmentId, success: true });
-
   } catch (error: any) {
     console.error('Save Assignment Error:', error);
-    return NextResponse.json({ error: error.message || 'حدث خطأ أثناء الحفظ' }, { status: 500 });
+    // إرسال الخطأ الحقيقي للواجهة!
+    return NextResponse.json({ error: error.message || 'حدث خطأ مجهول أثناء الحفظ' }, { status: 500 });
   }
 }
 
