@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as validations from '../lib/validations';
+import { Question } from './question';
 
 export * from './question';
 export * from '../lib/validations';
