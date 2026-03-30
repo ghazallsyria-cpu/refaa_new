@@ -17,7 +17,6 @@ export interface StudentExamResult {
   answers: any[];
 }
 
-// ✅ تم تحصين الدالة لتقبل الفراغ (null) وعرض الصور بشكل صحيح
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   return (questionsData || []).map((q: any) => {
     const normalized = normalizeQuestion(q) as any; 
@@ -200,7 +199,6 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
-  // ✅ دالة التسليم المحدثة التي ستظهر تفاصيل الخطأ في نافذة منبثقة (Alert)
   const submitExam = useCallback(async (examId: string, answers: Record<string, any>, score: number, status: string, timeSpent: number): Promise<string> => {
     if (!user) throw new Error('User not authenticated');
     try {
@@ -211,7 +209,6 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) {
-        // هذه النافذة ستخبرنا بالخطأ الدقيق من قاعدة البيانات!
         alert("تفاصيل الخطأ من قاعدة البيانات:\n\n" + (result.error || 'Failed to submit'));
         throw new Error(result.error || 'Failed to submit exam');
       }
@@ -293,50 +290,38 @@ export function useExamsSystem() {
     } catch (err) { throw err; }
   }, [user]);
 
-  // ✅ جلب نتائج الطالب بطريقة منفصلة (Decoupled Queries) لمنع انهيار قاعدة البيانات
+  // ✅ استخدام الـ API الخارق لجلب إجابات الطالب وتخطي حماية RLS لكي يراها المعلم فوراً
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
-      const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
+      const response = await fetch('/api/exams/student-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examId, studentId })
+      });
+      const result = await response.json();
       
-      let studentData = null;
-      const { data: sd1 } = await supabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
-      if (sd1) studentData = sd1;
-      else {
-        const { data: sd2 } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
-        if (sd2) studentData = sd2;
-      }
+      if (!response.ok) throw new Error(result.error || 'Failed to fetch result');
 
-      const { data: attemptData } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', studentData?.id || studentId).order('created_at', { ascending: false }).limit(1).maybeSingle();
-      
-      let answersData: any[] = [];
-      if (attemptData) {
-        let { data: rawAnswers } = await supabase.from('student_answers').select('*').eq('attempt_id', attemptData.id);
-        
-        if (!rawAnswers || rawAnswers.length === 0) {
-          const { data: fAnswers } = await supabase.from('exam_answers').select('*').eq('attempt_id', attemptData.id);
-          if (fAnswers) rawAnswers = fAnswers.map(a => ({ ...a, text_answer: a.answer, selected_option_id: a.answer }));
+      // معالجة الصور والتفاصيل للإجابات لضمان ظهورها في التصميم
+      const formattedAnswers = (result.answers || []).map((ans: any) => {
+        if (ans.question) {
+          const nq = normalizeQuestion(ans.question) as any;
+          ans.question = {
+            ...nq,
+            mediaUrl: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null,
+            media_url: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null
+          };
         }
+        return ans;
+      });
 
-        if (rawAnswers && rawAnswers.length > 0) {
-          const { data: rawQuestions } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId);
-          
-          answersData = rawAnswers.map((ans: any) => {
-            const matchedQ = rawQuestions?.find((q: any) => q.id === ans.question_id);
-            return {
-              ...ans,
-              question: matchedQ ? { ...(normalizeQuestion(matchedQ) as any), mediaUrl: matchedQ.media_url || matchedQ.mediaUrl || null } : null
-            };
-          });
-        }
-      }
-
-      const result: any = {
-        exam: examData,
-        student: studentData || { id: studentId, users: { full_name: 'Student' } },
-        attempt: attemptData || null,
-        answers: answersData
+      const finalResult: any = {
+        exam: result.exam,
+        student: result.student || { id: studentId, users: { full_name: 'طالب غير محدد' } },
+        attempt: result.attempt || null,
+        answers: formattedAnswers
       };
-      return result;
+      return finalResult;
     } catch (err) { throw err; }
   }, []);
 
