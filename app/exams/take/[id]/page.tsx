@@ -10,6 +10,12 @@ import { Question } from '@/types/question';
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; };
 
+// ✅ الرادار الفولاذي: دالة تحدد بدقة متناهية ما إذا كان السؤال يصحح آلياً
+const isAutoGradedType = (type: string) => {
+  const t = (type || '').toLowerCase();
+  return t.includes('multiple_choice') || t.includes('true_false') || t.includes('multi_select') || t.includes('checkbox');
+};
+
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
@@ -23,6 +29,7 @@ export default function TakeQuiz() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [hasManualQuestions, setHasManualQuestions] = useState(false);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -60,6 +67,10 @@ export default function TakeQuiz() {
       setExam({ ...examData, description: examData.description ?? "", settings: {} });
       setQuestions(questionsData || []);
 
+      // ✅ اكتشاف الأسئلة المقالية بالهندسة العكسية: أي سؤال ليس اختياري فهو مقالي!
+      const hasManual = (questionsData || []).some(q => !isAutoGradedType(q.type as string));
+      setHasManualQuestions(hasManual);
+
       if (examData.duration) {
         const finalTimeLeft = Math.min(examData.duration * 60, Math.floor((endDateTime.getTime() - now.getTime()) / 1000));
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
@@ -81,7 +92,6 @@ export default function TakeQuiz() {
     try {
       let totalScore = 0;
       const formattedAnswers: Record<string, any> = {};
-      let requiresManualGrading = false;
 
       for (const q of questions) {
         const studentAnswer = answers[q.id];
@@ -89,27 +99,26 @@ export default function TakeQuiz() {
         let pointsEarned = 0;
         
         const qType = (q.type as string || '').toLowerCase();
-        
-        const isManualQuestion = qType.includes('essay') || qType.includes('open') || qType.includes('text') || qType.includes('paragraph') || qType.includes('fill_in');
+        const isAuto = isAutoGradedType(qType);
 
-        if (isManualQuestion) {
-           requiresManualGrading = true; 
-        } else if (qType.includes('multiple_choice') || qType.includes('true_false')) {
-          const correctOpt = q.options?.find((o: any) => o.is_correct);
-          isCorrect = studentAnswer === correctOpt?.id;
-          pointsEarned = isCorrect ? (q.points || 0) : 0;
-        } else if (qType.includes('multi_select') || qType.includes('checkbox')) {
-          const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => o.id) || [];
-          const studentOpts = studentAnswer || [];
-          isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
-          pointsEarned = isCorrect ? (q.points || 0) : 0;
+        if (isAuto && studentAnswer !== undefined) {
+          if (qType.includes('multiple_choice') || qType.includes('true_false')) {
+            const correctOpt = q.options?.find((o: any) => o.is_correct);
+            isCorrect = studentAnswer === correctOpt?.id;
+            pointsEarned = isCorrect ? (q.points || 0) : 0;
+          } else if (qType.includes('multi_select') || qType.includes('checkbox')) {
+            const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => o.id) || [];
+            const studentOpts = Array.isArray(studentAnswer) ? studentAnswer : [];
+            isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
+            pointsEarned = isCorrect ? (q.points || 0) : 0;
+          }
         }
 
         totalScore += pointsEarned;
 
         formattedAnswers[q.id] = {
-          optionId: (qType.includes('multiple_choice') || qType.includes('true_false')) ? (studentAnswer || null) : null,
-          text: isManualQuestion ? (studentAnswer || "") : (qType.includes('multi_select') || qType.includes('checkbox')) ? JSON.stringify(studentAnswer || []) : (typeof studentAnswer === 'string' ? studentAnswer : ""),
+          optionId: (isAuto && typeof studentAnswer === 'string') ? studentAnswer : null,
+          text: !isAuto ? (studentAnswer || "") : (Array.isArray(studentAnswer) ? JSON.stringify(studentAnswer) : ""),
           isCorrect,
           pointsEarned
         };
@@ -117,18 +126,17 @@ export default function TakeQuiz() {
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
       
-      // ✅ تم تغيير submitted إلى completed لإرضاء قاعدة البيانات!
-      const attemptStatus = requiresManualGrading ? 'completed' : 'graded';
+      // ✅ إذا وجد مقالي يذهب للمراجعة (completed)، إذا كله اختياري تصدر النتيجة فورا (graded)
+      const attemptStatus = hasManualQuestions ? 'completed' : 'graded';
 
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
       setIsFinished(true);
     } catch (err: any) {
       showNotification('error', err.message || 'حدث خطأ أثناء إرسال الاختبار');
-      alert("تنبيه خطأ:\n" + err.message); 
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft]);
+  }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft, hasManualQuestions]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished) {
@@ -152,10 +160,17 @@ export default function TakeQuiz() {
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
              لقد استلمنا إجاباتك. 
-             {questions.some(q => ['essay', 'open', 'text', 'paragraph', 'fill_in_blank'].some(t => (q.type as string).toLowerCase().includes(t))) 
-               && <span className="block mt-2 text-amber-600 font-bold bg-amber-50 p-2 rounded-lg">سيتم إعلان نتيجتك بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.</span>}
+             {hasManualQuestions ? (
+               <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
+                 سيتم إعلان النتيجة النهائية بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.
+               </span>
+             ) : (
+               <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                 تم تصحيح الاختبار وتصدير نتيجتك. يمكنك رؤيتها من لوحة التحكم.
+               </span>
+             )}
           </p>
-          <button onClick={() => router.push(`/exams`)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">العودة للرئيسية</button>
+          <button onClick={() => router.push(`/exams`)} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">العودة للرئيسية</button>
         </motion.div>
       </div>
     );
@@ -164,6 +179,7 @@ export default function TakeQuiz() {
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
   const currentQType = (currentQuestion?.type as string || '').toLowerCase();
+  const isAutoCurrent = isAutoGradedType(currentQType);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
@@ -221,11 +237,8 @@ export default function TakeQuiz() {
                 );
               })}
 
-              {(currentQType.includes('essay') || currentQType.includes('open') || currentQType.includes('paragraph') || currentQType.includes('text')) && (
+              {!isAutoCurrent && (
                 <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed" />
-              )}
-              {currentQType.includes('fill_in_blank') && (
-                <input type="text" value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="أدخل الكلمة المفقودة..." className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg font-bold text-center" />
               )}
             </div>
           </motion.div>
@@ -234,11 +247,11 @@ export default function TakeQuiz() {
 
       <footer className="bg-white border-t border-slate-200 p-4 sticky bottom-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-          <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => prev - 1)} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
+          <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
           {currentQuestionIdx === questions.length - 1 ? (
             <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50"><Send className="h-5 w-5" />إرسال الاختبار</button>
           ) : (
-            <button onClick={() => setCurrentQuestionIdx(prev => prev + 1)} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
+            <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
           )}
         </div>
       </footer>
