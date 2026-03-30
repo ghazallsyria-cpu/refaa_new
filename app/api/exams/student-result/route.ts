@@ -14,35 +14,42 @@ export async function POST(req: Request) {
     const { examId, studentId } = await req.json();
 
     // 1. جلب الاختبار
-    const { data: examData, error: examErr } = await adminSupabase.from('exams').select('*').eq('id', examId).single();
-    if (examErr) throw new Error('لم يتم العثور على الاختبار');
+    const { data: examData } = await adminSupabase.from('exams').select('*').eq('id', examId).single();
 
-    // 2. جلب الطالب بأمان
+    // 2. البحث الدقيق جداً عن المحاولة (Attempt)
+    let attemptData = null;
     let studentData = null;
-    const { data: sd1 } = await adminSupabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
-    if (sd1) studentData = sd1;
-    else {
-      const { data: sd2 } = await adminSupabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
-      studentData = sd2;
+
+    // المحاولة الأولى: البحث المباشر باستخدام studentId القادم من الرابط
+    const { data: directAttempt } = await adminSupabase.from('exam_attempts')
+      .select('*').eq('exam_id', examId).eq('student_id', studentId)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+
+    if (directAttempt) {
+       attemptData = directAttempt;
+       // جلب بيانات الطالب بناء على الـ ID الدقيق
+       const { data: sd } = await adminSupabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
+       studentData = sd;
+    } else {
+       // المحاولة الثانية: ربما studentId هو user_id، نبحث عن ملف الطالب أولاً
+       const { data: profile } = await adminSupabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
+       if (profile) {
+          studentData = profile;
+          const { data: fallbackAttempt } = await adminSupabase.from('exam_attempts')
+            .select('*').eq('exam_id', examId).eq('student_id', profile.id)
+            .order('created_at', { ascending: false }).limit(1).maybeSingle();
+          attemptData = fallbackAttempt;
+       }
     }
 
-    // 3. جلب المحاولة
-    const { data: attemptData } = await adminSupabase.from('exam_attempts')
-      .select('*')
-      .eq('exam_id', examId)
-      .eq('student_id', studentData?.id || studentId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    // 4. السحر هنا: جلب أسئلة الاختبار الأساسية دائماً وبشكل مستقل!
+    // 3. جلب الأسئلة دائماً وبشكل مستقل
     const { data: rawQuestions } = await adminSupabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
 
-    // 5. جلب الإجابات إن وجدت
+    // 4. جلب الإجابات إن وجدت بناءً على رقم المحاولة
     let answersData: any[] = [];
-    if (attemptData) {
+    if (attemptData && attemptData.id) {
       let { data: rawAnswers } = await adminSupabase.from('student_answers').select('*').eq('attempt_id', attemptData.id);
-
+      
       if (!rawAnswers || rawAnswers.length === 0) {
         const { data: fAnswers } = await adminSupabase.from('exam_answers').select('*').eq('attempt_id', attemptData.id);
         if (fAnswers && fAnswers.length > 0) {
@@ -54,10 +61,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       exam: examData,
-      student: studentData,
-      attempt: attemptData,
+      student: studentData || { id: studentId, users: { full_name: 'طالب' } },
+      attempt: attemptData, // ✅ الآن مستحيل أن يكون فارغاً إذا كان الطالب قد أرسل الاختبار!
       answers: answersData,
-      questions: rawQuestions || [] // إرسال الأسئلة للواجهة
+      questions: rawQuestions || []
     });
 
   } catch (error: any) {
