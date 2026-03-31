@@ -5,13 +5,27 @@ import {
   Plus, Search, Filter, BookOpen, Users, 
   BarChart2, Clock, MoreVertical, Edit2, 
   Trash2, Eye, Play, FileText, CheckCircle,
-  TrendingUp, ArrowRight, AlertCircle
+  TrendingUp, ArrowRight, AlertCircle, Lock, Trophy
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
+
+// 🚀 دالة التحقق من القفل الزمني
+const checkIsLocked = (exam: any) => {
+  if (!exam?.exam_date) return false;
+  try {
+    const now = new Date();
+    const examDate = new Date(exam.exam_date);
+    const endTimeParts = (exam.end_time || '23:59').split(':');
+    examDate.setHours(parseInt(endTimeParts[0], 10), parseInt(endTimeParts[1], 10), 0);
+    return now <= examDate;
+  } catch(e) {
+    return false;
+  }
+};
 
 export default function ExamsDashboard() {
   const { user, authRole, isChecking: authLoading } = useAuth();
@@ -92,7 +106,7 @@ export default function ExamsDashboard() {
   if (!mounted || authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div>
       </div>
     );
   }
@@ -116,7 +130,7 @@ export default function ExamsDashboard() {
             <p className="text-xl text-slate-500 font-medium max-w-2xl">
               {isTeacherOrAdmin 
                 ? 'قم بإنشاء وإدارة الاختبارات التفاعلية ومتابعة أداء الطلاب بدقة.' 
-                : 'استعرض الاختبارات المتاحة لك وتابع نتائجك.'}
+                : 'استعرض الاختبارات المتاحة لك وتابع نتائجك في مكان واحد.'}
             </p>
           </div>
           
@@ -225,7 +239,6 @@ export default function ExamsDashboard() {
           ) : filteredExams.length > 0 ? (
             <AnimatePresence mode="popLayout">
               {filteredExams.map((exam, index) => {
-                // 💡 المتغيرات الذكية لاكتشاف حالات التصحيح
                 const pendingGradesCount = (exam.submission_count || 0) - (exam.graded_count || 0);
                 const needsTeacherGrading = isTeacherOrAdmin && pendingGradesCount > 0;
 
@@ -245,7 +258,6 @@ export default function ExamsDashboard() {
                           {getStatusLabel(exam.status)}
                         </div>
 
-                        {/* 🎯 وسام التنبيه للمعلم إذا كان هناك طلاب بانتظار التصحيح اليدوي */}
                         {needsTeacherGrading && (
                           <div className="flex-1 flex justify-end">
                             <div className="px-3 py-2 rounded-2xl text-[10px] font-black border shadow-sm bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1.5 animate-pulse">
@@ -351,7 +363,7 @@ export default function ExamsDashboard() {
                       </div>
                     </div>
 
-                    <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
+                    <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
                       {isTeacherOrAdmin ? (
                         <>
                           <div className="flex items-center gap-4">
@@ -364,7 +376,6 @@ export default function ExamsDashboard() {
                             </div>
                           </div>
                           <Link href={`/exams/results/${exam.id}`}>
-                            {/* 🎯 التعديل الذكي للمعلم: تغيير الزر لـ "صحح الآن" لون برتقالي */}
                             <motion.button 
                               whileHover={{ x: -5 }}
                               className={`h-14 px-6 rounded-2xl text-sm font-black shadow-sm transition-all flex items-center gap-3 active:scale-95 ${
@@ -379,29 +390,78 @@ export default function ExamsDashboard() {
                           </Link>
                         </>
                       ) : (
-                        (exam.submission_status === 'submitted' || exam.submission_status === 'graded') ? (
-                          exam.submission_status === 'submitted' ? (
-                            /* 🎯 التعديل الذكي للطالب: إظهار حالة "قيد المراجعة" باللون الأصفر */
-                            <div className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 rounded-2xl border border-amber-100">
-                              <div className="flex items-center gap-3">
-                                <Clock className="h-5 w-5 text-amber-600" />
-                                <span className="text-sm font-black text-amber-700">قيد المراجعة</span>
+                        (exam.submission_status === 'submitted' || exam.submission_status === 'graded' || exam.submission_status === 'completed') ? (() => {
+                          // 🚀 الطالب: جلب البيانات الخاصة به، والتأكد من القفل الزمني
+                          const isLocked = checkIsLocked(exam);
+                          const maxScore = exam.total_marks || exam.max_score || 100;
+                          const studentId = user?.id || user?.user_id || '';
+
+                          if (isLocked) {
+                            return (
+                              <Link href={`/exams/results/${exam.id}/student/${studentId}`} className="w-full">
+                                <div className="w-full flex items-center justify-between px-5 py-4 bg-slate-100 rounded-2xl border border-slate-200 transition-all hover:bg-slate-200 hover:shadow-md cursor-pointer group">
+                                  <div className="flex items-center gap-3">
+                                    <div className="bg-white p-2 rounded-xl shadow-sm group-hover:scale-110 transition-transform">
+                                      <Lock className="h-5 w-5 text-slate-500" />
+                                    </div>
+                                    <div className="flex flex-col text-right">
+                                      <span className="text-sm font-black text-slate-700">النتيجة محجوبة مؤقتاً</span>
+                                      <span className="text-xs font-bold text-slate-500">حتى انتهاء وقت الاختبار</span>
+                                    </div>
+                                  </div>
+                                  <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm group-hover:border-indigo-300">
+                                    <Eye className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                                  </div>
+                                </div>
+                              </Link>
+                            );
+                          }
+
+                          if (exam.submission_status === 'submitted' || exam.submission_status === 'completed') {
+                            return (
+                              <Link href={`/exams/results/${exam.id}/student/${studentId}`} className="w-full">
+                                <div className="w-full flex items-center justify-between px-5 py-4 bg-amber-50 rounded-2xl border border-amber-100 transition-all hover:bg-amber-100 hover:shadow-md cursor-pointer group">
+                                  <div className="flex items-center gap-3">
+                                    <div className="bg-white p-2 rounded-xl shadow-sm border border-amber-50 group-hover:scale-110 transition-transform">
+                                      <Clock className="h-5 w-5 text-amber-500" />
+                                    </div>
+                                    <div className="flex flex-col text-right">
+                                      <span className="text-sm font-black text-amber-700">قيد المراجعة</span>
+                                      <span className="text-xs font-bold text-amber-600">بانتظار تصحيح المعلم</span>
+                                    </div>
+                                  </div>
+                                  <div className="bg-white px-3 py-1.5 rounded-lg border border-amber-100 text-amber-600 font-bold text-xs shadow-sm">
+                                    التفاصيل
+                                  </div>
+                                </div>
+                              </Link>
+                            );
+                          }
+
+                          // 🏆 الحالة المكتملة والمصححة بالكامل (Premium Graded Design)
+                          return (
+                            <Link href={`/exams/results/${exam.id}/student/${studentId}`} className="w-full">
+                              <div className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:-translate-y-0.5 cursor-pointer group border border-indigo-500 relative overflow-hidden">
+                                <div className="absolute right-0 top-0 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl -mt-10 -mr-10"></div>
+                                <div className="flex items-center gap-4 relative z-10">
+                                  <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm shadow-inner group-hover:scale-110 transition-transform">
+                                    <Trophy className="h-6 w-6 text-white drop-shadow-md" />
+                                  </div>
+                                  <div className="flex flex-col text-right">
+                                    <span className="text-[10px] font-black text-indigo-100 uppercase tracking-widest mb-0.5">النتيجة النهائية</span>
+                                    <span className="text-sm font-black text-white drop-shadow-sm">{exam.subject_name || 'اختبار عام'}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3 relative z-10">
+                                  <div className="flex items-baseline gap-1 text-white bg-white/10 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/20 shadow-inner group-hover:bg-white/20 transition-colors">
+                                    <span className="text-2xl font-black drop-shadow-md">{exam.score || 0}</span>
+                                    <span className="text-xs font-bold opacity-80">/ {maxScore}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <span className="text-sm font-black text-amber-600">بانتظار المعلم</span>
-                            </div>
-                          ) : (
-                            /* الحالة الأصلية المكتملة */
-                            <div className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 rounded-2xl border border-emerald-100">
-                              <div className="flex items-center gap-3">
-                                <CheckCircle className="h-5 w-5 text-emerald-600" />
-                                <span className="text-sm font-black text-emerald-700">مقيّم ومكتمل</span>
-                              </div>
-                              <span className="text-lg font-black text-emerald-600">
-                                {exam.score !== null && exam.score !== undefined ? `${exam.score}%` : ''}
-                              </span>
-                            </div>
-                          )
-                        ) : (
+                            </Link>
+                          );
+                        })() : (
                           <Link href={`/exams/take/${exam.id}`} className="w-full">
                             <motion.button 
                               whileHover={{ scale: 1.02 }}
@@ -415,8 +475,8 @@ export default function ExamsDashboard() {
                             >
                               <Play className="h-5 w-5" />
                               <span>
-                                {getExamStatus(exam) === 'not_started' ? 'لم يبدأ بعد' :
-                                 getExamStatus(exam) === 'expired' ? 'انتهى الوقت' :
+                                {getExamStatus(exam) === 'not_started' ? 'لم يبدأ الاختبار بعد' :
+                                 getExamStatus(exam) === 'expired' ? 'انتهى وقت الاختبار' :
                                  'بدء الاختبار'}
                               </span>
                             </motion.button>
