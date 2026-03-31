@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { useAuth } from '@/context/auth-context'; // 🚀 استيراد لمعرفة هوية الطالب
+import { useAuth } from '@/context/auth-context';
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; };
 
@@ -19,8 +19,8 @@ const isAutoGradedType = (type: string) => {
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth() as any; // 🚀 سحب هوية الطالب
-  const { fetchExamForStudent } = useExamsSystem(); // طردنا submitExam القديم الخائن من هنا!
+  const { user } = useAuth() as any; 
+  const { fetchExamForStudent } = useExamsSystem();
   
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -30,6 +30,10 @@ export default function TakeQuiz() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+
+  // 🚨 رادار الغش (Anti-Cheat State)
+  const [cheatWarnings, setCheatWarnings] = useState(0);
+  const [showCheatModal, setShowCheatModal] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -124,7 +128,6 @@ export default function TakeQuiz() {
 
       const attemptStatus = hasManual ? 'completed' : 'graded';
 
-      // 🚀 الضربة القاضية: الاتصال المباشر بالـ API الخارق لتسليم الاختبار بالقوة
       const response = await fetch('/api/exams/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,7 +136,7 @@ export default function TakeQuiz() {
             answers: formattedAnswers,
             score: totalScore,
             status: attemptStatus,
-            userId: user.id || user.user_id // ضمان وجود رقم الطالب
+            userId: user.id || user.user_id 
         })
       });
 
@@ -143,7 +146,7 @@ export default function TakeQuiz() {
           throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر");
       }
 
-      setIsFinished(true); // لن نصل إلى هنا إلا إذا حفظت قاعدة البيانات بنجاح 100%
+      setIsFinished(true); 
       
     } catch (err: any) {
       alert("خطأ أثناء تسليم الاختبار: " + err.message);
@@ -160,6 +163,30 @@ export default function TakeQuiz() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timeLeft, isFinished, handleSubmit]);
+
+  // 🚨 تفعيل رادار الغش (يُراقب خروج الطالب من التبويب)
+  useEffect(() => {
+    if (isFinished || loading || !exam) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setCheatWarnings(prev => {
+          const newCount = prev + 1;
+          if (newCount === 1) {
+            // الإنذار الأول: عرض شاشة حمراء
+            setShowCheatModal(true);
+          } else if (newCount >= 2) {
+            // الإنذار الثاني: سحب الورقة بالقوة
+            handleSubmit();
+          }
+          return newCount;
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [isFinished, loading, exam, handleSubmit]);
 
   const handleAnswerChange = (questionId: string, value: any) => setAnswers(prev => ({ ...prev, [questionId]: value }));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -191,11 +218,11 @@ export default function TakeQuiz() {
              لقد استلمنا إجاباتك وتم تسجيلها في قاعدة البيانات. 
              {hasManualQuestions ? (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
-                 ستظهر نتيجتك النهائية بعد تصحيح المعلم.
+                 ستظهر نتيجتك النهائية بعد تصحيح المعلم وانتهاء الوقت.
                </span>
              ) : (
                <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                 تم تصحيح الاختبار تلقائياً.
+                 تم تصحيح الاختبار، ستظهر نتيجتك بعد انتهاء وقت الاختبار.
                </span>
              )}
           </p>
@@ -214,6 +241,32 @@ export default function TakeQuiz() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
+      
+      {/* 🚨 شاشة إنذار الغش (تغطي الشاشة بالكامل) 🚨 */}
+      <AnimatePresence>
+        {showCheatModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border-t-8 border-rose-600">
+              <div className="inline-flex p-4 rounded-full bg-rose-100 text-rose-600 mb-4 animate-bounce">
+                <AlertTriangle className="h-12 w-12" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 mb-3">إنذار بمحاولة غش!</h2>
+              <p className="text-slate-600 font-bold text-lg leading-relaxed mb-6">
+                لقد اكتشف النظام قيامك بالخروج من شاشة الاختبار (فتح تبويب أو تطبيق آخر). 
+                <br/><br/>
+                <span className="text-rose-600">هذا هو الإنذار الأول والأخير.</span> في حال تكرار ذلك، سيقوم النظام بسحب الورقة وتسليمها فوراً بالوضع الحالي.
+              </p>
+              <button 
+                onClick={() => setShowCheatModal(false)} 
+                className="w-full bg-rose-600 text-white py-4 rounded-xl font-black text-lg hover:bg-rose-700 active:scale-95 transition-all shadow-lg shadow-rose-200"
+              >
+                أتعهد بعدم الخروج من الشاشة
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
