@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, User, AlertCircle, Share2, Eye, CheckCircle2, Sparkles, Layout, Filter } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
@@ -13,7 +13,7 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 
 export default function AssignmentsPage() {
-  const { user, authRole, userRole, isChecking: authLoading } = useAuth() as any;
+  const { user, authRole, userRole, isChecking: authLoading } = useAuth() as { user: any, authRole: string | null, userRole: string | null, isChecking: boolean };
   const currentRole = authRole || userRole;
   
   const { data: assignments, loading: contentLoading, error: contentError, studentSubmissions, refetch: refresh, fetchAssignmentQuestions, saveAssignment, deleteAssignment } = useAssignmentsSystem();
@@ -24,7 +24,7 @@ export default function AssignmentsPage() {
   const teachers = formData?.teachers || [];
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // ✅ فلتر الحالة الجديد
+  const [statusFilter, setStatusFilter] = useState('all');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
@@ -46,7 +46,6 @@ export default function AssignmentsPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // ✅ تطبيق الفلتر المزدوج (بحث نصي + حالة الواجب)
   const filteredAssignments = assignments.filter(a => {
     if(!a) return false;
     const matchTitle = a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
@@ -58,6 +57,17 @@ export default function AssignmentsPage() {
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    // 🚀 درع الحماية الأمامي: يمنع إرسال واجبات يتيمة بدون مادة أو شعبة
+    if (!currentAssignment.subject_id) {
+      showNotification('error', 'عذراً، يجب اختيار المادة الدراسية');
+      return;
+    }
+    if (!currentAssignment.section_ids || currentAssignment.section_ids.length === 0) {
+      showNotification('error', 'عذراً، يجب تحديد شعبة واحدة على الأقل لإرسال الواجب إليها');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -70,7 +80,7 @@ export default function AssignmentsPage() {
         status: currentAssignment.status || 'draft'
       };
 
-      await saveAssignment(payload, currentAssignment.id || null, questions, currentAssignment.section_ids || [], subjects);
+      await saveAssignment(payload, currentAssignment.id || null, questions, currentAssignment.section_ids, subjects);
 
       showNotification('success', currentAssignment.id ? 'تم تحديث الواجب بنجاح' : 'تم إضافة الواجب بنجاح');
       setIsModalOpen(false);
@@ -130,7 +140,7 @@ export default function AssignmentsPage() {
       due_date: formattedDate,
       section_ids: [],
       file_url: '',
-      status: 'draft' // الافتراضي مسودة
+      status: 'draft'
     });
     setQuestions([]);
     setIsModalOpen(true);
@@ -139,7 +149,7 @@ export default function AssignmentsPage() {
   if (!mounted || authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div>
       </div>
     );
   }
@@ -149,20 +159,20 @@ export default function AssignmentsPage() {
   return (
     <div className="space-y-10 max-w-7xl mx-auto pb-24" dir="rtl">
       {notification && (
-        <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-50 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 transition-all animate-in fade-in slide-in-from-top-4 duration-500 ${
+        <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 transition-all animate-in fade-in slide-in-from-top-4 duration-500 ${
           notification.type === 'success' ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-red-500 text-white shadow-red-100'
         }`}>
           <div className="h-10 w-10 rounded-2xl bg-white/20 flex items-center justify-center">
             {notification.type === 'success' ? <CheckCircle2 className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}
           </div>
-          <div className="font-black tracking-tight">{notification.message}</div>
-          <button onClick={() => setNotification(null)} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
+          <div className="font-black tracking-tight text-lg">{notification.message}</div>
+          <button onClick={() => setNotification(null)} className="p-1 hover:bg-white/20 rounded-lg transition-colors mr-4">
             <X className="h-5 w-5" />
           </button>
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 pt-6">
         <div className="space-y-2">
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">الواجبات المدرسية</h1>
           <p className="text-lg text-slate-500 font-medium">إدارة الواجبات والمهام المسندة للطلاب</p>
@@ -178,7 +188,7 @@ export default function AssignmentsPage() {
         )}
       </div>
 
-      <div className="glass-card p-6 rounded-4xl shadow-2xl shadow-slate-200/50 border border-white/60">
+      <div className="glass-card p-6 rounded-4xl shadow-lg shadow-slate-200/50 border border-white/60">
         <div className="flex flex-col md:flex-row gap-6">
           <div className="relative flex-1 group">
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
@@ -193,7 +203,6 @@ export default function AssignmentsPage() {
             />
           </div>
           
-          {/* ✅ فلتر الحالة للمعلم والمدير */}
           {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
             <div className="relative md:w-64 group">
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
@@ -235,7 +244,7 @@ export default function AssignmentsPage() {
             const dueDateObj = new Date(assignment.due_date!);
             
             return (
-              <div key={assignment.id} className="group glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
+              <div key={assignment.id} className="group glass-card rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
                 <div className="p-8 flex-1">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex flex-wrap gap-2">
@@ -243,15 +252,13 @@ export default function AssignmentsPage() {
                         {assignment.subject_name}
                       </span>
                       
-                      {/* ✅ عرض حالة الواجب كشريط ملون */}
                       {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
                          <span className={`inline-flex items-center gap-1.5 rounded-2xl px-4 py-1.5 text-xs font-black uppercase tracking-widest border shadow-sm ${
                            assignment.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
                            assignment.status === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-100' :
                            'bg-slate-50 text-slate-700 border-slate-100'
                          }`}>
-                           {assignment.status === 'published' ? 'منشور' :
-                            assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
+                           {assignment.status === 'published' ? 'منشور' : assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
                          </span>
                       )}
 
@@ -308,13 +315,13 @@ export default function AssignmentsPage() {
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <Users className="h-5 w-5 text-indigo-500" />
                       <span className="line-clamp-1">
-                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join(', ') || 'لا يوجد فصول'}
+                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join('، ') || 'لا يوجد فصول مستهدفة'}
                       </span>
                     </div>
                   </div>
                 </div>
                 
-                <div className={`px-8 py-4 border-t flex items-center justify-between ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                <div className={`px-8 py-5 border-t flex flex-col sm:flex-row items-center justify-between gap-4 ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
                   <div className={`flex items-center gap-2 text-sm font-black ${overdue && assignment.status === 'published' ? 'text-red-600' : 'text-slate-700'}`}>
                     <Clock className="h-5 w-5" />
                     <span dir="ltr">
@@ -322,13 +329,13 @@ export default function AssignmentsPage() {
                     </span>
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
                     {assignment.file_url && (
                       <a 
                         href={assignment.file_url} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="h-10 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95"
+                        className="h-11 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
                       >
                         <LinkIcon className="h-4 w-4" />
                         <span>المرفق</span>
@@ -336,16 +343,16 @@ export default function AssignmentsPage() {
                     )}
                     <Link 
                       href={`/assignments/${assignment.id}`}
-                      className={`h-10 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center gap-2 active:scale-95 ${
+                      className={`h-11 px-6 rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center ${
                         currentRole === 'student' && studentSubmissions[assignment.id]
-                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200'
                       }`}
                     >
                       <span>
                         {currentRole === 'student' 
                           ? (studentSubmissions[assignment.id] ? 'عرض الإجابة' : 'عرض وتسليم') 
-                          : 'التفاصيل'}
+                          : 'التفاصيل والنتائج'}
                       </span>
                     </Link>
                   </div>
@@ -360,14 +367,14 @@ export default function AssignmentsPage() {
       <Dialog.Root open={!!assignmentToDelete} onOpenChange={(open) => !open && setAssignmentToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
             <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
               <Trash2 className="h-8 w-8 text-red-500" />
             </div>
             <Dialog.Title className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
               تأكيد الحذف
             </Dialog.Title>
-            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟</p>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <Dialog.Close asChild>
                 <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
@@ -390,17 +397,17 @@ export default function AssignmentsPage() {
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300" dir="rtl">
-            <div className="flex items-center justify-between mb-8">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 scrollbar-hide" dir="rtl">
+            <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
               <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center">
-                  <FileText className="h-6 w-6 text-indigo-600" />
+                <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                  <FileText className="h-7 w-7 text-indigo-600" />
                 </div>
                 <div>
                   <Dialog.Title className="text-2xl font-black text-slate-900 tracking-tight">
                     {currentAssignment.id ? 'تعديل الواجب' : 'إضافة واجب جديد'}
                   </Dialog.Title>
-                  <p className="text-sm text-slate-500 font-bold">أدخل تفاصيل الواجب والمهام المطلوبة</p>
+                  <p className="text-sm text-slate-500 font-bold mt-1">أدخل تفاصيل الواجب والمهام المطلوبة بدقة</p>
                 </div>
               </div>
               <Dialog.Close className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 transition-colors">
@@ -408,7 +415,7 @@ export default function AssignmentsPage() {
               </Dialog.Close>
             </div>
             
-            <form onSubmit={handleSaveAssignment} className="space-y-8">
+            <form onSubmit={handleSaveAssignment} className="space-y-10">
               <div className="space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="space-y-6">
@@ -416,12 +423,12 @@ export default function AssignmentsPage() {
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">حالة الواجب <span className="text-red-500">*</span></label>
                       <select 
                         required
-                        className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
+                        className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
                         value={currentAssignment.status || 'draft'}
                         onChange={(e) => setCurrentAssignment({...currentAssignment, status: e.target.value})}
                       >
-                        <option value="draft">مسودة</option>
-                        <option value="published">منشور</option>
+                        <option value="draft">مسودة (لا يظهر للطلاب)</option>
+                        <option value="published">منشور (يظهر للطلاب فوراً)</option>
                       </select>
                     </div>
                   
@@ -440,8 +447,8 @@ export default function AssignmentsPage() {
                   <div>
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الوصف والتفاصيل</label>
                     <textarea 
-                      rows={4}
-                      placeholder="اكتب تفاصيل الواجب هنا..." 
+                      rows={5}
+                      placeholder="اكتب تعليمات وتفاصيل الواجب هنا..." 
                       className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none"
                       value={currentAssignment.description || ''}
                       onChange={(e) => setCurrentAssignment({...currentAssignment, description: e.target.value})}
@@ -451,19 +458,17 @@ export default function AssignmentsPage() {
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المادة <span className="text-red-500">*</span></label>
-                      <div className="relative">
-                        <select 
-                          required
-                          className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none"
-                          value={currentAssignment.subject_id || ''}
-                          onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
-                        >
-                          <option value="">اختر المادة</option>
-                          {subjects.map((s: any) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <select 
+                        required
+                        className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
+                        value={currentAssignment.subject_id || ''}
+                        onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
+                      >
+                        <option value="">اختر المادة...</option>
+                        {subjects.map((s: any) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
@@ -478,14 +483,17 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الشعب المستهدفة <span className="text-red-500">*</span></label>
-                    <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto p-4 border border-slate-100 rounded-2xl bg-slate-50/50">
+                  <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+                    <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
+                      <Users className="w-5 h-5 text-indigo-500" />
+                      الشعب المستهدفة <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-2 scrollbar-hide">
                       {sections.map((s: any) => (
-                        <label key={s.id} className="flex items-center gap-3 cursor-pointer group">
+                        <label key={s.id} className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all">
                           <input
                             type="checkbox"
-                            className="h-5 w-5 rounded-lg border-slate-200 text-indigo-600 focus:ring-indigo-500 transition-all"
+                            className="h-5 w-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
                             checked={currentAssignment.section_ids?.includes(s.id)}
                             onChange={(e) => {
                               const newSectionIds = e.target.checked
@@ -494,7 +502,7 @@ export default function AssignmentsPage() {
                               setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
                             }}
                           />
-                          <span className="text-sm font-bold text-slate-600">{(s.class as any)?.name} - {s.name}</span>
+                          <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-900 transition-colors">{(s.class as any)?.name} - {s.name}</span>
                         </label>
                       ))}
                     </div>
@@ -504,7 +512,7 @@ export default function AssignmentsPage() {
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">رابط الملف المرفق (اختياري)</label>
                     <input
                       type="url"
-                      className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
+                      className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left placeholder:text-right"
                       dir="ltr"
                       placeholder="https://..."
                       value={currentAssignment.file_url || ''}
@@ -514,30 +522,36 @@ export default function AssignmentsPage() {
                 </div>
                 </div>
 
-                <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100">
-                  <h4 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
-                    <Layout className="h-5 w-5 text-indigo-600" />
-                    بناء الأسئلة التفاعلية
-                  </h4>
+                <div className="bg-slate-50/50 rounded-[2rem] p-6 sm:p-8 border border-slate-100">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-100">
+                       <Layout className="h-6 w-6 text-indigo-600" />
+                    </div>
+                    <h4 className="text-xl font-black text-slate-900">بناء الأسئلة التفاعلية للواجب</h4>
+                  </div>
                   <AssignmentBuilder questions={questions} onChange={setQuestions} />
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-8 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row justify-end gap-4 pt-8 border-t border-slate-100">
                 <Dialog.Close asChild>
                   <button
                     type="button"
-                    className="rounded-2xl bg-slate-50 px-8 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95"
+                    className="w-full sm:w-auto rounded-2xl bg-white border border-slate-200 px-8 py-4 text-sm font-black text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95"
                   >
-                    إلغاء
+                    إلغاء الأمر
                   </button>
                 </Dialog.Close>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                  className="w-full sm:w-auto rounded-2xl bg-indigo-600 px-10 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {isSubmitting ? 'جاري الحفظ...' : 'حفظ الواجب'}
+                  {isSubmitting ? (
+                    <><div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> جاري الحفظ...</>
+                  ) : (
+                    <><CheckCircle2 className="w-5 h-5" /> حفظ ونشر الواجب</>
+                  )}
                 </button>
               </div>
             </form>
