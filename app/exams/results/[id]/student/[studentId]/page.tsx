@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Database, RefreshCw } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
 const isAutoGradedType = (type: string) => {
@@ -20,20 +20,17 @@ export default function StudentExamResult() {
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
-  const [data, setData] = useState<any>({ exam: {}, student: {}, attempt: null, answers: [], questions: [], debugInfo: null });
+  const [data, setData] = useState<any>({ exam: {}, student: {}, attempt: null, answers: [], questions: [] });
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
+  const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
-  const fetchData = useCallback(async (forceBypassCache = false) => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      // 🚀 تدمير الكاش بإضافة رقم عشوائي للرابط
-      const url = `/api/exams/admin-result${forceBypassCache ? `?t=${new Date().getTime()}` : ''}`;
-      
-      const res = await fetch(url, {
+      const res = await fetch('/api/exams/admin-result', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
           body: JSON.stringify({ examId, studentId })
       });
       
@@ -41,6 +38,15 @@ export default function StudentExamResult() {
       
       if (result.success) {
           setData(result);
+
+          if (result.exam?.exam_date) {
+              const now = new Date();
+              const examDate = new Date(result.exam.exam_date);
+              const endTimeParts = (result.exam.end_time || '23:59').split(':');
+              examDate.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+              setIsExamTimeFinished(now > examDate);
+          }
+
           const initialGrading: any = {};
           result.questions.forEach((q: any) => {
              const ans = result.answers.find((a: any) => String(a.question_id) === String(q.id));
@@ -52,16 +58,10 @@ export default function StudentExamResult() {
       console.error('Error fetching:', err);
     } finally {
       setLoading(false);
-      setIsSyncing(false);
     }
   }, [examId, studentId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  const handleForceSync = () => {
-      setIsSyncing(true);
-      fetchData(true); // جلب إجباري يتجاهل الكاش
-  };
 
   const handleSaveGrade = async (questionId: string) => {
     const newPoints = gradingState[questionId].points;
@@ -69,6 +69,7 @@ export default function StudentExamResult() {
     
     try {
       if (!data.attempt?.id) { alert('لا توجد محاولة.'); return; }
+
       const res = await fetch('/api/exams/admin-grade', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -76,6 +77,7 @@ export default function StudentExamResult() {
       });
       
       const result = await res.json();
+
       if (result.success) {
           setData((prev: any) => {
               const newAnswers = prev.answers.map((a: any) => String(a.question_id) === String(questionId) ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
@@ -92,153 +94,228 @@ export default function StudentExamResult() {
     }
   };
 
-  if (loading && !isSyncing) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري المعالجة...</p></div>;
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4">
+        <div className="animate-spin rounded-full h-14 w-14 border-b-4 border-indigo-600"></div>
+        <p className="font-bold text-slate-500 animate-pulse">جاري تحميل النتائج...</p>
+    </div>
+  );
 
-  const { exam, attempt, answers, questions, debugInfo } = data;
+  const { exam, student, attempt, answers, questions } = data;
 
   const isPendingGrading = attempt && attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
+  
   const calculatedMax = questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || calculatedMax || 100;
 
+  const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
+  const hasManualQuestions = questions.some((q: any) => !isAutoGradedType(q.type));
+
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <button onClick={() => router.back()} className="flex items-center justify-center w-full sm:w-auto gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">
-            <ArrowRight className="h-5 w-5" /> العودة للنتائج
-          </button>
-          
-          {/* 🚀 الزر السحري الجديد لمزامنة البيانات وإجبار النظام على القراءة */}
-          <button onClick={handleForceSync} disabled={isSyncing} className="flex items-center justify-center w-full sm:w-auto gap-2 text-white font-bold bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-2xl shadow-md transition-all disabled:opacity-50">
-            <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} /> {isSyncing ? 'جاري المزامنة...' : 'مزامنة البيانات (تحديث إجباري)'}
-          </button>
+      {/* Header Actions */}
+      <div className="flex items-center justify-between">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-3 rounded-xl shadow-sm border border-slate-200 transition-all hover:shadow-md">
+          <ArrowRight className="h-5 w-5" /> العودة للنتائج
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-white p-8 rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -mr-10 -mt-10"></div>
-          <div className="relative z-10">
-            <h1 className="text-3xl font-black text-slate-900 leading-tight">{exam?.title || 'نتيجة الاختبار'}</h1>
-            <div className="flex flex-wrap items-center gap-4 mt-6 text-slate-600 font-bold">
-              <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                <User className="h-5 w-5 text-indigo-500" />
-                <span>رقم الطالب: {studentId.slice(0,8)}...</span>
-              </div>
-            </div>
-          </div>
+      {/* Lock Screen for Students */}
+      {isLockedForStudent && (
+        <div className="bg-slate-50 border border-slate-200 p-8 rounded-3xl flex flex-col sm:flex-row items-center gap-6 shadow-sm">
+           <div className="bg-white p-4 rounded-full shadow-sm border border-slate-100 shrink-0"><Lock className="w-10 h-10 text-slate-400" /></div>
+           <div className="text-center sm:text-right">
+              <h3 className="text-2xl font-black text-slate-800 mb-2">نتائج الطلاب محجوبة مؤقتاً</h3>
+              <p className="text-slate-600 font-medium text-lg leading-relaxed">حفاظاً على نزاهة الاختبار، لن يتم عرض تفاصيل الإجابات أو الدرجة النهائية إلا بعد انتهاء الوقت الرسمي للاختبار لجميع الطلاب.</p>
+           </div>
         </div>
+      )}
 
-        <div className={`p-8 rounded-3xl shadow-xl flex flex-col items-center justify-center text-white ${isPendingGrading ? 'bg-amber-500' : 'bg-indigo-600'}`}>
-          <Trophy className="h-10 w-10 text-white/80 mb-3" />
-          <div className="text-sm font-bold mb-2">النتيجة النهائية</div>
-          <div className="text-4xl sm:text-5xl font-black">
-            {totalEarned} <span className="text-2xl opacity-70">/ {displayMaxScore}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-6 mt-8">
-        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-          <BookOpen className="h-6 w-6 text-indigo-600" /> تفاصيل الإجابات
-        </h2>
-
-        {questions.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-3xl border shadow-sm">
-              <AlertCircle className="h-16 w-16 text-amber-400 mx-auto mb-4" />
-              <h3 className="text-2xl font-black text-slate-800">لا توجد أسئلة</h3>
-            </div>
-        ) : questions.map((question: any, index: number) => {
+      {/* Main Hero Card */}
+      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-60 -mr-20 -mt-20"></div>
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-60 -ml-20 -mb-20"></div>
           
-          const answer = answers.find((a: any) => String(a.question_id).trim() === String(question.id).trim());
-          const qType = (question.type || '').toLowerCase();
-          const isAuto = isAutoGradedType(qType);
-          
-          let studentAnswerText = null;
-          let isCorrect = false;
-          let pointsEarned = answer ? Number(answer.points_earned) || 0 : 0;
-
-          if (answer) {
-              let rawVal = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
-              if (rawVal && rawVal !== 'null' && String(rawVal).trim() !== '') {
-                  const selectedOpt = question.options?.find((o:any) => String(o.id) === String(rawVal) || String(o.content) === String(rawVal));
-                  if (selectedOpt) {
-                      studentAnswerText = selectedOpt.content;
-                      isCorrect = selectedOpt.is_correct || pointsEarned > 0;
-                  } else {
-                      studentAnswerText = String(rawVal);
-                      isCorrect = answer.is_correct || pointsEarned > 0;
-                  }
-              } else if (pointsEarned > 0 || answer.is_correct) {
-                  studentAnswerText = "✅ إجابة مسجلة";
-                  isCorrect = true;
-              }
-          }
-
-          const isUnanswered = !studentAnswerText;
-          const correctAnswerText = question.options?.filter((o:any)=>o.is_correct).map((o:any)=>o.content).join('، ') || 'يعتمد على المعلم';
-
-          return (
-            <div key={question.id} className={`bg-white rounded-[2rem] overflow-hidden shadow-sm border-2 ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-red-200'}`}>
-              <div className="p-6 bg-slate-50/50 border-b flex justify-between items-center gap-4">
-                <h3 className="font-black text-lg flex items-center gap-3">
-                  <span className="w-10 h-10 bg-white rounded-xl flex items-center justify-center border text-indigo-600 shadow-sm">{index + 1}</span>
-                  {question.content}
-                </h3>
-                <div className="flex items-center gap-1.5 bg-white shadow-sm px-5 py-2.5 rounded-2xl font-black text-sm text-slate-600 border border-slate-100 shrink-0">
-                  <span className={isCorrect ? 'text-emerald-600' : 'text-slate-900'}>{pointsEarned}</span>
-                  <span className="text-slate-300">/</span>
-                  <span>{Number(question.points) || 0} نقطة</span>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className={`p-4 rounded-2xl border ${isUnanswered ? 'bg-slate-50' : isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                  <div className="text-sm font-black mb-2 flex items-center gap-2">
-                    {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="text-emerald-600 w-5 h-5"/> : <XCircle className="text-red-600 w-5 h-5"/>}
-                    إجابة الطالب
+          <div className="p-8 sm:p-10 relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="flex-1 text-center md:text-right space-y-4">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-bold">
+                      <BookOpen className="w-4 h-4" /> {exam?.subject_name || 'اختبار عام'}
                   </div>
-                  <p className="text-lg font-bold text-slate-800">{isUnanswered ? 'لم يقم الطالب بالإجابة' : studentAnswerText}</p>
-                </div>
+                  <h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight">{exam?.title || 'تقرير نتيجة الاختبار'}</h1>
+                  
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 pt-2">
+                      <div className="flex items-center gap-2 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200">
+                          <User className="h-5 w-5 text-slate-400" />
+                          <span className="font-bold text-slate-700">{student?.users?.full_name || student?.full_name || 'طالب'}</span>
+                      </div>
+                      {isPendingGrading ? (
+                          <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 rounded-xl border border-amber-200 text-amber-700">
+                              <Clock className="h-5 w-5" /> <span className="font-bold">بانتظار تصحيح المعلم</span>
+                          </div>
+                      ) : (
+                          <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-700">
+                              <CheckCircle2 className="h-5 w-5" /> <span className="font-bold">مكتمل التصحيح</span>
+                          </div>
+                      )}
+                  </div>
+              </div>
 
-                <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100">
-                  <div className="text-sm font-black text-indigo-600 mb-2 flex items-center gap-2"><Lightbulb className="w-5 h-5"/> الإجابة النموذجية</div>
-                  <p className="text-lg font-bold text-slate-800">{correctAnswerText}</p>
-                </div>
+              {/* Score Widget */}
+              <div className={`shrink-0 w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center text-white shadow-xl ${isPendingGrading ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-200' : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-200'}`}>
+                  <Trophy className="h-10 w-10 text-white/90 mb-2" />
+                  <div className="text-sm font-bold text-white/80 uppercase tracking-widest mb-1">الدرجة المكتسبة</div>
+                  <div className="text-5xl font-black flex items-baseline gap-1">
+                      {isPendingGrading && !isTeacherOrAdmin ? '؟' : totalEarned}
+                      <span className="text-xl font-bold opacity-70">/{displayMaxScore}</span>
+                  </div>
+              </div>
+          </div>
+      </div>
 
-                {isTeacherOrAdmin && (
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border">
-                    <div className="flex items-center gap-3">
-                       <span className="font-black text-sm">تعديل الدرجة:</span>
-                       <input type="number" min="0" max={question.points} value={gradingState[question.id]?.points ?? 0} onChange={(e) => setGradingState((prev: any) => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-xl border focus:ring-2 font-black text-lg outline-none" />
+      {/* Teacher Alerts */}
+      {isTeacherOrAdmin && !isLockedForStudent && (
+          <div className="space-y-4">
+              {hasManualQuestions && (
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl flex items-center gap-3 text-blue-800">
+                      <AlertCircle className="w-5 h-5 shrink-0" />
+                      <span className="font-bold text-sm">هذا الاختبار يحتوي على أسئلة مقالية تتطلب وضع الدرجات يدوياً للطلاب.</span>
+                  </div>
+              )}
+              {(!attempt || attempt.id === null) && (
+                  <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl flex items-center gap-3 text-rose-800">
+                      <XCircle className="w-5 h-5 shrink-0" />
+                      <span className="font-bold text-sm">لم يتم العثور على تسليم صحيح من الطالب لهذا الاختبار. الإجابات بالأسفل قد تكون فارغة.</span>
+                  </div>
+              )}
+          </div>
+      )}
+
+      {/* Answers Detail Section */}
+      {!isLockedForStudent && (
+        <div className="space-y-8 mt-12">
+          <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
+            <Target className="h-7 w-7 text-indigo-600" />
+            <h2 className="text-2xl font-black text-slate-900">المراجعة التفصيلية للإجابات</h2>
+          </div>
+
+          {questions.length === 0 ? (
+              <div className="text-center py-20 bg-slate-50 rounded-3xl border border-slate-200 border-dashed">
+                <AlertCircle className="h-12 w-12 text-slate-400 mx-auto mb-3" />
+                <h3 className="text-xl font-bold text-slate-600">لا توجد أسئلة مسجلة في هذا الاختبار</h3>
+              </div>
+          ) : questions.map((question: any, index: number) => {
+            
+            const answer = answers.find((a: any) => String(a.question_id) === String(question.id));
+            const qType = (question.type || '').toLowerCase();
+            const isAuto = isAutoGradedType(qType);
+            
+            let studentAnswerText = null;
+            let isCorrect = false;
+            let pointsEarned = answer ? Number(answer.points_earned) || 0 : 0;
+
+            if (answer) {
+                let rawVal = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
+                if (rawVal && rawVal !== 'null' && String(rawVal).trim() !== '') {
+                    const selectedOpt = question.options?.find((o:any) => String(o.id) === String(rawVal) || String(o.content) === String(rawVal));
+                    if (selectedOpt) {
+                        studentAnswerText = selectedOpt.content;
+                        isCorrect = selectedOpt.is_correct || pointsEarned > 0;
+                    } else {
+                        studentAnswerText = String(rawVal);
+                        isCorrect = answer.is_correct || pointsEarned > 0;
+                    }
+                } else if (pointsEarned > 0 || answer.is_correct) {
+                    studentAnswerText = "تم تسجيل الإجابة بنجاح ✅";
+                    isCorrect = true;
+                }
+            }
+
+            const isUnanswered = !studentAnswerText;
+            const correctAnswerText = question.options?.filter((o:any)=>o.is_correct).map((o:any)=>o.content).join('، ') || 'يتم التقييم من قِبل المعلم';
+
+            return (
+              <div key={question.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
+                {/* Question Header */}
+                <div className="p-6 sm:p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
+                  <div className="flex gap-4 items-start">
+                    <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${isUnanswered ? 'bg-slate-200 text-slate-600' : isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {index + 1}
                     </div>
-                    <button onClick={() => handleSaveGrade(question.id)} disabled={gradingState[question.id]?.isSubmitting} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-black hover:bg-indigo-700 disabled:opacity-50">
-                      {gradingState[question.id]?.isSubmitting ? 'جاري الحفظ...' : 'حفظ'}
-                    </button>
+                    <h3 className="font-bold text-lg text-slate-800 leading-relaxed mt-1">{question.content}</h3>
+                  </div>
+                  
+                  <div className="flex items-center gap-1.5 bg-white px-4 py-2 rounded-xl font-bold text-sm border border-slate-200 shrink-0 self-start sm:self-auto">
+                    <Award className="w-4 h-4 text-slate-400" />
+                    <span className={isCorrect ? 'text-emerald-600' : 'text-slate-900'}>{!isAuto && isPendingGrading && !isTeacherOrAdmin ? '؟' : pointsEarned}</span>
+                    <span className="text-slate-300">/</span>
+                    <span className="text-slate-500">{Number(question.points) || 0} نقطة</span>
+                  </div>
+                </div>
+
+                {/* Media Attachment */}
+                {(question?.mediaUrl || question?.media_url) && (
+                  <div className="px-6 pt-6">
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2 flex justify-center">
+                          <img src={question.mediaUrl || question.media_url} alt="مرفق" className="max-h-72 w-auto object-contain rounded-xl" />
+                      </div>
                   </div>
                 )}
-              </div>
-            </div>
-          );
-        })}
 
-        {isTeacherOrAdmin && debugInfo && (
-            <div className="bg-slate-900 text-green-400 p-6 rounded-3xl mt-12 font-mono text-sm text-left shadow-xl" dir="ltr">
-               <div className="flex items-center justify-between border-b border-green-800 pb-2 mb-4">
-                   <div className="flex items-center gap-2"><Database className="w-5 h-5" /> <strong>System Diagnostic Tool</strong></div>
-               </div>
-               <p>» Clean Exam ID: {debugInfo.cleanExamId}</p>
-               <p>» Clean Student ID: {debugInfo.cleanStudentId}</p>
-               <p>» DB Attempts Found: <span className={debugInfo.foundAttemptsCount > 0 ? "text-green-400" : "text-red-500 font-bold"}>{debugInfo.foundAttemptsCount}</span></p>
-               
-               {/* 🚨 هنا نفضح أخطاء قاعدة البيانات 🚨 */}
-               {debugInfo.examError && <p className="text-red-500 mt-2 bg-red-900/30 p-2">Exam Query Error: {debugInfo.examError}</p>}
-               {debugInfo.attemptError && <p className="text-red-500 mt-2 bg-red-900/30 p-2">Attempt Query Error: {debugInfo.attemptError}</p>}
-               {debugInfo.answerError && <p className="text-red-500 mt-2 bg-red-900/30 p-2">Answer Query Error: {debugInfo.answerError}</p>}
-               
-               <p className="mt-2">» Answers Extracted: <span className={answers.length > 0 ? "text-green-400 font-bold text-lg" : "text-red-500"}>{answers.length}</span></p>
-            </div>
-        )}
-      </div>
+                {/* Answers Section */}
+                <div className="p-6 sm:p-8 space-y-5">
+                  
+                  {/* Student Answer Box */}
+                  <div className={`p-5 rounded-2xl border ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed' : isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
+                    <div className="text-sm font-black mb-3 flex items-center gap-2">
+                      {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
+                      <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابة الطالب</span>
+                    </div>
+                    <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
+                        {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : studentAnswerText}
+                    </p>
+                  </div>
+
+                  {/* Correct Answer Box */}
+                  <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
+                    <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
+                        <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
+                    </div>
+                    <p className="text-lg font-bold text-slate-800 leading-relaxed">{correctAnswerText}</p>
+                  </div>
+
+                  {/* Teacher Grading Tool */}
+                  {isTeacherOrAdmin && (
+                    <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                         <label className="font-bold text-slate-600 text-sm">تقييم المعلم:</label>
+                         <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+                             <input 
+                                type="number" 
+                                min="0" 
+                                max={question.points} 
+                                value={gradingState[question.id]?.points ?? 0} 
+                                onChange={(e) => setGradingState((prev: any) => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} 
+                                className="w-20 p-2.5 text-center font-black text-lg text-indigo-700 bg-transparent outline-none" 
+                             />
+                             <span className="px-3 text-sm font-bold text-slate-400 border-r border-slate-200 bg-slate-100/50">من {Number(question.points) || 0}</span>
+                         </div>
+                      </div>
+                      <button 
+                        onClick={() => handleSaveGrade(question.id)} 
+                        disabled={gradingState[question.id]?.isSubmitting} 
+                        className="w-full sm:w-auto bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-600 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        {gradingState[question.id]?.isSubmitting ? 'جاري الحفظ...' : <>حفظ الدرجة <Save className="w-4 h-4" /></>}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
