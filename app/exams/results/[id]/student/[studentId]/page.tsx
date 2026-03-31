@@ -44,6 +44,7 @@ export default function StudentExamResult() {
               const examDate = new Date(result.exam.exam_date);
               const endTimeParts = (result.exam.end_time || '23:59').split(':');
               examDate.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+              // التحقق الدقيق من انتهاء الوقت
               setIsExamTimeFinished(now > examDate);
           }
 
@@ -109,6 +110,7 @@ export default function StudentExamResult() {
   const calculatedMax = questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || calculatedMax || 100;
 
+  // 🚨 تفعيل القفل الصارم: إذا كان طالباً والوقت لم ينتهِ، نقفل النتيجة بالكامل
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
   const hasManualQuestions = questions.some((q: any) => !isAutoGradedType(q.type));
 
@@ -121,13 +123,13 @@ export default function StudentExamResult() {
         </button>
       </div>
 
-      {/* Lock Screen for Students */}
+      {/* Lock Screen Alert for Students */}
       {isLockedForStudent && (
         <div className="bg-slate-50 border border-slate-200 p-8 rounded-3xl flex flex-col sm:flex-row items-center gap-6 shadow-sm">
            <div className="bg-white p-4 rounded-full shadow-sm border border-slate-100 shrink-0"><Lock className="w-10 h-10 text-slate-400" /></div>
            <div className="text-center sm:text-right">
-              <h3 className="text-2xl font-black text-slate-800 mb-2">نتائج الطلاب محجوبة مؤقتاً</h3>
-              <p className="text-slate-600 font-medium text-lg leading-relaxed">حفاظاً على نزاهة الاختبار، لن يتم عرض تفاصيل الإجابات أو الدرجة النهائية إلا بعد انتهاء الوقت الرسمي للاختبار لجميع الطلاب.</p>
+              <h3 className="text-2xl font-black text-slate-800 mb-2">النتائج محجوبة مؤقتاً</h3>
+              <p className="text-slate-600 font-medium text-lg leading-relaxed">حفاظاً على نزاهة الاختبار، لن يتم عرض النتيجة النهائية أو تفاصيل إجاباتك إلا بعد انتهاء الوقت الرسمي للاختبار لجميع الطلاب.</p>
            </div>
         </div>
       )}
@@ -149,32 +151,41 @@ export default function StudentExamResult() {
                           <User className="h-5 w-5 text-slate-400" />
                           <span className="font-bold text-slate-700">{student?.users?.full_name || student?.full_name || 'طالب'}</span>
                       </div>
-                      {isPendingGrading ? (
-                          <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 rounded-xl border border-amber-200 text-amber-700">
-                              <Clock className="h-5 w-5" /> <span className="font-bold">بانتظار تصحيح المعلم</span>
-                          </div>
-                      ) : (
-                          <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-700">
-                              <CheckCircle2 className="h-5 w-5" /> <span className="font-bold">مكتمل التصحيح</span>
-                          </div>
+                      
+                      {!isLockedForStudent && (
+                        isPendingGrading ? (
+                            <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 rounded-xl border border-amber-200 text-amber-700">
+                                <Clock className="h-5 w-5" /> <span className="font-bold">بانتظار تصحيح المعلم</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-700">
+                                <CheckCircle2 className="h-5 w-5" /> <span className="font-bold">مكتمل التصحيح</span>
+                            </div>
+                        )
                       )}
                   </div>
               </div>
 
-              {/* Score Widget */}
-              <div className={`shrink-0 w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center text-white shadow-xl ${isPendingGrading ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-200' : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-200'}`}>
-                  <Trophy className="h-10 w-10 text-white/90 mb-2" />
+              {/* 🚨 Score Widget (Hides Score if Locked) */}
+              <div className={`shrink-0 w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center text-white shadow-xl ${isLockedForStudent ? 'bg-slate-400 shadow-slate-200' : isPendingGrading ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-200' : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-200'}`}>
+                  {isLockedForStudent ? <Lock className="h-10 w-10 text-white/90 mb-2" /> : <Trophy className="h-10 w-10 text-white/90 mb-2" />}
                   <div className="text-sm font-bold text-white/80 uppercase tracking-widest mb-1">الدرجة المكتسبة</div>
                   <div className="text-5xl font-black flex items-baseline gap-1">
-                      {isPendingGrading && !isTeacherOrAdmin ? '؟' : totalEarned}
-                      <span className="text-xl font-bold opacity-70">/{displayMaxScore}</span>
+                      {isLockedForStudent ? (
+                         <span className="text-3xl mt-2">مغلق</span>
+                      ) : isPendingGrading && !isTeacherOrAdmin ? (
+                         '؟'
+                      ) : (
+                         totalEarned
+                      )}
+                      {!isLockedForStudent && <span className="text-xl font-bold opacity-70">/{displayMaxScore}</span>}
                   </div>
               </div>
           </div>
       </div>
 
       {/* Teacher Alerts */}
-      {isTeacherOrAdmin && !isLockedForStudent && (
+      {isTeacherOrAdmin && (
           <div className="space-y-4">
               {hasManualQuestions && (
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl flex items-center gap-3 text-blue-800">
@@ -191,9 +202,9 @@ export default function StudentExamResult() {
           </div>
       )}
 
-      {/* Answers Detail Section */}
+      {/* 🚨 Answers Detail Section (Hides entirely if Locked for Student) */}
       {!isLockedForStudent && (
-        <div className="space-y-8 mt-12">
+        <div className="space-y-8 mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
             <Target className="h-7 w-7 text-indigo-600" />
             <h2 className="text-2xl font-black text-slate-900">المراجعة التفصيلية للإجابات</h2>
