@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase'; // 🚀 استيراد قاعدة البيانات مباشرة
 
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
@@ -22,7 +23,7 @@ export default function StudentExamResult() {
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
-  const { fetchStudentExamResult, gradeAnswer } = useExamsSystem();
+  const { gradeAnswer } = useExamsSystem();
   
   const [exam, setExam] = useState<any>({});
   const [student, setStudent] = useState<any>({});
@@ -34,40 +35,81 @@ export default function StudentExamResult() {
   
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
+  // 🚀 المحرك الجبار: متصل بقاعدة البيانات مباشرة ليتجاوز أي هوك معطل
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await fetchStudentExamResult(examId, studentId);
-      if (data) {
-        setExam(data.exam || {});
-        setStudent(data.student || {});
-        setAttempt(data.attempt || null); 
-        setAnswers(data.answers || []);
-        setQuestions(data.questions || []); 
-        
-        if (data.exam && data.exam.exam_date) {
-            const now = new Date();
-            const examDate = new Date(data.exam.exam_date);
-            const endTimeParts = (data.exam.end_time || '23:59').split(':');
-            const endDateTime = new Date(examDate);
-            endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
-            setIsExamTimeFinished(now > endDateTime);
-        }
-        
-        const initialGrading: any = {};
-        (data.questions || []).forEach(q => {
-           const qIdStr = String(q.id).trim();
-           const studentAns = (data.answers || []).find(a => String(a.question_id).trim() === qIdStr || String(a.questionId).trim() === qIdStr);
-           initialGrading[q.id] = { points: studentAns?.points_earned || 0, isSubmitting: false };
-        });
-        setGradingState(initialGrading);
+      
+      // 1. جلب الاختبار
+      const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
+      
+      // 2. تحديد هوية الطالب بدقة
+      let studentData = null;
+      const { data: s1 } = await supabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
+      if (s1) studentData = s1;
+      else {
+          const { data: s2 } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
+          if (s2) studentData = s2;
       }
+      const realStudentId = studentData?.id || studentId;
+
+      // 3. جلب الأسئلة وخياراتها
+      const { data: questionsData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
+
+      // 4. جلب المحاولة وإجاباتها بالقوة
+      const { data: attempts } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', realStudentId).order('created_at', { ascending: false });
+
+      let bestAttempt = null;
+      let bestAnswers: any[] = [];
+
+      if (attempts && attempts.length > 0) {
+          const attemptIds = attempts.map(a => a.id);
+          const { data: allAnswers } = await supabase.from('student_answers').select('*').in('attempt_id', attemptIds);
+
+          // البحث عن المحاولة التي تحتوي على إجابات فعلياً (المحاولة الذهبية)
+          for (const att of attempts) {
+              const attAnswers = (allAnswers || []).filter(a => a.attempt_id === att.id);
+              if (attAnswers.length > 0) {
+                  bestAttempt = att;
+                  bestAnswers = attAnswers;
+                  break;
+              }
+          }
+          if (!bestAttempt) bestAttempt = attempts[0]; // احتياط
+      }
+
+      // 5. ضبط حالة الحماية من الغش
+      if (examData && examData.exam_date) {
+          const now = new Date();
+          const examDate = new Date(examData.exam_date);
+          const endTimeParts = (examData.end_time || '23:59').split(':');
+          const endDateTime = new Date(examDate);
+          endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+          setIsExamTimeFinished(now > endDateTime);
+      }
+
+      // 6. تهيئة صناديق الدرجات
+      const initialGrading: any = {};
+      (questionsData || []).forEach(q => {
+         const qIdStr = String(q.id).trim();
+         const studentAns = (bestAnswers || []).find(a => String(a.question_id).trim() === qIdStr || String(a.questionId).trim() === qIdStr);
+         initialGrading[q.id] = { points: Number(studentAns?.points_earned) || 0, isSubmitting: false };
+      });
+
+      // حفظ البيانات في الواجهة
+      setExam(examData || {});
+      setStudent(studentData || { users: { full_name: 'طالب' } });
+      setAttempt(bestAttempt);
+      setAnswers(bestAnswers);
+      setQuestions(questionsData || []);
+      setGradingState(initialGrading);
+
     } catch (err) {
-      console.error('Error fetching result:', err);
+      console.error('Error fetching result directly:', err);
     } finally {
       setLoading(false);
     }
-  }, [examId, studentId, fetchStudentExamResult]);
+  }, [examId, studentId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -86,16 +128,15 @@ export default function StudentExamResult() {
           });
           
           setAttempt((prev: any) => {
-             const currentScore = prev?.score || 0;
-             const oldPoints = answers.find(a => String(a.question_id) === String(questionId))?.points_earned || 0;
+             const currentScore = Number(prev?.score) || 0;
+             const oldPoints = Number(answers.find(a => String(a.question_id) === String(questionId))?.points_earned) || 0;
              return { ...(prev || { id: 'temp-id', status: 'graded', exam_id: examId, student_id: studentId }), score: (currentScore - oldPoints) + newPoints, status: 'graded' };
           });
 
-          await fetchData();
-          router.refresh();
+          // لا حاجة لعمل refresh مزعج، التحديث يتم لحظياً
       }
     } catch (err: any) {
-      alert(err.message || 'حدث خطأ أثناء حفظ الدرجة');
+      alert('حدث خطأ أثناء حفظ الدرجة');
     } finally {
       setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
     }
@@ -104,12 +145,14 @@ export default function StudentExamResult() {
   if (loading) return <div className="flex items-center justify-center min-h-screen bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
   const isPendingGrading = !attempt || attempt.status !== 'graded';
-  const totalEarned = attempt?.score || 0;
+  const totalEarned = Number(attempt?.score) || 0;
   
-  const calculatedQuestionsScore = (questions || []).reduce((sum, q) => sum + (Number(q?.points) || 0), 0);
+  // 🚀 تدمير مشكلة 10/0 نهائياً
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || 0;
-  if (displayMaxScore === 0) displayMaxScore = calculatedQuestionsScore;
-  if (displayMaxScore === 0) displayMaxScore = 100;
+  if (displayMaxScore <= 0) {
+      displayMaxScore = (questions || []).reduce((sum, q) => sum + (Number(q?.points) || 0), 0);
+  }
+  if (displayMaxScore <= 0) displayMaxScore = 100; // الدرجة المطلقة لمنع الصفر في المقام
 
   const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type));
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
@@ -118,7 +161,7 @@ export default function StudentExamResult() {
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
       <div className="flex items-center justify-between">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">
-          <ArrowRight className="h-5 w-5" /> العودة للنتائج
+          <ArrowRight className="h-5 w-5" /> العودة
         </button>
       </div>
 
@@ -128,7 +171,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-slate-800 mb-1">نتائج الطلاب محجوبة حالياً (حماية من الغش)</h3>
               <p className="text-slate-600 font-bold text-sm leading-relaxed">
-                وقت الاختبار لم ينتهِ بعد. أنت فقط من يرى هذه الصفحة الآن لتتأكد من تسليمك. لن يتمكن الطلاب من استعراض الإجابات وتفاصيل الدرجات إلا بعد انتهاء وقت الاختبار الرسمي.
+                وقت الاختبار لم ينتهِ بعد. أنت فقط من يرى هذه الصفحة الآن لتتأكد من تسليمك.
               </p>
            </div>
         </div>
@@ -154,7 +197,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-red-800 mb-1">تنبيه الإدارة / المعلم</h3>
               <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو تم تفريغ محاولته. يمكنك وضع الدرجة التقديرية لكل سؤال بالأسفل ليتم بناء النتيجة وحفظها.
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح. يمكنك وضع الدرجة التقديرية بالأسفل ליتم بناء النتيجة.
               </p>
            </div>
         </div>
@@ -221,6 +264,7 @@ export default function StudentExamResult() {
             let studentAnswerText = null;
             let isUnanswered = true;
 
+            // 🚀 مترجم الإجابات الذي هزم ChatGPT
             if (answer) {
                 let rawData = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
                 
@@ -245,9 +289,10 @@ export default function StudentExamResult() {
                     }
                 } else if (pointsEarned > 0 || isCorrect) {
                     isUnanswered = false;
-                    studentAnswerText = "✅ إجابة مسجلة (النص مفقود من السجل القديم)";
+                    studentAnswerText = "✅ إجابة مسجلة (النص غير متوفر)";
                 }
                 
+                // تصحيح الدرجات المظلومة (0)
                 if (isAuto && studentAnswerText && !isCorrect && pointsEarned === 0) {
                     const correctOpt = question.options?.find((o:any) => o.is_correct);
                     if (correctOpt && (correctOpt.content === studentAnswerText || String(correctOpt.id) === String(rawData))) {
@@ -273,7 +318,7 @@ export default function StudentExamResult() {
                     <div className="flex items-center gap-1.5 bg-white shadow-sm px-5 py-2.5 rounded-2xl font-black text-sm text-slate-600 border border-slate-100 shrink-0">
                       <span className={isCorrect ? 'text-emerald-600' : 'text-slate-900'}>{isManualQuestion && isPendingGrading && !isTeacherOrAdmin ? '؟' : pointsEarned}</span>
                       <span className="text-slate-300">/</span>
-                      <span>{question?.points || 0} نقطة</span>
+                      <span>{Number(question?.points) || 0} نقطة</span>
                     </div>
                   </div>
 
@@ -323,7 +368,7 @@ export default function StudentExamResult() {
                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">تعديل الدرجة يدوياً</label>
                            <div className="flex items-center gap-2">
                              <input type="number" min="0" max={question.points} value={gradingState[question.id].points} onChange={(e) => setGradingState(prev => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-xl border border-slate-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 font-black text-xl text-indigo-700 outline-none bg-white transition-all" />
-                             <span className="text-sm text-slate-500 font-bold">من {question.points}</span>
+                             <span className="text-sm text-slate-500 font-bold">من {Number(question.points) || 0}</span>
                            </div>
                         </div>
                       </div>
