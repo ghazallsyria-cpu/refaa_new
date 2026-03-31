@@ -12,9 +12,9 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
   try {
-    const { assignmentId, studentId, answers, submissionId } = await req.json();
+    // 🚀 استقبال النص والملف من الواجهة
+    const { assignmentId, studentId, answers, submissionId, content, fileUrl } = await req.json();
 
-    // 1. تحديد الطالب بدقة
     let realStudentId = studentId;
     const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', studentId).maybeSingle();
     if (st?.id) realStudentId = st.id;
@@ -25,30 +25,32 @@ export async function POST(req: Request) {
 
     let finalSubmissionId = submissionId;
 
-    // 2. إنشاء أو تحديث تسليم الواجب
+    // 🚀 حفظ النص والملف في جدول التسليمات بشكل آمن
     if (finalSubmissionId) {
       const { error: updErr } = await adminSupabase.from('assignment_submissions').update({
         status: 'submitted',
-        submitted_at: new Date().toISOString()
+        submitted_at: new Date().toISOString(),
+        content: content || null,
+        file_url: fileUrl || null
       }).eq('id', finalSubmissionId);
       
       if (updErr) throw new Error('فشل تحديث التسليم: ' + updErr.message);
       
-      // مسح الإجابات القديمة
       await adminSupabase.from('assignment_answers').delete().eq('submission_id', finalSubmissionId);
     } else {
       const { data: sub, error: subErr } = await adminSupabase.from('assignment_submissions').insert([{
         assignment_id: assignmentId,
         student_id: realStudentId,
         status: 'submitted',
-        submitted_at: new Date().toISOString()
+        submitted_at: new Date().toISOString(),
+        content: content || null,
+        file_url: fileUrl || null
       }]).select('id').single();
 
       if (subErr) throw new Error('فشل إنشاء التسليم: ' + subErr.message);
       finalSubmissionId = sub.id;
     }
 
-    // 3. حفظ الإجابات
     if (answers && answers.length > 0) {
       const answersToInsert = answers.map((ans: any) => ({
         submission_id: finalSubmissionId,
@@ -66,4 +68,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 
