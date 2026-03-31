@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, AlertCircle, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 
@@ -32,7 +32,6 @@ export default function StudentExamResult() {
   const [loading, setLoading] = useState(true);
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
   
-  // 🚀 حالة درع الحماية من الغش
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -46,7 +45,6 @@ export default function StudentExamResult() {
         setAnswers(data.answers || []);
         setQuestions(data.questions || []); 
         
-        // 🚀 حساب وقت نهاية الاختبار لدرع الحماية
         if (data.exam && data.exam.exam_date) {
             const now = new Date();
             const examDate = new Date(data.exam.exam_date);
@@ -58,7 +56,8 @@ export default function StudentExamResult() {
         
         const initialGrading: any = {};
         (data.questions || []).forEach(q => {
-           const studentAns = (data.answers || []).find(a => a.question_id === q.id);
+           const qIdStr = String(q.id).trim();
+           const studentAns = (data.answers || []).find(a => String(a.question_id).trim() === qIdStr || String(a.questionId).trim() === qIdStr);
            initialGrading[q.id] = { points: studentAns?.points_earned || 0, isSubmitting: false };
         });
         setGradingState(initialGrading);
@@ -78,17 +77,18 @@ export default function StudentExamResult() {
     
     try {
       if(gradeAnswer) {
+          // حفظ الدرجة في الخلفية بصمت تام بدون أي رسائل مزعجة
           await gradeAnswer(attempt?.id || null, questionId, newPoints, examId, studentId);
           
           setAnswers(prev => {
-             const existing = prev.find(a => a.question_id === questionId);
-             if (existing) return prev.map(a => a.question_id === questionId ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
+             const existing = prev.find(a => String(a.question_id) === String(questionId));
+             if (existing) return prev.map(a => String(a.question_id) === String(questionId) ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
              return [...prev, { question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تم التقييم يدوياً' }];
           });
           
           setAttempt((prev: any) => {
              const currentScore = prev?.score || 0;
-             const oldPoints = answers.find(a => a.question_id === questionId)?.points_earned || 0;
+             const oldPoints = answers.find(a => String(a.question_id) === String(questionId))?.points_earned || 0;
              return { ...(prev || { id: 'temp-id', status: 'graded', exam_id: examId, student_id: studentId }), score: (currentScore - oldPoints) + newPoints, status: 'graded' };
           });
 
@@ -96,7 +96,7 @@ export default function StudentExamResult() {
           router.refresh();
       }
     } catch (err: any) {
-      alert(err.message || 'حدث خطأ أثناء حفظ الدرجة');
+      console.error(err);
     } finally {
       setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
     }
@@ -112,10 +112,6 @@ export default function StudentExamResult() {
   if (displayMaxScore === 0) displayMaxScore = calculatedQuestionsScore;
   if (displayMaxScore === 0) displayMaxScore = 100;
 
-  // 🚀 اكتشاف هل الاختبار آلي بالكامل أم يحتوي على مقالي
-  const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type));
-
-  // 🚀 درع الحماية من الغش للطالب
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
 
   return (
@@ -126,14 +122,13 @@ export default function StudentExamResult() {
         </button>
       </div>
 
-      {/* 🚀 رسالة الحجب للطلاب */}
       {isLockedForStudent && (
         <div className="bg-slate-100 border-2 border-slate-200 p-6 rounded-3xl flex items-center gap-4 shadow-sm">
            <div className="bg-white p-3 rounded-2xl text-slate-500 shrink-0"><Lock className="w-8 h-8" /></div>
            <div>
               <h3 className="text-xl font-black text-slate-800 mb-1">نتائج الطلاب محجوبة حالياً (حماية من الغش)</h3>
               <p className="text-slate-600 font-bold text-sm leading-relaxed">
-                وقت الاختبار لم ينتهِ بعد. أنت فقط من يرى هذه الصفحة الآن لتتأكد من تسليمك. لن يتمكن الطلاب من استعراض الإجابات وتفاصيل الدرجات إلا بعد انتهاء وقت الاختبار الرسمي.
+                وقت الاختبار لم ينتهِ بعد. أنت فقط من يرى هذه الصفحة الآن لتتأكد من تسليمك.
               </p>
            </div>
         </div>
@@ -145,21 +140,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-amber-800 mb-1">الاختبار قيد التقييم</h3>
               <p className="text-amber-700 font-bold text-sm leading-relaxed">
-                {isTeacherOrAdmin 
-                  ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي. يرجى وضع الدرجات في الأسفل لتكتمل النتيجة.' 
-                  : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
-              </p>
-           </div>
-        </div>
-      )}
-
-      {(!attempt || !attempt.id) && isTeacherOrAdmin && (
-        <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
-           <div className="bg-red-200/50 p-3 rounded-2xl text-red-600 shrink-0"><AlertCircle className="w-8 h-8" /></div>
-           <div>
-              <h3 className="text-xl font-black text-red-800 mb-1">تنبيه الإدارة / المعلم</h3>
-              <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو تم تفريغ محاولته. يمكنك وضع الدرجة التقديرية لكل سؤال بالأسفل ليتم بناء النتيجة وحفظها.
+                {isTeacherOrAdmin ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي.' : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
               </p>
            </div>
         </div>
@@ -197,72 +178,61 @@ export default function StudentExamResult() {
         </div>
       </div>
 
-      {/* 🚀 إخفاء تفاصيل الإجابات عن الطالب إذا كان الوقت لم ينتهِ */}
       {!isLockedForStudent && (
         <div className="space-y-8 mt-8">
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 mb-6">
             <BookOpen className="h-6 w-6 text-indigo-600" />
-            تفاصيل الإجابات {isTeacherOrAdmin && '(صلاحيات الإدارة)'}
+            تفاصيل الإجابات
           </h2>
 
-          {/* 🚀 تنبيه المعلم عن نوع الاختبار */}
-          {isTeacherOrAdmin && (
-             <div className={`p-4 rounded-2xl border flex items-center gap-3 font-bold text-sm ${hasManualQuestions ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                {hasManualQuestions ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
-                {hasManualQuestions ? 'هذا الاختبار يحتوي على أسئلة مقالية تتطلب وضع الدرجة يدوياً.' : 'هذا الاختبار يصحح آلياً بالكامل ولا يحتاج لتدخل يدوي لتقييمه.'}
-             </div>
-          )}
-
           {questions && Array.isArray(questions) && questions.length > 0 ? questions.map((question, index) => {
-            const answer = (answers || []).find(a => a.question_id === question.id);
+            
+            const questionIdStr = String(question.id).trim();
+            const answer = (answers || []).find(a => String(a.question_id).trim() === questionIdStr || String(a.questionId).trim() === questionIdStr);
+            
             const qType = (question?.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             const isManualQuestion = !isAuto;
             
-            let pointsEarned = answer?.points_earned || 0;
+            let pointsEarned = Number(answer?.points_earned) || 0;
+            let isCorrect = Boolean(answer?.is_correct) || pointsEarned > 0;
             
-            // 🚀 استخراج إجابة الطالب بدقة فائقة
             let studentAnswerText = null;
             let isUnanswered = true;
-            let isCorrect = false;
 
+            // 🚀 المترجم الجبار
             if (answer) {
-                let rawData = answer.selected_option_id || answer.text_answer || answer.answer;
+                let rawData = answer.text_answer || answer.selected_option_id || answer.answer || answer.option_id;
                 
-                if (rawData) {
+                if (rawData !== undefined && rawData !== null && rawData !== '' && rawData !== "لم يتم تسجيل إجابة") {
                     isUnanswered = false;
+                    
                     if (isAuto) {
-                        // تفكيك المصفوفات (مربعات الاختيار)
+                        let parsedData = rawData;
                         if (typeof rawData === 'string' && (rawData.startsWith('[') || rawData.startsWith('{'))) {
-                            try { rawData = JSON.parse(rawData); } catch(e){}
+                            try { parsedData = JSON.parse(rawData); } catch(e){}
                         }
                         
-                        if (Array.isArray(rawData)) {
-                            const matchedOptions = question.options?.filter((o:any) => rawData.includes(String(o.id))).map((o:any)=>o.content);
-                            studentAnswerText = matchedOptions && matchedOptions.length > 0 ? matchedOptions.join('، ') : rawData.join('، ');
+                        if (Array.isArray(parsedData)) {
+                            const matchedOptions = question.options?.filter((o:any) => parsedData.includes(String(o.id)) || parsedData.includes(o.content)).map((o:any)=>o.content);
+                            studentAnswerText = matchedOptions && matchedOptions.length > 0 ? matchedOptions.join('، ') : parsedData.join('، ');
                         } else {
-                            // اختيار واحد
-                            const selectedOpt = question.options?.find((o: any) => String(o.id) === String(rawData) || o.content === rawData);
-                            studentAnswerText = selectedOpt ? selectedOpt.content : String(rawData);
+                            const selectedOpt = question.options?.find((o: any) => String(o.id) === String(parsedData) || o.content === String(parsedData));
+                            studentAnswerText = selectedOpt ? selectedOpt.content : String(parsedData);
                         }
                     } else {
-                        // مقالي
                         studentAnswerText = typeof rawData === 'object' ? JSON.stringify(rawData) : String(rawData);
                     }
+                } else if (pointsEarned > 0 || isCorrect) {
+                    isUnanswered = false;
+                    studentAnswerText = "إجابة مسجلة ✅";
                 }
                 
-                // تحديد الصح والخطأ
-                if (isManualQuestion) {
-                    isCorrect = pointsEarned > 0;
-                } else {
-                    isCorrect = answer.is_correct || pointsEarned > 0;
-                    // تصحيح الأخطاء القديمة
-                    if (studentAnswerText && !isCorrect && pointsEarned === 0) {
-                        const correctOpt = question.options?.find((o:any) => o.is_correct);
-                        if (correctOpt && correctOpt.content === studentAnswerText) {
-                            isCorrect = true;
-                            pointsEarned = question.points || 1;
-                        }
+                if (isAuto && studentAnswerText && !isCorrect && pointsEarned === 0) {
+                    const correctOpt = question.options?.find((o:any) => o.is_correct);
+                    if (correctOpt && (correctOpt.content === studentAnswerText || String(correctOpt.id) === String(rawData))) {
+                        isCorrect = true;
+                        pointsEarned = Number(question.points) || 1;
                     }
                 }
             }
