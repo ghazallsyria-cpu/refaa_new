@@ -3,63 +3,87 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceKey) throw new Error('MISSING_ENV_KEYS: مفاتيح السيرفر مفقودة');
+    const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const { examId, studentId } = await req.json();
 
-    const adminSupabase = createClient(supabaseUrl, serviceKey);
-    const { examId, answers, score, status, userId } = await req.json();
+    // 1. جلب بيانات الاختبار
+    const { data: examData } = await adminSupabase.from('exams').select('*').eq('id', examId).single();
 
-    let realStudentId = userId;
-    const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
-    if (st) realStudentId = st.id;
-    else {
-      const { data: st2 } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
-      if (st2) realStudentId = st2.id;
-    }
+    // 2. تحديد هوية الطالب بجميع المعرفات الممكنة (User ID & Profile ID) لمنع ضياع البيانات
+    let studentProfile = null;
+    let possibleStudentIds = [studentId];
 
-    let attemptId;
-    const validStatus = (status === 'graded' || status === 'completed') ? status : 'completed';
-
-    const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
-
-    if (existing) {
-      attemptId = existing.id;
-      const { error: updErr } = await adminSupabase.from('exam_attempts').update({
-        score: score || 0, status: validStatus, completed_at: new Date().toISOString()
-      }).eq('id', attemptId);
-      if (updErr) throw new Error("DB_UPD_ATTEMPT_ERR: " + updErr.message);
-      
-      await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
+    const { data: s1 } = await adminSupabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
+    if (s1) {
+        studentProfile = s1;
+        if (s1.user_id) possibleStudentIds.push(s1.user_id);
     } else {
-      const { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([{
-        exam_id: examId, student_id: realStudentId, score: score || 0, status: validStatus,
-        started_at: new Date().toISOString(), completed_at: new Date().toISOString()
-      }]).select('id').single();
-      if (insErr) throw new Error("DB_INS_ATTEMPT_ERR: " + insErr.message);
-      attemptId = newAtt.id;
+        const { data: s2 } = await adminSupabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
+        if (s2) {
+            studentProfile = s2;
+            possibleStudentIds.push(s2.id);
+        }
     }
 
-    if (answers && Object.keys(answers).length > 0) {
-      const formattedAnswers = Object.entries(answers).map(([qId, ans]: any) => {
-        return {
-          attempt_id: attemptId,
-          question_id: qId,
-          text_answer: ans?.text ? String(ans.text) : "",
-          selected_option_id: (ans?.optionId && ans.optionId.length > 10) ? ans.optionId : null,
-          is_correct: ans?.isCorrect || false,
-          points_earned: ans?.pointsEarned || 0
-        };
-      });
+    // إزالة المعرفات المكررة
+    possibleStudentIds = [...new Set(possibleStudentIds.filter(Boolean))];
 
-      const { error: ansErr } = await adminSupabase.from('student_answers').insert(formattedAnswers);
-      if (ansErr) throw new Error("DB_INS_ANS_ERR: " + ansErr.message);
+    // 3. جلب الأسئلة
+    const { data: questions } = await adminSupabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
+
+    // 4. 🌟 السحر هنا: جلب جميع المحاولات والبحث عن "المحاولة الذهبية" التي تحتوي على إجابات!
+    let bestAttempt = null;
+    let bestAnswers: any[] = [];
+
+    const { data: allAttempts } = await adminSupabase.from('exam_attempts')
+        .select('*')
+        .eq('exam_id', examId)
+        .in('student_id', possibleStudentIds)
+        .order('created_at', { ascending: false });
+
+    if (allAttempts && allAttempts.length > 0) {
+        // فحص أي محاولة تمتلك إجابات مسجلة في جدول student_answers
+        for (const att of allAttempts) {
+            const { data: ans } = await adminSupabase.from('student_answers').select('*').eq('attempt_id', att.id);
+            if (ans && ans.length > 0) {
+                bestAttempt = att;
+                bestAnswers = ans;
+                break; // وجدنا المحاولة الذهبية! نوقف البحث
+            }
+        }
+
+        // إذا لم نجدها، نبحث في الجدول القديم exam_answers (تحسباً)
+        if (!bestAttempt) {
+            for (const att of allAttempts) {
+                const { data: ansLegacy } = await adminSupabase.from('exam_answers').select('*').eq('attempt_id', att.id);
+                if (ansLegacy && ansLegacy.length > 0) {
+                    bestAttempt = att;
+                    bestAnswers = ansLegacy.map(a => ({ ...a, text_answer: a.answer, selected_option_id: a.answer }));
+                    break;
+                }
+            }
+        }
+
+        // إذا لم يكن لدى الطالب أي إجابات في أي محاولة، نأخذ أحدث محاولة له
+        if (!bestAttempt) {
+            bestAttempt = allAttempts[0];
+        }
     }
 
-    return NextResponse.json({ success: true, attemptId });
+    // في حال عدم وجود أي محاولة إطلاقاً (لحماية الواجهة من الانهيار)
+    if (!bestAttempt) {
+         bestAttempt = { id: null, exam_id: examId, student_id: possibleStudentIds[0], score: 0, status: 'pending' };
+    }
+
+    return NextResponse.json({
+      exam: examData || {},
+      student: studentProfile || { id: studentId, users: { full_name: 'طالب' } },
+      attempt: bestAttempt,
+      answers: bestAnswers,
+      questions: questions || []
+    });
 
   } catch (error: any) {
-    console.error('Submit API Failed:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
