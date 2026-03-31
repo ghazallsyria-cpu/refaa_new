@@ -17,7 +17,7 @@ import {
   Eye,
   Filter
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -67,7 +67,7 @@ export default function StudentPerformancePage() {
     }
   }, [user, userRole, isChecking, router, loadPerformanceData]);
 
-  // 🚀 استخراج قائمة المواد بشكل ديناميكي (بدون تكرار)
+  // 🚀 استخراج قائمة المواد بشكل ديناميكي 
   const uniqueSubjects = useMemo(() => {
     const subjects = new Set<string>();
     examAttempts.forEach(a => { if (a.exams?.subjects?.name) subjects.add(a.exams.subjects.name); });
@@ -216,76 +216,73 @@ export default function StudentPerformancePage() {
           </div>
 
           <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {filteredExams.length === 0 ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
-                  <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <AlertCircle className="h-10 w-10 text-slate-300" />
-                  </div>
-                  <p className="text-slate-500 font-bold text-lg">لا توجد نتائج اختبارات مطابقة</p>
-                </motion.div>
-              ) : (
-                filteredExams.map((attempt, idx) => {
-                  const isPending = attempt.status === 'completed'; 
-                  const isGraded = attempt.status === 'graded'; 
-                  const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
+            {filteredExams.length === 0 ? (
+              <div className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
+                <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <AlertCircle className="h-10 w-10 text-slate-300" />
+                </div>
+                <p className="text-slate-500 font-bold text-lg">لا توجد نتائج اختبارات مطابقة</p>
+              </div>
+            ) : (
+              filteredExams.map((attempt, idx) => {
+                const isPending = attempt.status === 'completed'; 
+                const isGraded = attempt.status === 'graded'; 
+                const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
 
-                  return (
-                    <motion.div 
-                      layout
-                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }}
-                      key={attempt.id}
-                    >
-                      <Link href={`/exams/results/${attempt.exams.id}/student/${studentData?.id}`} className="block">
-                        <div className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all group hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center ${
-                          isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
-                        }`}>
-                          <div className="flex items-start gap-4">
-                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
-                              isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
-                            }`}>
-                              <BookOpen className="h-7 w-7" />
-                            </div>
-                            <div>
-                              <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight mb-2">
-                                {attempt.exams?.title}
-                              </h4>
-                              <div className="flex flex-wrap items-center gap-3">
-                                <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
-                                  {attempt.exams?.subjects?.name || 'مادة عامة'}
-                                </span>
-                                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  {attempt.completed_at ? format(new Date(attempt.completed_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
-                                </span>
-                              </div>
-                            </div>
+                return (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
+                    key={attempt.id}
+                  >
+                    <Link href={`/exams/results/${attempt.exams.id}/student/${studentData?.id}`} className="block">
+                      <div className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all group hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center ${
+                        isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
+                      }`}>
+                        <div className="flex items-start gap-4">
+                          <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                            isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
+                          }`}>
+                            <BookOpen className="h-7 w-7" />
                           </div>
-
-                          <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 sm:gap-2 mt-2 sm:mt-0 border-t sm:border-0 border-slate-50 pt-4 sm:pt-0">
-                            {isPending ? (
-                              <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
-                                <Clock className="w-4 h-4 animate-pulse" />
-                                <span className="font-black text-sm">قيد التصحيح</span>
-                              </div>
-                            ) : (
-                              <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
-                                <span className="font-black text-xl">{attempt.score || 0}</span>
-                                <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
-                              </div>
-                            )}
-
-                            <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                              <Eye className="w-4 h-4" /> التفاصيل
+                          <div>
+                            <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight mb-2">
+                              {attempt.exams?.title}
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                                {attempt.exams?.subjects?.name || 'مادة عامة'}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {attempt.completed_at ? format(new Date(attempt.completed_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
+                              </span>
                             </div>
                           </div>
                         </div>
-                      </Link>
-                    </motion.div>
-                  );
-                })
-              )}
-            </AnimatePresence>
+
+                        <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 sm:gap-2 mt-2 sm:mt-0 border-t sm:border-0 border-slate-50 pt-4 sm:pt-0">
+                          {isPending ? (
+                            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
+                              <Clock className="w-4 h-4 animate-pulse" />
+                              <span className="font-black text-sm">قيد التصحيح</span>
+                            </div>
+                          ) : (
+                            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
+                              <span className="font-black text-xl">{attempt.score || 0}</span>
+                              <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                            <Eye className="w-4 h-4" /> التفاصيل
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -304,78 +301,75 @@ export default function StudentPerformancePage() {
           </div>
 
           <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {filteredAssignments.length === 0 ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
-                   <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                     <AlertCircle className="h-10 w-10 text-slate-300" />
-                  </div>
-                  <p className="text-slate-500 font-bold text-lg">لا توجد نتائج واجبات مطابقة</p>
-                </motion.div>
-              ) : (
-                filteredAssignments.map((submission, idx) => {
-                  const isPending = submission.status === 'submitted';
-                  const isGraded = submission.status === 'graded';
-                  const maxScore = submission.assignments?.total_marks || 100;
+            {filteredAssignments.length === 0 ? (
+              <div className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
+                 <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <AlertCircle className="h-10 w-10 text-slate-300" />
+                </div>
+                <p className="text-slate-500 font-bold text-lg">لا توجد نتائج واجبات مطابقة</p>
+              </div>
+            ) : (
+              filteredAssignments.map((submission, idx) => {
+                const isPending = submission.status === 'submitted';
+                const isGraded = submission.status === 'graded';
+                const maxScore = submission.assignments?.total_marks || 100;
 
-                  return (
-                    <motion.div 
-                      layout
-                      key={submission.id}
-                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }}
-                      className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all flex flex-col gap-4 ${
-                        isPending ? 'border-amber-100' : 'border-slate-100 hover:border-violet-200'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div className="flex items-start gap-4">
-                          <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 ${
-                            isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'
-                          }`}>
-                            <PenTool className="h-7 w-7" />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-black text-slate-900 leading-tight mb-2">{submission.assignments?.title}</h4>
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
-                                {submission.assignments?.subjects?.name || 'مادة عامة'}
-                              </span>
-                              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                                <Calendar className="h-3.5 w-3.5" />
-                                {submission.submitted_at ? format(new Date(submission.submitted_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
-                              </span>
-                            </div>
-                          </div>
+                return (
+                  <motion.div 
+                    key={submission.id}
+                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
+                    className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all flex flex-col gap-4 ${
+                      isPending ? 'border-amber-100' : 'border-slate-100 hover:border-violet-200'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex items-start gap-4">
+                        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 ${
+                          isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'
+                        }`}>
+                          <PenTool className="h-7 w-7" />
                         </div>
-
-                        <div className="w-full sm:w-auto flex justify-end">
-                          {isPending ? (
-                            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
-                              <Clock className="w-4 h-4 animate-pulse" />
-                              <span className="font-black text-sm">بانتظار التقييم</span>
-                            </div>
-                          ) : (
-                            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
-                              <span className="font-black text-xl">{submission.grade || 0}</span>
-                              <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
-                            </div>
-                          )}
+                        <div>
+                          <h4 className="text-lg font-black text-slate-900 leading-tight mb-2">{submission.assignments?.title}</h4>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                              {submission.assignments?.subjects?.name || 'مادة عامة'}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                              <Calendar className="h-3.5 w-3.5" />
+                              {submission.submitted_at ? format(new Date(submission.submitted_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
-                      {submission.feedback && (
-                        <div className="mt-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 relative">
-                          <div className="absolute right-4 top-0 -mt-2 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
-                            ملاحظات المعلم
+                      <div className="w-full sm:w-auto flex justify-end">
+                        {isPending ? (
+                          <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
+                            <Clock className="w-4 h-4 animate-pulse" />
+                            <span className="font-black text-sm">بانتظار التقييم</span>
                           </div>
-                          <p className="text-sm text-slate-700 font-bold leading-relaxed pt-2">{submission.feedback}</p>
+                        ) : (
+                          <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
+                            <span className="font-black text-xl">{submission.grade || 0}</span>
+                            <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {submission.feedback && (
+                      <div className="mt-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 relative">
+                        <div className="absolute right-4 top-0 -mt-2 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                          ملاحظات المعلم
                         </div>
-                      )}
-                    </motion.div>
-                  );
-                })
-              )}
-            </AnimatePresence>
+                        <p className="text-sm text-slate-700 font-bold leading-relaxed pt-2">{submission.feedback}</p>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
