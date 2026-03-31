@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase';
+
+// Helper function
+const isAutoGradedType = (type: string) => {
+  const t = (type || '').toLowerCase();
+  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
+};
 
 export default function StudentExamResult() {
   const params = useParams();
@@ -15,94 +22,127 @@ export default function StudentExamResult() {
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
-  const [data, setData] = useState<any>({ exam: {}, student: {}, attempt: null, answers: [], questions: [] });
+  const [exam, setExam] = useState<any>({});
+  const [student, setStudent] = useState<any>({});
+  const [attempt, setAttempt] = useState<any>(null); 
+  const [answers, setAnswers] = useState<any[]>([]);
+  const [questions, setQuestions] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
-  
-  // دالة جلب البيانات من الـ API الجديد
-  const loadData = async () => {
+  const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
+
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/exams/get-result', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ examId, studentId })
-      });
       
-      const result = await res.json();
-      if (result.success) {
-          setData(result);
-          
-          // تحضير صناديق التقييم
-          const initialGrading: any = {};
-          result.questions.forEach((q: any) => {
-             const ans = result.answers.find((a: any) => String(a.question_id) === String(q.id));
-             initialGrading[q.id] = { points: Number(ans?.points_earned) || 0, isSubmitting: false };
-          });
-          setGradingState(initialGrading);
+      const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
+      
+      let studentData = null;
+      const { data: s1 } = await supabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
+      if (s1) studentData = s1;
+      else {
+        const { data: s2 } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
+        if (s2) studentData = s2;
       }
+      const realStudentId = studentData?.id || studentId;
+
+      const { data: rawQuestions } = await supabase.from('questions').select('*').eq('exam_id', examId).order('order_index');
+      
+      let finalQuestions = rawQuestions || [];
+      if (finalQuestions.length > 0) {
+          const qIds = finalQuestions.map(q => q.id);
+          const { data: rawOptions } = await supabase.from('question_options').select('*').in('question_id', qIds);
+          
+          finalQuestions = finalQuestions.map(q => ({
+              ...q,
+              options: (rawOptions || []).filter(o => o.question_id === q.id)
+          }));
+      }
+
+      const { data: attempts } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', realStudentId).order('created_at', { ascending: false });
+      const bestAttempt = attempts?.[0] || null;
+
+      let finalAnswers: any[] = [];
+      if (bestAttempt) {
+          const { data: ans } = await supabase.from('student_answers').select('*').eq('attempt_id', bestAttempt.id);
+          finalAnswers = ans || [];
+      }
+
+      if (examData && examData.exam_date) {
+          const now = new Date();
+          const examDate = new Date(examData.exam_date);
+          const endTimeParts = (examData.end_time || '23:59').split(':');
+          examDate.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+          setIsExamTimeFinished(now > examDate);
+      }
+
+      const initialGrading: any = {};
+      finalQuestions.forEach(q => {
+         const studentAns = finalAnswers.find(a => a.question_id === q.id);
+         initialGrading[q.id] = { points: Number(studentAns?.points_earned) || 0, isSubmitting: false };
+      });
+
+      setExam(examData || {});
+      setStudent(studentData || { users: { full_name: 'طالب' } });
+      setAttempt(bestAttempt);
+      setAnswers(finalAnswers);
+      setQuestions(finalQuestions);
+      setGradingState(initialGrading);
+
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching result:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [examId, studentId]);
 
-  useEffect(() => { loadData(); }, [examId, studentId]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // حفظ الدرجة باستخدام API بسيط
   const handleSaveGrade = async (questionId: string) => {
     const newPoints = gradingState[questionId].points;
-    setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
+    setGradingState((prev: any) => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
     
     try {
-      const res = await fetch('/api/exams/grade-v2', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attemptId: data.attempt?.id, questionId, pointsEarned: newPoints, examId, studentId })
+      if (!attempt?.id) throw new Error("لا توجد محاولة للطالب");
+
+      const existingAns = answers.find(a => a.question_id === questionId);
+      if (existingAns) {
+          await supabase.from('student_answers').update({ points_earned: newPoints, is_correct: newPoints > 0 }).eq('id', existingAns.id);
+      } else {
+          await supabase.from('student_answers').insert({ attempt_id: attempt.id, question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' });
+      }
+
+      const { data: allAns } = await supabase.from('student_answers').select('points_earned').eq('attempt_id', attempt.id);
+      const newTotal = (allAns || []).reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
+      await supabase.from('exam_attempts').update({ score: newTotal, status: 'graded' }).eq('id', attempt.id);
+
+      setAnswers((prev: any[]) => {
+         const exists = prev.find(a => a.question_id === questionId);
+         if (exists) return prev.map(a => a.question_id === questionId ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
+         return [...prev, { question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' }];
       });
       
-      if (res.ok) {
-          // تحديث الواجهة فوراً
-          setData(prev => {
-              const updatedAnswers = [...prev.answers];
-              const ansIndex = updatedAnswers.findIndex(a => String(a.question_id) === String(questionId));
-              if (ansIndex >= 0) {
-                  updatedAnswers[ansIndex].points_earned = newPoints;
-                  updatedAnswers[ansIndex].is_correct = newPoints > 0;
-              } else {
-                  updatedAnswers.push({ question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' });
-              }
-              
-              const newTotal = updatedAnswers.reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
-              return { ...prev, answers: updatedAnswers, attempt: { ...prev.attempt, score: newTotal, status: 'graded' } };
-          });
-      } else {
-          alert('فشل حفظ الدرجة');
-      }
-    } catch (err) {
+      setAttempt((prev: any) => ({ ...prev, score: newTotal, status: 'graded' }));
+
+    } catch (err: any) {
       console.error(err);
+      alert('حدث خطأ أثناء حفظ الدرجة');
     } finally {
-      setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
+      setGradingState((prev: any) => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div></div>;
+  if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري تجميع بيانات الاختبار...</p></div>;
 
-  const { exam, student, attempt, answers, questions } = data;
-  
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
-  let maxScore = Number(exam?.total_marks) || Number(exam?.max_score) || questions.reduce((sum:number, q:any) => sum + (Number(q.points) || 0), 0) || 100;
+  
+  const calculatedQuestionsScore = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
+  let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || 0;
+  if (displayMaxScore <= 0) displayMaxScore = calculatedQuestionsScore;
+  if (displayMaxScore <= 0) displayMaxScore = 100;
 
-  // حماية الغش للطالب
-  let isLockedForStudent = false;
-  if (!isTeacherOrAdmin && exam?.exam_date) {
-      const examDate = new Date(exam.exam_date);
-      const [hours, minutes] = (exam.end_time || '23:59').split(':');
-      examDate.setHours(Number(hours), Number(minutes), 0);
-      isLockedForStudent = new Date() <= examDate;
-  }
+  const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
@@ -134,7 +174,7 @@ export default function StudentExamResult() {
               <Trophy className="h-10 w-10 text-white/80 mb-3" />
               <div className="text-sm font-bold mb-2">النتيجة النهائية</div>
               <div className="text-4xl sm:text-5xl font-black">
-                {isPendingGrading && !isTeacherOrAdmin ? 'التقييم مستمر' : <>{totalEarned} <span className="text-2xl opacity-70">/ {maxScore}</span></>}
+                {isPendingGrading && !isTeacherOrAdmin ? 'التقييم مستمر' : <>{totalEarned} <span className="text-2xl opacity-70">/ {displayMaxScore}</span></>}
               </div>
             </div>
           </div>
@@ -147,14 +187,15 @@ export default function StudentExamResult() {
             {questions.length === 0 ? (
                 <div className="text-center py-20 bg-white rounded-3xl border shadow-sm">لا توجد أسئلة لعرضها</div>
             ) : questions.map((question: any, index: number) => {
-              // البحث عن إجابة الطالب
+              
               const answer = answers.find((a: any) => String(a.question_id) === String(question.id));
+              const qType = (question.type || '').toLowerCase();
+              const isAuto = isAutoGradedType(qType);
               
               let studentAnswerText = null;
               let isCorrect = false;
               let pointsEarned = answer ? Number(answer.points_earned) || 0 : 0;
 
-              // منطق استخراج الإجابة المباشر والبسيط
               if (answer) {
                   if (answer.selected_option_id) {
                       const selectedOpt = question.options?.find((o:any) => String(o.id) === String(answer.selected_option_id));
@@ -170,6 +211,13 @@ export default function StudentExamResult() {
               }
 
               const isUnanswered = !studentAnswerText;
+
+              let correctAnswerText = 'يعتمد على تقييم المعلم.';
+              if (isAuto) {
+                  const correctOpts = question.options?.filter((o:any) => o.is_correct).map((o:any) => o.content);
+                  if (correctOpts && correctOpts.length > 0) correctAnswerText = correctOpts.join('، ');
+                  else correctAnswerText = 'لم يحدد المعلم إجابة صحيحة لهذا السؤال.';
+              }
 
               return (
                 <div key={question.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border-2 ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-red-200'}`}>
@@ -191,16 +239,14 @@ export default function StudentExamResult() {
 
                     <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100">
                       <div className="text-sm font-black text-indigo-600 mb-2 flex items-center gap-2"><Lightbulb className="w-5 h-5"/> الإجابة النموذجية</div>
-                      <p className="text-lg font-bold text-slate-800">
-                        {question.options?.filter((o:any)=>o.is_correct).map((o:any)=>o.content).join('، ') || 'سؤال مقالي (يعتمد على المعلم)'}
-                      </p>
+                      <p className="text-lg font-bold text-slate-800">{correctAnswerText}</p>
                     </div>
 
                     {isTeacherOrAdmin && (
                       <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border">
                         <div className="flex items-center gap-3">
                            <span className="font-black text-sm">الدرجة:</span>
-                           <input type="number" min="0" max={question.points} value={gradingState[question.id]?.points ?? 0} onChange={(e) => setGradingState(prev => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-xl border focus:ring-2 font-black text-lg outline-none" />
+                           <input type="number" min="0" max={question.points} value={gradingState[question.id]?.points ?? 0} onChange={(e) => setGradingState((prev: any) => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-xl border focus:ring-2 font-black text-lg outline-none" />
                            <span className="font-bold text-slate-500">من {question.points}</span>
                         </div>
                         <button onClick={() => handleSaveGrade(question.id)} disabled={gradingState[question.id]?.isSubmitting} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-black hover:bg-indigo-700 disabled:opacity-50">
@@ -211,8 +257,8 @@ export default function StudentExamResult() {
                   </div>
                 </div>
               );
-            })
-          )}
+            })}
+          </div>
         </>
       )}
     </div>
