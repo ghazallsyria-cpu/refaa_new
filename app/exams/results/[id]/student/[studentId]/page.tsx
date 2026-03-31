@@ -2,14 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, AlertCircle, Save, Clock, MinusCircle } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, Save, Clock, MinusCircle } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
-
-const isAutoGradedType = (type: string) => {
-  const t = (type || '').toLowerCase();
-  return t.includes('multiple_choice') || t.includes('true_false') || t.includes('multi_select') || t.includes('checkbox');
-};
 
 export default function StudentExamResult() {
   const params = useParams();
@@ -24,7 +19,7 @@ export default function StudentExamResult() {
   
   const [exam, setExam] = useState<any>({});
   const [student, setStudent] = useState<any>({});
-  const [attempt, setAttempt] = useState<any>({});
+  const [attempt, setAttempt] = useState<any>(null); 
   const [answers, setAnswers] = useState<any[]>([]);
   const [questions, setQuestions] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
@@ -37,7 +32,7 @@ export default function StudentExamResult() {
       if (data) {
         setExam(data.exam || {});
         setStudent(data.student || {});
-        setAttempt(data.attempt || {});
+        setAttempt(data.attempt || null); 
         setAnswers(data.answers || []);
         setQuestions(data.questions || []); 
         
@@ -58,16 +53,13 @@ export default function StudentExamResult() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleSaveGrade = async (questionId: string) => {
-    if (!attempt?.id) {
-       alert("الطالب لم يقم بإنهاء المحاولة بنجاح.");
-       return;
-    }
     const newPoints = gradingState[questionId].points;
     setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
     
     try {
       if(gradeAnswer) {
-          await gradeAnswer(attempt.id, questionId, newPoints);
+          // ✅ السحر: نرسل بيانات الطالب والاختبار للسيرفر ليخلق محاولة إن لزم الأمر!
+          await gradeAnswer(attempt?.id || null, questionId, newPoints, examId, studentId);
           await fetchData(); 
           alert('تم حفظ الدرجة واعتمادها بنجاح!');
       }
@@ -80,16 +72,26 @@ export default function StudentExamResult() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
-  const isPendingGrading = attempt?.status !== 'graded';
+  const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = attempt?.score || 0;
   const maxScore = exam?.total_marks || exam?.max_score || questions.reduce((sum, q) => sum + (q.points || 0), 0) || 0;
 
   const renderStudentAnswerText = (answer: any, question: any) => {
     if (!answer) return null; 
-    if (isAutoGradedType(question.type)) {
+    const qType = (question.type || '').toLowerCase();
+
+    if (qType.includes('multiple_choice') || qType.includes('true_false')) {
       const selected = question.options?.find((o: any) => o.id === answer.selected_option_id || o.content === answer.text_answer);
       return selected?.content || answer.text_answer || null;
     }
+    
+    if (qType.includes('multi_select') || qType.includes('checkbox')) {
+      try {
+        const selectedIds = JSON.parse(answer.text_answer || '[]');
+        return question.options?.filter((o: any) => selectedIds.includes(o.id)).map((o: any) => o.content).join('، ') || answer.text_answer || null;
+      } catch { return answer.text_answer || null; }
+    }
+    
     return answer.text_answer || null;
   };
 
@@ -101,7 +103,7 @@ export default function StudentExamResult() {
         </button>
       </div>
 
-      {isPendingGrading && attempt && (
+      {isPendingGrading && (
         <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
            <div className="bg-amber-200/50 p-3 rounded-2xl text-amber-600 shrink-0"><Clock className="w-8 h-8" /></div>
            <div>
@@ -109,19 +111,7 @@ export default function StudentExamResult() {
               <p className="text-amber-700 font-bold text-sm leading-relaxed">
                 {currentRole === 'teacher' 
                   ? 'يحتوي هذا الاختبار على إجابات تحتاج لمراجعتك وتصحيحها يدوياً لتكتمل النتيجة.' 
-                  : 'تم استلام إجاباتك! الأسئلة الاختيارية صُححت، وبانتظار قيام المعلم بتصحيح الأسئلة المقالية لتكتمل نتيجتك.'}
-              </p>
-           </div>
-        </div>
-      )}
-
-      {!attempt && (
-        <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
-           <div className="bg-red-200/50 p-3 rounded-2xl text-red-600 shrink-0"><AlertCircle className="w-8 h-8" /></div>
-           <div>
-              <h3 className="text-xl font-black text-red-800 mb-1">تنبيه هام!</h3>
-              <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو تم فقدان محاولته. يفضل أن تحذف هذه النتيجة لكي يعيد الاختبار.
+                  : 'تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بمراجعة وتصحيح الاختبار.'}
               </p>
            </div>
         </div>
@@ -145,14 +135,13 @@ export default function StudentExamResult() {
           </div>
         </div>
 
-        {/* ✅ حجب النتيجة الكاملة للطالب إذا كان الاختبار قيد المراجعة */}
         <div className={`p-8 rounded-3xl shadow-xl flex flex-col items-center justify-center text-white relative overflow-hidden transition-all duration-500 ${isPendingGrading ? 'bg-gradient-to-br from-amber-500 to-orange-500 shadow-amber-200' : 'bg-gradient-to-br from-indigo-600 to-purple-700 shadow-indigo-200'}`}>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
           <Trophy className="h-10 w-10 text-yellow-300 mb-3 relative z-10" />
           <div className="text-sm font-bold text-white/90 mb-2 relative z-10">النتيجة النهائية</div>
           <div className="text-4xl sm:text-5xl font-black tracking-tighter relative z-10 flex items-baseline gap-2">
             {isPendingGrading && currentRole === 'student' ? (
-               <span className="text-3xl text-white drop-shadow-md">محجوبة للتقييم</span>
+               <span className="text-3xl text-white drop-shadow-md">يتم التقييم...</span>
             ) : (
                <>{totalEarned} <span className="text-2xl text-white/70 font-bold">/ {maxScore}</span></>
             )}
@@ -163,21 +152,21 @@ export default function StudentExamResult() {
       <div className="space-y-6 mt-8">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 mb-6">
           <BookOpen className="h-6 w-6 text-indigo-600" />
-          تفاصيل الإجابات {currentRole === 'teacher' && '(صلاحيات التصحيح)'}
+          تفاصيل الإجابات {currentRole === 'teacher' && '(صلاحيات المعلم الكاملة)'}
         </h2>
 
         {questions && questions.length > 0 ? questions.map((question, index) => {
           const answer = answers.find(a => a.question_id === question.id);
           const studentTextAnswer = renderStudentAnswerText(answer, question);
-          const isManual = !isAutoGradedType(question.type);
+          const qType = (question?.type || '').toLowerCase();
+          const isManualQuestion = ['essay', 'open', 'text', 'paragraph', 'fill_in'].some(t => qType.includes(t));
           
-          const isCorrect = isManual ? (answer?.points_earned > 0) : (answer ? answer.is_correct : false);
+          const isCorrect = isManualQuestion ? (answer?.points_earned > 0) : (answer ? answer.is_correct : false);
           const isUnanswered = !studentTextAnswer;
 
           return (
             <div key={question.id || index} className={`bg-white rounded-3xl overflow-hidden shadow-lg shadow-slate-100 border transition-all ${
                 isUnanswered ? 'border-slate-200 border-r-4 border-r-slate-400' :
-                isManual && attempt?.status !== 'graded' ? 'border-amber-200 border-r-4 border-r-amber-400' :
                 isCorrect ? 'border-emerald-100 border-r-4 border-r-emerald-500' : 
                 'border-red-100 border-r-4 border-r-red-500'
               }`}>
@@ -188,8 +177,7 @@ export default function StudentExamResult() {
                     <span className="leading-relaxed">{question?.content || 'نص السؤال غير متوفر'}</span>
                   </h3>
                   <div className="flex items-center gap-1.5 bg-slate-50 px-4 py-1.5 rounded-xl font-black text-sm text-slate-600 border border-slate-100 shrink-0">
-                    {/* ✅ إخفاء درجة السؤال للطالب فقط إذا كان مقالي، أما الاختياري فتظهر نتيجته فورا */}
-                    <span>{isManual && isPendingGrading && currentRole === 'student' ? '؟' : (answer?.points_earned || 0)}</span>
+                    <span>{isPendingGrading && currentRole === 'student' ? '؟' : (answer?.points_earned || 0)}</span>
                     <span className="text-slate-400">/</span>
                     <span>{question?.points || 0} نقطة</span>
                   </div>
@@ -219,11 +207,10 @@ export default function StudentExamResult() {
                         <span className="text-sm font-black text-slate-700">الإجابة النموذجية</span>
                       </div>
                       <p className="text-lg font-bold text-slate-800 leading-relaxed">
-                        {!isManual ? (question?.options?.find((o:any)=>o.is_correct)?.content || 'لا يوجد خيار صحيح محدد') : 'يُقيّم يدوياً بواسطة المعلم'}
+                        {!isManualQuestion ? (question?.options?.find((o:any)=>o.is_correct)?.content || 'لا يوجد خيار صحيح محدد') : 'يُقيّم يدوياً بواسطة المعلم'}
                       </p>
                     </div>
 
-                    {/* ✅ صلاحية مطلقة للمعلم بوضع أو تعديل الدرجة لأي سؤال! */}
                     {currentRole === 'teacher' && gradingState[question.id] && (
                       <div className="mt-4 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                         <div className="flex-1 flex items-center justify-between sm:justify-start gap-3 w-full">
@@ -231,8 +218,8 @@ export default function StudentExamResult() {
                           <input type="number" min="0" max={question.points} value={gradingState[question.id].points} onChange={(e) => setGradingState(prev => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-lg border-2 border-indigo-200 focus:border-indigo-600 focus:ring-0 font-black text-lg text-indigo-700 outline-none" />
                           <span className="text-sm text-slate-500 font-bold">من {question.points}</span>
                         </div>
-                        <button onClick={() => handleSaveGrade(question.id)} disabled={gradingState[question.id].isSubmitting || !attempt} className="w-full sm:w-auto flex justify-center items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-black hover:bg-indigo-700 disabled:opacity-50 transition-all shrink-0">
-                          {gradingState[question.id].isSubmitting ? 'جاري الحفظ...' : 'حفظ'} {!gradingState[question.id].isSubmitting && <Save className="w-5 h-5" />}
+                        <button onClick={() => handleSaveGrade(question.id)} disabled={gradingState[question.id].isSubmitting} className="w-full sm:w-auto flex justify-center items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-black hover:bg-indigo-700 disabled:opacity-50 transition-all shrink-0">
+                          {gradingState[question.id].isSubmitting ? 'جاري الحفظ...' : 'حفظ الدرجة'} {!gradingState[question.id].isSubmitting && <Save className="w-5 h-5" />}
                         </button>
                       </div>
                     )}
@@ -241,12 +228,7 @@ export default function StudentExamResult() {
               </div>
             </div>
           );
-        }) : (
-          <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
-            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-            <h3 className="text-2xl font-black text-slate-800 mb-2">حدث خطأ في تحميل الأسئلة</h3>
-          </div>
-        )}
+        }) : null}
       </div>
     </div>
   );
