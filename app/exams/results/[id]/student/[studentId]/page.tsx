@@ -29,7 +29,7 @@ export default function StudentExamResult() {
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
-  // 🚀 جلب البيانات عبر السيرفر لتخطي حماية RLS
+  // 🚀 جلب البيانات عبر السيرفر لتخطي حماية RLS والبحث عن المحاولة الذهبية
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -72,7 +72,6 @@ export default function StudentExamResult() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // حفظ الدرجة عبر السيرفر
   const handleSaveGrade = async (questionId: string) => {
     const newPoints = gradingState[questionId].points;
     setGradingState((prev: any) => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
@@ -103,7 +102,7 @@ export default function StudentExamResult() {
     }
   };
 
-  if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري كسر الحماية وجلب البيانات...</p></div>;
+  if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري كسر الحماية واستخراج البيانات...</p></div>;
 
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
@@ -237,14 +236,14 @@ export default function StudentExamResult() {
             );
           })}
 
-          {/* 🚨 شاشة الفحص السوداء 🚨 */}
+          {/* 🚨 شاشة الفحص السوداء (المطورة) 🚨 */}
           {isTeacherOrAdmin && (
               <div className="bg-slate-900 text-green-400 p-6 rounded-3xl mt-12 font-mono text-sm text-left shadow-xl" dir="ltr">
                  <div className="flex items-center gap-2 mb-4 border-b border-green-800 pb-2">
-                     <Database className="w-5 h-5" /> <strong>Supabase Connection Debugger (API Route)</strong>
+                     <Database className="w-5 h-5" /> <strong>Supabase Connection Debugger (API Route V4)</strong>
                  </div>
                  <p>» Exam ID: {examId}</p>
-                 <p>» Attempt Found: <span className={attempt ? "text-green-400" : "text-red-500"}>{attempt ? 'YES' : 'NO'}</span></p>
+                 <p>» Attempt Found: <span className={attempt ? "text-green-400" : "text-red-500"}>{attempt ? 'YES (ID: '+attempt.id+')' : 'NO'}</span></p>
                  <p>» Questions Loaded: {questions.length}</p>
                  <p>» Answers Fetched (No RLS!): <span className={answers.length > 0 ? "text-green-400" : "text-red-500"}>{answers.length}</span></p>
                  <div className="mt-4 border-t border-green-800 pt-4">
