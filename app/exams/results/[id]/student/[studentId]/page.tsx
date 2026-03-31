@@ -31,13 +31,16 @@ export default function StudentExamResult() {
   
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
-  // 🚀 جلب البيانات من الـ API الخارق (V2)
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      // 🚀 إجبار المتصفح على جلب البيانات الحية وعدم استخدام الكاش!
       const res = await fetch('/api/exams/student-result-v2', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache, no-store, must-revalidate'
+          },
           body: JSON.stringify({ examId, studentId })
       });
       
@@ -69,7 +72,7 @@ export default function StudentExamResult() {
         setGradingState(initialGrading);
       }
     } catch (err) {
-      console.error('Error:', err);
+      console.error('Error fetching result:', err);
     } finally {
       setLoading(false);
     }
@@ -77,7 +80,6 @@ export default function StudentExamResult() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 حفظ التقييم باستخدام API الخارق (V2)
   const handleSaveGrade = async (questionId: string) => {
     const newPoints = gradingState[questionId].points;
     setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
@@ -114,7 +116,6 @@ export default function StudentExamResult() {
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
   
-  // 🚀 تدمير الصفر في العلامة الكاملة للأبد
   const calculatedQuestionsScore = (questions || []).reduce((sum, q) => sum + (Number(q?.points) || 0), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || 0;
   if (displayMaxScore === 0) displayMaxScore = calculatedQuestionsScore;
@@ -149,7 +150,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-amber-800 mb-1">الاختبار قيد التقييم</h3>
               <p className="text-amber-700 font-bold text-sm leading-relaxed">
-                {isTeacherOrAdmin ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي.' : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
+                {isTeacherOrAdmin ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي.' : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً.'}
               </p>
            </div>
         </div>
@@ -161,7 +162,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-red-800 mb-1">تنبيه الإدارة / المعلم</h3>
               <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو أنه لم يجب على الأسئلة.
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو أنه لم يجب.
               </p>
            </div>
         </div>
@@ -209,14 +210,14 @@ export default function StudentExamResult() {
           {isTeacherOrAdmin && (
              <div className={`p-4 rounded-2xl border flex items-center gap-3 font-bold text-sm ${hasManualQuestions ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                 {hasManualQuestions ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
-                {hasManualQuestions ? 'هذا الاختبار يحتوي على أسئلة مقالية تتطلب وضع الدرجة يدوياً.' : 'هذا الاختبار يصحح آلياً بالكامل ولا يحتاج لتدخل يدوي لتقييمه.'}
+                {hasManualQuestions ? 'هذا الاختبار يحتوي على أسئلة مقالية تتطلب وضع الدرجة يدوياً.' : 'هذا الاختبار يصحح آلياً بالكامل.'}
              </div>
           )}
 
           {questions && Array.isArray(questions) && questions.length > 0 ? questions.map((question, index) => {
             
             const questionIdStr = String(question.id).trim();
-            const answer = (answers || []).find(a => String(a.question_id).trim() === questionIdStr || String(a.questionId).trim() === questionIdStr);
+            const answer = (answers || []).find(a => String(a.question_id).trim() === questionIdStr);
             
             const qType = (question?.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
@@ -228,8 +229,8 @@ export default function StudentExamResult() {
             let studentAnswerText = null;
             let isUnanswered = true;
 
-            // 🚀 المترجم اللغوي بعد تخطي حاجز الحماية
             if (answer) {
+                // 🚀 الترجمة الجبارة: البحث عن المطابقة بغض النظر عن النوع
                 let rawData = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
                 
                 if (rawData !== undefined && rawData !== null && rawData !== '') {
@@ -245,6 +246,7 @@ export default function StudentExamResult() {
                             const matchedOptions = question.options?.filter((o:any) => parsedData.includes(String(o.id)) || parsedData.includes(o.content)).map((o:any)=>o.content);
                             studentAnswerText = matchedOptions && matchedOptions.length > 0 ? matchedOptions.join('، ') : parsedData.join('، ');
                         } else {
+                            // البحث في الخيارات المجلوبة يدوياً في السيرفر
                             const selectedOpt = question.options?.find((o: any) => String(o.id) === String(parsedData) || o.content === String(parsedData));
                             studentAnswerText = selectedOpt ? selectedOpt.content : String(parsedData);
                         }
@@ -256,7 +258,7 @@ export default function StudentExamResult() {
                     studentAnswerText = "✅ إجابة مسجلة";
                 }
                 
-                // إنصاف الطالب إذا كان قد أجاب بشكل صحيح ولم تُحسب درجته
+                // تصحيح الأخطاء القديمة
                 if (isAuto && studentAnswerText && !isCorrect && pointsEarned === 0) {
                     const correctOpt = question.options?.find((o:any) => o.is_correct);
                     if (correctOpt && (correctOpt.content === studentAnswerText || String(correctOpt.id) === String(rawData))) {
