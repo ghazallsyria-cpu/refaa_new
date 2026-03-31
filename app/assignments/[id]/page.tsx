@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Settings, Share2, BarChart3, MoreVertical, Eye, X, Calendar, Download, FileSpreadsheet, Edit, ArrowLeft, GraduationCap, LayoutDashboard, Send, Trophy } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -11,7 +11,6 @@ import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
 import { Question } from '@/types/question';
 import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -56,12 +55,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const exportToExcel = () => {
     if (submissions.length === 0) return;
-    
     const data = submissions.map(sub => {
       const student = sub.student as any;
       const className = student?.section?.class?.name || '';
       const sectionName = student?.section?.name || '';
-      
       return {
         'اسم الطالب': student?.users?.full_name || 'غير معروف',
         'الصف': `${className} - ${sectionName}`,
@@ -70,7 +67,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         'الدرجة': sub.grade || '-'
       };
     });
-
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Submissions');
@@ -79,19 +75,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const exportToPDF = () => {
     if (submissions.length === 0) return;
-
     const doc = new jsPDF();
     doc.addFont('https://fonts.gstatic.com/s/amiri/v26/J7afpDI9z6hc06m3.ttf', 'Amiri', 'normal');
     doc.setFont('Amiri');
-    
     doc.text('قائمة تسليمات الواجب', 105, 10, { align: 'center' });
     doc.text(`الواجب: ${assignment?.title}`, 105, 20, { align: 'center' });
-
     const tableData = submissions.map(sub => {
       const student = sub.student as any;
       const className = student?.section?.class?.name || '';
       const sectionName = student?.section?.name || '';
-
       return [
         sub.grade || '-',
         sub.status === 'graded' ? 'تم التصحيح' : 'قيد الانتظار',
@@ -100,7 +92,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         student?.users?.full_name || 'غير معروف'
       ];
     });
-
     (doc as any).autoTable({
       head: [['الدرجة', 'الحالة', 'تاريخ التسليم', 'الصف', 'اسم الطالب']],
       body: tableData,
@@ -108,7 +99,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       styles: { font: 'Amiri', halign: 'right' },
       headStyles: { fillColor: [79, 70, 229] }
     });
-
     doc.save(`submissions_${assignmentId}.pdf`);
   };
 
@@ -117,12 +107,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setLoading(true);
     try {
       if (authRole === 'student') setStudentId(user.id);
-
       const details = await fetchAssignmentDetails(assignmentId);
-      
       setAssignment(details.assignment);
       setEditData(details.assignment);
-      
       if (details.questions) setQuestions(details.questions);
 
       if (authRole === 'student') {
@@ -142,7 +129,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       } else if (['teacher', 'admin', 'management'].includes(authRole || '')) {
         setSubmissions(details.allSubmissions);
       }
-
     } catch (error: any) {
       console.error('Error fetching data:', error);
       showNotification('error', 'حدث خطأ أثناء جلب البيانات: ' + error.message);
@@ -168,9 +154,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         };
       });
 
-      // 🚀 إرسال ملف الطالب ونص الإجابة إلى السيرفر!
+      // إرسال النص والملف إلى الخادم لكي يراه المعلم
       await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
-
       showNotification('success', 'تم تسليم الواجب بنجاح!');
       await fetchData();
     } catch (error: any) {
@@ -190,12 +175,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         description: editData.description || null,
         due_date: new Date(editData.due_date!).toISOString(),
       };
-
-      // 🚀 حماية الفصول من الحذف: تمرير الفصول الحالية بدلاً من مصفوفة فارغة
       const existingSectionIds = (assignment as any)?.assignment_sections?.map((s: any) => s.section_id) || [];
-      
       await saveAssignment(payload, assignmentId, questions as any, existingSectionIds, []);
-
       showNotification('success', 'تم تحديث الواجب بنجاح');
       setIsEditModalOpen(false);
       await fetchData();
@@ -209,13 +190,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const handleDeleteAssignmentAction = async () => {
     try {
       if (assignment?.file_url) await deleteFromCloudinary(assignment.file_url);
-
       if (submissions && submissions.length > 0) {
         for (const sub of submissions) {
           if ((sub as any).file_url) await deleteFromCloudinary((sub as any).file_url);
         }
       }
-
       await deleteAssignment(assignmentId);
       router.push('/assignments');
     } catch (error: any) {
@@ -249,10 +228,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const dueDateObj = new Date(assignment.due_date);
   const isOverdue = dueDateObj < new Date();
-
   const firstSection = (assignment as any).assignment_sections?.[0]?.section;
   const className = firstSection?.class?.name || '';
   const sectionName = firstSection?.name || '';
+
+  // 🚀 دالة للتحقق إذا كان الرابط عبارة عن صورة أم ملف عادي
+  const isImageUrl = (url: string) => {
+    if (!url) return false;
+    return url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || url.includes('cloudinary.com/image');
+  };
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-24" dir="rtl">
@@ -289,7 +273,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           <button 
             onClick={copyAssignmentLink}
             className="h-12 px-4 rounded-2xl bg-white border border-slate-100 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center gap-2 shadow-sm font-bold"
-            title="نسخ الرابط"
           >
             <Share2 className="h-5 w-5" />
             <span className="hidden sm:inline">مشاركة</span>
@@ -307,7 +290,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <button 
                 onClick={() => setIsDeleteModalOpen(true)}
                 className="h-12 w-12 flex items-center justify-center rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 transition-all shadow-sm"
-                title="حذف"
               >
                 <Trash2 className="h-5 w-5" />
               </button>
@@ -334,26 +316,47 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             <p className="text-slate-600 leading-relaxed whitespace-pre-wrap text-lg">{assignment.description || 'لا يوجد وصف إضافي.'}</p>
           </div>
 
+          {/* 🚀 عرض المرفق بشكل مذهل: إذا كان صورة يظهرها، إذا كان ملف يضع زر تحميل */}
           {assignment.file_url && (
-            <div className="mt-8 p-6 rounded-3xl bg-indigo-50/50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm">
-                  <FileText className="h-7 w-7 text-indigo-600" />
+            <div className="mt-8">
+              <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-indigo-600" />
+                المرفقات
+              </h3>
+              {isImageUrl(assignment.file_url) ? (
+                <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2">
+                  <Image 
+                    src={assignment.file_url} 
+                    alt="مرفق الواجب" 
+                    width={800} 
+                    height={600} 
+                    className="object-contain rounded-2xl" 
+                    referrerPolicy="no-referrer"
+                    unoptimized
+                  />
                 </div>
-                <div>
-                  <h4 className="font-bold text-slate-900">مرفق من المعلم</h4>
-                  <p className="text-sm text-slate-500">مادة علمية مرفقة للواجب</p>
+              ) : (
+                <div className="p-6 rounded-3xl bg-indigo-50/50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+                      <FileText className="h-7 w-7 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900">ملف مرفق</h4>
+                      <p className="text-sm text-slate-500">انقر للتحميل</p>
+                    </div>
+                  </div>
+                  <a 
+                    href={assignment.file_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <LinkIcon className="h-5 w-5" />
+                    <span>تحميل المرفق</span>
+                  </a>
                 </div>
-              </div>
-              <a 
-                href={assignment.file_url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95"
-              >
-                <LinkIcon className="h-5 w-5" />
-                <span>تحميل المرفق</span>
-              </a>
+              )}
             </div>
           )}
         </div>
@@ -408,17 +411,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     disabled={!!mySubmission}
                   />
 
-                  <label className="block text-base font-black text-slate-800 mb-4">ملف الإجابة (اختياري)</label>
+                  <label className="block text-base font-black text-slate-800 mb-4">ملف الإجابة (ارفع صورة الحل هنا)</label>
                   {!mySubmission ? (
                     <ImageUpload
                       initialImageUrl={fileUrl}
                       onUploadSuccess={(url) => setFileUrl(url || '')}
-                      label="ارفع صورة أو ملف"
+                      label="ارفع صورة إجابتك أو ملف الحل"
                     />
                   ) : (
                     fileUrl && (
                       <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
-                        <Image src={fileUrl} alt="Assignment" fill className="object-contain" referrerPolicy="no-referrer" />
+                        <Image src={fileUrl} alt="إجابة الطالب" fill className="object-contain" referrerPolicy="no-referrer" unoptimized />
                       </div>
                     )
                   )}
@@ -440,17 +443,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   </div>
                   
                   <div className="mt-8">
-                    <label className="block text-base font-black text-slate-800 mb-4">صورة الواجب (اختياري إذا كان هناك نص)</label>
+                    <label className="block text-base font-black text-slate-800 mb-4">صورة الواجب (ارفع حلك هنا إجباري إذا لم تكتب نصاً)</label>
                     {!mySubmission ? (
                       <ImageUpload
                         initialImageUrl={fileUrl}
                         onUploadSuccess={(url) => setFileUrl(url || '')}
-                        label="اختر صورة الواجب لرفعها"
+                        label="ارفع صورة الحل الخاص بك"
                       />
                     ) : (
                       fileUrl && (
                         <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
-                          <Image src={fileUrl} alt="Assignment" fill className="object-contain" referrerPolicy="no-referrer" />
+                          <Image src={fileUrl} alt="إجابة الطالب" fill className="object-contain" referrerPolicy="no-referrer" unoptimized />
                         </div>
                       )
                     )}
@@ -461,7 +464,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="pt-4">
                     <button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || (!content && !fileUrl)}
                       className="w-full flex justify-center items-center gap-3 rounded-2xl bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (
@@ -479,6 +482,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
 
+      {/* Teacher Tabs for Submissions */}
       {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
         <div className="space-y-8">
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
@@ -598,6 +602,26 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+            <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
+              <Trash2 className="h-8 w-8 text-red-500" />
+            </div>
+            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2">تأكيد الحذف</Dialog.Title>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب نهائياً؟ سيتم مسح إجابات الطلاب.</p>
+            <div className="flex justify-end gap-3">
+              <Dialog.Close asChild>
+                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100">إلغاء</button>
+              </Dialog.Close>
+              <button onClick={handleDeleteAssignmentAction} className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl hover:bg-red-700">تأكيد الحذف</button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
       {/* Edit Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <Dialog.Portal>
@@ -661,26 +685,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 </button>
               </div>
             </form>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Delete Modal */}
-      <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
-            <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
-              <Trash2 className="h-8 w-8 text-red-500" />
-            </div>
-            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2">تأكيد الحذف</Dialog.Title>
-            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب نهائياً؟ سيتم مسح إجابات الطلاب.</p>
-            <div className="flex justify-end gap-3">
-              <Dialog.Close asChild>
-                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100">إلغاء</button>
-              </Dialog.Close>
-              <button onClick={handleDeleteAssignmentAction} className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl hover:bg-red-700">تأكيد الحذف</button>
-            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
