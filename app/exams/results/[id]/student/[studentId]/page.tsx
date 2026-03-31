@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, FileWarning } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
 const isAutoGradedType = (type: string) => {
@@ -30,30 +30,36 @@ export default function StudentExamResult() {
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
   
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
+  
+  // 🚀 رادار كشف تلاعب الأسئلة
+  const [mismatchWarning, setMismatchWarning] = useState(false);
+  const [rawAnswers, setRawAnswers] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      // 🚀 إجبار المتصفح على جلب البيانات الحية وعدم استخدام الكاش!
-      const res = await fetch('/api/exams/student-result-v2', {
+      // 🚀 استدعاء خادم الاستخبارات V3
+      const res = await fetch('/api/exams/student-result-v3', {
           method: 'POST',
-          headers: { 
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache, no-store, must-revalidate'
-          },
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store, must-revalidate' },
           body: JSON.stringify({ examId, studentId })
       });
       
       if (!res.ok) throw new Error('فشل جلب البيانات');
       const data = await res.json();
       
-      if (data) {
+      if (data.success) {
         setExam(data.exam || {});
         setStudent(data.student || {});
         setAttempt(data.attempt || null); 
         setAnswers(data.answers || []);
+        setRawAnswers(data.answers || []);
         setQuestions(data.questions || []); 
         
+        // 🚀 رادار كشف تغيير الأسئلة: هل يمتلك الطالب إجابات لا تنتمي للأسئلة الحالية؟
+        const isMismatch = (data.answers || []).length > 0 && (data.questions || []).length > 0 && !(data.answers || []).some((a:any) => (data.questions || []).some((q:any) => String(q.id).trim() === String(a.question_id).trim()));
+        setMismatchWarning(isMismatch);
+
         if (data.exam && data.exam.exam_date) {
             const now = new Date();
             const examDate = new Date(data.exam.exam_date);
@@ -118,8 +124,8 @@ export default function StudentExamResult() {
   
   const calculatedQuestionsScore = (questions || []).reduce((sum, q) => sum + (Number(q?.points) || 0), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || 0;
-  if (displayMaxScore === 0) displayMaxScore = calculatedQuestionsScore;
-  if (displayMaxScore === 0) displayMaxScore = 100;
+  if (displayMaxScore <= 0) displayMaxScore = calculatedQuestionsScore;
+  if (displayMaxScore <= 0) displayMaxScore = 100;
 
   const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type));
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
@@ -162,7 +168,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-red-800 mb-1">تنبيه الإدارة / المعلم</h3>
               <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو أنه لم يجب.
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو لم يُجب على الأسئلة.
               </p>
            </div>
         </div>
@@ -214,6 +220,27 @@ export default function StudentExamResult() {
              </div>
           )}
 
+          {/* 🚨 صندوق الرادار: يظهر فقط إذا تم تغيير الأسئلة 🚨 */}
+          {isTeacherOrAdmin && mismatchWarning && (
+            <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-200 animate-pulse">
+                <div className="flex items-center gap-3 mb-3">
+                    <FileWarning className="w-8 h-8 text-red-600" />
+                    <h3 className="text-xl font-black text-red-800">تنبيه خطير: تم تغيير أسئلة الاختبار!</h3>
+                </div>
+                <p className="text-red-700 font-bold mb-4 leading-relaxed">
+                    لقد اكتشف النظام أن الطالب قام بالإجابة ({rawAnswers.length} إجابات)، ولكن المعلم قام <b>بحذف أو تغيير</b> الأسئلة بعد ذلك! الإجابات المعروضة في الأسفل فارغة لأن الأسئلة جديدة. إليك الإجابات القديمة المسجلة للطالب:
+                </p>
+                <div className="bg-white p-4 rounded-xl border border-red-100 shadow-inner overflow-y-auto max-h-48 text-sm font-bold text-slate-700">
+                    {rawAnswers.map((ans, idx) => (
+                        <div key={idx} className="mb-2 pb-2 border-b border-slate-100 last:border-0 last:pb-0 last:mb-0">
+                            <span className="text-indigo-600 mr-2">إجابة {idx + 1}:</span> 
+                            <span dir="ltr">{ans.text_answer || ans.selected_option_id || ans.answer || 'مفقودة'}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
+
           {questions && Array.isArray(questions) && questions.length > 0 ? questions.map((question, index) => {
             
             const questionIdStr = String(question.id).trim();
@@ -230,7 +257,6 @@ export default function StudentExamResult() {
             let isUnanswered = true;
 
             if (answer) {
-                // 🚀 الترجمة الجبارة: البحث عن المطابقة بغض النظر عن النوع
                 let rawData = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
                 
                 if (rawData !== undefined && rawData !== null && rawData !== '') {
@@ -246,7 +272,6 @@ export default function StudentExamResult() {
                             const matchedOptions = question.options?.filter((o:any) => parsedData.includes(String(o.id)) || parsedData.includes(o.content)).map((o:any)=>o.content);
                             studentAnswerText = matchedOptions && matchedOptions.length > 0 ? matchedOptions.join('، ') : parsedData.join('، ');
                         } else {
-                            // البحث في الخيارات المجلوبة يدوياً في السيرفر
                             const selectedOpt = question.options?.find((o: any) => String(o.id) === String(parsedData) || o.content === String(parsedData));
                             studentAnswerText = selectedOpt ? selectedOpt.content : String(parsedData);
                         }
@@ -255,10 +280,9 @@ export default function StudentExamResult() {
                     }
                 } else if (pointsEarned > 0 || isCorrect) {
                     isUnanswered = false;
-                    studentAnswerText = "✅ إجابة مسجلة";
+                    studentAnswerText = "✅ إجابة مسجلة (بدون نص)";
                 }
                 
-                // تصحيح الأخطاء القديمة
                 if (isAuto && studentAnswerText && !isCorrect && pointsEarned === 0) {
                     const correctOpt = question.options?.find((o:any) => o.is_correct);
                     if (correctOpt && (correctOpt.content === studentAnswerText || String(correctOpt.id) === String(rawData))) {
@@ -287,12 +311,6 @@ export default function StudentExamResult() {
                       <span>{Number(question?.points) || 0} نقطة</span>
                     </div>
                   </div>
-
-                  {(question?.mediaUrl || question?.media_url) && (
-                    <div className="mt-6 rounded-3xl overflow-hidden border border-slate-100 bg-white flex justify-center p-4 shadow-sm">
-                      <img src={question.mediaUrl || question.media_url} alt="مرفق السؤال" className="max-h-80 w-auto object-contain rounded-2xl" />
-                    </div>
-                  )}
                 </div>
 
                 <div className="p-6 sm:p-8 space-y-4 bg-white">
