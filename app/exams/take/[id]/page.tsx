@@ -11,8 +11,9 @@ import { Question } from '@/types/question';
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; };
 
 const isAutoGradedType = (type: string) => {
-  const t = (type || '').toLowerCase();
-  return t.includes('multiple_choice') || t.includes('true_false') || t.includes('multi_select') || t.includes('checkbox');
+  if (!type) return false;
+  const t = type.toLowerCase();
+  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox');
 };
 
 export default function TakeQuiz() {
@@ -86,28 +87,23 @@ export default function TakeQuiz() {
     try {
       let totalScore = 0;
       const formattedAnswers: Record<string, any> = {};
-
-      // 💡 الحل الجذري للمشكلة: فحص نوع الأسئلة "في لحظة الإرسال" بدلاً من الاعتماد على متغير خارجي!
-      let hasManualQuestions = false;
+      let hasManual = false; // 🚀 الرادار اللحظي: يفحص في جزء من الثانية وقت الإرسال
 
       for (const q of questions) {
         const studentAnswer = answers[q.id];
         let isCorrect = false;
         let pointsEarned = 0;
         
-        const qType = (q.type as string || '').toLowerCase();
-        const isAuto = isAutoGradedType(qType);
-
-        if (!isAuto) {
-           hasManualQuestions = true; // اكتشاف السؤال المقالي بدقة 100%
-        }
+        const isAuto = isAutoGradedType(q.type as string);
+        if (!isAuto) hasManual = true; // اكتشاف السؤال المقالي بدقة
 
         if (isAuto && studentAnswer !== undefined) {
-          if (qType.includes('multiple_choice') || qType.includes('true_false')) {
+          const qType = (q.type as string || '').toLowerCase();
+          if (qType.includes('choice') || qType.includes('true_false')) {
             const correctOpt = q.options?.find((o: any) => o.is_correct);
             isCorrect = studentAnswer === correctOpt?.id;
             pointsEarned = isCorrect ? (q.points || 0) : 0;
-          } else if (qType.includes('multi_select') || qType.includes('checkbox')) {
+          } else if (qType.includes('select') || qType.includes('checkbox')) {
             const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => o.id) || [];
             const studentOpts = Array.isArray(studentAnswer) ? studentAnswer : [];
             isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
@@ -127,8 +123,8 @@ export default function TakeQuiz() {
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
       
-      // ✅ الحقيقة المطلقة هنا: إذا فيه مقالي = completed، إذا كله اختياري = graded
-      const attemptStatus = hasManualQuestions ? 'completed' : 'graded';
+      // 🚀 الحكم النهائي: إذا فيه مقالي = completed (مراجعة)، كله اختياري = graded (منشور فوراً)
+      const attemptStatus = hasManual ? 'completed' : 'graded';
 
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
       setIsFinished(true);
@@ -153,8 +149,7 @@ export default function TakeQuiz() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
-  // فحص ذكي قبل عرض شاشة النهاية
-  const hasManual = questions.some(q => !isAutoGradedType(q.type as string));
+  const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type as string));
 
   if (isFinished) {
     return (
@@ -164,13 +159,13 @@ export default function TakeQuiz() {
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
              لقد استلمنا إجاباتك. 
-             {hasManual ? (
+             {hasManualQuestions ? (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
-                 سيتم إعلان النتيجة النهائية بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.
+                 سيتم إعلان نتيجتك النهائية بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.
                </span>
              ) : (
                <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                 تم تصحيح الاختبار وتصدير نتيجتك. يمكنك رؤيتها من لوحة التحكم الآن.
+                 تم تصحيح الاختبار تلقائياً. يمكنك رؤية نتيجتك من لوحة التحكم الآن.
                </span>
              )}
           </p>
@@ -182,8 +177,7 @@ export default function TakeQuiz() {
 
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
-  const currentQType = (currentQuestion?.type as string || '').toLowerCase();
-  const isAutoCurrent = isAutoGradedType(currentQType);
+  const isAutoCurrent = isAutoGradedType(currentQuestion?.type as string);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
@@ -221,14 +215,14 @@ export default function TakeQuiz() {
             </div>
 
             <div className="space-y-3">
-              {(currentQType.includes('multiple_choice') || currentQType.includes('true_false')) && currentQuestion.options?.map((option) => (
+              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('choice') && currentQuestion.options?.map((option) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", answers[currentQuestion.id] === option.id ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", answers[currentQuestion.id] === option.id ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
                   <span className="text-lg font-medium">{option.content}</span>
                 </button>
               ))}
 
-              {(currentQType.includes('multi_select') || currentQType.includes('checkbox')) && currentQuestion.options?.map((option) => {
+              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('select') && currentQuestion.options?.map((option) => {
                 const isSelected = (answers[currentQuestion.id] || []).includes(option.id);
                 return (
                   <button key={option.id} onClick={() => {
