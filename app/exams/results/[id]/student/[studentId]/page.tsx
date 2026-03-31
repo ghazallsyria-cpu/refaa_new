@@ -20,16 +20,11 @@ export default function StudentExamResult() {
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
-  const [exam, setExam] = useState<any>({});
-  const [student, setStudent] = useState<any>({});
-  const [attempt, setAttempt] = useState<any>(null); 
-  const [answers, setAnswers] = useState<any[]>([]);
-  const [questions, setQuestions] = useState<any[]>([]); 
+  const [data, setData] = useState<any>({ exam: {}, student: {}, attempt: null, answers: [], questions: [], debugInfo: null });
   const [loading, setLoading] = useState(true);
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
-  // 🚀 جلب البيانات عبر السيرفر لتخطي حماية RLS والبحث عن المحاولة الذهبية
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
@@ -39,26 +34,22 @@ export default function StudentExamResult() {
           body: JSON.stringify({ examId, studentId })
       });
       
-      const data = await res.json();
+      const result = await res.json();
       
-      if (data.success) {
-          setExam(data.exam);
-          setStudent(data.student);
-          setAttempt(data.attempt);
-          setAnswers(data.answers);
-          setQuestions(data.questions);
+      if (result.success) {
+          setData(result);
 
-          if (data.exam?.exam_date) {
+          if (result.exam?.exam_date) {
               const now = new Date();
-              const examDate = new Date(data.exam.exam_date);
-              const endTimeParts = (data.exam.end_time || '23:59').split(':');
+              const examDate = new Date(result.exam.exam_date);
+              const endTimeParts = (result.exam.end_time || '23:59').split(':');
               examDate.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
               setIsExamTimeFinished(now > examDate);
           }
 
           const initialGrading: any = {};
-          data.questions.forEach((q: any) => {
-             const ans = data.answers.find((a: any) => String(a.question_id) === String(q.id));
+          result.questions.forEach((q: any) => {
+             const ans = result.answers.find((a: any) => String(a.question_id) === String(q.id));
              initialGrading[q.id] = { points: Number(ans?.points_earned) || 0, isSubmitting: false };
           });
           setGradingState(initialGrading);
@@ -77,23 +68,24 @@ export default function StudentExamResult() {
     setGradingState((prev: any) => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
     
     try {
-      if (!attempt?.id) { alert('لا توجد محاولة.'); return; }
+      if (!data.attempt?.id) { alert('لا توجد محاولة.'); return; }
 
       const res = await fetch('/api/exams/admin-grade', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attemptId: attempt.id, questionId, pointsEarned: newPoints })
+          body: JSON.stringify({ attemptId: data.attempt.id, questionId, pointsEarned: newPoints })
       });
       
       const result = await res.json();
 
       if (result.success) {
-          setAnswers((prev: any[]) => {
-             const exists = prev.find(a => String(a.question_id) === String(questionId));
-             if (exists) return prev.map(a => String(a.question_id) === String(questionId) ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
-             return [...prev, { question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' }];
+          setData((prev: any) => {
+              const newAnswers = prev.answers.map((a: any) => String(a.question_id) === String(questionId) ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
+              if (!newAnswers.find((a: any) => String(a.question_id) === String(questionId))) {
+                  newAnswers.push({ question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' });
+              }
+              return { ...prev, answers: newAnswers, attempt: { ...prev.attempt, score: result.newTotal, status: 'graded' } };
           });
-          setAttempt((prev: any) => ({ ...prev, score: result.newTotal, status: 'graded' }));
       }
     } catch (err) {
       alert('حدث خطأ أثناء الحفظ');
@@ -104,10 +96,12 @@ export default function StudentExamResult() {
 
   if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري كسر الحماية واستخراج البيانات...</p></div>;
 
+  const { exam, student, attempt, answers, questions, debugInfo } = data;
+
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
   
-  const calculatedMax = questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
+  const calculatedMax = questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || calculatedMax || 100;
 
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
@@ -118,8 +112,18 @@ export default function StudentExamResult() {
         <ArrowRight className="h-5 w-5" /> العودة للنتائج
       </button>
 
+      {debugInfo?.isForced && isTeacherOrAdmin && (
+        <div className="bg-amber-100 border border-amber-300 p-6 rounded-3xl flex items-center gap-4 shadow-sm animate-pulse">
+           <AlertCircle className="w-8 h-8 text-amber-600" />
+           <div>
+              <h3 className="text-xl font-black text-amber-900 mb-1">تم إجبار النظام على عرض هذه الإجابات!</h3>
+              <p className="text-amber-800 font-bold text-sm">رقم الطالب في الرابط لا يتطابق مع رقم الطالب في قاعدة البيانات، لقد قمنا بسحب المحاولة بالقوة لكي تراها.</p>
+           </div>
+        </div>
+      )}
+
       {isLockedForStudent && (
-        <div className="bg-slate-100 border-2 border-slate-200 p-6 rounded-3xl flex items-center gap-4 shadow-sm">
+        <div className="bg-slate-100 border border-slate-200 p-6 rounded-3xl flex items-center gap-4 shadow-sm">
            <Lock className="w-8 h-8 text-slate-500" />
            <div>
               <h3 className="text-xl font-black text-slate-800 mb-1">نتائج الطلاب محجوبة حالياً (حماية من الغش)</h3>
@@ -236,24 +240,22 @@ export default function StudentExamResult() {
             );
           })}
 
-          {/* 🚨 شاشة الفحص السوداء (المطورة) 🚨 */}
-          {isTeacherOrAdmin && (
+          {/* 🚨 شاشة الفحص السوداء (وضع الإله) 🚨 */}
+          {isTeacherOrAdmin && debugInfo && (
               <div className="bg-slate-900 text-green-400 p-6 rounded-3xl mt-12 font-mono text-sm text-left shadow-xl" dir="ltr">
                  <div className="flex items-center gap-2 mb-4 border-b border-green-800 pb-2">
-                     <Database className="w-5 h-5" /> <strong>Supabase Connection Debugger (API Route V4)</strong>
+                     <Database className="w-5 h-5" /> <strong>God Mode Debugger</strong>
                  </div>
                  <p>» Exam ID: {examId}</p>
-                 <p>» Attempt Found: <span className={attempt ? "text-green-400" : "text-red-500"}>{attempt ? 'YES (ID: '+attempt.id+')' : 'NO'}</span></p>
-                 <p>» Questions Loaded: {questions.length}</p>
-                 <p>» Answers Fetched (No RLS!): <span className={answers.length > 0 ? "text-green-400" : "text-red-500"}>{answers.length}</span></p>
-                 <div className="mt-4 border-t border-green-800 pt-4">
-                     <p className="mb-2 text-white">Raw Answers Array:</p>
-                     {answers.length === 0 ? <p className="text-red-500">[] Empty</p> : answers.map((a, i) => (
-                         <p key={i} className="text-xs text-green-300">
-                             [{i}] Ans: {a.selected_option_id || a.text_answer || 'null'} | Pts: {a.points_earned}
-                         </p>
-                     ))}
-                 </div>
+                 <p>» URL Student ID: <span className="text-yellow-400">{studentId}</span></p>
+                 <p>» Total Attempts in DB for this Exam: {debugInfo.foundAttemptsCount}</p>
+                 <p className="break-all">» Student IDs in DB: {JSON.stringify(debugInfo.attemptStudentIdsInDB)}</p>
+                 
+                 {debugInfo.isForced && (
+                    <p className="text-red-400 mt-2 font-bold">» WARNING: URL Student ID did NOT match DB. Forced to load Attempt: {attempt?.id}</p>
+                 )}
+                 
+                 <p className="mt-2">» Answers Fetched: <span className={answers.length > 0 ? "text-green-400" : "text-red-500"}>{answers.length}</span></p>
               </div>
           )}
         </div>
