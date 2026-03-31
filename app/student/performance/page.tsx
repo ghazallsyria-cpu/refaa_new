@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase'; // 🚀 استيراد قاعدة البيانات مباشرة لضمان الدقة
+import { supabase } from '@/lib/supabase';
 import { 
   FileText, 
   PenTool, 
@@ -15,13 +15,24 @@ import {
   Calendar,
   GraduationCap,
   Eye,
-  Filter
+  Filter,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+// 🚀 دالة التحقق من القفل الزمني
+const checkIsLocked = (examData: any) => {
+  if (!examData?.exam_date) return false;
+  const now = new Date();
+  const examDate = new Date(examData.exam_date);
+  const endTimeParts = (examData.end_time || '23:59').split(':');
+  examDate.setHours(parseInt(endTimeParts[0], 10), parseInt(endTimeParts[1], 10), 0);
+  return now <= examDate;
+};
 
 export default function StudentPerformancePage() {
   const router = useRouter();
@@ -40,13 +51,11 @@ export default function StudentPerformancePage() {
     completedAssignments: 0
   });
 
-  // 🚀 المحرك الجبار: جلب البيانات مباشرة متخطياً الهوك المعطل
   const loadPerformanceData = useCallback(async () => {
     if (!user || userRole !== 'student') return;
     
     setIsLoading(true);
     try {
-      // 1. جلب رقم الطالب الحقيقي بدقة 100%
       let student = null;
       const { data: s1 } = await supabase.from('students').select('*, sections(name, classes(name))').eq('user_id', user.id).maybeSingle();
       if (s1) student = s1;
@@ -60,10 +69,10 @@ export default function StudentPerformancePage() {
         return;
       }
 
-      // 2. جلب جميع المحاولات والواجبات المربوطة بهذا الطالب
+      // 🚀 تم إضافة exam_date و end_time للاستعلام لمعرفة وقت الانتهاء
       const [examsRes, assignmentsRes] = await Promise.all([
         supabase.from('exam_attempts')
-          .select('*, exams(id, title, max_score, total_marks, subjects(name))')
+          .select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))')
           .eq('student_id', student.id)
           .order('completed_at', { ascending: false }),
           
@@ -76,8 +85,9 @@ export default function StudentPerformancePage() {
       const eAttempts = examsRes.data || [];
       const aSubmissions = assignmentsRes.data || [];
 
-      // 3. بناء الإحصائيات الرياضية
-      const gradedExams = eAttempts.filter((a: any) => a.status === 'graded');
+      // 🚀 استبعاد الاختبارات المحجوبة (التي لم ينته وقتها) من حساب المتوسط لكي لا يخمن الطالب النتيجة!
+      const gradedExams = eAttempts.filter((a: any) => a.status === 'graded' && !checkIsLocked(a.exams));
+      
       let avgExam = 0;
       if (gradedExams.length > 0) {
          let totalPercent = 0;
@@ -128,7 +138,6 @@ export default function StudentPerformancePage() {
     }
   }, [user, userRole, isChecking, router, loadPerformanceData]);
 
-  // 🚀 استخراج المواد للفلترة الذكية
   const uniqueSubjects = useMemo(() => {
     const subjects = new Set<string>();
     examAttempts.forEach(a => { if (a.exams?.subjects?.name) subjects.add(a.exams.subjects.name); });
@@ -231,7 +240,7 @@ export default function StudentPerformancePage() {
         </motion.div>
       </div>
 
-      {/* 🚀 شريط الفلترة الذكي (Smart Filter Bar) */}
+      {/* Smart Filter Bar */}
       {uniqueSubjects.length > 0 && (
         <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide py-2">
           <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-slate-500 font-bold text-sm shrink-0">
@@ -287,8 +296,10 @@ export default function StudentPerformancePage() {
               ) : (
                 filteredExams.map((attempt, idx) => {
                   const isPending = attempt.status === 'completed' || attempt.status === 'submitted'; 
-                  const isGraded = attempt.status === 'graded'; 
                   const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
+                  
+                  // 🚀 فحص القفل للاختبار الحالي
+                  const isLocked = checkIsLocked(attempt.exams);
 
                   return (
                     <motion.div 
@@ -298,13 +309,13 @@ export default function StudentPerformancePage() {
                     >
                       <Link href={`/exams/results/${attempt.exams?.id}/student/${studentData?.id}`} className="block">
                         <div className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all group hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center ${
-                          isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
+                          isLocked ? 'border-slate-100 hover:border-slate-300' : isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
                         }`}>
                           <div className="flex items-start gap-4">
                             <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
-                              isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
+                              isLocked ? 'bg-slate-100 text-slate-400' : isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
                             }`}>
-                              <BookOpen className="h-7 w-7" />
+                              {isLocked ? <Lock className="h-6 w-6" /> : <BookOpen className="h-7 w-7" />}
                             </div>
                             <div>
                               <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight mb-2">
@@ -323,7 +334,12 @@ export default function StudentPerformancePage() {
                           </div>
 
                           <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 sm:gap-2 mt-2 sm:mt-0 border-t sm:border-0 border-slate-50 pt-4 sm:pt-0">
-                            {isPending ? (
+                            {isLocked ? (
+                              <div className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 flex items-center gap-2">
+                                <Lock className="w-4 h-4" />
+                                <span className="font-black text-sm">النتيجة محجوبة</span>
+                              </div>
+                            ) : isPending ? (
                               <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
                                 <Clock className="w-4 h-4 animate-pulse" />
                                 <span className="font-black text-sm">قيد التصحيح</span>
@@ -441,5 +457,4 @@ export default function StudentPerformancePage() {
     </div>
   );
 }
-
 
