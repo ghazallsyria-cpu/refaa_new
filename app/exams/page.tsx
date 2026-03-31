@@ -148,45 +148,77 @@ export default function ExamsDashboard() {
           )}
         </motion.div>
 
-        {/* Stats Overview */}
+        {/* Stats Overview for Teachers */}
         {isTeacherOrAdmin && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { label: 'إجمالي الاختبارات', value: exams.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', shadow: 'shadow-blue-100' },
-              { label: 'اختبارات منشورة', value: exams.filter(e => e?.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
-              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
-              { 
-                label: 'متوسط النجاح', 
-                value: (() => {
-                  const totalAttempts = exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0);
-                  if (totalAttempts === 0) return '0%';
-                  const totalScore = exams.reduce((acc, e) => {
-                    return acc + (e?.avg_score || 0) * (e?.submission_count || 0);
-                  }, 0);
-                  return `${Math.round(totalScore / totalAttempts)}%`;
-                })(), 
-                icon: TrendingUp, 
-                color: 'text-indigo-600', 
-                bg: 'bg-indigo-50', 
-                shadow: 'shadow-indigo-100' 
-              },
-            ].map((stat, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
-              >
-                <div className={`h-16 w-16 rounded-3xl ${stat.bg} flex items-center justify-center shadow-xl ${stat.shadow}`}>
-                  <stat.icon className={`h-8 w-8 ${stat.color}`} />
-                </div>
-                <div>
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">{stat.label}</p>
-                  <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{stat.value}</p>
-                </div>
-              </motion.div>
-            ))}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.0 }}
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center shadow-xl shadow-blue-100">
+                <FileText className="h-8 w-8 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">إجمالي الاختبارات</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{exams.length}</p>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-emerald-50 flex items-center justify-center shadow-xl shadow-emerald-100">
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">اختبارات منشورة</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{exams.filter(e => e?.status === 'published').length}</p>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-amber-50 flex items-center justify-center shadow-xl shadow-amber-100">
+                <Users className="h-8 w-8 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">إجمالي المحاولات</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0)}</p>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-indigo-50 flex items-center justify-center shadow-xl shadow-indigo-100">
+                <TrendingUp className="h-8 w-8 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">متوسط النجاح</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                  {(() => {
+                    const totalAttempts = exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0);
+                    if (totalAttempts === 0) return '0%';
+                    const totalScore = exams.reduce((acc, e) => {
+                      return acc + (e?.avg_score || 0) * (e?.submission_count || 0);
+                    }, 0);
+                    return `${Math.round(totalScore / totalAttempts)}%`;
+                  })()}
+                </p>
+              </div>
+            </motion.div>
           </div>
         )}
 
@@ -242,9 +274,8 @@ export default function ExamsDashboard() {
                 const pendingGradesCount = (exam.submission_count || 0) - (exam.graded_count || 0);
                 const needsTeacherGrading = isTeacherOrAdmin && pendingGradesCount > 0;
                 
-                // 🚀 تحويل الحالة إلى String صريح لتخطي فحص TypeScript في Netlify
-                const currentStatusStr = String(exam.submission_status);
-                const isStudentDone = ['submitted', 'graded', 'completed'].includes(currentStatusStr);
+                // 🚀 التحويل النصي الآمن لحل مشكلة Type Error بشكل نهائي في Netlify
+                const statusStr = String(exam.submission_status || '');
 
                 return (
                   <motion.div
@@ -394,7 +425,7 @@ export default function ExamsDashboard() {
                           </Link>
                         </>
                       ) : (
-                        isStudentDone ? (() => {
+                        (statusStr === 'submitted' || statusStr === 'graded' || statusStr === 'completed') ? (() => {
                           const isLocked = checkIsLocked(exam);
                           const maxScore = exam.total_marks || exam.max_score || 100;
                           const studentId = user?.id || user?.user_id || '';
@@ -420,7 +451,7 @@ export default function ExamsDashboard() {
                             );
                           }
 
-                          if (currentStatusStr === 'submitted') {
+                          if (statusStr === 'submitted') {
                             return (
                               <Link href={`/exams/results/${exam.id}/student/${studentId}`} className="w-full">
                                 <div className="w-full flex items-center justify-between px-5 py-4 bg-amber-50 rounded-2xl border border-amber-100 transition-all hover:bg-amber-100 hover:shadow-md cursor-pointer group">
