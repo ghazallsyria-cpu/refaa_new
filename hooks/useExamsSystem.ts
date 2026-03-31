@@ -15,7 +15,7 @@ export interface StudentExamResult {
   student: { id: string, users: { full_name: string } };
   attempt: ExamAttempt | null;
   answers: any[];
-  questions: any[]; // تمت إضافة الأسئلة هنا
+  questions: any[];
 }
 
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
@@ -304,12 +304,20 @@ export function useExamsSystem() {
          throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
       }
 
+      const formattedAnswers = (result.answers || []).map((ans: any) => {
+        if (ans.question) {
+          const nq = normalizeQuestion(ans.question) as any;
+          ans.question = { ...nq, mediaUrl: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null, media_url: ans.question.media_url || ans.question.mediaUrl || nq.mediaUrl || nq.media_url || null };
+        }
+        return ans;
+      });
+
       return {
         exam: result.exam,
         student: result.student || { id: studentId, users: { full_name: 'طالب' } },
         attempt: result.attempt || null,
-        answers: result.answers || [],
-        questions: mapQuestionsWithMedia(result.questions || []) // استقبال الأسئلة هنا
+        answers: formattedAnswers,
+        questions: mapQuestionsWithMedia(result.questions || [])
       };
       
     } catch (err: any) { 
@@ -317,12 +325,13 @@ export function useExamsSystem() {
     }
   }, []);
 
-  const gradeAnswer = useCallback(async (attemptId: string, questionId: string, pointsEarned: number): Promise<void> => {
+  // ✅ التعديل الذكي هنا: دالة الحفظ أصبحت تقبل (examId, studentId) لحل أزمة المحاولة المفقودة!
+  const gradeAnswer = useCallback(async (attemptId: string | null, questionId: string, pointsEarned: number, examId?: string, studentId?: string): Promise<void> => {
     try {
       const response = await fetch('/api/exams/grade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attemptId, questionId, pointsEarned })
+        body: JSON.stringify({ attemptId, questionId, pointsEarned, examId, studentId })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'فشل تقييم الإجابة');
