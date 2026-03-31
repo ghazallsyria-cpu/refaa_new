@@ -3,9 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
-import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase'; // 🚀 استيراد قاعدة البيانات مباشرة
 
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
@@ -23,8 +21,6 @@ export default function StudentExamResult() {
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
-  const { gradeAnswer } = useExamsSystem();
-  
   const [exam, setExam] = useState<any>({});
   const [student, setStudent] = useState<any>({});
   const [attempt, setAttempt] = useState<any>(null); 
@@ -35,77 +31,45 @@ export default function StudentExamResult() {
   
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
-  // 🚀 المحرك الجبار: متصل بقاعدة البيانات مباشرة ليتجاوز أي هوك معطل
+  // 🚀 جلب البيانات من الـ API الخارق (V2)
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // 1. جلب الاختبار
-      const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
-      
-      // 2. تحديد هوية الطالب بدقة
-      let studentData = null;
-      const { data: s1 } = await supabase.from('students').select('*, users(full_name)').eq('user_id', studentId).maybeSingle();
-      if (s1) studentData = s1;
-      else {
-          const { data: s2 } = await supabase.from('students').select('*, users(full_name)').eq('id', studentId).maybeSingle();
-          if (s2) studentData = s2;
-      }
-      const realStudentId = studentData?.id || studentId;
-
-      // 3. جلب الأسئلة وخياراتها
-      const { data: questionsData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
-
-      // 4. جلب المحاولة وإجاباتها بالقوة
-      const { data: attempts } = await supabase.from('exam_attempts').select('*').eq('exam_id', examId).eq('student_id', realStudentId).order('created_at', { ascending: false });
-
-      let bestAttempt = null;
-      let bestAnswers: any[] = [];
-
-      if (attempts && attempts.length > 0) {
-          const attemptIds = attempts.map(a => a.id);
-          const { data: allAnswers } = await supabase.from('student_answers').select('*').in('attempt_id', attemptIds);
-
-          // البحث عن المحاولة التي تحتوي على إجابات فعلياً (المحاولة الذهبية)
-          for (const att of attempts) {
-              const attAnswers = (allAnswers || []).filter(a => a.attempt_id === att.id);
-              if (attAnswers.length > 0) {
-                  bestAttempt = att;
-                  bestAnswers = attAnswers;
-                  break;
-              }
-          }
-          if (!bestAttempt) bestAttempt = attempts[0]; // احتياط
-      }
-
-      // 5. ضبط حالة الحماية من الغش
-      if (examData && examData.exam_date) {
-          const now = new Date();
-          const examDate = new Date(examData.exam_date);
-          const endTimeParts = (examData.end_time || '23:59').split(':');
-          const endDateTime = new Date(examDate);
-          endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
-          setIsExamTimeFinished(now > endDateTime);
-      }
-
-      // 6. تهيئة صناديق الدرجات
-      const initialGrading: any = {};
-      (questionsData || []).forEach(q => {
-         const qIdStr = String(q.id).trim();
-         const studentAns = (bestAnswers || []).find(a => String(a.question_id).trim() === qIdStr || String(a.questionId).trim() === qIdStr);
-         initialGrading[q.id] = { points: Number(studentAns?.points_earned) || 0, isSubmitting: false };
+      const res = await fetch('/api/exams/student-result-v2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ examId, studentId })
       });
-
-      // حفظ البيانات في الواجهة
-      setExam(examData || {});
-      setStudent(studentData || { users: { full_name: 'طالب' } });
-      setAttempt(bestAttempt);
-      setAnswers(bestAnswers);
-      setQuestions(questionsData || []);
-      setGradingState(initialGrading);
-
+      
+      if (!res.ok) throw new Error('فشل جلب البيانات');
+      const data = await res.json();
+      
+      if (data) {
+        setExam(data.exam || {});
+        setStudent(data.student || {});
+        setAttempt(data.attempt || null); 
+        setAnswers(data.answers || []);
+        setQuestions(data.questions || []); 
+        
+        if (data.exam && data.exam.exam_date) {
+            const now = new Date();
+            const examDate = new Date(data.exam.exam_date);
+            const endTimeParts = (data.exam.end_time || '23:59').split(':');
+            const endDateTime = new Date(examDate);
+            endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+            setIsExamTimeFinished(now > endDateTime);
+        }
+        
+        const initialGrading: any = {};
+        (data.questions || []).forEach((q: any) => {
+           const qIdStr = String(q.id).trim();
+           const studentAns = (data.answers || []).find((a: any) => String(a.question_id).trim() === qIdStr);
+           initialGrading[q.id] = { points: Number(studentAns?.points_earned) || 0, isSubmitting: false };
+        });
+        setGradingState(initialGrading);
+      }
     } catch (err) {
-      console.error('Error fetching result directly:', err);
+      console.error('Error:', err);
     } finally {
       setLoading(false);
     }
@@ -113,28 +77,31 @@ export default function StudentExamResult() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // 🚀 حفظ التقييم باستخدام API الخارق (V2)
   const handleSaveGrade = async (questionId: string) => {
     const newPoints = gradingState[questionId].points;
     setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
     
     try {
-      if(gradeAnswer) {
-          await gradeAnswer(attempt?.id || null, questionId, newPoints, examId, studentId);
-          
-          setAnswers(prev => {
-             const existing = prev.find(a => String(a.question_id) === String(questionId));
-             if (existing) return prev.map(a => String(a.question_id) === String(questionId) ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
-             return [...prev, { question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تم التقييم يدوياً' }];
-          });
-          
-          setAttempt((prev: any) => {
-             const currentScore = Number(prev?.score) || 0;
-             const oldPoints = Number(answers.find(a => String(a.question_id) === String(questionId))?.points_earned) || 0;
-             return { ...(prev || { id: 'temp-id', status: 'graded', exam_id: examId, student_id: studentId }), score: (currentScore - oldPoints) + newPoints, status: 'graded' };
-          });
-
-          // لا حاجة لعمل refresh مزعج، التحديث يتم لحظياً
-      }
+      const res = await fetch('/api/exams/grade-v2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attemptId: attempt?.id, questionId, pointsEarned: newPoints, examId, studentId })
+      });
+      
+      if (!res.ok) throw new Error('فشل الحفظ');
+      
+      setAnswers(prev => {
+         const existing = prev.find(a => String(a.question_id) === String(questionId));
+         if (existing) return prev.map(a => String(a.question_id) === String(questionId) ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
+         return [...prev, { question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' }];
+      });
+      
+      setAttempt((prev: any) => {
+         const currentScore = Number(prev?.score) || 0;
+         const oldPoints = Number(answers.find(a => String(a.question_id) === String(questionId))?.points_earned) || 0;
+         return { ...(prev || { id: 'temp-id', status: 'graded', exam_id: examId, student_id: studentId }), score: (currentScore - oldPoints) + newPoints, status: 'graded' };
+      });
     } catch (err: any) {
       alert('حدث خطأ أثناء حفظ الدرجة');
     } finally {
@@ -147,12 +114,11 @@ export default function StudentExamResult() {
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
   
-  // 🚀 تدمير مشكلة 10/0 نهائياً
+  // 🚀 تدمير الصفر في العلامة الكاملة للأبد
+  const calculatedQuestionsScore = (questions || []).reduce((sum, q) => sum + (Number(q?.points) || 0), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || 0;
-  if (displayMaxScore <= 0) {
-      displayMaxScore = (questions || []).reduce((sum, q) => sum + (Number(q?.points) || 0), 0);
-  }
-  if (displayMaxScore <= 0) displayMaxScore = 100; // الدرجة المطلقة لمنع الصفر في المقام
+  if (displayMaxScore === 0) displayMaxScore = calculatedQuestionsScore;
+  if (displayMaxScore === 0) displayMaxScore = 100;
 
   const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type));
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
@@ -161,7 +127,7 @@ export default function StudentExamResult() {
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
       <div className="flex items-center justify-between">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">
-          <ArrowRight className="h-5 w-5" /> العودة
+          <ArrowRight className="h-5 w-5" /> العودة للنتائج
         </button>
       </div>
 
@@ -183,9 +149,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-amber-800 mb-1">الاختبار قيد التقييم</h3>
               <p className="text-amber-700 font-bold text-sm leading-relaxed">
-                {isTeacherOrAdmin 
-                  ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي. يرجى وضع الدرجات في الأسفل لتكتمل النتيجة.' 
-                  : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
+                {isTeacherOrAdmin ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي.' : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
               </p>
            </div>
         </div>
@@ -197,7 +161,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-red-800 mb-1">تنبيه الإدارة / المعلم</h3>
               <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح. يمكنك وضع الدرجة التقديرية بالأسفل ליتم بناء النتيجة.
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو أنه لم يجب على الأسئلة.
               </p>
            </div>
         </div>
@@ -264,7 +228,7 @@ export default function StudentExamResult() {
             let studentAnswerText = null;
             let isUnanswered = true;
 
-            // 🚀 مترجم الإجابات الذي هزم ChatGPT
+            // 🚀 المترجم اللغوي بعد تخطي حاجز الحماية
             if (answer) {
                 let rawData = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
                 
@@ -289,10 +253,10 @@ export default function StudentExamResult() {
                     }
                 } else if (pointsEarned > 0 || isCorrect) {
                     isUnanswered = false;
-                    studentAnswerText = "✅ إجابة مسجلة (النص غير متوفر)";
+                    studentAnswerText = "✅ إجابة مسجلة";
                 }
                 
-                // تصحيح الدرجات المظلومة (0)
+                // إنصاف الطالب إذا كان قد أجاب بشكل صحيح ولم تُحسب درجته
                 if (isAuto && studentAnswerText && !isCorrect && pointsEarned === 0) {
                     const correctOpt = question.options?.find((o:any) => o.is_correct);
                     if (correctOpt && (correctOpt.content === studentAnswerText || String(correctOpt.id) === String(rawData))) {
