@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, ShieldCheck, Lightbulb, Lock } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 
@@ -77,7 +77,6 @@ export default function StudentExamResult() {
     
     try {
       if(gradeAnswer) {
-          // حفظ الدرجة في الخلفية بصمت تام بدون أي رسائل مزعجة
           await gradeAnswer(attempt?.id || null, questionId, newPoints, examId, studentId);
           
           setAnswers(prev => {
@@ -96,7 +95,7 @@ export default function StudentExamResult() {
           router.refresh();
       }
     } catch (err: any) {
-      console.error(err);
+      alert(err.message || 'حدث خطأ أثناء حفظ الدرجة');
     } finally {
       setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
     }
@@ -112,6 +111,7 @@ export default function StudentExamResult() {
   if (displayMaxScore === 0) displayMaxScore = calculatedQuestionsScore;
   if (displayMaxScore === 0) displayMaxScore = 100;
 
+  const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type));
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
 
   return (
@@ -128,7 +128,7 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-slate-800 mb-1">نتائج الطلاب محجوبة حالياً (حماية من الغش)</h3>
               <p className="text-slate-600 font-bold text-sm leading-relaxed">
-                وقت الاختبار لم ينتهِ بعد. أنت فقط من يرى هذه الصفحة الآن لتتأكد من تسليمك.
+                وقت الاختبار لم ينتهِ بعد. أنت فقط من يرى هذه الصفحة الآن لتتأكد من تسليمك. لن يتمكن الطلاب من استعراض الإجابات وتفاصيل الدرجات إلا بعد انتهاء وقت الاختبار الرسمي.
               </p>
            </div>
         </div>
@@ -140,7 +140,21 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-amber-800 mb-1">الاختبار قيد التقييم</h3>
               <p className="text-amber-700 font-bold text-sm leading-relaxed">
-                {isTeacherOrAdmin ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي.' : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
+                {isTeacherOrAdmin 
+                  ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي. يرجى وضع الدرجات في الأسفل لتكتمل النتيجة.' 
+                  : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة المقالية.'}
+              </p>
+           </div>
+        </div>
+      )}
+
+      {(!attempt || !attempt.id) && isTeacherOrAdmin && (
+        <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
+           <div className="bg-red-200/50 p-3 rounded-2xl text-red-600 shrink-0"><AlertCircle className="w-8 h-8" /></div>
+           <div>
+              <h3 className="text-xl font-black text-red-800 mb-1">تنبيه الإدارة / المعلم</h3>
+              <p className="text-red-700 font-bold text-sm leading-relaxed">
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو تم تفريغ محاولته. يمكنك وضع الدرجة التقديرية لكل سؤال بالأسفل ليتم بناء النتيجة وحفظها.
               </p>
            </div>
         </div>
@@ -182,8 +196,15 @@ export default function StudentExamResult() {
         <div className="space-y-8 mt-8">
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 mb-6">
             <BookOpen className="h-6 w-6 text-indigo-600" />
-            تفاصيل الإجابات
+            تفاصيل الإجابات {isTeacherOrAdmin && '(صلاحيات الإدارة)'}
           </h2>
+
+          {isTeacherOrAdmin && (
+             <div className={`p-4 rounded-2xl border flex items-center gap-3 font-bold text-sm ${hasManualQuestions ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                {hasManualQuestions ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                {hasManualQuestions ? 'هذا الاختبار يحتوي على أسئلة مقالية تتطلب وضع الدرجة يدوياً.' : 'هذا الاختبار يصحح آلياً بالكامل ولا يحتاج لتدخل يدوي لتقييمه.'}
+             </div>
+          )}
 
           {questions && Array.isArray(questions) && questions.length > 0 ? questions.map((question, index) => {
             
@@ -200,11 +221,10 @@ export default function StudentExamResult() {
             let studentAnswerText = null;
             let isUnanswered = true;
 
-            // 🚀 المترجم الجبار
             if (answer) {
-                let rawData = answer.text_answer || answer.selected_option_id || answer.answer || answer.option_id;
+                let rawData = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
                 
-                if (rawData !== undefined && rawData !== null && rawData !== '' && rawData !== "لم يتم تسجيل إجابة") {
+                if (rawData !== undefined && rawData !== null && rawData !== '') {
                     isUnanswered = false;
                     
                     if (isAuto) {
@@ -225,7 +245,7 @@ export default function StudentExamResult() {
                     }
                 } else if (pointsEarned > 0 || isCorrect) {
                     isUnanswered = false;
-                    studentAnswerText = "إجابة مسجلة ✅";
+                    studentAnswerText = "✅ إجابة مسجلة (النص مفقود من السجل القديم)";
                 }
                 
                 if (isAuto && studentAnswerText && !isCorrect && pointsEarned === 0) {
