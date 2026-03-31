@@ -42,9 +42,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [activeTab, setActiveTab] = useState<'submissions' | 'preview'>('submissions');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [editData, setEditData] = useState<Partial<AssignmentWithMeta>>({});
-  const [subjects, setSubjects] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
 
   // Submission Form State
   const [content, setContent] = useState('');
@@ -61,10 +58,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (submissions.length === 0) return;
     
     const data = submissions.map(sub => {
-      const student = sub.student;
-      const section = student?.section;
-      const className = section?.class?.name || '';
-      const sectionName = section?.name || '';
+      const student = sub.student as any;
+      const className = student?.section?.class?.name || '';
+      const sectionName = student?.section?.name || '';
       
       return {
         'اسم الطالب': student?.users?.full_name || 'غير معروف',
@@ -92,10 +88,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     doc.text(`الواجب: ${assignment?.title}`, 105, 20, { align: 'center' });
 
     const tableData = submissions.map(sub => {
-      const student = sub.student;
-      const section = student?.section;
-      const className = section?.class?.name || '';
-      const sectionName = section?.name || '';
+      const student = sub.student as any;
+      const className = student?.section?.class?.name || '';
+      const sectionName = student?.section?.name || '';
 
       return [
         sub.grade || '-',
@@ -121,24 +116,20 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (!user) return;
     setLoading(true);
     try {
-      if (authRole === 'student') {
-        setStudentId(user.id);
-      }
+      if (authRole === 'student') setStudentId(user.id);
 
       const details = await fetchAssignmentDetails(assignmentId);
       
       setAssignment(details.assignment);
       setEditData(details.assignment);
       
-      if (details.questions) {
-        setQuestions(details.questions);
-      }
+      if (details.questions) setQuestions(details.questions);
 
       if (authRole === 'student') {
         if (details.submission) {
           setMySubmission(details.submission as any);
-          setContent(details.submission.content || '');
-          setFileUrl(details.submission.file_url || '');
+          setContent((details.submission as any).content || '');
+          setFileUrl((details.submission as any).file_url || '');
 
           if (details.answers) {
             const answersMap: Record<string, string | string[] | null> = {};
@@ -177,7 +168,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         };
       });
 
-      await submitAssignment(assignmentId, answersPayload, mySubmission?.id);
+      // 🚀 إرسال ملف الطالب ونص الإجابة إلى السيرفر!
+      await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
 
       showNotification('success', 'تم تسليم الواجب بنجاح!');
       await fetchData();
@@ -199,7 +191,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         due_date: new Date(editData.due_date!).toISOString(),
       };
 
-      await saveAssignment(payload, assignmentId, questions as any, [], []);
+      // 🚀 حماية الفصول من الحذف: تمرير الفصول الحالية بدلاً من مصفوفة فارغة
+      const existingSectionIds = (assignment as any)?.assignment_sections?.map((s: any) => s.section_id) || [];
+      
+      await saveAssignment(payload, assignmentId, questions as any, existingSectionIds, []);
 
       showNotification('success', 'تم تحديث الواجب بنجاح');
       setIsEditModalOpen(false);
@@ -213,17 +208,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const handleDeleteAssignmentAction = async () => {
     try {
-      // 1. Delete assignment file from Cloudinary
-      if (assignment?.file_url) {
-        await deleteFromCloudinary(assignment.file_url);
-      }
+      if (assignment?.file_url) await deleteFromCloudinary(assignment.file_url);
 
-      // 2. Delete all submission files from Cloudinary
       if (submissions && submissions.length > 0) {
         for (const sub of submissions) {
-          if (sub.file_url) {
-            await deleteFromCloudinary(sub.file_url);
-          }
+          if ((sub as any).file_url) await deleteFromCloudinary((sub as any).file_url);
         }
       }
 
@@ -261,27 +250,24 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const dueDateObj = new Date(assignment.due_date);
   const isOverdue = dueDateObj < new Date();
 
-  // Get first section info
-  const firstSection = assignment.assignment_sections?.[0]?.section;
+  const firstSection = (assignment as any).assignment_sections?.[0]?.section;
   const className = firstSection?.class?.name || '';
   const sectionName = firstSection?.name || '';
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-24">
-      {/* Notification Toast */}
+    <div className="space-y-8 max-w-5xl mx-auto pb-24" dir="rtl">
       {notification && (
-        <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-50 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 transition-all animate-in fade-in slide-in-from-top-4 duration-500 ${
+        <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 transition-all animate-in fade-in slide-in-from-top-4 duration-500 ${
           notification.type === 'success' ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-red-500 text-white shadow-red-100'
         }`}>
           <div className="h-10 w-10 rounded-2xl bg-white/20 flex items-center justify-center">
             {notification.type === 'success' ? <CheckCircle className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}
           </div>
-          <div className="font-black tracking-tight">{notification.message}</div>
+          <div className="font-black tracking-tight text-lg">{notification.message}</div>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-6">
         <div className="flex items-center gap-4">
           <Link href="/assignments" className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
             <ArrowRight className="h-6 w-6" />
@@ -295,7 +281,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-wider">نشط</span>
               )}
             </div>
-            <p className="text-slate-500 font-medium mt-1">{assignment.subject?.name} - {className} {sectionName}</p>
+            <p className="text-slate-500 font-medium mt-1">{(assignment as any).subject?.name} - {className} {sectionName}</p>
           </div>
         </div>
 
@@ -316,7 +302,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 className="h-12 px-6 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-2 font-black shadow-sm"
               >
                 <Edit2 className="h-5 w-5" />
-                <span>تعديل</span>
+                <span>تعديل سريع</span>
               </button>
               <button 
                 onClick={() => setIsDeleteModalOpen(true)}
@@ -330,75 +316,74 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      {/* Assignment Details Card */}
-      <div className="glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden">
+      <div className="glass-card rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden">
         <div className="p-8">
           <div className="flex flex-wrap items-center gap-4 mb-8">
             <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-black ${isOverdue ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'}`}>
               <Clock className="h-5 w-5" />
-              <span>آخر موعد: {dueDateObj.toLocaleDateString('ar-EG', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              <span dir="ltr">آخر موعد: {format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
             </div>
             <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 text-slate-600 border border-slate-100 text-sm font-bold">
               <User className="h-5 w-5 text-slate-400" />
-              <span>أ. {assignment.teacher?.user?.full_name}</span>
+              <span>أ. {(assignment as any).teacher?.user?.full_name}</span>
             </div>
           </div>
 
           <div className="prose prose-slate max-w-none mb-8">
             <h3 className="text-xl font-bold text-slate-900 mb-4">وصف الواجب</h3>
-            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{assignment.description || 'لا يوجد وصف إضافي.'}</p>
+            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap text-lg">{assignment.description || 'لا يوجد وصف إضافي.'}</p>
           </div>
 
           {assignment.file_url && (
-            <div className="mt-8 p-6 rounded-3xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+            <div className="mt-8 p-6 rounded-3xl bg-indigo-50/50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center shadow-sm">
-                  <FileText className="h-6 w-6 text-indigo-600" />
+                <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+                  <FileText className="h-7 w-7 text-indigo-600" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900">الملف المرفق</h4>
-                  <p className="text-sm text-slate-500">انقر للتحميل أو العرض</p>
+                  <h4 className="font-bold text-slate-900">مرفق من المعلم</h4>
+                  <p className="text-sm text-slate-500">مادة علمية مرفقة للواجب</p>
                 </div>
               </div>
               <a 
                 href={assignment.file_url} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="h-12 px-6 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-sm hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95"
+                className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95"
               >
                 <LinkIcon className="h-5 w-5" />
-                <span>فتح الملف</span>
+                <span>تحميل المرفق</span>
               </a>
             </div>
           )}
         </div>
       </div>
 
-      {/* Student View: Submission Form */}
       {authRole === 'student' && (
-        <div className="glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden">
+        <div className="glass-card rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden">
           <div className="p-8 border-b border-slate-100/50 bg-slate-50/50">
             <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
                 <Upload className="h-6 w-6" />
               </div>
-              تسليم الواجب
+              تسليم الإجابة
             </h2>
           </div>
           <div className="p-8">
             {mySubmission?.grade !== undefined && mySubmission?.grade !== null ? (
-              <div className="mb-8 p-6 rounded-3xl bg-emerald-50 border border-emerald-100">
-                <h3 className="text-lg font-bold text-emerald-800 mb-2">تم التقييم</h3>
-                <p className="text-emerald-600 font-medium mb-4">لقد تم تقييم هذا الواجب من قبل المعلم.</p>
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="px-4 py-2 bg-white rounded-xl shadow-sm border border-emerald-100 font-black text-emerald-700">
-                    الدرجة: {mySubmission.grade}
-                  </div>
+              <div className="mb-8 p-6 rounded-3xl bg-emerald-50 border border-emerald-200 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                   <h3 className="text-xl font-black text-emerald-800 flex items-center gap-2">
+                     <CheckCircle2 className="w-6 h-6" /> تم التقييم
+                   </h3>
+                   <div className="px-5 py-2 bg-white rounded-xl shadow-sm border border-emerald-100 font-black text-emerald-700 text-xl">
+                     الدرجة: {mySubmission.grade}
+                   </div>
                 </div>
                 {mySubmission.feedback && (
-                  <div className="p-4 bg-white rounded-2xl border border-emerald-100">
-                    <p className="text-sm font-bold text-emerald-800 mb-1">ملاحظات المعلم:</p>
-                    <p className="text-slate-600">{mySubmission.feedback}</p>
+                  <div className="p-5 bg-white rounded-2xl border border-emerald-100">
+                    <p className="text-sm font-black text-emerald-800 mb-2">ملاحظات المعلم:</p>
+                    <p className="text-slate-700 leading-relaxed font-medium">{mySubmission.feedback}</p>
                   </div>
                 )}
               </div>
@@ -412,52 +397,64 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 initialAnswers={myAnswers}
                 readOnly={!!mySubmission}
               >
-                <div className="glass-card p-8 rounded-4xl border border-white/60 shadow-xl shadow-slate-200/50">
-                  <label className="block text-sm font-bold text-slate-700 mb-4">صورة الواجب (اختياري)</label>
+                <div className="glass-card p-8 rounded-4xl border border-white/60 shadow-xl shadow-slate-200/50 mt-8">
+                  <label className="block text-base font-black text-slate-800 mb-4">نص الإجابة (اختياري)</label>
+                  <textarea
+                    rows={4}
+                    className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all resize-none font-bold disabled:opacity-60 mb-6"
+                    placeholder="إذا أردت إضافة ملاحظة نصية للمعلم..."
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    disabled={!!mySubmission}
+                  />
+
+                  <label className="block text-base font-black text-slate-800 mb-4">ملف الإجابة (اختياري)</label>
                   {!mySubmission ? (
                     <ImageUpload
                       initialImageUrl={fileUrl}
                       onUploadSuccess={(url) => setFileUrl(url || '')}
-                      label="اختر صورة الواجب"
+                      label="ارفع صورة أو ملف"
                     />
                   ) : (
                     fileUrl && (
-                      <div className="relative w-full h-48 mt-2">
-                        <Image src={fileUrl} alt="Assignment" fill className="object-contain rounded-lg" referrerPolicy="no-referrer" />
+                      <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
+                        <Image src={fileUrl} alt="Assignment" fill className="object-contain" referrerPolicy="no-referrer" />
                       </div>
                     )
                   )}
                 </div>
               </AssignmentForm>
             ) : (
-              <form onSubmit={(e) => { e.preventDefault(); handleSubmitAnswers({}); }} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">نص الإجابة (اختياري إذا كان هناك ملف)</label>
-                  <textarea
-                    rows={6}
-                    className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all resize-none"
-                    placeholder="اكتب إجابتك هنا..."
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    disabled={!!mySubmission}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">صورة الواجب (اختياري)</label>
-                  {!mySubmission ? (
-                    <ImageUpload
-                      initialImageUrl={fileUrl}
-                      onUploadSuccess={(url) => setFileUrl(url || '')}
-                      label="اختر صورة الواجب"
+              <form onSubmit={(e) => { e.preventDefault(); handleSubmitAnswers({}); }} className="space-y-8">
+                <div className="glass-card p-8 rounded-4xl border border-white/60 shadow-xl shadow-slate-200/50">
+                  <div>
+                    <label className="block text-base font-black text-slate-800 mb-4">نص الإجابة (اختياري إذا كان هناك ملف)</label>
+                    <textarea
+                      rows={6}
+                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all resize-none font-bold disabled:opacity-60"
+                      placeholder="اكتب إجابتك هنا بالتفصيل..."
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      disabled={!!mySubmission}
                     />
-                  ) : (
-                    fileUrl && (
-                      <div className="relative w-full h-48 mt-2">
-                        <Image src={fileUrl} alt="Assignment" fill className="object-contain rounded-lg" referrerPolicy="no-referrer" />
-                      </div>
-                    )
-                  )}
+                  </div>
+                  
+                  <div className="mt-8">
+                    <label className="block text-base font-black text-slate-800 mb-4">صورة الواجب (اختياري إذا كان هناك نص)</label>
+                    {!mySubmission ? (
+                      <ImageUpload
+                        initialImageUrl={fileUrl}
+                        onUploadSuccess={(url) => setFileUrl(url || '')}
+                        label="اختر صورة الواجب لرفعها"
+                      />
+                    ) : (
+                      fileUrl && (
+                        <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
+                          <Image src={fileUrl} alt="Assignment" fill className="object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                      )
+                    )}
+                  </div>
                 </div>
 
                 {!mySubmission && (
@@ -465,14 +462,14 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full flex justify-center items-center gap-2 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="w-full flex justify-center items-center gap-3 rounded-2xl bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (
-                        <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <div className="h-6 w-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
                       ) : (
-                        <CheckCircle className="h-5 w-5" />
+                        <Send className="h-6 w-6" />
                       )}
-                      تسليم الواجب
+                      إرسال وتأكيد التسليم
                     </button>
                   </div>
                 )}
@@ -482,7 +479,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {/* Teacher View: Submissions List & Preview */}
       {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
         <div className="space-y-8">
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
@@ -504,33 +500,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
           {activeTab === 'submissions' ? (
             <div className="glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden">
-              <div className="p-8 border-b border-slate-100/50 bg-slate-50/50 flex items-center justify-between">
+              <div className="p-8 border-b border-slate-100/50 bg-slate-50/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
                   <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
                     <Users className="h-6 w-6" />
                   </div>
                   تسليمات الطلاب
                 </h2>
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={exportToExcel}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl font-bold border border-emerald-100 hover:bg-emerald-100 transition-all"
-                  >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Excel
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl font-bold border border-emerald-100 hover:bg-emerald-100 transition-all">
+                    <FileSpreadsheet className="h-4 w-4" /> Excel
                   </button>
-                  <button 
-                    onClick={exportToPDF}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-xl font-bold border border-red-100 hover:bg-red-100 transition-all"
-                  >
-                    <Download className="h-4 w-4" />
-                    PDF
+                  <button onClick={exportToPDF} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-xl font-bold border border-red-100 hover:bg-red-100 transition-all">
+                    <Download className="h-4 w-4" /> PDF
                   </button>
                   <div className="px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-sm font-bold text-slate-600">
                     الإجمالي: {submissions.length}
-                  </div>
-                  <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl shadow-sm border border-emerald-100 text-sm font-bold">
-                    تم التقييم: {submissions.filter(s => s.grade !== null).length}
                   </div>
                 </div>
               </div>
@@ -541,47 +526,48 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileText className="h-8 w-8 text-slate-300" />
                     </div>
-                    <p className="text-slate-500 font-medium">لم يقم أي طالب بتسليم الواجب حتى الآن.</p>
+                    <p className="text-slate-500 font-medium text-lg">لم يقم أي طالب بتسليم الواجب حتى الآن.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100">
-                    {submissions.map((sub) => (
-                      <div key={sub.id} className="p-6 hover:bg-slate-50/50 transition-colors">
-                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                          <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                              <User className="h-6 w-6" />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-slate-900 text-lg">{sub.student?.user?.full_name || 'طالب غير معروف'}</h3>
-                              <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
-                                <Clock className="h-4 w-4" />
-                                {new Date(sub.submitted_at).toLocaleString('ar-EG')}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {sub.grade !== null && sub.grade !== undefined ? (
-                              <div className="flex flex-col items-end">
-                                <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-black">
-                                  الدرجة: {sub.grade}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-lg text-xs font-black">
-                                بانتظار التقييم
-                              </span>
-                            )}
-                            <Link 
-                              href={`/assignments/${assignmentId}/submissions/${sub.id}`}
-                              className="h-10 px-6 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-black hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all flex items-center shadow-sm"
-                            >
-                              تقييم الإجابة
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                    {submissions.map((sub) => {
+                       const st = sub.student as any;
+                       return (
+                         <div key={sub.id} className="p-6 hover:bg-slate-50/50 transition-colors">
+                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                             <div className="flex items-center gap-4">
+                               <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-500 border border-indigo-100">
+                                 <User className="h-7 w-7" />
+                               </div>
+                               <div>
+                                 <h3 className="font-black text-slate-900 text-lg">{st?.users?.full_name || 'طالب غير معروف'}</h3>
+                                 <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
+                                   <Clock className="h-4 w-4" />
+                                   <span dir="ltr">{new Date(sub.submitted_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
+                                 </p>
+                               </div>
+                             </div>
+                             <div className="flex items-center gap-3 justify-end border-t md:border-0 pt-4 md:pt-0 mt-2 md:mt-0 border-slate-100 w-full md:w-auto">
+                               {sub.grade !== null && sub.grade !== undefined ? (
+                                 <div className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-black flex items-center gap-2">
+                                   <CheckCircle2 className="w-4 h-4" /> الدرجة: {sub.grade}
+                                 </div>
+                               ) : (
+                                 <span className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-sm font-black animate-pulse">
+                                   بانتظار التقييم
+                                 </span>
+                               )}
+                               <Link 
+                                 href={`/assignments/${assignmentId}/submissions/${sub.id}`}
+                                 className="h-11 px-6 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-indigo-600 transition-all flex items-center shadow-md active:scale-95"
+                               >
+                                 تصحيح وتقييم
+                               </Link>
+                             </div>
+                           </div>
+                         </div>
+                       );
+                    })}
                   </div>
                 )}
               </div>
@@ -589,8 +575,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           ) : (
             <div className="max-w-3xl mx-auto">
               <div className="mb-8 p-4 rounded-2xl bg-amber-50 border border-amber-100 text-amber-700 text-sm font-bold flex items-center gap-3">
-                <AlertCircle className="h-5 w-5" />
-                هذه معاينة لما يراه الطالب. لن يتم حفظ أي إجابات تقوم بإدخالها هنا.
+                <AlertCircle className="h-6 w-6 shrink-0" />
+                هذه معاينة لما يراه الطالب في صفحة التسليم. لن يتم حفظ أي إجابات تقوم بإدخالها هنا.
               </div>
               {questions.length > 0 ? (
                 <AssignmentForm 
@@ -603,8 +589,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-100">
                     <FileText className="h-10 w-10 text-slate-300" />
                   </div>
-                  <h3 className="text-2xl font-black text-slate-900 mb-2">لا توجد أسئلة</h3>
-                  <p className="text-slate-500 font-bold">هذا الواجب لا يحتوي على أسئلة بعد. يمكنك إضافة أسئلة من خلال تعديل الواجب.</p>
+                  <h3 className="text-2xl font-black text-slate-900 mb-2">لا توجد أسئلة تفاعلية</h3>
+                  <p className="text-slate-500 font-bold">هذا الواجب يعتمد على رفع ملف من قِبل الطالب. يمكنك إضافة أسئلة من خلال التعديل.</p>
                 </div>
               )}
             </div>
@@ -612,40 +598,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
-            <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
-              <Trash2 className="h-8 w-8 text-red-500" />
-            </div>
-            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
-              تأكيد الحذف
-            </Dialog.Title>
-            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف جميع تسليمات الطلاب المرتبطة به.</p>
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
-              <Dialog.Close asChild>
-                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
-                  إلغاء
-                </button>
-              </Dialog.Close>
-              <button
-                onClick={handleDeleteAssignmentAction}
-                className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl shadow-red-100 hover:bg-red-700 hover:shadow-red-200 transition-all active:scale-95"
-              >
-                تأكيد الحذف
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Edit Assignment Modal */}
+      {/* Edit Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-3xl translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300" dir="rtl">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 scrollbar-hide" dir="rtl">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center">
@@ -653,9 +610,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 </div>
                 <div>
                   <Dialog.Title className="text-2xl font-black text-slate-900 tracking-tight">
-                    تعديل الواجب
+                    تعديل سريع للواجب
                   </Dialog.Title>
-                  <p className="text-sm text-slate-500 font-bold">تعديل تفاصيل الواجب والأسئلة</p>
                 </div>
               </div>
               <Dialog.Close className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 transition-colors">
@@ -663,79 +619,72 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               </Dialog.Close>
             </div>
             
-            <form onSubmit={handleUpdateAssignment} className="space-y-8">
-              <div className="space-y-6">
+            <form onSubmit={handleUpdateAssignment} className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2 mr-1">عنوان الواجب <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-black text-slate-700 mb-2">عنوان الواجب <span className="text-red-500">*</span></label>
                   <input 
-                    type="text" 
-                    required
-                    className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
+                    type="text" required
+                    className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold"
                     value={editData.title || ''}
                     onChange={(e) => setEditData({...editData, title: e.target.value})}
                   />
                 </div>
-                
                 <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الوصف والتفاصيل</label>
+                  <label className="block text-sm font-black text-slate-700 mb-2">الوصف والتفاصيل</label>
                   <textarea 
                     rows={4}
-                    className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none"
+                    className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold resize-none"
                     value={editData.description || ''}
                     onChange={(e) => setEditData({...editData, description: e.target.value})}
                   />
                 </div>
-
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">
-                        <Calendar className="h-5 w-5" />
-                      </div>
-                      <input 
-                        type="datetime-local" 
-                        required
-                        className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
-                        dir="ltr"
-                        value={editData.due_date ? new Date(new Date(editData.due_date).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
-                        onChange={(e) => setEditData({...editData, due_date: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-8 border-t border-slate-100">
-                  <AssignmentBuilder questions={questions} onChange={setQuestions} />
+                <div>
+                  <label className="block text-sm font-black text-slate-700 mb-2">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
+                  <input 
+                    type="datetime-local" required dir="ltr"
+                    className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold text-left"
+                    value={editData.due_date ? new Date(new Date(editData.due_date).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
+                    onChange={(e) => setEditData({...editData, due_date: e.target.value})}
+                  />
                 </div>
               </div>
 
               <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-slate-100">
                 <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="rounded-2xl bg-slate-50 px-8 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95"
-                  >
+                  <button type="button" className="rounded-2xl bg-slate-50 px-8 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
                     إلغاء
                   </button>
                 </Dialog.Close>
-                <button
-                  type="submit"
-                  disabled={isSubmittingEdit}
-                  className="rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
-                >
-                  {isSubmittingEdit ? (
-                    <>
-                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      جاري الحفظ...
-                    </>
-                  ) : 'حفظ التعديلات'}
+                <button type="submit" disabled={isSubmittingEdit} className="rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50">
+                  {isSubmittingEdit ? 'جاري الحفظ...' : 'حفظ التعديلات'}
                 </button>
               </div>
             </form>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {/* Delete Modal */}
+      <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+            <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
+              <Trash2 className="h-8 w-8 text-red-500" />
+            </div>
+            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2">تأكيد الحذف</Dialog.Title>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب نهائياً؟ سيتم مسح إجابات الطلاب.</p>
+            <div className="flex justify-end gap-3">
+              <Dialog.Close asChild>
+                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100">إلغاء</button>
+              </Dialog.Close>
+              <button onClick={handleDeleteAssignmentAction} className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl hover:bg-red-700">تأكيد الحذف</button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
+
