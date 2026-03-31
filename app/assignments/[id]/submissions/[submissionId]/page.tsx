@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { ArrowRight, User, Calendar, Clock, CheckCircle, AlertCircle, Save, MessageSquare, Star } from 'lucide-react';
+import { ArrowRight, User, Calendar, Clock, CheckCircle, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
@@ -18,7 +18,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const { fetchSubmissionDetails, updateSubmissionGrade } = useAssignmentsSystem();
   
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [submission, setSubmission] = useState<SubmissionWithStudent | null>(null);
+  const [submission, setSubmission] = useState<any>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -32,11 +32,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     try {
       const details = await fetchSubmissionDetails(submissionId);
       
-      if (details.assignment) setAssignment(details.assignment);
-
-      if (details.questions) {
-        setQuestions(details.questions);
-      }
+      if (details.assignment) setAssignment(details.assignment as any);
+      if (details.questions) setQuestions(details.questions);
 
       if (details.submission) {
         setSubmission(details.submission);
@@ -88,12 +85,10 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
       setNotification({ type: 'success', message: 'تم حفظ التقييم بنجاح' });
       
-      // Clear notification after 3 seconds
       setTimeout(() => {
         setNotification(null);
       }, 3000);
       
-      // Refresh data to show updated state
       fetchData();
     } catch (error: any) {
       setNotification({ type: 'error', message: 'خطأ في الحفظ: ' + error.message });
@@ -112,7 +107,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
-      {/* Header */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -145,8 +139,9 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
       </div>
 
       <div className="max-w-5xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Answers */}
+        {/* Left Column: Answers & Uploads */}
         <div className="lg:col-span-2 space-y-6">
+          
           <div className="glass-card p-6 rounded-4xl border border-white/60 shadow-xl shadow-slate-200/50">
             <div className="flex items-center gap-4 mb-8 pb-6 border-b border-slate-100">
               <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
@@ -167,12 +162,52 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
               </div>
             </div>
 
-            <AssignmentForm 
-              questions={questions} 
-              onSubmit={() => {}} 
-              initialAnswers={answers}
-              readOnly={true}
-            />
+            {/* 🚀 إظهار الملف والنص المرفق من الطالب لكي يراه المعلم */}
+            {(submission?.content || submission?.file_url) && (
+              <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-6 mb-8 shadow-sm">
+                <h3 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-indigo-600" />
+                  مرفقات الطالب الإضافية
+                </h3>
+                
+                {submission?.content && (
+                  <div className="bg-white p-5 rounded-2xl border border-slate-100 mb-4 shadow-sm">
+                    <p className="text-slate-700 whitespace-pre-wrap font-bold leading-relaxed">{submission.content}</p>
+                  </div>
+                )}
+
+                {submission?.file_url && (
+                  <a 
+                    href={submission.file_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-2xl hover:bg-indigo-100 transition-colors group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
+                        <LinkIcon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-black text-indigo-900">صورة/ملف إجابة الطالب</p>
+                        <p className="text-xs text-indigo-600 font-bold mt-1">انقر لفتح الملف ومراجعة الإجابة</p>
+                      </div>
+                    </div>
+                    <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm group-hover:scale-110 transition-transform">
+                      <Eye className="h-5 w-5" />
+                    </div>
+                  </a>
+                )}
+              </div>
+            )}
+
+            {questions.length > 0 && (
+               <AssignmentForm 
+                 questions={questions} 
+                 onSubmit={() => {}} 
+                 initialAnswers={answers}
+                 readOnly={true}
+               />
+            )}
           </div>
         </div>
 
@@ -195,8 +230,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                     onChange={(e) => setGrade(e.target.value)}
                     placeholder="0"
                   />
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
-                    / {questions.reduce((acc, q) => acc + q.points, 0)}
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold bg-slate-100 px-3 py-1 rounded-xl">
+                    من {questions.reduce((acc, q) => acc + q.points, 0) || 100}
                   </div>
                 </div>
               </div>
@@ -204,29 +239,29 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
-                  ملاحظات وتغذية راجعة
+                  ملاحظات وتغذية راجعة للطالب
                 </label>
                 <textarea
                   rows={6}
-                  className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all resize-none font-bold"
-                  placeholder="اكتب ملاحظاتك للطالب هنا..."
+                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all resize-none font-bold"
+                  placeholder="اكتب تشجيعاً أو ملاحظاتك هنا..."
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                 />
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 border-t border-slate-100">
                 <button
                   onClick={handleSaveGrade}
                   disabled={isSaving}
-                  className="w-full flex justify-center items-center gap-2 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70"
+                  className="w-full flex justify-center items-center gap-2 rounded-2xl bg-slate-900 px-8 py-5 text-base font-black text-white shadow-xl hover:bg-indigo-600 transition-all active:scale-95 disabled:opacity-70"
                 >
                   {isSaving ? (
                     <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                   ) : (
                     <CheckCircle className="h-5 w-5" />
                   )}
-                  حفظ وإرسال التقييم
+                  اعتماد التقييم
                 </button>
               </div>
             </div>
@@ -236,12 +271,12 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`p-4 rounded-2xl flex items-center gap-3 border ${
+              className={`p-5 rounded-2xl flex items-center gap-3 border shadow-sm ${
                 notification.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
               }`}
             >
-              {notification.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-              <span className="text-sm font-bold">{notification.message}</span>
+              {notification.type === 'success' ? <CheckCircle className="h-6 w-6" /> : <AlertCircle className="h-6 w-6" />}
+              <span className="font-black">{notification.message}</span>
             </motion.div>
           )}
         </div>
@@ -249,3 +284,4 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     </div>
   );
 }
+
