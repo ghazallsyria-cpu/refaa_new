@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST(req: Request) {
   try {
@@ -16,36 +17,43 @@ export async function POST(req: Request) {
     // 1. جلب الاختبار
     const { data: exam } = await adminSupabase.from('exams').select('*').eq('id', examId).single();
 
-    // 2. محاولة التعرف على الطالب
+    // 2. التعرف على الطالب وتوحيد الأرقام
     const { data: students } = await adminSupabase.from('students').select('id, user_id, users(full_name)');
     const targetStudent = students?.find(s => s.id === studentId || s.user_id === studentId);
-    const validIds = targetStudent ? [targetStudent.id, targetStudent.user_id] : [studentId];
+    const validIds = targetStudent ? [targetStudent.id, targetStudent.user_id].filter(Boolean) : [studentId];
 
-    // 3. جلب جميع المحاولات لهذا الاختبار
+    // 3. جلب جميع محاولات الاختبار
     const { data: allAttempts } = await adminSupabase.from('exam_attempts').select('*').eq('exam_id', examId);
     
-    // 4. 🚀 البحث عن المحاولة.. وإذا لم نجدها، نستخدم "وضع الإجبار" (God Mode)
-    let bestAttempt = allAttempts?.find(a => validIds.includes(a.student_id) || validIds.includes(a.user_id));
-    let isForced = false;
+    // فلترة المحاولات لتخص هذا الطالب فقط
+    const studentAttempts = (allAttempts || []).filter(a => validIds.includes(a.student_id) || validIds.includes(a.user_id));
 
-    if (!bestAttempt && allAttempts && allAttempts.length > 0) {
-        // 🚨 الطالب غير متطابق! ولكننا سنجبر النظام على عرض أول محاولة موجودة في الداتا بيز لكي نرى الإجابات
-        bestAttempt = allAttempts[0];
-        isForced = true;
+    let bestAttempt = null;
+    let finalAnswers: any[] = [];
+    let maxAnswersCount = -1;
+
+    // 🚀 4. الذكاء الاصطناعي: فحص كل المحاولات لاختيار المحاولة المليئة بالإجابات وتجاهل الفارغة
+    for (const att of studentAttempts) {
+        const { data: ans } = await adminSupabase.from('student_answers').select('*').eq('attempt_id', att.id);
+        const count = ans?.length || 0;
+        
+        // إذا وجدنا إجابات أكثر من المحاولة السابقة، نعتمد هذه المحاولة
+        if (count > maxAnswersCount) {
+            maxAnswersCount = count;
+            bestAttempt = att;
+            finalAnswers = ans || [];
+        }
     }
 
-    // 5. جلب الإجابات للمحاولة
-    let answers = [];
-    if (bestAttempt) {
-        const { data: ans } = await adminSupabase.from('student_answers').select('*').eq('attempt_id', bestAttempt.id);
-        answers = ans || [];
+    if (!bestAttempt && studentAttempts.length > 0) {
+        bestAttempt = studentAttempts[0];
     }
 
-    // 6. جلب الأسئلة والخيارات
+    // 5. جلب الأسئلة والخيارات
     const { data: questions } = await adminSupabase.from('questions').select('*').eq('exam_id', examId).order('order_index');
     const qIds = questions?.map(q => q.id) || [];
     
-    let options = [];
+    let options: any[] = [];
     if (qIds.length > 0) {
         const { data: opts } = await adminSupabase.from('question_options').select('*').in('question_id', qIds);
         options = opts || [];
@@ -55,22 +63,18 @@ export async function POST(req: Request) {
         ...q, options: options.filter(o => o.question_id === q.id)
     }));
 
-    // معلومات تصحيح الأخطاء لكشف الحقيقة
-    const debugInfo = {
-        urlStudentId: studentId,
-        foundAttemptsCount: allAttempts?.length || 0,
-        attemptStudentIdsInDB: allAttempts?.map(a => a.student_id) || [],
-        isForced: isForced
-    };
-
     return NextResponse.json({
         success: true,
         exam: exam || {},
-        student: targetStudent || { id: studentId, users: { full_name: 'طالب (أرقام غير متطابقة)' } },
-        attempt: bestAttempt || null,
-        answers: answers,
+        student: targetStudent || { id: studentId, users: { full_name: 'طالب' } },
+        attempt: bestAttempt,
+        answers: finalAnswers,
         questions: finalQuestions,
-        debugInfo: debugInfo
+        debugInfo: {
+            foundAttemptsCount: studentAttempts.length,
+            isForced: studentAttempts.length === 0,
+            attemptStudentIdsInDB: validIds
+        }
     });
 
   } catch (error: any) {
