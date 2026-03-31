@@ -7,7 +7,7 @@ import {
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer
@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
+import { supabase } from '@/lib/supabase'; // 🚀 استيراد قاعدة البيانات مباشرة للتدخل السريع
 
 // 🚀 دالة التحقق من القفل الزمني (تمنع الطالب من رؤية النتيجة قبل انتهاء وقت الاختبار)
 const checkIsLocked = (examData: any) => {
@@ -57,11 +58,38 @@ export default function StudentDashboard() {
       if (data) {
         setStudentData(data.student);
         setAttendanceStats({ rate: data.attendanceRate });
-        setRecentGrades(data.grades);
         setUpcomingExams(data.exams);
         setUpcomingAssignments(data.assignments);
         setTodaysSchedule(data.todaysSchedule);
         setPeriods(data.periods);
+
+        // 🚀 التدخل السريع: جلب الدرجات مباشرة من قاعدة البيانات لضمان وجود (تاريخ الانتهاء) للقفل!
+        try {
+            const studentId = data.student?.id;
+            if (studentId) {
+                const { data: dbGrades } = await supabase
+                  .from('exam_attempts')
+                  .select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))')
+                  .eq('student_id', studentId)
+                  .order('completed_at', { ascending: false })
+                  .limit(10);
+                  
+                if (dbGrades && dbGrades.length > 0) {
+                    const formattedGrades = dbGrades.map((g: any) => ({
+                        ...g,
+                        exam: { ...g.exams, subject: g.exams?.subjects }
+                    }));
+                    setRecentGrades(formattedGrades);
+                } else {
+                    setRecentGrades(data.grades || []);
+                }
+            } else {
+                setRecentGrades(data.grades || []);
+            }
+        } catch (e) {
+            console.error("Direct fetch failed", e);
+            setRecentGrades(data.grades || []);
+        }
       }
     } catch (error) {
       console.error('Error fetching student dashboard data:', error);
@@ -99,7 +127,7 @@ export default function StudentDashboard() {
       <div className="flex h-[80vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-medium animate-pulse">جاري تحميل البيانات...</p>
+          <p className="text-slate-500 font-medium animate-pulse">جاري تحميل لوحة التحكم...</p>
         </div>
       </div>
     );
@@ -111,7 +139,7 @@ export default function StudentDashboard() {
   // 🚀 استخراج الدرجات غير المحجوبة فقط لحساب المتوسط والرسم البياني
   const unlockedGrades = recentGrades.filter(g => !checkIsLocked(g.exam));
 
-  // حساب المتوسط العام للدرجات المتاحة فقط
+  // حساب المتوسط العام للدرجات المتاحة فقط لكي لا يستنتج الطالب درجته
   const avgScore = unlockedGrades.length > 0 
     ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length)
     : 0;
@@ -249,7 +277,7 @@ export default function StudentDashboard() {
                 </div>
                 تطور المستوى الأكاديمي
               </h2>
-              <Link href="/reports" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">
+              <Link href="/dashboard/student/performance" className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">
                 التقارير المفصلة <ChevronLeft className="h-4 w-4" />
               </Link>
             </div>
@@ -312,8 +340,8 @@ export default function StudentDashboard() {
                 </div>
                 آخر النتائج
               </h2>
-              <Link href="/exams" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors">
-                كل الاختبارات <ChevronLeft className="h-4 w-4" />
+              <Link href="/dashboard/student/performance" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors">
+                كل النتائج <ChevronLeft className="h-4 w-4" />
               </Link>
             </div>
             <div className="space-y-4">
@@ -335,8 +363,8 @@ export default function StudentDashboard() {
                       <div className="text-right">
                         {isLocked ? (
                           <div className="flex flex-col items-end gap-1">
-                            <span className="text-xs font-bold text-slate-500 bg-slate-200/50 border border-slate-200 px-2 py-1 rounded-lg flex items-center gap-1">
-                              <Lock className="w-3 h-3" /> النتيجة محجوبة
+                            <span className="text-xs font-bold text-slate-500 bg-white shadow-sm border border-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                              <Lock className="w-3.5 h-3.5" /> النتيجة محجوبة
                             </span>
                             <p className="text-[10px] text-slate-400 font-medium">
                               {safeFormat(grade.completed_at, 'd MMMM')}
@@ -344,7 +372,7 @@ export default function StudentDashboard() {
                           </div>
                         ) : (
                           <>
-                            <p className={`text-xl font-bold ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <p className={`text-xl font-black ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {grade.score}%
                             </p>
                             <p className="text-xs text-slate-400 font-medium mt-1">
