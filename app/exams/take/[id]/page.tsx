@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { Question } from '@/types/question';
@@ -47,19 +47,19 @@ export default function TakeQuiz() {
       const endTimeParts = (examData.end_time || '23:59').split(':');
       
       const startDateTime = new Date(examDate);
-      startDateTime.setHours(parseInt(startTimeParts[0]), parseInt(startTimeParts[1]), 0);
+      startDateTime.setHours(parseInt(startTimeParts[0] || '0'), parseInt(startTimeParts[1] || '0'), 0);
       const endDateTime = new Date(examDate);
-      endDateTime.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
+      endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
       
       if (now < startDateTime) {
         showNotification('error', `الاختبار يبدأ في ${examData.start_time} بتاريخ ${examData.exam_date}`);
-        setTimeout(() => router.push('/exams'), 3000);
+        setTimeout(() => { window.location.href = '/exams'; }, 3000);
         return;
       }
       
       if (now > endDateTime) {
         showNotification('error', 'انتهى الوقت المخصص لهذا الاختبار.');
-        setTimeout(() => router.push('/exams'), 3000);
+        setTimeout(() => { window.location.href = '/exams'; }, 3000);
         return;
       }
 
@@ -72,62 +72,79 @@ export default function TakeQuiz() {
       }
     } catch (err) {
       showNotification('error', 'حدث خطأ أثناء تحميل الاختبار');
-      setTimeout(() => router.push('/exams'), 3000);
+      setTimeout(() => { window.location.href = '/exams'; }, 3000);
     } finally {
       setLoading(false);
     }
-  }, [params.id, router, fetchExamForStudent]);
+  }, [params.id, fetchExamForStudent]);
 
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !questions || questions.length === 0) return;
     setIsSubmitting(true);
 
     try {
       let totalScore = 0;
       const formattedAnswers: Record<string, any> = {};
-      let hasManual = false; // 🚀 الرادار اللحظي: يفحص في جزء من الثانية وقت الإرسال
+      let hasManual = false; 
 
       for (const q of questions) {
         const studentAnswer = answers[q.id];
         let isCorrect = false;
         let pointsEarned = 0;
         
-        const isAuto = isAutoGradedType(q.type as string);
-        if (!isAuto) hasManual = true; // اكتشاف السؤال المقالي بدقة
+        const qType = (q.type as string || '').toLowerCase();
+        const isAuto = isAutoGradedType(qType);
 
-        if (isAuto && studentAnswer !== undefined) {
-          const qType = (q.type as string || '').toLowerCase();
-          if (qType.includes('choice') || qType.includes('true_false')) {
-            const correctOpt = q.options?.find((o: any) => o.is_correct);
-            isCorrect = studentAnswer === correctOpt?.id;
-            pointsEarned = isCorrect ? (q.points || 0) : 0;
-          } else if (qType.includes('select') || qType.includes('checkbox')) {
-            const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => o.id) || [];
-            const studentOpts = Array.isArray(studentAnswer) ? studentAnswer : [];
-            isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: any) => studentOpts.includes(id));
-            pointsEarned = isCorrect ? (q.points || 0) : 0;
-          }
+        if (!isAuto) hasManual = true; 
+
+        // 🚀 معالجة البيانات وتجهيزها للإرسال بأمان تام
+        let optionIdToSend = null;
+        let textToSend = null;
+
+        if (studentAnswer !== undefined && studentAnswer !== null && studentAnswer !== "") {
+            if (isAuto) {
+              if (Array.isArray(studentAnswer)) {
+                  // إذا كان مربعات اختيار (مصفوفة)، يجب إرسالها كنص (JSON) لكي لا ترفضها الداتا بيز
+                  textToSend = JSON.stringify(studentAnswer);
+                  
+                  const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => String(o.id)) || [];
+                  const studentOpts = studentAnswer.map(String);
+                  isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: string) => studentOpts.includes(id));
+                  pointsEarned = isCorrect ? (Number(q.points) || 0) : 0;
+              } else {
+                  // اختيار من متعدد (إجابة واحدة)
+                  optionIdToSend = String(studentAnswer);
+                  textToSend = String(studentAnswer); // احتياطاً
+                  
+                  const correctOpt = q.options?.find((o: any) => o.is_correct);
+                  isCorrect = String(studentAnswer) === String(correctOpt?.id);
+                  pointsEarned = isCorrect ? (Number(q.points) || 0) : 0;
+              }
+            } else {
+              // سؤال مقالي
+              textToSend = String(studentAnswer);
+            }
         }
 
         totalScore += pointsEarned;
 
         formattedAnswers[q.id] = {
-          optionId: (isAuto && typeof studentAnswer === 'string') ? studentAnswer : null,
-          text: !isAuto ? (studentAnswer || "") : (Array.isArray(studentAnswer) ? JSON.stringify(studentAnswer) : ""),
+          optionId: optionIdToSend,
+          text: textToSend,
           isCorrect,
           pointsEarned
         };
       }
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
-      
-      // 🚀 الحكم النهائي: إذا فيه مقالي = completed (مراجعة)، كله اختياري = graded (منشور فوراً)
       const attemptStatus = hasManual ? 'completed' : 'graded';
 
+      // 🚀 إرسال البيانات
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
       setIsFinished(true);
+      
     } catch (err: any) {
       showNotification('error', err.message || 'حدث خطأ أثناء إرسال الاختبار');
     } finally {
@@ -149,6 +166,19 @@ export default function TakeQuiz() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-amber-500">
+          <div className="inline-flex p-4 rounded-full bg-amber-50 text-amber-500"><AlertCircle className="h-12 w-12" /></div>
+          <h2 className="text-2xl font-bold text-slate-900">الاختبار غير مكتمل</h2>
+          <p className="text-slate-600 font-medium">عذراً، هذا الاختبار لا يحتوي على أي أسئلة مضافة حتى الآن. يرجى مراجعة المعلم.</p>
+          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all">العودة للرئيسية</button>
+        </motion.div>
+      </div>
+    );
+  }
+
   const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type as string));
 
   if (isFinished) {
@@ -158,7 +188,7 @@ export default function TakeQuiz() {
           <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
-             لقد استلمنا إجاباتك. 
+             لقد استلمنا إجاباتك، وتم تسجيلها في النظام. 
              {hasManualQuestions ? (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
                  سيتم إعلان نتيجتك النهائية بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.
@@ -169,7 +199,11 @@ export default function TakeQuiz() {
                </span>
              )}
           </p>
-          <button onClick={() => router.push(`/exams`)} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">العودة للرئيسية</button>
+          <button onClick={() => {
+              window.location.href = '/exams'; // Force hard reload to bust cache
+          }} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
+            عرض النتائج والعودة
+          </button>
         </motion.div>
       </div>
     );
@@ -177,7 +211,8 @@ export default function TakeQuiz() {
 
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
-  const isAutoCurrent = isAutoGradedType(currentQuestion?.type as string);
+  const currentQType = (currentQuestion?.type as string || '').toLowerCase();
+  const isAutoCurrent = isAutoGradedType(currentQType);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
@@ -247,7 +282,9 @@ export default function TakeQuiz() {
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
           {currentQuestionIdx === questions.length - 1 ? (
-            <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50"><Send className="h-5 w-5" />إرسال الاختبار</button>
+            <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50">
+              {isSubmitting ? <span className="animate-pulse">جاري الإرسال...</span> : <><Send className="h-5 w-5" /> إرسال الاختبار</>}
+            </button>
           ) : (
             <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
           )}
