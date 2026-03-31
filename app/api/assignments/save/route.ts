@@ -15,7 +15,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { payload, assignmentId, questions, sectionIds, subjects, userId } = body;
 
-    // 1. تحديد المعلم بدقة لتفادي أي ضياع للبيانات
     let realTeacherId = userId;
     const { data: tProfile1 } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
     if (tProfile1?.id) {
@@ -25,7 +24,6 @@ export async function POST(req: Request) {
       if (tProfile2?.id) realTeacherId = tProfile2.id;
     }
 
-    // 2. تنظيف البيانات (الـ UUID الفارغ يسبب انفجار في الداتابيز، لذلك نحوله إلى null)
     const safePayload: any = {
       title: payload.title || 'واجب بدون عنوان',
       description: payload.description || '',
@@ -38,18 +36,20 @@ export async function POST(req: Request) {
 
     let finalAssignmentId = assignmentId;
 
-    // 3. الحفظ المدرع للواجب
     if (finalAssignmentId) {
       const { error: updErr } = await adminSupabase.from('assignments').update(safePayload).eq('id', finalAssignmentId);
       if (updErr) {
-          // خطة إنقاذ إذا كانت الداتابيز لا تحتوي عمود status
           delete safePayload.status;
           const { error: retryErr } = await adminSupabase.from('assignments').update(safePayload).eq('id', finalAssignmentId);
           if (retryErr) throw new Error('فشل تحديث الواجب: ' + retryErr.message);
       }
-      // مسح القديم للتحديث النظيف
+      
       await adminSupabase.from('assignment_questions').delete().eq('assignment_id', finalAssignmentId);
-      await adminSupabase.from('assignment_sections').delete().eq('assignment_id', finalAssignmentId);
+      
+      // 🚨 نمنع حذف الفصول إذا كانت المصفوفة المرسلة فارغة (لتأمين زر التعديل السريع)
+      if (sectionIds && sectionIds.length > 0) {
+         await adminSupabase.from('assignment_sections').delete().eq('assignment_id', finalAssignmentId);
+      }
     } else {
       const { data: newAss, error: insErr } = await adminSupabase.from('assignments').insert([safePayload]).select('id').single();
       if (insErr) {
@@ -64,7 +64,6 @@ export async function POST(req: Request) {
 
     if (!finalAssignmentId) throw new Error('لم نتمكن من الحصول على معرف الواجب');
 
-    // 4. حفظ الأسئلة
     if (questions && questions.length > 0) {
       const qPayload = questions.map((q: any, idx: number) => ({
         assignment_id: finalAssignmentId,
@@ -79,7 +78,6 @@ export async function POST(req: Request) {
       if (qErr) throw new Error('فشل حفظ الأسئلة: ' + qErr.message);
     }
 
-    // 5. حفظ الفصول والشعب المستهدفة (مهم جداً ليظهر الواجب للطالب!)
     if (sectionIds && sectionIds.length > 0) {
       const sPayload = sectionIds.map((sId: string) => ({
         assignment_id: finalAssignmentId,
