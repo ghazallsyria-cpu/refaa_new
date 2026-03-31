@@ -274,7 +274,7 @@ export default function ExamsDashboard() {
                 const pendingGradesCount = (exam.submission_count || 0) - (exam.graded_count || 0);
                 const needsTeacherGrading = isTeacherOrAdmin && pendingGradesCount > 0;
                 
-                // 🚀 التحويل النصي الآمن لحل مشكلة Type Error بشكل نهائي في Netlify
+                // التحويل النصي الآمن لحل مشكلة Type Error بشكل نهائي في Netlify
                 const statusStr = String(exam.submission_status || '');
 
                 return (
@@ -427,7 +427,8 @@ export default function ExamsDashboard() {
                       ) : (
                         (statusStr === 'submitted' || statusStr === 'graded' || statusStr === 'completed') ? (() => {
                           const isLocked = checkIsLocked(exam);
-                          const maxScore = exam.total_marks || exam.max_score || 100;
+                          // 🚀 حماية TypeScript من الشكوى عن total_marks
+                          const maxScore = (exam as any).total_marks || (exam as any).max_score || 100;
                           const studentId = user?.id || user?.user_id || '';
 
                           if (isLocked) {
