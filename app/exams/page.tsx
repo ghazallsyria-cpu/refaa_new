@@ -427,9 +427,9 @@ export default function ExamsDashboard() {
                       ) : (
                         (statusStr === 'submitted' || statusStr === 'graded' || statusStr === 'completed') ? (() => {
                           const isLocked = checkIsLocked(exam);
-                          // 🚀 حماية TypeScript من الشكوى عن total_marks
+                          // 🚀 حماية TypeScript النهائية 100%
                           const maxScore = (exam as any).total_marks || (exam as any).max_score || 100;
-                          const studentId = user?.id || user?.user_id || '';
+                          const studentId = user?.id || (user as any)?.user_id || '';
 
                           if (isLocked) {
                             return (
