@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { ArrowRight, Users, CheckCircle2, AlertCircle, Eye, Search, Trash2, Trophy, Clock, BookOpen, Filter } from 'lucide-react';
+import { ArrowRight, Users, CheckCircle2, AlertCircle, Eye, Search, Trash2, Trophy, Clock, BookOpen, Filter, Download, Printer, Layers } from 'lucide-react';
 
 export default function TeacherExamResultsPage() {
   const params = useParams();
@@ -17,8 +17,12 @@ export default function TeacherExamResultsPage() {
   const [examData, setExamData] = useState<any>(null);
   const [attempts, setAttempts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // فلاتر البحث
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); 
+  const [sectionFilter, setSectionFilter] = useState('all'); // الفلتر الجديد للفصول
+  
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -47,7 +51,6 @@ export default function TeacherExamResultsPage() {
 
   const handleDeleteAttempt = async (attemptId: string) => {
     if (!confirm('هل أنت متأكد من حذف نتيجة هذا الطالب؟ سيتمكن من إعادة الاختبار.')) return;
-    
     setIsDeleting(attemptId);
     try {
       await deleteAttempt(attemptId);
@@ -72,35 +75,155 @@ export default function TeacherExamResultsPage() {
     );
   }
 
+  // 1. استخراج الفصول الفريدة من البيانات لتعبئة قائمة الفلتر
+  const uniqueSections = Array.from(new Set(
+    attempts.map(a => a.student?.section?.name ? `${a.student.section?.classes?.name || ''} - ${a.student.section.name}` : 'بدون فصل')
+  )).filter(Boolean);
+
+  // 2. تطبيق جميع الفلاتر (نص، حالة، فصل)
   const filteredAttempts = attempts.filter((attempt: any) => {
      const studentName = attempt?.student?.users?.full_name || 'طالب مجهول';
+     const sectionName = attempt?.student?.section?.name ? `${attempt.student.section?.classes?.name || ''} - ${attempt.student.section.name}` : 'بدون فصل';
+     
      const matchesSearch = studentName.toLowerCase().includes(searchTerm.toLowerCase());
      const matchesStatus = statusFilter === 'all' 
-        ? true 
-        : statusFilter === 'pending' 
-          ? attempt.status !== 'graded' 
-          : attempt.status === 'graded';
+        ? true : statusFilter === 'pending' ? attempt.status !== 'graded' : attempt.status === 'graded';
+     const matchesSection = sectionFilter === 'all' ? true : sectionName === sectionFilter;
           
-     return matchesSearch && matchesStatus;
+     return matchesSearch && matchesStatus && matchesSection;
   });
 
   const gradedAttempts = attempts.filter(a => a.status === 'graded');
   const pendingCount = attempts.length - gradedAttempts.length;
-
   const averageScore = gradedAttempts.length > 0 
-    ? Math.round(gradedAttempts.reduce((sum, a) => sum + (a.score || 0), 0) / gradedAttempts.length) 
-    : 0;
+    ? Math.round(gradedAttempts.reduce((sum, a) => sum + (a.score || 0), 0) / gradedAttempts.length) : 0;
+
+  // 🎯 دالة تصدير إكسل (Excel / CSV)
+  const exportToExcel = () => {
+    const headers = ['اسم الطالب', 'الفصل', 'الدرجة', 'الحالة', 'تاريخ التسليم'];
+    const csvData = filteredAttempts.map(attempt => {
+       const name = attempt?.student?.users?.full_name || 'طالب مجهول';
+       const section = attempt?.student?.section?.name ? `${attempt.student.section?.classes?.name || ''} - ${attempt.student.section.name}` : 'بدون فصل';
+       const score = attempt.status !== 'graded' ? 'قيد المراجعة' : attempt.score || 0;
+       const status = attempt.status !== 'graded' ? 'يحتاج تصحيح' : 'مقيّم';
+       const date = new Date(attempt.completed_at || attempt.created_at).toLocaleString('ar-EG');
+       return `"${name}","${section}","${score}","${status}","${date}"`;
+    });
+    
+    // إضافة BOM ليتعرف إكسل على اللغة العربية
+    const csvContent = '\uFEFF' + [headers.join(','), ...csvData].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `نتائج_${examData?.title || 'الاختبار'}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  // 🎯 دالة تصدير كشف PDF رسمي
+  const exportToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { alert("يرجى السماح بالنوافذ المنبثقة (Pop-ups) لطباعة الكشف."); return; }
+
+    const maxScore = examData?.total_marks || examData?.max_score || 0;
+    
+    const tableRows = filteredAttempts.map((attempt, index) => {
+       const name = attempt?.student?.users?.full_name || 'طالب مجهول';
+       const section = attempt?.student?.section?.name ? `${attempt.student.section?.classes?.name || ''} - ${attempt.student.section.name}` : 'بدون فصل';
+       const score = attempt.status !== 'graded' ? '؟' : attempt.score || 0;
+       const date = new Date(attempt.completed_at || attempt.created_at).toLocaleDateString('ar-EG');
+       return `
+        <tr>
+          <td>${index + 1}</td>
+          <td><strong>${name}</strong></td>
+          <td>${section}</td>
+          <td style="text-align: center; font-weight: bold;">${score} / ${maxScore}</td>
+          <td style="text-align: center;">${date}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>كشف درجات - ${examData?.title}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+            body { font-family: 'Cairo', sans-serif; padding: 40px; color: #1e293b; background: #fff; }
+            .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+            .header h1 { color: #4f46e5; margin: 0 0 10px 0; font-size: 28px; }
+            .info-grid { display: flex; justify-content: space-between; background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; font-size: 16px; border: 1px solid #e2e8f0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+            th { background-color: #4f46e5; color: white; padding: 15px; text-align: right; }
+            th:nth-child(4), th:nth-child(5) { text-align: center; }
+            td { padding: 15px; border-bottom: 1px solid #e2e8f0; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #64748b; }
+            @media print {
+              body { padding: 0; }
+              .header-info, table { width: 100%; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>📄 كشف درجات الطلاب</h1>
+            <h2>${examData?.title || 'اختبار'}</h2>
+          </div>
+          
+          <div class="info-grid">
+            <div><strong>الفصل المعروض:</strong> ${sectionFilter === 'all' ? 'جميع الفصول' : sectionFilter}</div>
+            <div><strong>عدد الطلاب:</strong> ${filteredAttempts.length}</div>
+            <div><strong>العلامة الكاملة:</strong> ${maxScore}</div>
+            <div><strong>متوسط الدرجات:</strong> ${averageScore}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th width="5%">#</th>
+                <th width="35%">اسم الطالب</th>
+                <th width="20%">الفصل</th>
+                <th width="20%">الدرجة</th>
+                <th width="20%">تاريخ التسليم</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            تم إصدار هذا الكشف تلقائياً من منصة الاختبارات الذكية بتاريخ ${new Date().toLocaleString('ar-EG')}
+          </div>
+          
+          <script>
+             window.onload = () => { setTimeout(() => window.print(), 500); }
+          </script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
-      <div className="flex items-center justify-between">
-        <button 
-          onClick={() => router.push('/exams')}
-          className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100"
-        >
-          <ArrowRight className="h-5 w-5" />
-          العودة للاختبارات
+      
+      {/* 🚀 Top Bar: Back button and Export Tools */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <button onClick={() => router.push('/exams')} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 w-full sm:w-auto justify-center">
+          <ArrowRight className="h-5 w-5" /> العودة للاختبارات
         </button>
+        
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button onClick={exportToPDF} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-red-50 text-red-600 font-bold rounded-2xl border border-red-100 hover:bg-red-600 hover:text-white transition-all shadow-sm">
+             <Printer className="w-5 h-5" /> طباعة PDF
+          </button>
+          <button onClick={exportToExcel} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-emerald-50 text-emerald-600 font-bold rounded-2xl border border-emerald-100 hover:bg-emerald-600 hover:text-white transition-all shadow-sm">
+             <Download className="w-5 h-5" /> تحميل إكسل
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -112,7 +235,7 @@ export default function TeacherExamResultsPage() {
               <h2 className="text-sm font-bold text-indigo-600 tracking-widest uppercase">نتائج الاختبار</h2>
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-tight mb-4">{examData?.title || 'جاري التحميل...'}</h1>
-            <div className="flex items-center gap-4 text-sm font-bold text-slate-600">
+            <div className="flex flex-wrap items-center gap-4 text-sm font-bold text-slate-600">
                <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
                  العلامة الكاملة: {examData?.total_marks || examData?.max_score || 0}
                </span>
@@ -138,7 +261,8 @@ export default function TeacherExamResultsPage() {
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-4">
+      {/* 🚀 أدوات البحث والفلترة المتقدمة (تم إضافة الفصول) */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-4">
         <div className="relative flex-1 group">
           <div className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 group-focus-within:text-indigo-600">
             <Search className="h-5 w-5" />
@@ -152,6 +276,24 @@ export default function TeacherExamResultsPage() {
           />
         </div>
 
+        {/* فلتر الفصول الجديد */}
+        <div className="relative min-w-[200px] group">
+          <div className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 pointer-events-none">
+            <Layers className="h-5 w-5" />
+          </div>
+          <select
+            className="block w-full rounded-xl border-0 py-3 pr-12 pl-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold transition-all appearance-none cursor-pointer"
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+          >
+            <option value="all">جميع الفصول</option>
+            {uniqueSections.map((sec: any) => (
+              <option key={sec} value={sec}>{sec}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* فلتر الحالة */}
         <div className="relative min-w-[200px] group">
           <div className="absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400 pointer-events-none">
             <Filter className="h-5 w-5" />
@@ -161,7 +303,7 @@ export default function TeacherExamResultsPage() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="all">جميع الطلاب ({attempts.length})</option>
+            <option value="all">حالة التصحيح (الكل)</option>
             <option value="pending">بحاجة للتصحيح ({pendingCount})</option>
             <option value="graded">تم التقييم ({gradedAttempts.length})</option>
           </select>
@@ -172,18 +314,18 @@ export default function TeacherExamResultsPage() {
         {filteredAttempts.length === 0 ? (
           <div className="text-center py-20">
             <Users className="h-16 w-16 text-slate-200 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-slate-500">لا توجد نتائج مسجلة أو مطابقة للبحث</h3>
+            <h3 className="text-xl font-bold text-slate-500">لا توجد نتائج مسجلة أو مطابقة للفلاتر</h3>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
+            <table className="min-w-full text-right border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="px-6 py-5 text-sm font-black text-slate-600">الطالب</th>
-                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center">الدرجة</th>
-                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center">الحالة</th>
-                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center">تاريخ التسليم</th>
-                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center">الإجراءات</th>
+                  <th className="px-6 py-5 text-sm font-black text-slate-600 whitespace-nowrap">الطالب</th>
+                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center whitespace-nowrap">الدرجة</th>
+                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center whitespace-nowrap">تاريخ التسليم</th>
+                  <th className="px-6 py-5 text-sm font-black text-slate-600 text-center whitespace-nowrap">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -195,16 +337,16 @@ export default function TeacherExamResultsPage() {
 
                   return (
                     <tr key={attempt.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-black text-slate-900 text-base">{studentName}</div>
                         <div className="text-xs font-bold text-slate-500 mt-1">{sectionName}</div>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-6 py-4 text-center whitespace-nowrap">
                         <span className={`inline-flex items-center justify-center font-black px-4 py-1.5 rounded-xl text-base border ${isPending ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
                           {isPending ? '؟' : (attempt.score || 0)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-6 py-4 text-center whitespace-nowrap">
                         {!isPending ? (
                           <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-bold px-3 py-1 rounded-lg text-xs border border-emerald-100">
                             <CheckCircle2 className="h-4 w-4" /> مقيّم
@@ -215,15 +357,14 @@ export default function TeacherExamResultsPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-center text-sm font-bold text-slate-500" dir="ltr">
+                      <td className="px-6 py-4 text-center text-sm font-bold text-slate-500 whitespace-nowrap" dir="ltr">
                         {date.toLocaleDateString('en-GB')} {date.toLocaleTimeString('en-GB', {hour: '2-digit', minute:'2-digit'})}
                       </td>
-                      <td className="px-6 py-4">
-                        {/* ✅ تم مسح opacity-0 لكي تظهر الأزرار للمستخدم سواء على الجوال أو الكمبيوتر */}
-                        <div className="flex items-center justify-center gap-2 transition-opacity">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-2">
                           <button 
                             onClick={() => router.push(`/exams/results/${params.id}/student/${attempt.student_id}`)}
-                            className="h-10 px-4 flex items-center gap-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                            className="h-10 px-4 flex items-center gap-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm shrink-0"
                           >
                             <Eye className="h-4 w-4" /> التفاصيل
                           </button>
@@ -232,7 +373,7 @@ export default function TeacherExamResultsPage() {
                             onClick={() => handleDeleteAttempt(attempt.id)}
                             disabled={isDeleting === attempt.id}
                             title="حذف المحاولة (يتيح للطالب الإعادة)"
-                            className="h-10 w-10 flex items-center justify-center bg-red-50 text-red-500 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-all shadow-sm disabled:opacity-50"
+                            className="h-10 w-10 flex items-center justify-center bg-red-50 text-red-500 rounded-xl font-bold hover:bg-red-500 hover:text-white transition-all shadow-sm shrink-0 disabled:opacity-50"
                           >
                             {isDeleting === attempt.id ? (
                               <div className="h-4 w-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
