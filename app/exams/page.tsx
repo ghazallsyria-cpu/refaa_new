@@ -40,6 +40,8 @@ export default function ExamsDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
+  const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
+
   const filteredExams = exams.filter(exam => {
     if (!exam) return false;
     const matchesSearch = (exam.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -47,6 +49,11 @@ export default function ExamsDashboard() {
     const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // 🚀 الثغرة الأمنية تم إغلاقها: الطالب يرى فقط الاختبارات المنشورة
+  const displayedExams = isTeacherOrAdmin 
+    ? filteredExams 
+    : filteredExams.filter(e => e?.status === 'published');
 
   const handleDelete = async (examId: string) => {
     if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) return;
@@ -74,8 +81,6 @@ export default function ExamsDashboard() {
       default: return status;
     }
   };
-
-  const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
   
   const getExamStatus = (exam: any) => {
     if (exam?.status !== 'published') return null;
@@ -85,8 +90,10 @@ export default function ExamsDashboard() {
       const examDate = new Date(exam.exam_date);
       const startTimeParts = (exam.start_time || '00:00').split(':');
       const endTimeParts = (exam.end_time || '23:59').split(':');
+      
       const startDateTime = new Date(examDate);
       startDateTime.setHours(parseInt(startTimeParts[0] || '0'), parseInt(startTimeParts[1] || '0'), 0);
+      
       const endDateTime = new Date(examDate);
       endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
       
@@ -112,8 +119,8 @@ export default function ExamsDashboard() {
         
         {/* Header Section */}
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
           className="flex flex-col md:flex-row md:items-end justify-between gap-8"
         >
           <div className="space-y-4">
@@ -125,15 +132,15 @@ export default function ExamsDashboard() {
             <p className="text-xl text-slate-500 font-medium max-w-2xl">
               {isTeacherOrAdmin 
                 ? 'قم بإنشاء وإدارة الاختبارات التفاعلية ومتابعة أداء الطلاب بدقة.' 
-                : 'استعرض الاختبارات المتاحة لك، وتابع نتائجك وسجل إنجازاتك الأكاديمية.'}
+                : 'استعرض الاختبارات المتاحة لك وتابع نتائجك في مكان واحد.'}
             </p>
           </div>
           
           {isTeacherOrAdmin && (
             <Link href="/exams/builder/new">
               <motion.button 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }} 
                 className="inline-flex items-center justify-center gap-3 rounded-3xl bg-indigo-600 px-10 py-5 text-base font-black text-white shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transition-all self-start md:self-end"
               >
                 <Plus className="h-6 w-6" />
@@ -146,48 +153,80 @@ export default function ExamsDashboard() {
         {/* Stats Overview for Teachers */}
         {isTeacherOrAdmin && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { label: 'إجمالي الاختبارات', value: exams.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50', shadow: 'shadow-blue-100' },
-              { label: 'اختبارات منشورة', value: exams.filter(e => e?.status === 'published').length, icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50', shadow: 'shadow-emerald-100' },
-              { label: 'إجمالي المحاولات', value: exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0), icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', shadow: 'shadow-amber-100' },
-              { 
-                label: 'متوسط النجاح', 
-                value: (() => {
-                  const totalAttempts = exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0);
-                  if (totalAttempts === 0) return '0%';
-                  const totalScore = exams.reduce((acc, e) => acc + (e?.avg_score || 0) * (e?.submission_count || 0), 0);
-                  return `${Math.round(totalScore / totalAttempts)}%`;
-                })(), 
-                icon: TrendingUp, 
-                color: 'text-indigo-600', 
-                bg: 'bg-indigo-50', 
-                shadow: 'shadow-indigo-100' 
-              },
-            ].map((stat, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
-              >
-                <div className={`h-16 w-16 rounded-3xl ${stat.bg} flex items-center justify-center shadow-xl ${stat.shadow}`}>
-                  <stat.icon className={`h-8 w-8 ${stat.color}`} />
-                </div>
-                <div>
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">{stat.label}</p>
-                  <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{stat.value}</p>
-                </div>
-              </motion.div>
-            ))}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.1 }} 
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center shadow-xl shadow-blue-100">
+                <FileText className="h-8 w-8 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">إجمالي الاختبارات</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{exams.length}</p>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.2 }} 
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-emerald-50 flex items-center justify-center shadow-xl shadow-emerald-100">
+                <CheckCircle className="h-8 w-8 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">اختبارات منشورة</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{exams.filter(e => e?.status === 'published').length}</p>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.3 }} 
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-amber-50 flex items-center justify-center shadow-xl shadow-amber-100">
+                <Users className="h-8 w-8 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">إجمالي المحاولات</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">{exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0)}</p>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ delay: 0.4 }} 
+              className="glass-card p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex items-center gap-6 transition-all hover:shadow-2xl hover:-translate-y-1"
+            >
+              <div className="h-16 w-16 rounded-3xl bg-indigo-50 flex items-center justify-center shadow-xl shadow-indigo-100">
+                <TrendingUp className="h-8 w-8 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-2">متوسط النجاح</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none">
+                  {(() => {
+                    const totalAttempts = exams.reduce((acc, e) => acc + (e?.submission_count || 0), 0);
+                    if (totalAttempts === 0) return '0%';
+                    const totalScore = exams.reduce((acc, e) => acc + (e?.avg_score || 0) * (e?.submission_count || 0), 0);
+                    return `${Math.round(totalScore / totalAttempts)}%`;
+                  })()}
+                </p>
+              </div>
+            </motion.div>
           </div>
         )}
 
         {/* Filters Section */}
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.5 }} 
           className="glass-card p-8 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white/60"
         >
           <div className="flex flex-col md:flex-row gap-8">
@@ -195,12 +234,12 @@ export default function ExamsDashboard() {
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-6 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
                 <Search className="h-6 w-6" />
               </div>
-              <input
-                type="text"
-                className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold"
-                placeholder="البحث عن اختبار بالاسم أو المادة..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+              <input 
+                type="text" 
+                className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold" 
+                placeholder="البحث عن اختبار بالاسم أو المادة..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
               />
             </div>
             {isTeacherOrAdmin && (
@@ -208,9 +247,9 @@ export default function ExamsDashboard() {
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-6 text-slate-400 group-focus-within:text-indigo-600 transition-colors">
                   <Filter className="h-6 w-6" />
                 </div>
-                <select
-                  className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold appearance-none"
-                  value={statusFilter}
+                <select 
+                  className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold appearance-none" 
+                  value={statusFilter} 
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   <option value="all">جميع حالات النشر</option>
@@ -223,26 +262,34 @@ export default function ExamsDashboard() {
           </div>
         </motion.div>
 
-        {/* 🚀 Dynamic Layout: Grid for Teachers (Stats), List for Students (Clean) */}
+        {/* 🚀 الفصل التام بين واجهة المعلم وواجهة الطالب */}
         <div className={isTeacherOrAdmin ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10" : "flex flex-col gap-5"}>
           {contentLoading ? (
             Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className={`glass-card rounded-[3rem] border border-white/60 animate-pulse bg-slate-50/50 ${isTeacherOrAdmin ? 'h-[450px]' : 'h-32'}`}></div>
+              <div 
+                key={i} 
+                className={`glass-card rounded-[3rem] border border-white/60 animate-pulse bg-slate-50/50 ${isTeacherOrAdmin ? 'h-[450px]' : 'h-32'}`}
+              ></div>
             ))
-          ) : filteredExams.length > 0 ? (
+          ) : displayedExams.length > 0 ? (
             <AnimatePresence mode="popLayout">
-              {filteredExams.map((exam, index) => {
+              {displayedExams.map((exam, index) => {
                 
-                // -------------------------------------------------------------
-                // 👨‍🏫 TEACHER CARD UI (Massive & Detailed)
-                // -------------------------------------------------------------
+                // ==========================================
+                // 👨‍🏫 واجهة المعلم (Teacher UI - Big Cards)
+                // ==========================================
                 if (isTeacherOrAdmin) {
                   const pendingGradesCount = (exam.submission_count || 0) - (exam.graded_count || 0);
                   const needsTeacherGrading = pendingGradesCount > 0;
-                  
+
                   return (
-                    <motion.div
-                      key={exam.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: index * 0.05 }}
+                    <motion.div 
+                      key={exam.id} 
+                      layout 
+                      initial={{ opacity: 0, y: 20 }} 
+                      animate={{ opacity: 1, y: 0 }} 
+                      exit={{ opacity: 0, scale: 0.95 }} 
+                      transition={{ delay: index * 0.05 }} 
                       className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col"
                     >
                       <div className="p-10 flex-1">
@@ -250,7 +297,7 @@ export default function ExamsDashboard() {
                           <div className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border shadow-sm whitespace-nowrap ${getStatusColor(exam.status)}`}>
                             {getStatusLabel(exam.status)}
                           </div>
-
+                          
                           {needsTeacherGrading && (
                             <div className="flex-1 flex justify-end">
                               <div className="px-3 py-2 rounded-2xl text-[10px] font-black border shadow-sm bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1.5 animate-pulse">
@@ -263,8 +310,8 @@ export default function ExamsDashboard() {
                           <DropdownMenu.Root>
                             <DropdownMenu.Trigger asChild>
                               <motion.button 
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
+                                whileHover={{ scale: 1.1 }} 
+                                whileTap={{ scale: 0.9 }} 
                                 className="h-12 w-12 flex items-center justify-center rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-all bg-slate-50 border border-slate-100 shrink-0"
                               >
                                 <MoreVertical className="h-6 w-6" />
@@ -274,58 +321,70 @@ export default function ExamsDashboard() {
                               <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
                                 <DropdownMenu.Item asChild>
                                   <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                    <Edit2 className="h-5 w-5" /><span>تعديل الاختبار</span>
+                                    <Edit2 className="h-5 w-5" />
+                                    <span>تعديل الاختبار</span>
                                   </Link>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Item asChild>
                                   <Link href={`/exams/results/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                    <BarChart2 className="h-5 w-5" /><span>النتائج والتحليلات</span>
+                                    <BarChart2 className="h-5 w-5" />
+                                    <span>النتائج والتحليلات</span>
                                   </Link>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Separator className="h-px bg-slate-100 my-3 mx-3" />
                                 <DropdownMenu.Item 
-                                  className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors"
+                                  className="flex items-center gap-4 px-5 py-4 text-sm font-black text-red-600 hover:bg-red-50 rounded-2xl outline-none cursor-pointer transition-colors" 
                                   onClick={() => handleDelete(exam.id)}
                                 >
-                                  <Trash2 className="h-5 w-5" /><span>حذف الاختبار</span>
+                                  <Trash2 className="h-5 w-5" />
+                                  <span>حذف الاختبار</span>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Item asChild>
                                   <Link href={`/exams/take/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
-                                    <Eye className="h-5 w-5" /><span>معاينة الاختبار</span>
+                                    <Eye className="h-5 w-5" />
+                                    <span>معاينة الاختبار</span>
                                   </Link>
                                 </DropdownMenu.Item>
                               </DropdownMenu.Content>
                             </DropdownMenu.Portal>
                           </DropdownMenu.Root>
                         </div>
-
+                        
                         <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
                           {exam.title}
                         </h3>
                         <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-lg leading-relaxed">
                           {exam.description || 'لا يوجد وصف لهذا الاختبار'}
                         </p>
-
+                        
                         <div className="grid grid-cols-2 gap-5">
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center"><BookOpen className="h-5 w-5 text-indigo-500" /></div>
+                            <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                              <BookOpen className="h-5 w-5 text-indigo-500" />
+                            </div>
                             <span className="truncate">{exam.subject_name}</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center"><Clock className="h-5 w-5 text-amber-500" /></div>
+                            <div className="h-10 w-10 rounded-2xl bg-amber-50 flex items-center justify-center">
+                              <Clock className="h-5 w-5 text-amber-500" />
+                            </div>
                             <span>{exam.duration ? `${exam.duration} د` : 'مفتوح'}</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center"><FileText className="h-5 w-5 text-blue-500" /></div>
+                            <div className="h-10 w-10 rounded-2xl bg-blue-50 flex items-center justify-center">
+                              <FileText className="h-5 w-5 text-blue-500" />
+                            </div>
                             <span>{exam.question_count || 0} سؤال</span>
                           </div>
                           <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
-                            <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center"><Users className="h-5 w-5 text-emerald-500" /></div>
+                            <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center">
+                              <Users className="h-5 w-5 text-emerald-500" />
+                            </div>
                             <span>{exam.submission_count || 0} محاولة</span>
                           </div>
                         </div>
                       </div>
-
+                      
                       <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div className="h-12 w-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
@@ -338,12 +397,8 @@ export default function ExamsDashboard() {
                         </div>
                         <Link href={`/exams/results/${exam.id}`}>
                           <motion.button 
-                            whileHover={{ x: -5 }}
-                            className={`h-14 px-6 rounded-2xl text-sm font-black shadow-sm transition-all flex items-center gap-3 active:scale-95 ${
-                              needsTeacherGrading
-                              ? 'bg-amber-500 text-white hover:bg-amber-600 border border-transparent'
-                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-indigo-600'
-                            }`}
+                            whileHover={{ x: -5 }} 
+                            className={`h-14 px-6 rounded-2xl text-sm font-black shadow-sm transition-all flex items-center gap-3 active:scale-95 ${needsTeacherGrading ? 'bg-amber-500 text-white hover:bg-amber-600 border border-transparent' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-indigo-600'}`}
                           >
                             <span>{needsTeacherGrading ? 'صحح الآن' : 'النتائج'}</span>
                             <ArrowRight className="h-5 w-5 rotate-180" />
@@ -354,12 +409,11 @@ export default function ExamsDashboard() {
                   );
                 } 
                 
-                // -------------------------------------------------------------
-                // 👨‍🎓 STUDENT ROW UI (Compact, Beautiful, List View)
-                // -------------------------------------------------------------
+                // ==========================================
+                // 👨‍🎓 واجهة الطالب (Student UI - Compact Rows)
+                // ==========================================
                 else {
-                  // تحويل نصي صريح لحماية TypeScript في Netlify
-                  const statusStr = String(exam.submission_status || '');
+                  const statusStr = String((exam as any).submission_status || '');
                   const isStudentDone = ['submitted', 'graded', 'completed'].includes(statusStr);
                   const isLocked = checkIsLocked(exam);
                   const maxScore = (exam as any).total_marks || (exam as any).max_score || 100;
@@ -367,8 +421,14 @@ export default function ExamsDashboard() {
                   const examStatus = getExamStatus(exam);
 
                   return (
-                    <motion.div key={exam.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: index * 0.05 }}>
-                      
+                    <motion.div 
+                      key={exam.id} 
+                      layout 
+                      initial={{ opacity: 0, y: 10 }} 
+                      animate={{ opacity: 1, y: 0 }} 
+                      exit={{ opacity: 0, scale: 0.95 }} 
+                      transition={{ delay: index * 0.05 }}
+                    >
                       {isStudentDone ? (
                         isLocked ? (
                           /* 🔒 حالة: النتيجة محجوبة (Locked) */
@@ -473,7 +533,10 @@ export default function ExamsDashboard() {
                               </div>
                               
                               <Link href={`/exams/take/${exam.id}`} className="w-full md:w-auto">
-                                <button disabled={examStatus !== 'available'} className={`w-full md:w-auto px-8 py-3 rounded-xl text-sm font-black shadow-md transition-all flex items-center justify-center gap-2 ${examStatus === 'available' ? 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 hover:shadow-lg hover:shadow-indigo-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}>
+                                <button 
+                                  disabled={examStatus !== 'available'} 
+                                  className={`w-full md:w-auto px-8 py-3 rounded-xl text-sm font-black shadow-md transition-all flex items-center justify-center gap-2 ${examStatus === 'available' ? 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 hover:shadow-lg hover:shadow-indigo-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'}`}
+                                >
                                    <Play className="w-4 h-4" />
                                    {examStatus === 'not_started' ? 'انتظر الموعد' : examStatus === 'expired' ? 'مغلق' : 'بدء الاختبار'}
                                 </button>
@@ -497,13 +560,15 @@ export default function ExamsDashboard() {
               </div>
               <h3 className="text-3xl font-black text-slate-900 tracking-tight">لا توجد اختبارات حالياً</h3>
               <p className="text-slate-500 mb-10 text-lg font-medium">
-                {isTeacherOrAdmin ? 'ابدأ بإنشاء أول اختبار لك لتقييم مستوى طلابك.' : 'لم يتم نشر أي اختبارات لك بعد.'}
+                {isTeacherOrAdmin 
+                  ? 'ابدأ بإنشاء أول اختبار لك لتقييم مستوى طلابك.' 
+                  : 'لم يتم نشر أي اختبارات لك بعد.'}
               </p>
               {isTeacherOrAdmin && (
                 <Link href="/exams/builder/new">
                   <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.05 }} 
+                    whileTap={{ scale: 0.95 }} 
                     className="inline-flex items-center gap-4 bg-indigo-600 text-white px-10 py-5 rounded-3xl hover:bg-indigo-700 transition-all font-black shadow-2xl shadow-indigo-100"
                   >
                     <Plus className="h-6 w-6" />
