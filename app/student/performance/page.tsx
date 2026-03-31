@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { usePerformanceSystem } from '@/hooks/usePerformanceSystem';
 import { useAuth } from '@/context/auth-context';
 import { 
@@ -11,12 +11,13 @@ import {
   Clock, 
   CheckCircle2, 
   AlertCircle,
-  ChevronRight,
   BookOpen,
   Calendar,
-  GraduationCap
+  GraduationCap,
+  Eye,
+  Filter
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -30,6 +31,8 @@ export default function StudentPerformancePage() {
   const [studentData, setStudentData] = useState<any>(null);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
   const [assignmentSubmissions, setAssignmentSubmissions] = useState<any[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<string>('all'); // الفلتر الذكي
+  
   const [stats, setStats] = useState({
     avgExamScore: 0,
     avgAssignmentScore: 0,
@@ -43,8 +46,8 @@ export default function StudentPerformancePage() {
     const data = await fetchPerformanceData();
     if (data) {
       setStudentData(data.student);
-      setExamAttempts(data.examAttempts);
-      setAssignmentSubmissions(data.assignmentSubmissions);
+      setExamAttempts(data.examAttempts || []);
+      setAssignmentSubmissions(data.assignmentSubmissions || []);
       setStats(data.stats);
     }
   }, [user, userRole, fetchPerformanceData]);
@@ -64,6 +67,25 @@ export default function StudentPerformancePage() {
     }
   }, [user, userRole, isChecking, router, loadPerformanceData]);
 
+  // 🚀 استخراج قائمة المواد بشكل ديناميكي (بدون تكرار)
+  const uniqueSubjects = useMemo(() => {
+    const subjects = new Set<string>();
+    examAttempts.forEach(a => { if (a.exams?.subjects?.name) subjects.add(a.exams.subjects.name); });
+    assignmentSubmissions.forEach(a => { if (a.assignments?.subjects?.name) subjects.add(a.assignments.subjects.name); });
+    return Array.from(subjects);
+  }, [examAttempts, assignmentSubmissions]);
+
+  // 🚀 تطبيق الفلترة على الاختبارات والواجبات
+  const filteredExams = useMemo(() => {
+    if (selectedSubject === 'all') return examAttempts;
+    return examAttempts.filter(a => a.exams?.subjects?.name === selectedSubject);
+  }, [examAttempts, selectedSubject]);
+
+  const filteredAssignments = useMemo(() => {
+    if (selectedSubject === 'all') return assignmentSubmissions;
+    return assignmentSubmissions.filter(a => a.assignments?.subjects?.name === selectedSubject);
+  }, [assignmentSubmissions, selectedSubject]);
+
   if (systemLoading || isChecking) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -76,22 +98,26 @@ export default function StudentPerformancePage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8 pb-20 p-4 sm:p-6 lg:p-8" dir="rtl">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">سجل الأداء الأكاديمي</h1>
-          <p className="text-slate-500 mt-1 font-medium">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 text-indigo-600 text-xs font-black uppercase tracking-widest mb-4">
+            <TrendingUp className="h-4 w-4" />
+            سجل التميز
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">سجل الأداء الأكاديمي</h1>
+          <p className="text-slate-500 mt-2 font-medium text-lg">
             متابعة شاملة لدرجاتك في الاختبارات والواجبات المدرسية
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-          <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-            <GraduationCap className="h-5 w-5 text-indigo-600" />
+        <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-3xl border border-slate-100 shrink-0">
+          <div className="h-14 w-14 rounded-2xl bg-indigo-100 flex items-center justify-center">
+            <GraduationCap className="h-7 w-7 text-indigo-600" />
           </div>
           <div className="flex flex-col pr-1">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">الصف الدراسي</span>
-            <span className="text-sm font-black text-slate-900">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">الصف الدراسي</span>
+            <span className="text-base font-black text-slate-900">
               {studentData?.sections?.classes?.name} - {studentData?.sections?.name}
             </span>
           </div>
@@ -99,207 +125,262 @@ export default function StudentPerformancePage() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white flex flex-col gap-4"
-        >
-          <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <TrendingUp className="h-6 w-6" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-4 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full blur-2xl group-hover:bg-emerald-100 transition-all"></div>
+          <div className="h-14 w-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 relative z-10">
+            <TrendingUp className="h-7 w-7" />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">متوسط الاختبارات</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{stats.avgExamScore}%</h3>
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">متوسط الاختبارات</p>
+            <h3 className="text-3xl sm:text-4xl font-black text-slate-900 mt-2">{stats.avgExamScore}%</h3>
           </div>
         </motion.div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white flex flex-col gap-4"
-        >
-          <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-            <Award className="h-6 w-6" />
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-4 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-indigo-50 rounded-full blur-2xl group-hover:bg-indigo-100 transition-all"></div>
+          <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 relative z-10">
+            <Award className="h-7 w-7" />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">متوسط الواجبات</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{stats.avgAssignmentScore}%</h3>
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">متوسط الواجبات</p>
+            <h3 className="text-3xl sm:text-4xl font-black text-slate-900 mt-2">{stats.avgAssignmentScore}%</h3>
           </div>
         </motion.div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white flex flex-col gap-4"
-        >
-          <div className="h-12 w-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
-            <FileText className="h-6 w-6" />
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-4 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-50 rounded-full blur-2xl group-hover:bg-amber-100 transition-all"></div>
+          <div className="h-14 w-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 relative z-10">
+            <FileText className="h-7 w-7" />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">اختبارات منجزة</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{stats.completedExams}</h3>
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">اختبارات منجزة</p>
+            <h3 className="text-3xl sm:text-4xl font-black text-slate-900 mt-2">{stats.completedExams}</h3>
           </div>
         </motion.div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white flex flex-col gap-4"
-        >
-          <div className="h-12 w-12 rounded-2xl bg-violet-50 flex items-center justify-center text-violet-600">
-            <PenTool className="h-6 w-6" />
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-4 relative overflow-hidden group hover:shadow-lg transition-all">
+          <div className="absolute -right-4 -top-4 w-24 h-24 bg-violet-50 rounded-full blur-2xl group-hover:bg-violet-100 transition-all"></div>
+          <div className="h-14 w-14 rounded-2xl bg-violet-50 flex items-center justify-center text-violet-600 relative z-10">
+            <PenTool className="h-7 w-7" />
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">واجبات مسلمة</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-1">{stats.completedAssignments}</h3>
+          <div className="relative z-10">
+            <p className="text-xs sm:text-sm font-bold text-slate-400 uppercase tracking-widest">واجبات مسلمة</p>
+            <h3 className="text-3xl sm:text-4xl font-black text-slate-900 mt-2">{stats.completedAssignments}</h3>
           </div>
         </motion.div>
       </div>
 
+      {/* 🚀 شريط الفلترة الذكي (Smart Filter Bar) */}
+      {uniqueSubjects.length > 0 && (
+        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide py-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-slate-500 font-bold text-sm shrink-0">
+            <Filter className="w-4 h-4" /> تصفية بالمواد:
+          </div>
+          <button 
+            onClick={() => setSelectedSubject('all')}
+            className={`px-5 py-2.5 rounded-xl font-bold text-sm shrink-0 transition-all ${
+              selectedSubject === 'all' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            جميع المواد
+          </button>
+          {uniqueSubjects.map((subject) => (
+            <button 
+              key={subject}
+              onClick={() => setSelectedSubject(subject)}
+              className={`px-5 py-2.5 rounded-xl font-bold text-sm shrink-0 transition-all ${
+                selectedSubject === subject ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {subject}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Exams Section */}
+        
+        {/* 🎯 Exams Section */}
         <div className="space-y-6">
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center">
-                <FileText className="h-4 w-4 text-amber-600" />
+              <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                <FileText className="h-5 w-5 text-amber-600" />
               </div>
-              <h2 className="text-xl font-black text-slate-900">نتائج الاختبارات</h2>
+              <h2 className="text-2xl font-black text-slate-900">نتائج الاختبارات</h2>
+            </div>
+            <div className="text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
+              {filteredExams.length} اختبار
             </div>
           </div>
 
           <div className="space-y-4">
-            {examAttempts.length === 0 ? (
-              <div className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-200 text-center">
-                <AlertCircle className="h-12 w-12 text-slate-200 mx-auto mb-4" />
-                <p className="text-slate-500 font-bold">لا توجد نتائج اختبارات مسجلة حالياً</p>
-              </div>
-            ) : (
-              examAttempts.map((attempt, idx) => (
-                <motion.div 
-                  key={attempt.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-amber-50 group-hover:text-amber-600 transition-colors">
-                        <BookOpen className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-black text-slate-900">{attempt.exams?.title}</h4>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{attempt.exams?.subjects?.name}</span>
-                          <span className="text-[10px] text-slate-300">•</span>
-                          <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {attempt.completed_at ? format(new Date(attempt.completed_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-left">
-                        <div className="text-lg font-black text-indigo-600">
-                          {attempt.score !== null ? `${attempt.score} / ${attempt.exams?.total_marks || attempt.exams?.max_score || 100}` : 'قيد التصحيح'}
-                        </div>
-                        <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${
-                          attempt.status === 'graded' ? 'text-emerald-500' : 'text-amber-500'
-                        }`}>
-                          {attempt.status === 'graded' ? 'تم التصحيح' : 'مكتمل'}
-                        </div>
-                      </div>
-                      {(attempt.status === 'graded' || attempt.status === 'completed') && (
-                        <Link href={`/exams/results/${attempt.exams.id}/student/${studentData?.id}`}>
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
-                          >
-                            <ChevronRight className="h-5 w-5" />
-                          </motion.button>
-                        </Link>
-                      )}
-                    </div>
+            <AnimatePresence mode="popLayout">
+              {filteredExams.length === 0 ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
+                  <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertCircle className="h-10 w-10 text-slate-300" />
                   </div>
+                  <p className="text-slate-500 font-bold text-lg">لا توجد نتائج اختبارات مطابقة</p>
                 </motion.div>
-              ))
-            )}
+              ) : (
+                filteredExams.map((attempt, idx) => {
+                  const isPending = attempt.status === 'completed'; 
+                  const isGraded = attempt.status === 'graded'; 
+                  const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
+
+                  return (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }}
+                      key={attempt.id}
+                    >
+                      <Link href={`/exams/results/${attempt.exams.id}/student/${studentData?.id}`} className="block">
+                        <div className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all group hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center ${
+                          isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
+                        }`}>
+                          <div className="flex items-start gap-4">
+                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                              isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
+                            }`}>
+                              <BookOpen className="h-7 w-7" />
+                            </div>
+                            <div>
+                              <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight mb-2">
+                                {attempt.exams?.title}
+                              </h4>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                                  {attempt.exams?.subjects?.name || 'مادة عامة'}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                                  <Calendar className="h-3.5 w-3.5" />
+                                  {attempt.completed_at ? format(new Date(attempt.completed_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 sm:gap-2 mt-2 sm:mt-0 border-t sm:border-0 border-slate-50 pt-4 sm:pt-0">
+                            {isPending ? (
+                              <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
+                                <Clock className="w-4 h-4 animate-pulse" />
+                                <span className="font-black text-sm">قيد التصحيح</span>
+                              </div>
+                            ) : (
+                              <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
+                                <span className="font-black text-xl">{attempt.score || 0}</span>
+                                <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                              <Eye className="w-4 h-4" /> التفاصيل
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  );
+                })
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
-        {/* Assignments Section */}
+        {/* 🎯 Assignments Section */}
         <div className="space-y-6">
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-violet-100 flex items-center justify-center">
-                <PenTool className="h-4 w-4 text-violet-600" />
+              <div className="h-10 w-10 rounded-xl bg-violet-100 flex items-center justify-center">
+                <PenTool className="h-5 w-5 text-violet-600" />
               </div>
-              <h2 className="text-xl font-black text-slate-900">نتائج الواجبات</h2>
+              <h2 className="text-2xl font-black text-slate-900">نتائج الواجبات</h2>
+            </div>
+            <div className="text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">
+              {filteredAssignments.length} واجب
             </div>
           </div>
 
           <div className="space-y-4">
-            {assignmentSubmissions.length === 0 ? (
-              <div className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-200 text-center">
-                <AlertCircle className="h-12 w-12 text-slate-200 mx-auto mb-4" />
-                <p className="text-slate-500 font-bold">لا توجد نتائج واجبات مسجلة حالياً</p>
-              </div>
-            ) : (
-              assignmentSubmissions.map((submission, idx) => (
-                <motion.div 
-                  key={submission.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
-                        <PenTool className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-black text-slate-900">{submission.assignments?.title}</h4>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{submission.assignments?.subjects?.name}</span>
-                          <span className="text-[10px] text-slate-300">•</span>
-                          <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {submission.submitted_at ? format(new Date(submission.submitted_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
-                          </span>
+            <AnimatePresence mode="popLayout">
+              {filteredAssignments.length === 0 ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
+                   <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertCircle className="h-10 w-10 text-slate-300" />
+                  </div>
+                  <p className="text-slate-500 font-bold text-lg">لا توجد نتائج واجبات مطابقة</p>
+                </motion.div>
+              ) : (
+                filteredAssignments.map((submission, idx) => {
+                  const isPending = submission.status === 'submitted';
+                  const isGraded = submission.status === 'graded';
+                  const maxScore = submission.assignments?.total_marks || 100;
+
+                  return (
+                    <motion.div 
+                      layout
+                      key={submission.id}
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }}
+                      className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all flex flex-col gap-4 ${
+                        isPending ? 'border-amber-100' : 'border-slate-100 hover:border-violet-200'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div className="flex items-start gap-4">
+                          <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 ${
+                            isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'
+                          }`}>
+                            <PenTool className="h-7 w-7" />
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-black text-slate-900 leading-tight mb-2">{submission.assignments?.title}</h4>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                                {submission.assignments?.subjects?.name || 'مادة عامة'}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {submission.submitted_at ? format(new Date(submission.submitted_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="w-full sm:w-auto flex justify-end">
+                          {isPending ? (
+                            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
+                              <Clock className="w-4 h-4 animate-pulse" />
+                              <span className="font-black text-sm">بانتظار التقييم</span>
+                            </div>
+                          ) : (
+                            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
+                              <span className="font-black text-xl">{submission.grade || 0}</span>
+                              <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-lg font-black text-indigo-600">
-                        {submission.grade !== null ? `${submission.grade} / ${submission.assignments?.total_marks || 100}` : 'لم يتم التقييم'}
-                      </div>
-                      <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${
-                        submission.status === 'graded' ? 'text-emerald-500' : 'text-amber-500'
-                      }`}>
-                        {submission.status === 'graded' ? 'تم التقييم' : 'تم التسليم'}
-                      </div>
-                    </div>
-                  </div>
-                  {submission.feedback && (
-                    <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">ملاحظات المعلم:</p>
-                      <p className="text-xs text-slate-600 font-medium leading-relaxed">{submission.feedback}</p>
-                    </div>
-                  )}
-                </motion.div>
-              ))
-            )}
+
+                      {submission.feedback && (
+                        <div className="mt-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 relative">
+                          <div className="absolute right-4 top-0 -mt-2 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                            ملاحظات المعلم
+                          </div>
+                          <p className="text-sm text-slate-700 font-bold leading-relaxed pt-2">{submission.feedback}</p>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+
