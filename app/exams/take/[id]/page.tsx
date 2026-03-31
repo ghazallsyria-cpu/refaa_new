@@ -2,26 +2,28 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, X } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { Question } from '@/types/question';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد لمعرفة هوية الطالب
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; };
 
 const isAutoGradedType = (type: string) => {
   if (!type) return false;
   const t = type.toLowerCase();
-  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox');
+  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
 };
 
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
-  const { fetchExamForStudent, submitExam } = useExamsSystem();
+  const { user } = useAuth() as any; // 🚀 سحب هوية الطالب
+  const { fetchExamForStudent } = useExamsSystem(); // طردنا submitExam القديم الخائن من هنا!
+  
   const [exam, setExam] = useState<Exam | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -69,7 +71,7 @@ export default function TakeQuiz() {
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting || !questions || questions.length === 0) return;
+    if (isSubmitting || !questions || questions.length === 0 || !user) return;
     setIsSubmitting(true);
 
     try {
@@ -87,7 +89,6 @@ export default function TakeQuiz() {
 
         if (!isAuto) hasManual = true; 
 
-        // 🚀 السحر الأول: التقاط الإجابة وتحويلها لنص إجباري لتجنب فشل الحفظ
         let optionIdToSend = null;
         let textToSend = null;
 
@@ -121,18 +122,35 @@ export default function TakeQuiz() {
         };
       }
 
-      const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
       const attemptStatus = hasManual ? 'completed' : 'graded';
 
-      await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
-      setIsFinished(true);
+      // 🚀 الضربة القاضية: الاتصال المباشر بالـ API الخارق لتسليم الاختبار بالقوة
+      const response = await fetch('/api/exams/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            examId: params.id,
+            answers: formattedAnswers,
+            score: totalScore,
+            status: attemptStatus,
+            userId: user.id || user.user_id // ضمان وجود رقم الطالب
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+          throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر");
+      }
+
+      setIsFinished(true); // لن نصل إلى هنا إلا إذا حفظت قاعدة البيانات بنجاح 100%
       
     } catch (err: any) {
-      alert(err.message || 'حدث خطأ أثناء الإرسال');
+      alert("خطأ أثناء تسليم الاختبار: " + err.message);
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft]);
+  }, [isSubmitting, questions, answers, params.id, exam, user]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished) {
@@ -154,7 +172,7 @@ export default function TakeQuiz() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-amber-500">
           <div className="inline-flex p-4 rounded-full bg-amber-50 text-amber-500"><AlertCircle className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">الاختبار غير مكتمل</h2>
-          <p className="text-slate-600 font-medium">عذراً، هذا الاختبار لا يحتوي على أي أسئلة.</p>
+          <p className="text-slate-600 font-medium">عذراً، هذا الاختبار لا يحتوي على أي أسئلة مضافة حتى الآن.</p>
           <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all">العودة للرئيسية</button>
         </motion.div>
       </div>
@@ -170,14 +188,14 @@ export default function TakeQuiz() {
           <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
-             لقد استلمنا إجاباتك، وتم تسجيلها. 
+             لقد استلمنا إجاباتك وتم تسجيلها في قاعدة البيانات. 
              {hasManualQuestions ? (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
                  ستظهر نتيجتك النهائية بعد تصحيح المعلم.
                </span>
              ) : (
                <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                 تم تصحيح الاختبار تلقائياً، يمكنك مراجعة لوحة التحكم.
+                 تم تصحيح الاختبار تلقائياً.
                </span>
              )}
           </p>
@@ -230,14 +248,14 @@ export default function TakeQuiz() {
             </div>
 
             <div className="space-y-3">
-              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('choice') && currentQuestion.options?.map((option) => (
+              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('choice') && currentQuestion.options?.map((option: any) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
                   <span className="text-lg font-medium">{option.content}</span>
                 </button>
               ))}
 
-              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('select') && currentQuestion.options?.map((option) => {
+              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('select') && currentQuestion.options?.map((option: any) => {
                 const isSelected = (answers[currentQuestion.id] || []).map(String).includes(String(option.id));
                 return (
                   <button key={option.id} onClick={() => {
@@ -263,7 +281,7 @@ export default function TakeQuiz() {
           <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
           {currentQuestionIdx === questions.length - 1 ? (
             <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50">
-              {isSubmitting ? <span className="animate-pulse">جاري الإرسال...</span> : <><Send className="h-5 w-5" /> إرسال الاختبار</>}
+              {isSubmitting ? <span className="animate-pulse">جاري الحفظ بدقة...</span> : <><Send className="h-5 w-5" /> إرسال الاختبار</>}
             </button>
           ) : (
             <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
