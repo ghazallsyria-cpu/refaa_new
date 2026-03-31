@@ -1,77 +1,124 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const normalize = (v: any) => String(v ?? '').trim().toLowerCase();
 
 export async function POST(req: Request) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  try {
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
 
-  const { examId, studentId } = await req.json();
+    const { examId, studentId } = await req.json();
 
-  const { data: exam } = await supabase.from('exams').select('*').eq('id', examId).single();
-
-  const now = new Date();
-  const examDate = new Date(exam.exam_date);
-  const [h, m] = (exam.end_time || '23:59').split(':');
-
-  examDate.setHours(Number(h), Number(m));
-  const isExamFinished = now > examDate;
-
-  const { data: attempts } = await supabase
-    .from('exam_attempts')
-    .select('*')
-    .eq('exam_id', examId)
-    .eq('student_id', studentId)
-    .order('created_at', { ascending: false });
-
-  const attempt = attempts?.[0] || null;
-
-  let answers: any[] = [];
-
-  if (attempt) {
-    const { data } = await supabase
-      .from('student_answers')
+    // 1. exam
+    const { data: exam } = await adminSupabase
+      .from('exams')
       .select('*')
-      .eq('attempt_id', attempt.id);
+      .eq('id', examId)
+      .single();
 
-    answers = data || [];
-  }
+    // 2. student
+    const { data: students } = await adminSupabase
+      .from('students')
+      .select('*, users(full_name)')
+      .or(`id.eq.${studentId},user_id.eq.${studentId}`);
 
-  const { data: questions } = await supabase
-    .from('questions')
-    .select('*')
-    .eq('exam_id', examId);
+    const student = students?.[0] || {
+      id: studentId,
+      users: { full_name: 'طالب' }
+    };
 
-  const qIds = questions.map((q: any) => q.id);
+    const allStudentIds = [
+      ...new Set([studentId, student.id, student.user_id].filter(Boolean))
+    ];
 
-  const { data: options } = await supabase
-    .from('question_options')
-    .select('*')
-    .in('question_id', qIds);
+    // 3. attempt
+    const { data: attempts } = await adminSupabase
+      .from('exam_attempts')
+      .select('*')
+      .eq('exam_id', examId)
+      .in('student_id', allStudentIds)
+      .order('created_at', { ascending: false });
 
-  const finalQuestions = questions.map((q: any) => ({
-    ...q,
-    options: options.filter((o: any) => normalize(o.question_id) === normalize(q.id))
-  }));
+    const attempt = attempts?.[0] || null;
 
-  // 🔒 منع تسريب البيانات للطالب
-  const isPrivileged = true; // اربطها لاحقاً بالجلسة
+    // 4. answers
+    let answers: any[] = [];
 
-  if (!isPrivileged) {
-    if (!isExamFinished || attempt?.status !== 'graded') {
-      answers = [];
+    if (attempt?.id) {
+      const { data: ans } = await adminSupabase
+        .from('student_answers')
+        .select('*')
+        .eq('attempt_id', attempt.id);
+
+      answers = ans || [];
     }
-  }
 
-  return NextResponse.json({
-    success: true,
-    exam,
-    attempt,
-    answers,
-    questions: finalQuestions,
-    isExamFinished
-  });
+    // 5. exam time state
+    let isExamFinished = true;
+
+    if (exam?.exam_date) {
+      const now = new Date();
+      const examDate = new Date(exam.exam_date);
+
+      const [h, m] = (exam.end_time || '23:59').split(':');
+      examDate.setHours(Number(h), Number(m), 0, 0);
+
+      isExamFinished = now > examDate;
+    }
+
+    // 6. questions
+    const { data: rawQuestions } = await adminSupabase
+      .from('questions')
+      .select('*')
+      .eq('exam_id', examId)
+      .order('order_index');
+
+    const safeQuestions = rawQuestions || [];
+
+    const qIds = safeQuestions.map((q: any) => q.id);
+
+    // 7. options
+    let options: any[] = [];
+
+    if (qIds.length > 0) {
+      const { data: rawOptions } = await adminSupabase
+        .from('question_options')
+        .select('*')
+        .in('question_id', qIds);
+
+      options = rawOptions || [];
+    }
+
+    // 8. merge
+    const finalQuestions = safeQuestions.map((q: any) => ({
+      ...q,
+      options: (options || []).filter(
+        (o: any) => normalize(o.question_id) === normalize(q.id)
+      )
+    }));
+
+    return NextResponse.json({
+      success: true,
+      exam: exam || {},
+      student,
+      attempt,
+      answers: answers || [],
+      questions: finalQuestions,
+      isExamFinished
+    });
+  } catch (error: any) {
+    console.error('API Error:', error);
+
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
 }
