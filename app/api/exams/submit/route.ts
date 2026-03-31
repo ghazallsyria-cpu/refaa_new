@@ -3,9 +3,14 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) throw new Error('مفاتيح السيرفر مفقودة');
+
+    const adminSupabase = createClient(supabaseUrl, serviceKey);
     const { examId, answers, score, status, userId } = await req.json();
 
+    // 1. تحديد الطالب
     let realStudentId = userId;
     const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
     if (st) realStudentId = st.id;
@@ -16,36 +21,59 @@ export async function POST(req: Request) {
 
     const validStatus = (status === 'graded' || status === 'completed') ? status : 'completed';
 
+    // 📸 2. أخذ لقطة (Snapshot) للأسئلة والخيارات الحالية قبل حفظ المحاولة
+    const { data: currentQuestions } = await adminSupabase
+      .from('questions')
+      .select('*, options:question_options(*)')
+      .eq('exam_id', examId)
+      .order('order_index');
+
+    // 3. معالجة المحاولة (Attempt) مع حفظ اللقطة
     const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
 
     let attemptId;
     if (existing) {
       attemptId = existing.id;
-      await adminSupabase.from('exam_attempts').update({ score: score || 0, status: validStatus, completed_at: new Date().toISOString() }).eq('id', attemptId);
+      const { error: updErr } = await adminSupabase.from('exam_attempts').update({
+        score: score || 0, 
+        status: validStatus, 
+        completed_at: new Date().toISOString(),
+        questions_snapshot: currentQuestions // 📸 حفظ اللقطة هنا
+      }).eq('id', attemptId);
+      if (updErr) throw new Error("خطأ في تحديث المحاولة: " + updErr.message);
+      
       await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
     } else {
-      const { data: newAtt } = await adminSupabase.from('exam_attempts').insert([{
-        exam_id: examId, student_id: realStudentId, score: score || 0, status: validStatus,
-        started_at: new Date().toISOString(), completed_at: new Date().toISOString()
+      const { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([{
+        exam_id: examId, 
+        student_id: realStudentId, 
+        score: score || 0, 
+        status: validStatus,
+        started_at: new Date().toISOString(), 
+        completed_at: new Date().toISOString(),
+        questions_snapshot: currentQuestions // 📸 حفظ اللقطة هنا
       }]).select('id').single();
-      attemptId = newAtt?.id;
+      if (insErr) throw new Error("خطأ في إنشاء المحاولة: " + insErr.message);
+      attemptId = newAtt.id;
     }
 
-    // 🚀 السحر الثاني: حفظ الإجابة كنص كخيار أول لتجنب أي تعارض في نوع البيانات في قاعدة بياناتك
+    // 4. حفظ الإجابات
     if (answers && Object.keys(answers).length > 0) {
       const formattedAnswers = Object.entries(answers).map(([qId, ans]: any) => {
-        
-        // التحقق من أن ID الخيار هو UUID صالح قبل إرساله لقاعدة البيانات
         let finalOptionId = null;
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (ans.optionId && typeof ans.optionId === 'string' && uuidRegex.test(ans.optionId)) {
+        let finalText = null;
+
+        if (ans.optionId && typeof ans.optionId === 'string' && ans.optionId.trim() !== '') {
             finalOptionId = ans.optionId;
+        }
+        if (ans.text) {
+            finalText = typeof ans.text === 'object' ? JSON.stringify(ans.text) : String(ans.text);
         }
 
         return {
           attempt_id: attemptId,
           question_id: qId,
-          text_answer: ans.text ? String(ans.text) : "لم يتم تسجيل إجابة",
+          text_answer: finalText,
           selected_option_id: finalOptionId,
           is_correct: Boolean(ans.isCorrect),
           points_earned: Number(ans.pointsEarned) || 0
@@ -60,6 +88,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, attemptId });
 
   } catch (error: any) {
+    console.error('Submit API Failed:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
