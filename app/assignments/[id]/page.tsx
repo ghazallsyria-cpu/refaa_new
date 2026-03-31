@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Settings, Share2, BarChart3, MoreVertical, Eye, X, Calendar, Download, FileSpreadsheet, Edit, ArrowLeft, GraduationCap, LayoutDashboard, Send } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Settings, Share2, BarChart3, MoreVertical, Eye, X, Calendar, Download, FileSpreadsheet, Edit, ArrowLeft, GraduationCap, LayoutDashboard, Send, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -687,4 +687,5 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     </div>
   );
 }
+
 
