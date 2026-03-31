@@ -241,6 +241,10 @@ export default function ExamsDashboard() {
               {filteredExams.map((exam, index) => {
                 const pendingGradesCount = (exam.submission_count || 0) - (exam.graded_count || 0);
                 const needsTeacherGrading = isTeacherOrAdmin && pendingGradesCount > 0;
+                
+                // 🚀 تحويل الحالة إلى String صريح لتخطي فحص TypeScript في Netlify
+                const currentStatusStr = String(exam.submission_status);
+                const isStudentDone = ['submitted', 'graded', 'completed'].includes(currentStatusStr);
 
                 return (
                   <motion.div
@@ -390,8 +394,7 @@ export default function ExamsDashboard() {
                           </Link>
                         </>
                       ) : (
-                        (exam.submission_status === 'submitted' || exam.submission_status === 'graded' || exam.submission_status === 'completed') ? (() => {
-                          // 🚀 الطالب: جلب البيانات الخاصة به، والتأكد من القفل الزمني
+                        isStudentDone ? (() => {
                           const isLocked = checkIsLocked(exam);
                           const maxScore = exam.total_marks || exam.max_score || 100;
                           const studentId = user?.id || user?.user_id || '';
@@ -417,7 +420,7 @@ export default function ExamsDashboard() {
                             );
                           }
 
-                          if (exam.submission_status === 'submitted' || exam.submission_status === 'completed') {
+                          if (currentStatusStr === 'submitted') {
                             return (
                               <Link href={`/exams/results/${exam.id}/student/${studentId}`} className="w-full">
                                 <div className="w-full flex items-center justify-between px-5 py-4 bg-amber-50 rounded-2xl border border-amber-100 transition-all hover:bg-amber-100 hover:shadow-md cursor-pointer group">
@@ -438,7 +441,6 @@ export default function ExamsDashboard() {
                             );
                           }
 
-                          // 🏆 الحالة المكتملة والمصححة بالكامل (Premium Graded Design)
                           return (
                             <Link href={`/exams/results/${exam.id}/student/${studentId}`} className="w-full">
                               <div className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:-translate-y-0.5 cursor-pointer group border border-indigo-500 relative overflow-hidden">
