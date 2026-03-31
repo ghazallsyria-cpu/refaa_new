@@ -13,7 +13,8 @@ export interface AssignmentDetails {
 }
 
 export function useAssignmentsSystem() {
-  const { user, authRole, userRole } = useAuth() as any;
+  // استخدام Types صارمة بدلاً من any
+  const { user, authRole, userRole } = useAuth() as { user: { id: string, user_metadata?: any } | null, authRole: string | null, userRole: string | null };
   const currentRole = authRole || userRole;
   
   const [data, setData] = useState<AssignmentWithMeta[]>([]);
@@ -22,58 +23,64 @@ export function useAssignmentsSystem() {
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
   const fetchAssignments = useCallback(async (): Promise<void> => {
-    if (!user || !currentRole) return;
+    if (!user?.id || !currentRole) return;
+    
     setLoading(true);
     setError(null);
+    
     try {
-      let query = supabase
-        .from('assignments')
-        .select(`
-          *,
-          subject:subjects(name),
-          teacher:teachers(user:users(full_name)),
-          assignment_sections(
-            section_id,
-            section:sections(
-              name,
-              class:classes(name)
-            )
-          )
-        `)
-        .order('due_date', { ascending: true });
+      // 🚀 إصلاح قاتل: استخدام !inner للطالب لكي يفلتر الواجبات بناءً على شعبته بدقة
+      const selectQuery = currentRole === 'student' 
+        ? `*, subject:subjects(name), teacher:teachers(user:users(full_name)), assignment_sections!inner(section_id, section:sections(name, class:classes(name)))`
+        : `*, subject:subjects(name), teacher:teachers(user:users(full_name)), assignment_sections(section_id, section:sections(name, class:classes(name)))`;
+
+      let query = supabase.from('assignments').select(selectQuery).order('due_date', { ascending: true });
 
       if (currentRole === 'student') {
         const { data: stProfile } = await supabase.from('students').select('section_id').or(`id.eq.${user.id},user_id.eq.${user.id}`).limit(1).maybeSingle();
+        
         if (stProfile?.section_id) {
            query = query.eq('assignment_sections.section_id', stProfile.section_id);
         } else {
-           setData([]); setLoading(false); return;
+           setData([]); 
+           setLoading(false); 
+           return;
         }
       } else if (currentRole === 'teacher') {
         const { data: tProfile } = await supabase.from('teachers').select('id').or(`id.eq.${user.id},user_id.eq.${user.id}`).limit(1).maybeSingle();
-        if (tProfile) {
+        
+        if (tProfile?.id) {
            query = query.eq('teacher_id', tProfile.id);
         } else {
-           setData([]); setLoading(false); return;
+           setData([]); 
+           setLoading(false); 
+           return;
         }
       }
 
       const { data: assignmentsData, error: fetchErr } = await query;
+      
       if (fetchErr) throw fetchErr;
 
-      const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => ({
-        ...a,
-        created_at: a.created_at || new Date().toISOString(),
-        subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
-        teacher_name: Array.isArray(a.teacher?.user) ? a.teacher.user[0]?.full_name : a.teacher?.user?.full_name,
-      }));
+      const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: unknown) => {
+        const assignment = a as any;
+        return {
+          ...assignment,
+          created_at: assignment.created_at || new Date().toISOString(),
+          subject_name: Array.isArray(assignment.subject) ? assignment.subject[0]?.name : assignment.subject?.name,
+          teacher_name: Array.isArray(assignment.teacher?.user) ? assignment.teacher.user[0]?.full_name : assignment.teacher?.user?.full_name,
+        };
+      });
 
       setData(mappedData);
 
       if (currentRole === 'student') {
         const { data: subData } = await supabase.from('assignment_submissions').select('assignment_id, status, grade, id, student_id, submitted_at').eq('student_id', user.id);
         const subMap: Record<string, AssignmentSubmission> = {};
-        (subData || []).forEach((s: any) => { subMap[s.assignment_id] = s as AssignmentSubmission; });
+        (subData || []).forEach((s: unknown) => { 
+            const submission = s as AssignmentSubmission;
+            subMap[submission.assignment_id] = submission; 
+        });
         setStudentSubmissions(subMap);
       }
 
@@ -81,15 +88,15 @@ export function useAssignmentsSystem() {
         const { data: countsData } = await supabase.from('assignment_submissions').select('assignment_id, status');
         if (countsData) {
           const updatedData = mappedData.map(a => {
-            const subs = countsData.filter(s => s.assignment_id === a.id);
-            return { ...a, submission_count: subs.length, graded_count: subs.filter(s => s.status === 'graded').length };
+            const subs = countsData.filter((s: { assignment_id: string, status: string }) => s.assignment_id === a.id);
+            return { ...a, submission_count: subs.length, graded_count: subs.filter((s: { status: string }) => s.status === 'graded').length };
           });
           setData(updatedData);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Fetch Assignments Error:", err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
       setLoading(false);
     }
@@ -101,7 +108,7 @@ export function useAssignmentsSystem() {
     try {
       const { data, error } = await supabase.from('assignment_questions').select('*').eq('assignment_id', assignmentId).order('order');
       if (error) throw error;
-      return (data || []).map(q => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required }));
+      return (data || []).map((q: any) => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required }));
     } catch (err) { return []; }
   }, []);
 
@@ -147,8 +154,8 @@ export function useAssignmentsSystem() {
       }
 
       return {
-        assignment: assignmentData as Assignment,
-        questions: (qData || []).map(q => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required })),
+        assignment: assignmentData as AssignmentWithMeta,
+        questions: (qData || []).map((q: any) => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required })),
         submission: submissionData,
         answers: answersData,
         allSubmissions: allSubmissionsData
@@ -178,7 +185,7 @@ export function useAssignmentsSystem() {
 
       return {
         submission: submissionData as unknown as SubmissionWithStudent,
-        assignment: assignmentData as Assignment,
+        assignment: assignmentData as AssignmentWithMeta,
         questions: (qData || []).map((q: any) => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required })),
         answers: (answersData as AssignmentAnswer[]) || []
       };
