@@ -28,12 +28,6 @@ export default function TakeQuiz() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
-  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
-
-  const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 5000);
-  };
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -51,15 +45,9 @@ export default function TakeQuiz() {
       const endDateTime = new Date(examDate);
       endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
       
-      if (now < startDateTime) {
-        showNotification('error', `الاختبار يبدأ في ${examData.start_time} بتاريخ ${examData.exam_date}`);
-        setTimeout(() => { window.location.href = '/exams'; }, 3000);
-        return;
-      }
-      
-      if (now > endDateTime) {
-        showNotification('error', 'انتهى الوقت المخصص لهذا الاختبار.');
-        setTimeout(() => { window.location.href = '/exams'; }, 3000);
+      if (now < startDateTime || now > endDateTime) {
+        alert("هذا الاختبار غير متاح في الوقت الحالي.");
+        window.location.href = '/exams';
         return;
       }
 
@@ -71,8 +59,8 @@ export default function TakeQuiz() {
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
       }
     } catch (err) {
-      showNotification('error', 'حدث خطأ أثناء تحميل الاختبار');
-      setTimeout(() => { window.location.href = '/exams'; }, 3000);
+      alert("حدث خطأ في تحميل الاختبار.");
+      window.location.href = '/exams';
     } finally {
       setLoading(false);
     }
@@ -99,31 +87,26 @@ export default function TakeQuiz() {
 
         if (!isAuto) hasManual = true; 
 
-        // 🚀 معالجة البيانات وتجهيزها للإرسال بأمان تام
+        // 🚀 السحر الأول: التقاط الإجابة وتحويلها لنص إجباري لتجنب فشل الحفظ
         let optionIdToSend = null;
         let textToSend = null;
 
         if (studentAnswer !== undefined && studentAnswer !== null && studentAnswer !== "") {
             if (isAuto) {
               if (Array.isArray(studentAnswer)) {
-                  // إذا كان مربعات اختيار (مصفوفة)، يجب إرسالها كنص (JSON) لكي لا ترفضها الداتا بيز
                   textToSend = JSON.stringify(studentAnswer);
-                  
                   const correctOpts = q.options?.filter((o: any) => o.is_correct).map((o: any) => String(o.id)) || [];
                   const studentOpts = studentAnswer.map(String);
                   isCorrect = correctOpts.length > 0 && correctOpts.length === studentOpts.length && correctOpts.every((id: string) => studentOpts.includes(id));
                   pointsEarned = isCorrect ? (Number(q.points) || 0) : 0;
               } else {
-                  // اختيار من متعدد (إجابة واحدة)
                   optionIdToSend = String(studentAnswer);
-                  textToSend = String(studentAnswer); // احتياطاً
-                  
+                  textToSend = String(studentAnswer); 
                   const correctOpt = q.options?.find((o: any) => o.is_correct);
                   isCorrect = String(studentAnswer) === String(correctOpt?.id);
                   pointsEarned = isCorrect ? (Number(q.points) || 0) : 0;
               }
             } else {
-              // سؤال مقالي
               textToSend = String(studentAnswer);
             }
         }
@@ -141,12 +124,11 @@ export default function TakeQuiz() {
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
       const attemptStatus = hasManual ? 'completed' : 'graded';
 
-      // 🚀 إرسال البيانات
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
       setIsFinished(true);
       
     } catch (err: any) {
-      showNotification('error', err.message || 'حدث خطأ أثناء إرسال الاختبار');
+      alert(err.message || 'حدث خطأ أثناء الإرسال');
     } finally {
       setIsSubmitting(false);
     }
@@ -172,7 +154,7 @@ export default function TakeQuiz() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-amber-500">
           <div className="inline-flex p-4 rounded-full bg-amber-50 text-amber-500"><AlertCircle className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">الاختبار غير مكتمل</h2>
-          <p className="text-slate-600 font-medium">عذراً، هذا الاختبار لا يحتوي على أي أسئلة مضافة حتى الآن. يرجى مراجعة المعلم.</p>
+          <p className="text-slate-600 font-medium">عذراً، هذا الاختبار لا يحتوي على أي أسئلة.</p>
           <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-all">العودة للرئيسية</button>
         </motion.div>
       </div>
@@ -188,21 +170,19 @@ export default function TakeQuiz() {
           <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
-             لقد استلمنا إجاباتك، وتم تسجيلها في النظام. 
+             لقد استلمنا إجاباتك، وتم تسجيلها. 
              {hasManualQuestions ? (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
-                 سيتم إعلان نتيجتك النهائية بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.
+                 ستظهر نتيجتك النهائية بعد تصحيح المعلم.
                </span>
              ) : (
                <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                 تم تصحيح الاختبار تلقائياً. يمكنك رؤية نتيجتك من لوحة التحكم الآن.
+                 تم تصحيح الاختبار تلقائياً، يمكنك مراجعة لوحة التحكم.
                </span>
              )}
           </p>
-          <button onClick={() => {
-              window.location.href = '/exams'; // Force hard reload to bust cache
-          }} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
-            عرض النتائج والعودة
+          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
+            العودة للرئيسية
           </button>
         </motion.div>
       </div>
@@ -251,18 +231,18 @@ export default function TakeQuiz() {
 
             <div className="space-y-3">
               {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('choice') && currentQuestion.options?.map((option) => (
-                <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", answers[currentQuestion.id] === option.id ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
-                  <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", answers[currentQuestion.id] === option.id ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
+                <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
+                  <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
                   <span className="text-lg font-medium">{option.content}</span>
                 </button>
               ))}
 
               {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('select') && currentQuestion.options?.map((option) => {
-                const isSelected = (answers[currentQuestion.id] || []).includes(option.id);
+                const isSelected = (answers[currentQuestion.id] || []).map(String).includes(String(option.id));
                 return (
                   <button key={option.id} onClick={() => {
-                    const current = answers[currentQuestion.id] || [];
-                    handleAnswerChange(currentQuestion.id, isSelected ? current.filter((id: string) => id !== option.id) : [...current, option.id]);
+                    const current = (answers[currentQuestion.id] || []).map(String);
+                    handleAnswerChange(currentQuestion.id, isSelected ? current.filter((id: string) => id !== String(option.id)) : [...current, String(option.id)]);
                   }} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all", isSelected ? "bg-indigo-50 border-indigo-600" : "bg-white border-slate-100")}>
                     <div className={cn("h-6 w-6 rounded-lg border-2 flex items-center justify-center shrink-0", isSelected ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0" /></div>
                     <span className="text-lg font-medium">{option.content}</span>
