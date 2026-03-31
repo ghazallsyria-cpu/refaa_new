@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
@@ -58,7 +58,6 @@ export default function AssignmentsPage() {
     e.preventDefault();
     if (!user) return;
 
-    // 🚀 درع الحماية الأمامي: يمنع إرسال واجبات يتيمة بدون مادة أو شعبة
     if (!currentAssignment.subject_id) {
       showNotification('error', 'عذراً، يجب اختيار المادة الدراسية');
       return;
@@ -244,7 +243,7 @@ export default function AssignmentsPage() {
             const dueDateObj = new Date(assignment.due_date!);
             
             return (
-              <div key={assignment.id} className="group glass-card rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
+              <div key={assignment.id} className="group glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
                 <div className="p-8 flex-1">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex flex-wrap gap-2">
@@ -258,7 +257,8 @@ export default function AssignmentsPage() {
                            assignment.status === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-100' :
                            'bg-slate-50 text-slate-700 border-slate-100'
                          }`}>
-                           {assignment.status === 'published' ? 'منشور' : assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
+                           {assignment.status === 'published' ? 'منشور' :
+                            assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
                          </span>
                       )}
 
@@ -315,13 +315,13 @@ export default function AssignmentsPage() {
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <Users className="h-5 w-5 text-indigo-500" />
                       <span className="line-clamp-1">
-                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join('، ') || 'لا يوجد فصول مستهدفة'}
+                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join('، ') || 'لا يوجد فصول'}
                       </span>
                     </div>
                   </div>
                 </div>
                 
-                <div className={`px-8 py-5 border-t flex flex-col sm:flex-row items-center justify-between gap-4 ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                <div className={`px-8 py-4 border-t flex items-center justify-between ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
                   <div className={`flex items-center gap-2 text-sm font-black ${overdue && assignment.status === 'published' ? 'text-red-600' : 'text-slate-700'}`}>
                     <Clock className="h-5 w-5" />
                     <span dir="ltr">
@@ -329,13 +329,13 @@ export default function AssignmentsPage() {
                     </span>
                   </div>
                   
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="flex items-center gap-2">
                     {assignment.file_url && (
                       <a 
                         href={assignment.file_url} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="h-11 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                        className="h-10 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95"
                       >
                         <LinkIcon className="h-4 w-4" />
                         <span>المرفق</span>
@@ -343,16 +343,16 @@ export default function AssignmentsPage() {
                     )}
                     <Link 
                       href={`/assignments/${assignment.id}`}
-                      className={`h-11 px-6 rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center ${
+                      className={`h-10 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center gap-2 active:scale-95 ${
                         currentRole === 'student' && studentSubmissions[assignment.id]
-                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200'
+                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
                     >
                       <span>
                         {currentRole === 'student' 
                           ? (studentSubmissions[assignment.id] ? 'عرض الإجابة' : 'عرض وتسليم') 
-                          : 'التفاصيل والنتائج'}
+                          : 'التفاصيل'}
                       </span>
                     </Link>
                   </div>
@@ -367,14 +367,14 @@ export default function AssignmentsPage() {
       <Dialog.Root open={!!assignmentToDelete} onOpenChange={(open) => !open && setAssignmentToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
             <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
               <Trash2 className="h-8 w-8 text-red-500" />
             </div>
             <Dialog.Title className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
               تأكيد الحذف
             </Dialog.Title>
-            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟</p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <Dialog.Close asChild>
                 <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
