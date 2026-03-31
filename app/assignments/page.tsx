@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
+import ImageUpload from '@/components/ImageUpload';
 import { Question } from '@/types/question';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
@@ -75,7 +76,7 @@ export default function AssignmentsPage() {
         subject_id: currentAssignment.subject_id,
         teacher_id: currentRole === 'teacher' ? user.id : currentAssignment.teacher_id,
         due_date: currentAssignment.due_date,
-        file_url: currentAssignment.file_url,
+        file_url: currentAssignment.file_url, // هنا يتم حفظ رابط الصورة المرفوعة
         status: currentAssignment.status || 'draft'
       };
 
@@ -243,7 +244,7 @@ export default function AssignmentsPage() {
             const dueDateObj = new Date(assignment.due_date!);
             
             return (
-              <div key={assignment.id} className="group glass-card rounded-4xl shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
+              <div key={assignment.id} className="group glass-card rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
                 <div className="p-8 flex-1">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex flex-wrap gap-2">
@@ -257,8 +258,7 @@ export default function AssignmentsPage() {
                            assignment.status === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-100' :
                            'bg-slate-50 text-slate-700 border-slate-100'
                          }`}>
-                           {assignment.status === 'published' ? 'منشور' :
-                            assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
+                           {assignment.status === 'published' ? 'منشور' : assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
                          </span>
                       )}
 
@@ -315,13 +315,13 @@ export default function AssignmentsPage() {
                     <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
                       <Users className="h-5 w-5 text-indigo-500" />
                       <span className="line-clamp-1">
-                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join('، ') || 'لا يوجد فصول'}
+                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join('، ') || 'لا يوجد فصول مستهدفة'}
                       </span>
                     </div>
                   </div>
                 </div>
                 
-                <div className={`px-8 py-4 border-t flex items-center justify-between ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                <div className={`px-8 py-5 border-t flex flex-col sm:flex-row items-center justify-between gap-4 ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
                   <div className={`flex items-center gap-2 text-sm font-black ${overdue && assignment.status === 'published' ? 'text-red-600' : 'text-slate-700'}`}>
                     <Clock className="h-5 w-5" />
                     <span dir="ltr">
@@ -329,30 +329,30 @@ export default function AssignmentsPage() {
                     </span>
                   </div>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
                     {assignment.file_url && (
                       <a 
                         href={assignment.file_url} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="h-10 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95"
+                        className="h-11 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
                       >
-                        <LinkIcon className="h-4 w-4" />
-                        <span>المرفق</span>
+                        <ImageIcon className="h-4 w-4" />
+                        <span>عرض المرفق</span>
                       </a>
                     )}
                     <Link 
                       href={`/assignments/${assignment.id}`}
-                      className={`h-10 px-4 rounded-xl text-xs font-black shadow-sm transition-all flex items-center gap-2 active:scale-95 ${
+                      className={`h-11 px-6 rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center ${
                         currentRole === 'student' && studentSubmissions[assignment.id]
-                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200'
                       }`}
                     >
                       <span>
                         {currentRole === 'student' 
                           ? (studentSubmissions[assignment.id] ? 'عرض الإجابة' : 'عرض وتسليم') 
-                          : 'التفاصيل'}
+                          : 'التفاصيل والنتائج'}
                       </span>
                     </Link>
                   </div>
@@ -374,7 +374,7 @@ export default function AssignmentsPage() {
             <Dialog.Title className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
               تأكيد الحذف
             </Dialog.Title>
-            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟</p>
+            <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
               <Dialog.Close asChild>
                 <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
@@ -407,7 +407,7 @@ export default function AssignmentsPage() {
                   <Dialog.Title className="text-2xl font-black text-slate-900 tracking-tight">
                     {currentAssignment.id ? 'تعديل الواجب' : 'إضافة واجب جديد'}
                   </Dialog.Title>
-                  <p className="text-sm text-slate-500 font-bold mt-1">أدخل تفاصيل الواجب والمهام المطلوبة بدقة</p>
+                  <p className="text-sm text-slate-500 font-bold mt-1">أدخل تفاصيل الواجب، ويمكنك إرفاق صورة للمسألة</p>
                 </div>
               </div>
               <Dialog.Close className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-50 text-slate-400 transition-colors">
@@ -437,7 +437,7 @@ export default function AssignmentsPage() {
                     <input 
                       type="text" 
                       required
-                      placeholder="مثال: حل تمارين الفصل الأول" 
+                      placeholder="مثال: حل مسائل الفيزياء صفحة 40" 
                       className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
                       value={currentAssignment.title || ''}
                       onChange={(e) => setCurrentAssignment({...currentAssignment, title: e.target.value})}
@@ -448,7 +448,7 @@ export default function AssignmentsPage() {
                     <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الوصف والتفاصيل</label>
                     <textarea 
                       rows={5}
-                      placeholder="اكتب تعليمات وتفاصيل الواجب هنا..." 
+                      placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)" 
                       className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none"
                       value={currentAssignment.description || ''}
                       onChange={(e) => setCurrentAssignment({...currentAssignment, description: e.target.value})}
@@ -508,15 +508,16 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">رابط الملف المرفق (اختياري)</label>
-                    <input
-                      type="url"
-                      className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left placeholder:text-right"
-                      dir="ltr"
-                      placeholder="https://..."
-                      value={currentAssignment.file_url || ''}
-                      onChange={(e) => setCurrentAssignment({...currentAssignment, file_url: e.target.value})}
+                  {/* 🚀 استبدال رابط النص بأداة رفع الصور */}
+                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
+                    <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
+                      <ImageIcon className="w-5 h-5 text-indigo-500" />
+                      إرفاق مسألة أو صورة (اختياري)
+                    </label>
+                    <ImageUpload
+                      initialImageUrl={currentAssignment.file_url}
+                      onUploadSuccess={(url) => setCurrentAssignment({...currentAssignment, file_url: url})}
+                      label="ارفع صورة أو ملف للواجب"
                     />
                   </div>
                 </div>
