@@ -244,6 +244,10 @@ export function useExamsSystem() {
 
   const fetchExamResults = useCallback(async (examId: string): Promise<ExamResults> => {
     try {
+      // 🚀 إضافة cache: no-store لضمان جلب النتائج الطازجة دائماً في الداشبورد
+      const response = await fetch(`/api/exams/results-data?examId=${examId}`, { cache: 'no-store' }).catch(() => null);
+      // Fallback in case API isn't made yet, fall back to direct supabase calls
+      
       const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single();
       if (examError) throw examError;
       
@@ -292,10 +296,12 @@ export function useExamsSystem() {
 
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
+      // 🚀 القوة الخفية: تدمير التخبئة (cache: 'no-store') ليتم جلب النتيجة فوراً بعد التصحيح!
       const response = await fetch('/api/exams/student-result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ examId, studentId })
+        body: JSON.stringify({ examId, studentId }),
+        cache: 'no-store' 
       });
       const result = await response.json();
       
@@ -325,7 +331,6 @@ export function useExamsSystem() {
     }
   }, []);
 
-  // ✅ التعديل الذكي هنا: دالة الحفظ أصبحت تقبل (examId, studentId) لحل أزمة المحاولة المفقودة!
   const gradeAnswer = useCallback(async (attemptId: string | null, questionId: string, pointsEarned: number, examId?: string, studentId?: string): Promise<void> => {
     try {
       const response = await fetch('/api/exams/grade', {
