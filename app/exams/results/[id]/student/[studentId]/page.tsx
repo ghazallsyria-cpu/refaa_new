@@ -94,7 +94,7 @@ export default function StudentExamResult() {
     }
   };
 
-  if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري كسر الحماية واستخراج البيانات...</p></div>;
+  if (loading) return <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div><p className="font-bold text-slate-500">جاري المعالجة...</p></div>;
 
   const { exam, student, attempt, answers, questions, debugInfo } = data;
 
@@ -116,8 +116,8 @@ export default function StudentExamResult() {
         <div className="bg-amber-100 border border-amber-300 p-6 rounded-3xl flex items-center gap-4 shadow-sm animate-pulse">
            <AlertCircle className="w-8 h-8 text-amber-600" />
            <div>
-              <h3 className="text-xl font-black text-amber-900 mb-1">تم إجبار النظام على عرض هذه الإجابات!</h3>
-              <p className="text-amber-800 font-bold text-sm">رقم الطالب في الرابط لا يتطابق مع رقم الطالب في قاعدة البيانات، لقد قمنا بسحب المحاولة بالقوة لكي تراها.</p>
+              <h3 className="text-xl font-black text-amber-900 mb-1">تنبيه: تم عرض إجابات طالب آخر للتجربة!</h3>
+              <p className="text-amber-800 font-bold text-sm">الطالب الحالي لم يقم بإرسال الاختبار (الـ Submit فشل أو لم يختبر). قمنا بجلب محاولة موجودة في النظام لكي تتأكد أن الإجابات تعمل بشكل سليم.</p>
            </div>
         </div>
       )}
@@ -126,7 +126,7 @@ export default function StudentExamResult() {
         <div className="bg-slate-100 border border-slate-200 p-6 rounded-3xl flex items-center gap-4 shadow-sm">
            <Lock className="w-8 h-8 text-slate-500" />
            <div>
-              <h3 className="text-xl font-black text-slate-800 mb-1">نتائج الطلاب محجوبة حالياً (حماية من الغش)</h3>
+              <h3 className="text-xl font-black text-slate-800 mb-1">نتائج الطلاب محجوبة حالياً</h3>
               <p className="text-slate-600 font-bold text-sm">وقت الاختبار لم ينتهِ بعد.</p>
            </div>
         </div>
@@ -140,7 +140,7 @@ export default function StudentExamResult() {
             <div className="flex flex-wrap items-center gap-4 mt-6 text-slate-600 font-bold">
               <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
                 <User className="h-5 w-5 text-indigo-500" />
-                <span>{student?.users?.full_name || student?.full_name || 'طالب'}</span>
+                <span>{student?.users?.full_name || student?.full_name || 'طالب غير محدد'}</span>
               </div>
             </div>
           </div>
@@ -240,22 +240,24 @@ export default function StudentExamResult() {
             );
           })}
 
-          {/* 🚨 شاشة الفحص السوداء (وضع الإله) 🚨 */}
+          {/* 🚨 شاشة الفحص السوداء (وضع الإله النهائي) 🚨 */}
           {isTeacherOrAdmin && debugInfo && (
               <div className="bg-slate-900 text-green-400 p-6 rounded-3xl mt-12 font-mono text-sm text-left shadow-xl" dir="ltr">
                  <div className="flex items-center gap-2 mb-4 border-b border-green-800 pb-2">
-                     <Database className="w-5 h-5" /> <strong>God Mode Debugger</strong>
+                     <Database className="w-5 h-5" /> <strong>Final God Mode Debugger</strong>
                  </div>
                  <p>» Exam ID: {examId}</p>
                  <p>» URL Student ID: <span className="text-yellow-400">{studentId}</span></p>
                  <p>» Total Attempts in DB for this Exam: {debugInfo.foundAttemptsCount}</p>
-                 <p className="break-all">» Student IDs in DB: {JSON.stringify(debugInfo.attemptStudentIdsInDB)}</p>
-                 
+                 <p>» Active Attempt ID: {attempt?.id || 'NONE'}</p>
                  {debugInfo.isForced && (
-                    <p className="text-red-400 mt-2 font-bold">» WARNING: URL Student ID did NOT match DB. Forced to load Attempt: {attempt?.id}</p>
+                    <p className="text-red-400 mt-2 font-bold bg-red-900/50 p-2 rounded">
+                        » SYSTEM WARNING: The student ID did not match any attempts. We forced the system to load the first available attempt just to show you that answers work! 
+                        <br/>(Please ask the student to retake the exam using the new code)
+                    </p>
                  )}
                  
-                 <p className="mt-2">» Answers Fetched: <span className={answers.length > 0 ? "text-green-400" : "text-red-500"}>{answers.length}</span></p>
+                 <p className="mt-2">» Answers Fetched from DB: <span className={answers.length > 0 ? "text-green-400 font-bold text-lg" : "text-red-500"}>{answers.length}</span></p>
               </div>
           )}
         </div>
