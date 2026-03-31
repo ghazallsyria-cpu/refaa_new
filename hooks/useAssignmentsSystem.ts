@@ -13,7 +13,6 @@ export interface AssignmentDetails {
 }
 
 export function useAssignmentsSystem() {
-  // استخدام Types صارمة بدلاً من any
   const { user, authRole, userRole } = useAuth() as { user: { id: string, user_metadata?: any } | null, authRole: string | null, userRole: string | null };
   const currentRole = authRole || userRole;
   
@@ -24,12 +23,9 @@ export function useAssignmentsSystem() {
 
   const fetchAssignments = useCallback(async (): Promise<void> => {
     if (!user?.id || !currentRole) return;
-    
     setLoading(true);
     setError(null);
-    
     try {
-      // 🚀 إصلاح قاتل: استخدام !inner للطالب لكي يفلتر الواجبات بناءً على شعبته بدقة
       const selectQuery = currentRole === 'student' 
         ? `*, subject:subjects(name), teacher:teachers(user:users(full_name)), assignment_sections!inner(section_id, section:sections(name, class:classes(name)))`
         : `*, subject:subjects(name), teacher:teachers(user:users(full_name)), assignment_sections(section_id, section:sections(name, class:classes(name)))`;
@@ -38,28 +34,21 @@ export function useAssignmentsSystem() {
 
       if (currentRole === 'student') {
         const { data: stProfile } = await supabase.from('students').select('section_id').or(`id.eq.${user.id},user_id.eq.${user.id}`).limit(1).maybeSingle();
-        
         if (stProfile?.section_id) {
            query = query.eq('assignment_sections.section_id', stProfile.section_id);
         } else {
-           setData([]); 
-           setLoading(false); 
-           return;
+           setData([]); setLoading(false); return;
         }
       } else if (currentRole === 'teacher') {
         const { data: tProfile } = await supabase.from('teachers').select('id').or(`id.eq.${user.id},user_id.eq.${user.id}`).limit(1).maybeSingle();
-        
         if (tProfile?.id) {
            query = query.eq('teacher_id', tProfile.id);
         } else {
-           setData([]); 
-           setLoading(false); 
-           return;
+           setData([]); setLoading(false); return;
         }
       }
 
       const { data: assignmentsData, error: fetchErr } = await query;
-      
       if (fetchErr) throw fetchErr;
 
       const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: unknown) => {
@@ -163,12 +152,27 @@ export function useAssignmentsSystem() {
     } catch (err) { throw err; }
   }, [user, currentRole]);
 
-  const submitAssignment = useCallback(async (assignmentId: string, answers: RawAssignmentAnswer[], submissionId?: string): Promise<string> => {
+  // 🚀 إرسال النص والملف إلى السيرفر بنجاح
+  const submitAssignment = useCallback(async (
+    assignmentId: string, 
+    answers: RawAssignmentAnswer[], 
+    submissionId?: string,
+    content?: string,
+    fileUrl?: string
+  ): Promise<string> => {
     const studentName = user?.user_metadata?.full_name || 'طالب';
     const response = await fetch('/api/assignments/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignmentId, studentId: user?.id, studentName, answers, submissionId }),
+      body: JSON.stringify({ 
+        assignmentId, 
+        studentId: user?.id, 
+        studentName, 
+        answers, 
+        submissionId,
+        content,
+        fileUrl
+      }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Failed to submit assignment');
