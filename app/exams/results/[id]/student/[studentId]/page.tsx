@@ -17,6 +17,8 @@ export default function StudentExamResult() {
   const { authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
   
+  const isTeacherOrAdmin = ['teacher', 'admin', 'management'].includes(currentRole);
+  
   const examId = params.id as string;
   const studentId = params.studentId as string; 
   
@@ -63,18 +65,19 @@ export default function StudentExamResult() {
     
     try {
       if(gradeAnswer) {
+          // 🚀 نرسل بيانات الطالب والاختبار للسيرفر ليتصرف إن لم تكن هناك محاولة، بدون أي رسائل توقف المعلم!
           await gradeAnswer(attempt?.id || null, questionId, newPoints, examId, studentId);
           
           setAnswers(prev => {
              const existing = prev.find(a => a.question_id === questionId);
              if (existing) return prev.map(a => a.question_id === questionId ? { ...a, points_earned: newPoints } : a);
-             return [...prev, { question_id: questionId, points_earned: newPoints, text_answer: 'تم التقييم' }];
+             return [...prev, { question_id: questionId, points_earned: newPoints, text_answer: 'تم التقييم يدوياً' }];
           });
           
           setAttempt((prev: any) => {
-             const oldPoints = answers.find(a => a.question_id === questionId)?.points_earned || 0;
              const currentScore = prev?.score || 0;
-             return { ...prev, score: (currentScore - oldPoints) + newPoints, status: 'graded' };
+             const oldPoints = answers.find(a => a.question_id === questionId)?.points_earned || 0;
+             return { ...(prev || { id: 'temp-id', status: 'graded', exam_id: examId, student_id: studentId }), score: (currentScore - oldPoints) + newPoints, status: 'graded' };
           });
 
           await fetchData();
@@ -91,16 +94,22 @@ export default function StudentExamResult() {
 
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = attempt?.score || 0;
-  const maxScore = exam?.total_marks || exam?.max_score || (questions || []).reduce((sum, q) => sum + (q?.points || 0), 0) || 0;
+  
+  // 🚀 حل مشكلة (10 / 0): نجمع درجات الأسئلة إذا كان الاختبار مسجلاً بـ 0 أو null في الداتا بيز
+  const calculatedQuestionsScore = (questions || []).reduce((sum, q) => sum + (q?.points || 0), 0);
+  let maxScore = exam?.total_marks || exam?.max_score;
+  if (!maxScore || maxScore === 0) {
+      maxScore = calculatedQuestionsScore;
+  }
+  // إذا لم يكن هناك أسئلة أيضاً، نضع 100 كاحتياطي أخير
+  if (!maxScore || maxScore === 0) maxScore = 100;
 
-  // 🚀 دالة فك التشفير الجبارة (لن يضيع أي حرف كتبه أو اختاره الطالب بعد اليوم!)
   const renderStudentAnswerText = (answer: any, question: any) => {
     if (!answer || !question) return null; 
     let rawText = answer.text_answer || answer.answer || answer.selected_option_id;
     
     if (rawText === undefined || rawText === null || rawText === '') return null;
 
-    // إذا كان الناتج مصفوفة (Array) أو JSON
     if (typeof rawText === 'object') {
        try {
          if (Array.isArray(rawText)) {
@@ -114,7 +123,6 @@ export default function StudentExamResult() {
        }
     }
 
-    // إذا كانت الإجابة نصية ولكنها قد تكون JSON مخفي
     if (typeof rawText === 'string' && (rawText.startsWith('[') || rawText.startsWith('{'))) {
       try {
          const parsed = JSON.parse(rawText);
@@ -123,12 +131,10 @@ export default function StudentExamResult() {
             if (matchedOptions && matchedOptions.length > 0) return matchedOptions.join('، ');
             return parsed.join('، ');
          }
-      } catch(e) {} // تجاهل الخطأ إذا لم يكن JSON صالح
+      } catch(e) {} 
     }
 
     const qType = (question.type || '').toLowerCase();
-    
-    // إذا كان سؤال اختياري، ابحث عن المحتوى بناءً على الـ ID أو النص
     if (isAutoGradedType(qType)) {
       const selected = question.options?.find((o: any) => o.id === answer.selected_option_id || o.id === rawText || o.content === rawText);
       return selected?.content || String(rawText);
@@ -151,9 +157,9 @@ export default function StudentExamResult() {
            <div>
               <h3 className="text-xl font-black text-amber-800 mb-1">الاختبار قيد التقييم</h3>
               <p className="text-amber-700 font-bold text-sm leading-relaxed">
-                {currentRole === 'teacher' 
-                  ? 'هذا الاختبار يحتوي على إجابات بانتظار تصحيحك اليدوي. يرجى وضع الدرجات في الأسفل لتكتمل النتيجة.' 
-                  : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بتصحيح الأسئلة.'}
+                {isTeacherOrAdmin 
+                  ? 'هذا الاختبار يحتوي على إجابات بانتظار مراجعتك. يرجى وضع الدرجات في الأسفل لتكتمل النتيجة.' 
+                  : 'لقد تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى تقوم الإدارة بتصحيح الأسئلة.'}
               </p>
            </div>
         </div>
@@ -163,9 +169,9 @@ export default function StudentExamResult() {
         <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
            <div className="bg-red-200/50 p-3 rounded-2xl text-red-600 shrink-0"><AlertCircle className="w-8 h-8" /></div>
            <div>
-              <h3 className="text-xl font-black text-red-800 mb-1">تنبيه المعلم</h3>
+              <h3 className="text-xl font-black text-red-800 mb-1">تنبيه المعلم / الإدارة</h3>
               <p className="text-red-700 font-bold text-sm leading-relaxed">
-                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح. يمكنك وضع الدرجة التقديرية لكل سؤال بالأسفل ليتم بناء النتيجة.
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح أو لم يحل الأسئلة. يمكنك وضع الدرجة التقديرية لكل سؤال بالأسفل ليتم بناء النتيجة وحفظها فوراً.
               </p>
            </div>
         </div>
@@ -194,7 +200,7 @@ export default function StudentExamResult() {
           <Trophy className="h-10 w-10 text-yellow-300 mb-3 relative z-10" />
           <div className="text-sm font-bold text-white/90 mb-2 relative z-10">النتيجة النهائية</div>
           <div className="text-4xl sm:text-5xl font-black tracking-tighter relative z-10 flex items-baseline gap-2">
-            {isPendingGrading && currentRole === 'student' ? (
+            {isPendingGrading && !isTeacherOrAdmin ? (
                <span className="text-3xl text-white drop-shadow-md">يتم التقييم</span>
             ) : (
                <>{totalEarned} <span className="text-2xl text-white/70 font-bold">/ {maxScore}</span></>
@@ -206,7 +212,7 @@ export default function StudentExamResult() {
       <div className="space-y-8 mt-8">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3 mb-6">
           <BookOpen className="h-6 w-6 text-indigo-600" />
-          تفاصيل الإجابات
+          تفاصيل الإجابات {isTeacherOrAdmin && '(صلاحيات الإدارة والمعلم)'}
         </h2>
 
         {questions && Array.isArray(questions) && questions.length > 0 ? questions.map((question, index) => {
@@ -225,7 +231,6 @@ export default function StudentExamResult() {
                 'border-red-100 border-r-[6px] border-r-red-500'
               }`}>
               
-              {/* رأس السؤال */}
               <div className="p-6 sm:p-8 bg-slate-50/30 border-b border-slate-100">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <h3 className="font-black text-xl text-slate-800 flex items-start sm:items-center gap-4">
@@ -233,7 +238,7 @@ export default function StudentExamResult() {
                     <span className="leading-relaxed mt-1 sm:mt-0">{question?.content || 'نص السؤال غير متوفر'}</span>
                   </h3>
                   <div className="flex items-center gap-1.5 bg-white shadow-sm px-5 py-2.5 rounded-2xl font-black text-sm text-slate-600 border border-slate-100 shrink-0">
-                    <span className={isCorrect ? 'text-emerald-600' : 'text-slate-900'}>{isManualQuestion && isPendingGrading && currentRole === 'student' ? '؟' : (answer?.points_earned || 0)}</span>
+                    <span className={isCorrect ? 'text-emerald-600' : 'text-slate-900'}>{isManualQuestion && isPendingGrading && !isTeacherOrAdmin ? '؟' : (answer?.points_earned || 0)}</span>
                     <span className="text-slate-300">/</span>
                     <span>{question?.points || 0} نقطة</span>
                   </div>
@@ -246,10 +251,8 @@ export default function StudentExamResult() {
                 )}
               </div>
 
-              {/* 🚀 التصميم الجديد: ترتيب عمودي (Vertical Stack) احترافي جداً */}
               <div className="p-6 sm:p-8 space-y-4 bg-white">
                 
-                {/* 1. إجابة الطالب */}
                 <div className={`p-6 rounded-3xl border-2 transition-all ${
                   isUnanswered ? 'bg-slate-50 border-dashed border-slate-200' : 
                   isCorrect ? 'bg-emerald-50/30 border-emerald-100' : 'bg-red-50/30 border-red-100'
@@ -267,7 +270,6 @@ export default function StudentExamResult() {
                   </p>
                 </div>
 
-                {/* 2. الإجابة النموذجية (تظهر دائماً بشكل محايد وأنيق) */}
                 <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck className="h-5 w-5 text-slate-400" />
@@ -278,8 +280,7 @@ export default function StudentExamResult() {
                   </p>
                 </div>
 
-                {/* 3. صندوق التقييم (للمعلم فقط) */}
-                {currentRole === 'teacher' && gradingState[question.id] !== undefined && (
+                {isTeacherOrAdmin && gradingState[question.id] !== undefined && (
                   <div className="mt-4 bg-indigo-50/30 p-6 rounded-3xl border border-indigo-100 flex flex-col sm:flex-row items-center gap-4 justify-between">
                     <div className="flex items-center gap-4 w-full sm:w-auto">
                       <div className="h-12 w-12 rounded-2xl bg-indigo-100 flex items-center justify-center shrink-0">
@@ -298,7 +299,7 @@ export default function StudentExamResult() {
                       {gradingState[question.id].isSubmitting ? 'جاري الحفظ...' : 'حفظ التقييم'} {!gradingState[question.id].isSubmitting && <Save className="w-5 h-5" />}
                     </button>
                   </div>
-                )}
+               )}
                 
               </div>
             </div>
