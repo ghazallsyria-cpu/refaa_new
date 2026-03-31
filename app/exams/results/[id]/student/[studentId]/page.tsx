@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, Save, Clock, MinusCircle } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, Check, Save, Clock, MinusCircle, AlertCircle } from 'lucide-react';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 
@@ -58,10 +58,27 @@ export default function StudentExamResult() {
     
     try {
       if(gradeAnswer) {
-          // ✅ السحر: نرسل بيانات الطالب والاختبار للسيرفر ليخلق محاولة إن لزم الأمر!
           await gradeAnswer(attempt?.id || null, questionId, newPoints, examId, studentId);
-          await fetchData(); 
-          alert('تم حفظ الدرجة واعتمادها بنجاح!');
+          
+          // 🚀 التحديث الفوري البصري (Optimistic Update)
+          setAnswers(prev => {
+             const existing = prev.find(a => a.question_id === questionId);
+             if (existing) {
+                return prev.map(a => a.question_id === questionId ? { ...a, points_earned: newPoints } : a);
+             } else {
+                return [...prev, { question_id: questionId, points_earned: newPoints, text_answer: 'تم تقييمه من المعلم' }];
+             }
+          });
+          
+          // تحديث الدرجة الكلية فوراً بدون انتظار الريفريش
+          setAttempt((prev: any) => {
+             const oldPoints = answers.find(a => a.question_id === questionId)?.points_earned || 0;
+             const currentScore = prev?.score || 0;
+             return { ...prev, score: (currentScore - oldPoints) + newPoints, status: 'graded' };
+          });
+
+          // نطلب الداتا في الخلفية لضمان التطابق
+          fetchData(); 
       }
     } catch (err: any) {
       alert(err.message || 'حدث خطأ أثناء حفظ الدرجة');
@@ -72,7 +89,7 @@ export default function StudentExamResult() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
-  const isPendingGrading = !attempt || attempt.status !== 'graded';
+  const isPendingGrading = attempt && attempt.status !== 'graded';
   const totalEarned = attempt?.score || 0;
   const maxScore = exam?.total_marks || exam?.max_score || questions.reduce((sum, q) => sum + (q.points || 0), 0) || 0;
 
@@ -103,7 +120,7 @@ export default function StudentExamResult() {
         </button>
       </div>
 
-      {isPendingGrading && (
+      {isPendingGrading && attempt && (
         <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
            <div className="bg-amber-200/50 p-3 rounded-2xl text-amber-600 shrink-0"><Clock className="w-8 h-8" /></div>
            <div>
@@ -112,6 +129,18 @@ export default function StudentExamResult() {
                 {currentRole === 'teacher' 
                   ? 'يحتوي هذا الاختبار على إجابات تحتاج لمراجعتك وتصحيحها يدوياً لتكتمل النتيجة.' 
                   : 'تم استلام إجاباتك! نتيجتك محجوبة مؤقتاً حتى يقوم المعلم بمراجعة وتصحيح الاختبار.'}
+              </p>
+           </div>
+        </div>
+      )}
+
+      {(!attempt || !attempt.id) && (
+        <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl flex items-center gap-4 animate-in fade-in shadow-sm">
+           <div className="bg-red-200/50 p-3 rounded-2xl text-red-600 shrink-0"><AlertCircle className="w-8 h-8" /></div>
+           <div>
+              <h3 className="text-xl font-black text-red-800 mb-1">تنبيه المعلم</h3>
+              <p className="text-red-700 font-bold text-sm leading-relaxed">
+                هذا الطالب لم يقم بإنهاء الاختبار بشكل صحيح. يمكنك وضع الدرجة التقديرية لكل سؤال بالأسفل ليتم بناء النتيجة.
               </p>
            </div>
         </div>
@@ -161,7 +190,7 @@ export default function StudentExamResult() {
           const qType = (question?.type || '').toLowerCase();
           const isManualQuestion = ['essay', 'open', 'text', 'paragraph', 'fill_in'].some(t => qType.includes(t));
           
-          const isCorrect = isManualQuestion ? (answer?.points_earned > 0) : (answer ? answer.is_correct : false);
+          const isCorrect = isManualQuestion ? ((answer?.points_earned || 0) > 0) : (answer ? answer.is_correct : false);
           const isUnanswered = !studentTextAnswer;
 
           return (
@@ -219,7 +248,7 @@ export default function StudentExamResult() {
                           <span className="text-sm text-slate-500 font-bold">من {question.points}</span>
                         </div>
                         <button onClick={() => handleSaveGrade(question.id)} disabled={gradingState[question.id].isSubmitting} className="w-full sm:w-auto flex justify-center items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-black hover:bg-indigo-700 disabled:opacity-50 transition-all shrink-0">
-                          {gradingState[question.id].isSubmitting ? 'جاري الحفظ...' : 'حفظ الدرجة'} {!gradingState[question.id].isSubmitting && <Save className="w-5 h-5" />}
+                          {gradingState[question.id].isSubmitting ? 'جاري الحفظ...' : 'حفظ'} {!gradingState[question.id].isSubmitting && <Save className="w-5 h-5" />}
                         </button>
                       </div>
                     )}
@@ -228,7 +257,12 @@ export default function StudentExamResult() {
               </div>
             </div>
           );
-        }) : null}
+        }) : (
+          <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
+            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+            <h3 className="text-2xl font-black text-slate-800 mb-2">حدث خطأ في تحميل الأسئلة</h3>
+          </div>
+        )}
       </div>
     </div>
   );
