@@ -2,26 +2,29 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
-  const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) throw new Error('MISSING_ENV_KEYS: مفاتيح السيرفر مفقودة');
+
+    const adminSupabase = createClient(supabaseUrl, serviceKey);
     const { attemptId, questionId, pointsEarned, examId, studentId } = await req.json();
 
     let activeAttemptId = attemptId;
 
-    // 🌟 السحر هنا: إذا لم نجد رقم محاولة، سنقوم بإنشائها فوراً لكي يحفظ المعلم الدرجة!
+    // 1. إذا لم يكن هناك محاولة، نقوم بإنشاء واحدة
     if (!activeAttemptId && examId && studentId) {
        let realStudentId = studentId;
        const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', studentId).maybeSingle();
        if (st) realStudentId = st.id;
 
-       const { data: existing } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
-       
+       const { data: existing, error: existErr } = await adminSupabase.from('exam_attempts').select('id').eq('exam_id', examId).eq('student_id', realStudentId).maybeSingle();
+       if (existErr && existErr.code !== 'PGRST116') throw new Error("DB_EXIST_ERR: " + existErr.message);
+
        if (existing) {
            activeAttemptId = existing.id;
        } else {
-           // إنشاء محاولة جديدة فارغة بالقوة لكي نربط الدرجة بها
-           const { data: newAtt } = await adminSupabase.from('exam_attempts').insert([{
+           const { data: newAtt, error: insAttErr } = await adminSupabase.from('exam_attempts').insert([{
                exam_id: examId,
                student_id: realStudentId,
                score: 0,
@@ -29,44 +32,44 @@ export async function POST(req: Request) {
                started_at: new Date().toISOString(),
                completed_at: new Date().toISOString()
            }]).select('id').single();
-           if (newAtt) activeAttemptId = newAtt.id;
+           
+           if (insAttErr) throw new Error("DB_INS_ATTEMPT_ERR: " + insAttErr.message);
+           activeAttemptId = newAtt.id;
        }
     }
 
-    if (!activeAttemptId) {
-      return NextResponse.json({ error: 'لم نتمكن من تحديد هوية الطالب في قاعدة البيانات.' }, { status: 400 });
-    }
+    if (!activeAttemptId) throw new Error('لا يمكن تحديد رقم المحاولة للطالب');
 
-    // 1. تحديث أو إدخال إجابة الطالب
-    const { data: checkAns } = await adminSupabase.from('student_answers').select('id').eq('attempt_id', activeAttemptId).eq('question_id', questionId).maybeSingle();
+    // 2. تحديث أو إدخال إجابة الطالب
+    const { data: checkAns, error: checkAnsErr } = await adminSupabase.from('student_answers').select('id').eq('attempt_id', activeAttemptId).eq('question_id', questionId).maybeSingle();
+    if (checkAnsErr && checkAnsErr.code !== 'PGRST116') throw new Error("DB_CHECK_ANS_ERR: " + checkAnsErr.message);
 
     if (checkAns) {
-       await adminSupabase.from('student_answers').update({ points_earned: pointsEarned, is_correct: pointsEarned > 0 }).eq('id', checkAns.id);
+       const { error: updErr } = await adminSupabase.from('student_answers').update({ points_earned: pointsEarned, is_correct: pointsEarned > 0 }).eq('id', checkAns.id);
+       if (updErr) throw new Error("DB_UPD_ANS_ERR: " + updErr.message);
     } else {
-       await adminSupabase.from('student_answers').insert([{ 
+       const { error: insAnsErr } = await adminSupabase.from('student_answers').insert([{ 
          attempt_id: activeAttemptId, 
          question_id: questionId, 
-         text_answer: 'تم التقييم من المعلم', 
+         text_answer: 'تقييم المعلم (يدوي)', 
          is_correct: pointsEarned > 0, 
          points_earned: pointsEarned 
        }]);
+       if (insAnsErr) throw new Error("DB_INS_ANS_ERR: " + insAnsErr.message);
     }
 
-    // 2. تحديث جدول الإجابات البديل إن وجد
-    const { data: checkAnsExam } = await adminSupabase.from('exam_answers').select('id').eq('attempt_id', activeAttemptId).eq('question_id', questionId).maybeSingle();
-    if (checkAnsExam) {
-       await adminSupabase.from('exam_answers').update({ points_earned: pointsEarned, is_correct: pointsEarned > 0 }).eq('id', checkAnsExam.id);
-    }
-
-    // 3. الخوارزمية الذكية: إعادة جمع درجات كل الأسئلة لهذا الطالب
-    const { data: allAnswers } = await adminSupabase.from('student_answers').select('points_earned').eq('attempt_id', activeAttemptId);
+    // 3. إعادة جمع الدرجات
+    const { data: allAnswers, error: allAnsErr } = await adminSupabase.from('student_answers').select('points_earned').eq('attempt_id', activeAttemptId);
+    if (allAnsErr) throw new Error("DB_ALL_ANS_ERR: " + allAnsErr.message);
+    
     let newTotalScore = 0;
     if (allAnswers) {
       newTotalScore = allAnswers.reduce((sum, ans) => sum + (ans.points_earned || 0), 0);
     }
 
-    // 4. تحديث النتيجة النهائية وإغلاق المحاولة
-    await adminSupabase.from('exam_attempts').update({ score: newTotalScore, status: 'graded' }).eq('id', activeAttemptId);
+    // 4. تحديث النتيجة النهائية
+    const { error: finalErr } = await adminSupabase.from('exam_attempts').update({ score: newTotalScore, status: 'graded' }).eq('id', activeAttemptId);
+    if (finalErr) throw new Error("DB_FINAL_UPD_ERR: " + finalErr.message);
 
     return NextResponse.json({ success: true, newTotalScore });
 
