@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { usePerformanceSystem } from '@/hooks/usePerformanceSystem';
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase'; // 🚀 استيراد قاعدة البيانات مباشرة لضمان الدقة
 import { 
   FileText, 
   PenTool, 
@@ -17,7 +17,7 @@ import {
   Eye,
   Filter
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -26,12 +26,12 @@ import Link from 'next/link';
 export default function StudentPerformancePage() {
   const router = useRouter();
   const { user, userRole, isChecking } = useAuth();
-  const { loading: systemLoading, fetchPerformanceData } = usePerformanceSystem();
   
+  const [isLoading, setIsLoading] = useState(true);
   const [studentData, setStudentData] = useState<any>(null);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
   const [assignmentSubmissions, setAssignmentSubmissions] = useState<any[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string>('all'); // الفلتر الذكي
+  const [selectedSubject, setSelectedSubject] = useState<string>('all'); 
   
   const [stats, setStats] = useState({
     avgExamScore: 0,
@@ -40,17 +40,81 @@ export default function StudentPerformancePage() {
     completedAssignments: 0
   });
 
+  // 🚀 المحرك الجبار: جلب البيانات مباشرة متخطياً الهوك المعطل
   const loadPerformanceData = useCallback(async () => {
     if (!user || userRole !== 'student') return;
     
-    const data = await fetchPerformanceData();
-    if (data) {
-      setStudentData(data.student);
-      setExamAttempts(data.examAttempts || []);
-      setAssignmentSubmissions(data.assignmentSubmissions || []);
-      setStats(data.stats);
+    setIsLoading(true);
+    try {
+      // 1. جلب رقم الطالب الحقيقي بدقة 100%
+      let student = null;
+      const { data: s1 } = await supabase.from('students').select('*, sections(name, classes(name))').eq('user_id', user.id).maybeSingle();
+      if (s1) student = s1;
+      else {
+        const { data: s2 } = await supabase.from('students').select('*, sections(name, classes(name))').eq('id', user.id).maybeSingle();
+        if (s2) student = s2;
+      }
+
+      if (!student) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. جلب جميع المحاولات والواجبات المربوطة بهذا الطالب
+      const [examsRes, assignmentsRes] = await Promise.all([
+        supabase.from('exam_attempts')
+          .select('*, exams(id, title, max_score, total_marks, subjects(name))')
+          .eq('student_id', student.id)
+          .order('completed_at', { ascending: false }),
+          
+        supabase.from('assignment_submissions')
+          .select('*, assignments(id, title, total_marks, subjects(name))')
+          .eq('student_id', student.id)
+          .order('submitted_at', { ascending: false })
+      ]);
+
+      const eAttempts = examsRes.data || [];
+      const aSubmissions = assignmentsRes.data || [];
+
+      // 3. بناء الإحصائيات الرياضية
+      const gradedExams = eAttempts.filter((a: any) => a.status === 'graded');
+      let avgExam = 0;
+      if (gradedExams.length > 0) {
+         let totalPercent = 0;
+         gradedExams.forEach((a: any) => {
+            const max = a.exams?.total_marks || a.exams?.max_score || 100;
+            totalPercent += ((a.score || 0) / max) * 100;
+         });
+         avgExam = Math.round(totalPercent / gradedExams.length);
+      }
+
+      const gradedAssignments = aSubmissions.filter((a: any) => a.status === 'graded');
+      let avgAss = 0;
+      if (gradedAssignments.length > 0) {
+         let totalPercent = 0;
+         gradedAssignments.forEach((a: any) => {
+            const max = a.assignments?.total_marks || 100;
+            totalPercent += ((a.grade || 0) / max) * 100;
+         });
+         avgAss = Math.round(totalPercent / gradedAssignments.length);
+      }
+
+      setStudentData(student);
+      setExamAttempts(eAttempts);
+      setAssignmentSubmissions(aSubmissions);
+      setStats({
+        avgExamScore: avgExam,
+        avgAssignmentScore: avgAss,
+        completedExams: eAttempts.length,
+        completedAssignments: aSubmissions.length
+      });
+
+    } catch (e) {
+      console.error('Error fetching performance data:', e);
+    } finally {
+      setIsLoading(false);
     }
-  }, [user, userRole, fetchPerformanceData]);
+  }, [user, userRole]);
 
   useEffect(() => {
     if (!isChecking) {
@@ -59,15 +123,12 @@ export default function StudentPerformancePage() {
       } else if (userRole !== 'student') {
         router.push('/dashboard');
       } else {
-        const timer = setTimeout(() => {
-          loadPerformanceData();
-        }, 0);
-        return () => clearTimeout(timer);
+        loadPerformanceData();
       }
     }
   }, [user, userRole, isChecking, router, loadPerformanceData]);
 
-  // 🚀 استخراج قائمة المواد بشكل ديناميكي 
+  // 🚀 استخراج المواد للفلترة الذكية
   const uniqueSubjects = useMemo(() => {
     const subjects = new Set<string>();
     examAttempts.forEach(a => { if (a.exams?.subjects?.name) subjects.add(a.exams.subjects.name); });
@@ -75,7 +136,6 @@ export default function StudentPerformancePage() {
     return Array.from(subjects);
   }, [examAttempts, assignmentSubmissions]);
 
-  // 🚀 تطبيق الفلترة على الاختبارات والواجبات
   const filteredExams = useMemo(() => {
     if (selectedSubject === 'all') return examAttempts;
     return examAttempts.filter(a => a.exams?.subjects?.name === selectedSubject);
@@ -86,7 +146,7 @@ export default function StudentPerformancePage() {
     return assignmentSubmissions.filter(a => a.assignments?.subjects?.name === selectedSubject);
   }, [assignmentSubmissions, selectedSubject]);
 
-  if (systemLoading || isChecking) {
+  if (isLoading || isChecking) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -216,73 +276,76 @@ export default function StudentPerformancePage() {
           </div>
 
           <div className="space-y-4">
-            {filteredExams.length === 0 ? (
-              <div className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
-                <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                   <AlertCircle className="h-10 w-10 text-slate-300" />
-                </div>
-                <p className="text-slate-500 font-bold text-lg">لا توجد نتائج اختبارات مطابقة</p>
-              </div>
-            ) : (
-              filteredExams.map((attempt, idx) => {
-                const isPending = attempt.status === 'completed'; 
-                const isGraded = attempt.status === 'graded'; 
-                const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
+            <AnimatePresence mode="popLayout">
+              {filteredExams.length === 0 ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
+                  <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertCircle className="h-10 w-10 text-slate-300" />
+                  </div>
+                  <p className="text-slate-500 font-bold text-lg">لا توجد نتائج اختبارات مطابقة</p>
+                </motion.div>
+              ) : (
+                filteredExams.map((attempt, idx) => {
+                  const isPending = attempt.status === 'completed' || attempt.status === 'submitted'; 
+                  const isGraded = attempt.status === 'graded'; 
+                  const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
 
-                return (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
-                    key={attempt.id}
-                  >
-                    <Link href={`/exams/results/${attempt.exams.id}/student/${studentData?.id}`} className="block">
-                      <div className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all group hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center ${
-                        isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
-                      }`}>
-                        <div className="flex items-start gap-4">
-                          <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
-                            isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
-                          }`}>
-                            <BookOpen className="h-7 w-7" />
+                  return (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }}
+                      key={attempt.id}
+                    >
+                      <Link href={`/exams/results/${attempt.exams?.id}/student/${studentData?.id}`} className="block">
+                        <div className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all group hover:-translate-y-1 hover:shadow-lg cursor-pointer flex flex-col sm:flex-row gap-5 justify-between items-start sm:items-center ${
+                          isPending ? 'border-amber-100 hover:border-amber-300' : 'border-slate-100 hover:border-emerald-200'
+                        }`}>
+                          <div className="flex items-start gap-4">
+                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                              isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600'
+                            }`}>
+                              <BookOpen className="h-7 w-7" />
+                            </div>
+                            <div>
+                              <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight mb-2">
+                                {attempt.exams?.title || 'اختبار غير معروف'}
+                              </h4>
+                              <div className="flex flex-wrap items-center gap-3">
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                                  {attempt.exams?.subjects?.name || 'مادة عامة'}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                                  <Calendar className="h-3.5 w-3.5" />
+                                  {attempt.completed_at ? format(new Date(attempt.completed_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight mb-2">
-                              {attempt.exams?.title}
-                            </h4>
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
-                                {attempt.exams?.subjects?.name || 'مادة عامة'}
-                              </span>
-                              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                                <Calendar className="h-3.5 w-3.5" />
-                                {attempt.completed_at ? format(new Date(attempt.completed_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
-                              </span>
+
+                          <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 sm:gap-2 mt-2 sm:mt-0 border-t sm:border-0 border-slate-50 pt-4 sm:pt-0">
+                            {isPending ? (
+                              <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
+                                <Clock className="w-4 h-4 animate-pulse" />
+                                <span className="font-black text-sm">قيد التصحيح</span>
+                              </div>
+                            ) : (
+                              <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
+                                <span className="font-black text-xl">{attempt.score || 0}</span>
+                                <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                              <Eye className="w-4 h-4" /> التفاصيل
                             </div>
                           </div>
                         </div>
-
-                        <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-4 sm:gap-2 mt-2 sm:mt-0 border-t sm:border-0 border-slate-50 pt-4 sm:pt-0">
-                          {isPending ? (
-                            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
-                              <Clock className="w-4 h-4 animate-pulse" />
-                              <span className="font-black text-sm">قيد التصحيح</span>
-                            </div>
-                          ) : (
-                            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
-                              <span className="font-black text-xl">{attempt.score || 0}</span>
-                              <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-1.5 text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1.5 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <Eye className="w-4 h-4" /> التفاصيل
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  </motion.div>
-                );
-              })
-            )}
+                      </Link>
+                    </motion.div>
+                  );
+                })
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -301,75 +364,77 @@ export default function StudentPerformancePage() {
           </div>
 
           <div className="space-y-4">
-            {filteredAssignments.length === 0 ? (
-              <div className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
-                 <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                   <AlertCircle className="h-10 w-10 text-slate-300" />
-                </div>
-                <p className="text-slate-500 font-bold text-lg">لا توجد نتائج واجبات مطابقة</p>
-              </div>
-            ) : (
-              filteredAssignments.map((submission, idx) => {
-                const isPending = submission.status === 'submitted';
-                const isGraded = submission.status === 'graded';
-                const maxScore = submission.assignments?.total_marks || 100;
+            <AnimatePresence mode="popLayout">
+              {filteredAssignments.length === 0 ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white p-12 rounded-[2rem] border border-dashed border-slate-300 text-center">
+                   <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                     <AlertCircle className="h-10 w-10 text-slate-300" />
+                  </div>
+                  <p className="text-slate-500 font-bold text-lg">لا توجد نتائج واجبات مطابقة</p>
+                </motion.div>
+              ) : (
+                filteredAssignments.map((submission, idx) => {
+                  const isPending = submission.status === 'submitted' || submission.status === 'completed';
+                  const maxScore = submission.assignments?.total_marks || 100;
 
-                return (
-                  <motion.div 
-                    key={submission.id}
-                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05 }}
-                    className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all flex flex-col gap-4 ${
-                      isPending ? 'border-amber-100' : 'border-slate-100 hover:border-violet-200'
-                    }`}
-                  >
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div className="flex items-start gap-4">
-                        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 ${
-                          isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'
-                        }`}>
-                          <PenTool className="h-7 w-7" />
-                        </div>
-                        <div>
-                          <h4 className="text-lg font-black text-slate-900 leading-tight mb-2">{submission.assignments?.title}</h4>
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
-                              {submission.assignments?.subjects?.name || 'مادة عامة'}
-                            </span>
-                            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-                              <Calendar className="h-3.5 w-3.5" />
-                              {submission.submitted_at ? format(new Date(submission.submitted_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
-                            </span>
+                  return (
+                    <motion.div 
+                      layout
+                      key={submission.id}
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }}
+                      className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all flex flex-col gap-4 ${
+                        isPending ? 'border-amber-100' : 'border-slate-100 hover:border-violet-200'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div className="flex items-start gap-4">
+                          <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 ${
+                            isPending ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'
+                          }`}>
+                            <PenTool className="h-7 w-7" />
                           </div>
+                          <div>
+                            <h4 className="text-lg font-black text-slate-900 leading-tight mb-2">{submission.assignments?.title || 'واجب غير معروف'}</h4>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-500 border border-slate-100">
+                                {submission.assignments?.subjects?.name || 'مادة عامة'}
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {submission.submitted_at ? format(new Date(submission.submitted_at), 'dd MMMM yyyy', { locale: ar }) : 'غير محدد'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="w-full sm:w-auto flex justify-end">
+                          {isPending ? (
+                            <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
+                              <Clock className="w-4 h-4 animate-pulse" />
+                              <span className="font-black text-sm">بانتظار التقييم</span>
+                            </div>
+                          ) : (
+                            <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
+                              <span className="font-black text-xl">{submission.grade || 0}</span>
+                              <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      <div className="w-full sm:w-auto flex justify-end">
-                        {isPending ? (
-                          <div className="px-4 py-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 flex items-center gap-2">
-                            <Clock className="w-4 h-4 animate-pulse" />
-                            <span className="font-black text-sm">بانتظار التقييم</span>
+                      {submission.feedback && (
+                        <div className="mt-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 relative">
+                          <div className="absolute right-4 top-0 -mt-2 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                            ملاحظات المعلم
                           </div>
-                        ) : (
-                          <div className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 flex items-baseline gap-1">
-                            <span className="font-black text-xl">{submission.grade || 0}</span>
-                            <span className="font-bold text-xs opacity-70">/ {maxScore}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {submission.feedback && (
-                      <div className="mt-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 relative">
-                        <div className="absolute right-4 top-0 -mt-2 bg-white px-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
-                          ملاحظات المعلم
+                          <p className="text-sm text-slate-700 font-bold leading-relaxed pt-2">{submission.feedback}</p>
                         </div>
-                        <p className="text-sm text-slate-700 font-bold leading-relaxed pt-2">{submission.feedback}</p>
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })
-            )}
+                      )}
+                    </motion.div>
+                  );
+                })
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
