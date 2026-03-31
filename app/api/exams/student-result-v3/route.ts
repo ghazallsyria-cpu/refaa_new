@@ -1,76 +1,77 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-const normalizeId = (id: any) => String(id ?? '').trim().toLowerCase();
+const normalize = (v: any) => String(v ?? '').trim().toLowerCase();
 
 export async function POST(req: Request) {
-  try {
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-      process.env.SUPABASE_SERVICE_ROLE_KEY!, 
-      { auth: { persistSession: false } }
-    );
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
-    const { examId, studentId } = await req.json();
+  const { examId, studentId } = await req.json();
 
-    // 1. جلب الاختبار
-    const { data: exam } = await adminSupabase.from('exams').select('*').eq('id', examId).single();
+  const { data: exam } = await supabase.from('exams').select('*').eq('id', examId).single();
 
-    // 2. جلب الطالب
-    const { data: students } = await adminSupabase.from('students').select('*, users(full_name)').or(`id.eq.${studentId},user_id.eq.${studentId}`);
-    const student = students?.[0] || { id: studentId, users: { full_name: 'طالب' } };
-    const allStudentIds = [...new Set([studentId, student.id, student.user_id].filter(Boolean))];
+  const now = new Date();
+  const examDate = new Date(exam.exam_date);
+  const [h, m] = (exam.end_time || '23:59').split(':');
 
-    // 3. جلب المحاولة
-    const { data: attempts } = await adminSupabase.from('exam_attempts').select('*').eq('exam_id', examId).in('student_id', allStudentIds).order('created_at', { ascending: false });
-    const attempt = attempts?.[0] || null;
+  examDate.setHours(Number(h), Number(m));
+  const isExamFinished = now > examDate;
 
-    // 4. جلب الإجابات
-    let answers: any[] = [];
-    if (attempt) {
-        const { data: ans } = await adminSupabase.from('student_answers').select('*').eq('attempt_id', attempt.id);
-        answers = ans || [];
-    }
+  const { data: attempts } = await supabase
+    .from('exam_attempts')
+    .select('*')
+    .eq('exam_id', examId)
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false });
 
-    // 5. 🚀 السحر النووي: جلب الأسئلة والخيارات منفصلة لضمان عدم انهيار قاعدة البيانات!
-    let finalQuestions: any[] = [];
+  const attempt = attempts?.[0] || null;
 
-    // هل لدينا لقطة شاشة (Snapshot) للأسئلة وقت تقديم الطالب؟
-    if (attempt?.questions_snapshot && Array.isArray(attempt.questions_snapshot) && attempt.questions_snapshot.length > 0) {
-        finalQuestions = attempt.questions_snapshot;
-    } else {
-        // إذا لم يكن هناك لقطة، نجلب الأسئلة الحية بأمان تام
-        const { data: rawQuestions } = await adminSupabase.from('questions').select('*').eq('exam_id', examId).order('order_index');
-        
-        if (rawQuestions && rawQuestions.length > 0) {
-            const qIds = rawQuestions.map(q => q.id);
-            // جلب الخيارات وحدها
-            const { data: rawOptions } = await adminSupabase.from('question_options').select('*').in('question_id', qIds);
-            
-            // الدمج اليدوي الخارق
-            finalQuestions = rawQuestions.map(q => ({
-                ...q,
-                options: (rawOptions || []).filter(o => o.question_id === q.id)
-            }));
-        }
-    }
+  let answers: any[] = [];
 
-    return NextResponse.json({
-        success: true,
-        exam: exam || {},
-        student,
-        attempt,
-        answers,
-        questions: finalQuestions
-    });
+  if (attempt) {
+    const { data } = await supabase
+      .from('student_answers')
+      .select('*')
+      .eq('attempt_id', attempt.id);
 
-  } catch (error: any) {
-    console.error("API Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    answers = data || [];
   }
+
+  const { data: questions } = await supabase
+    .from('questions')
+    .select('*')
+    .eq('exam_id', examId);
+
+  const qIds = questions.map((q: any) => q.id);
+
+  const { data: options } = await supabase
+    .from('question_options')
+    .select('*')
+    .in('question_id', qIds);
+
+  const finalQuestions = questions.map((q: any) => ({
+    ...q,
+    options: options.filter((o: any) => normalize(o.question_id) === normalize(q.id))
+  }));
+
+  // 🔒 منع تسريب البيانات للطالب
+  const isPrivileged = true; // اربطها لاحقاً بالجلسة
+
+  if (!isPrivileged) {
+    if (!isExamFinished || attempt?.status !== 'graded') {
+      answers = [];
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    exam,
+    attempt,
+    answers,
+    questions: finalQuestions,
+    isExamFinished
+  });
 }
-
-
