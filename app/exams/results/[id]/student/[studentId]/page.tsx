@@ -31,12 +31,10 @@ export default function StudentExamResult() {
   const [gradingState, setGradingState] = useState<Record<string, { points: number, isSubmitting: boolean }>>({});
   const [isExamTimeFinished, setIsExamTimeFinished] = useState(true);
 
-  // 🚀 المحرك الجبار: بدون API، جلب مباشر وبسيط جداً يمنع أي خطأ
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      console.log("1. بدء جلب البيانات للاختبار:", examId, "والطالب:", studentId);
-
+      
       // 1. جلب الاختبار
       const { data: examData } = await supabase.from('exams').select('*').eq('id', examId).single();
       
@@ -50,10 +48,10 @@ export default function StudentExamResult() {
       }
       const realStudentId = studentData?.id || studentId;
 
-      // 3. جلب الأسئلة (ببساطة تامة)
+      // 3. جلب الأسئلة
       const { data: rawQuestions } = await supabase.from('questions').select('*').eq('exam_id', examId).order('order_index');
       
-      // 4. جلب الخيارات ودمجها يدوياً (لمنع فشل Supabase Joins)
+      // 4. جلب الخيارات ودمجها يدوياً
       let finalQuestions = rawQuestions || [];
       if (finalQuestions.length > 0) {
           const qIds = finalQuestions.map(q => q.id);
@@ -75,8 +73,6 @@ export default function StudentExamResult() {
           const { data: ans } = await supabase.from('student_answers').select('*').eq('attempt_id', bestAttempt.id);
           finalAnswers = ans || [];
       }
-
-      console.log("نجاح! عدد الأسئلة:", finalQuestions.length, "عدد الإجابات:", finalAnswers.length);
 
       // 7. ضبط حالة الحماية
       if (examData && examData.exam_date) {
@@ -103,7 +99,6 @@ export default function StudentExamResult() {
 
     } catch (err) {
       console.error('خطأ جسيم في جلب البيانات:', err);
-      alert('حدث خطأ في الاتصال بقاعدة البيانات.');
     } finally {
       setLoading(false);
     }
@@ -111,10 +106,10 @@ export default function StudentExamResult() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 حفظ التقييم مباشرة لقاعدة البيانات
+  // 🚀 حفظ التقييم (مع إصلاح TypeScript الصارم)
   const handleSaveGrade = async (questionId: string) => {
     const newPoints = gradingState[questionId].points;
-    setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
+    setGradingState((prev: any) => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: true } }));
     
     try {
       if (!attempt?.id) throw new Error("لا توجد محاولة للطالب");
@@ -131,20 +126,20 @@ export default function StudentExamResult() {
       const newTotal = (allAns || []).reduce((sum, a) => sum + (Number(a.points_earned) || 0), 0);
       await supabase.from('exam_attempts').update({ score: newTotal, status: 'graded' }).eq('id', attempt.id);
 
-      // تحديث الواجهة فوراً
-      setAnswers(prev => {
+      // تحديث الواجهة (TypeScript Fixed)
+      setAnswers((prev: any[]) => {
          const exists = prev.find(a => a.question_id === questionId);
          if (exists) return prev.map(a => a.question_id === questionId ? { ...a, points_earned: newPoints, is_correct: newPoints > 0 } : a);
          return [...prev, { question_id: questionId, points_earned: newPoints, is_correct: newPoints > 0, text_answer: 'تقييم يدوي' }];
       });
       
-      setAttempt(prev => ({ ...prev, score: newTotal, status: 'graded' }));
+      setAttempt((prev: any) => ({ ...prev, score: newTotal, status: 'graded' }));
 
     } catch (err: any) {
       console.error(err);
       alert('حدث خطأ أثناء حفظ الدرجة');
     } finally {
-      setGradingState(prev => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
+      setGradingState((prev: any) => ({ ...prev, [questionId]: { ...prev[questionId], isSubmitting: false } }));
     }
   };
 
@@ -153,7 +148,6 @@ export default function StudentExamResult() {
   const isPendingGrading = !attempt || attempt.status !== 'graded';
   const totalEarned = Number(attempt?.score) || 0;
   
-  // حساب العلامة الكاملة بدقة
   const calculatedQuestionsScore = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || 0;
   if (displayMaxScore <= 0) displayMaxScore = calculatedQuestionsScore;
@@ -236,18 +230,15 @@ export default function StudentExamResult() {
               let studentAnswerText = null;
               let isUnanswered = true;
 
-              // 🚀 فك تشفير إجابة الطالب بذكاء شديد
               if (answer) {
                   let rawVal = answer.selected_option_id || answer.text_answer || answer.answer;
                   
                   if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
                       isUnanswered = false;
                       if (isAuto) {
-                          // محاولة مطابقة rawVal مع معرفات الخيارات (id)
                           const selectedOpt = question.options?.find((o: any) => String(o.id) === String(rawVal) || o.content === String(rawVal));
                           if (selectedOpt) {
                               studentAnswerText = selectedOpt.content;
-                              // تحديث الصح والخطأ للمسجل قديماً
                               if(selectedOpt.is_correct) isCorrect = true;
                           } else {
                               studentAnswerText = String(rawVal);
@@ -261,7 +252,6 @@ export default function StudentExamResult() {
                   }
               }
 
-              // الإجابة النموذجية
               let correctAnswerText = 'يعتمد على تقييم المعلم.';
               if (isAuto) {
                   const correctOpts = question.options?.filter((o:any) => o.is_correct).map((o:any) => o.content);
@@ -325,7 +315,7 @@ export default function StudentExamResult() {
                           <div className="flex flex-col">
                              <label className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">تعديل الدرجة يدوياً</label>
                              <div className="flex items-center gap-2">
-                               <input type="number" min="0" max={question.points} value={gradingState[question.id]?.points ?? 0} onChange={(e) => setGradingState(prev => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-xl border border-slate-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 font-black text-xl text-indigo-700 outline-none bg-white transition-all" />
+                               <input type="number" min="0" max={question.points} value={gradingState[question.id]?.points ?? 0} onChange={(e) => setGradingState((prev: any) => ({ ...prev, [question.id]: { ...prev[question.id], points: Number(e.target.value) } }))} className="w-20 p-2 text-center rounded-xl border border-slate-300 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 font-black text-xl text-indigo-700 outline-none bg-white transition-all" />
                                <span className="text-sm text-slate-500 font-bold">من {Number(question.points) || 0}</span>
                              </div>
                           </div>
