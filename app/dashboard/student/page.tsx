@@ -5,7 +5,7 @@ import {
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, LayoutDashboard, 
   TrendingUp, AlertCircle, Bell, ChevronLeft,
-  Award, Target, BarChart2
+  Award, Target, BarChart2, Lock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { 
@@ -17,6 +17,20 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
+
+// 🚀 دالة التحقق من القفل الزمني (تمنع الطالب من رؤية النتيجة قبل انتهاء وقت الاختبار)
+const checkIsLocked = (examData: any) => {
+  if (!examData?.exam_date) return false;
+  try {
+    const now = new Date();
+    const examDate = new Date(examData.exam_date);
+    const endTimeParts = (examData.end_time || '23:59').split(':');
+    examDate.setHours(parseInt(endTimeParts[0], 10), parseInt(endTimeParts[1], 10), 0);
+    return now <= examDate;
+  } catch(e) {
+    return false;
+  }
+};
 
 export default function StudentDashboard() {
   const [studentData, setStudentData] = useState<any>(null);
@@ -59,7 +73,6 @@ export default function StudentDashboard() {
   const handleTrackSelection = async (track: 'scientific' | 'literary') => {
     try {
       await updateStudentTrack(track);
-      // Refresh data to hide the selection UI
       fetchData();
     } catch (error) {
       console.error('Error selecting track:', error);
@@ -70,16 +83,11 @@ export default function StudentDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // Helper for safe date formatting
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
     try {
       const date = new Date(dateStr);
-      if (isNaN(date.getTime())) {
-        // If it's just a time string (HH:mm), it might fail. 
-        // But for exams we have exam_date.
-        return fallback;
-      }
+      if (isNaN(date.getTime())) return fallback;
       return format(date, formatStr, { locale: arSA });
     } catch (e) {
       return fallback;
@@ -97,13 +105,15 @@ export default function StudentDashboard() {
     );
   }
 
-  // Check if student is in 10th grade and hasn't selected a track
   const isTenthGrade = studentData?.sections?.classes?.name?.includes('العاشر');
   const hasSelectedTrack = !!studentData?.next_year_track;
 
-  // Calculate average score
-  const avgScore = recentGrades.length > 0 
-    ? Math.round(recentGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / recentGrades.length)
+  // 🚀 استخراج الدرجات غير المحجوبة فقط لحساب المتوسط والرسم البياني
+  const unlockedGrades = recentGrades.filter(g => !checkIsLocked(g.exam));
+
+  // حساب المتوسط العام للدرجات المتاحة فقط
+  const avgScore = unlockedGrades.length > 0 
+    ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length)
     : 0;
 
   return (
@@ -133,7 +143,6 @@ export default function StudentDashboard() {
             </div>
           </div>
         </div>
-        {/* Decorative background circles */}
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl"></div>
         <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl"></div>
       </div>
@@ -231,7 +240,7 @@ export default function StudentDashboard() {
         {/* Main Content - Left 2 Columns */}
         <div className="lg:col-span-2 space-y-8">
           
-          {/* Recent Grades Chart */}
+          {/* Recent Grades Chart (Excludes Locked Exams) */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -245,9 +254,9 @@ export default function StudentDashboard() {
               </Link>
             </div>
             <div className="h-[300px] w-full">
-              {recentGrades.length > 0 ? (
+              {unlockedGrades.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={recentGrades.map(g => ({
+                  <AreaChart data={unlockedGrades.map(g => ({
                     ...g,
                     displayTitle: g.exam?.title || 'اختبار',
                     displayScore: g.score || 0
@@ -288,13 +297,13 @@ export default function StudentDashboard() {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   <BarChart2 className="h-10 w-10 text-slate-300 mb-3" />
-                  <p>لا توجد بيانات كافية لعرض الرسم البياني</p>
+                  <p>لا توجد نتائج اختبارات متاحة لعرض الرسم البياني</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Recent Activity / Grades Table */}
+          {/* Recent Activity / Grades Table (Shows Lock for hidden grades) */}
           <div className="rounded-3xl bg-white/80 backdrop-blur-xl p-6 shadow-sm ring-1 ring-slate-200/50 hover:shadow-md transition-all">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -309,27 +318,44 @@ export default function StudentDashboard() {
             </div>
             <div className="space-y-4">
               {recentGrades.length > 0 ? (
-                recentGrades.map((grade) => (
-                  <div key={grade.id} className="flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${grade.score >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                        <FileText className="h-6 w-6" />
+                recentGrades.map((grade) => {
+                  const isLocked = checkIsLocked(grade.exam);
+                  
+                  return (
+                    <div key={grade.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${isLocked ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-100'}`}>
+                      <div className="flex items-center gap-4">
+                        <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-sm ${isLocked ? 'bg-slate-200 text-slate-500' : grade.score >= 50 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                          {isLocked ? <Lock className="h-5 w-5" /> : <FileText className="h-6 w-6" />}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{grade.exam?.title}</p>
+                          <p className="text-sm text-slate-500">{grade.exam?.subject?.name}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-slate-900">{grade.exam?.title}</p>
-                        <p className="text-sm text-slate-500">{grade.exam?.subject?.name}</p>
+                      <div className="text-right">
+                        {isLocked ? (
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-xs font-bold text-slate-500 bg-slate-200/50 border border-slate-200 px-2 py-1 rounded-lg flex items-center gap-1">
+                              <Lock className="w-3 h-3" /> النتيجة محجوبة
+                            </span>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              {safeFormat(grade.completed_at, 'd MMMM')}
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <p className={`text-xl font-bold ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {grade.score}%
+                            </p>
+                            <p className="text-xs text-slate-400 font-medium mt-1">
+                              {safeFormat(grade.completed_at, 'd MMMM')}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-xl font-bold ${grade.score >= 50 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {grade.score}%
-                      </p>
-                      <p className="text-xs text-slate-400 font-medium mt-1">
-                        {safeFormat(grade.completed_at, 'd MMMM')}
-                      </p>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-center py-10 text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   لا توجد نتائج اختبارات حالياً
@@ -487,7 +513,6 @@ export default function StudentDashboard() {
                             if (!exam.exam_date) return '...';
                             const datePart = exam.exam_date;
                             const timePart = exam.start_time || '00:00';
-                            // Combine date and time for a valid Date object
                             const fullDateStr = timePart.includes('T') ? timePart : `${datePart}T${timePart}`;
                             return safeFormat(fullDateStr, 'EEEE، d MMMM - h:mm a');
                           })()}
@@ -509,3 +534,5 @@ export default function StudentDashboard() {
     </motion.div>
   );
 }
+
+
