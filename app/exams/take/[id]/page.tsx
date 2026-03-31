@@ -10,7 +10,6 @@ import { Question } from '@/types/question';
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; };
 
-// ✅ الرادار الفولاذي: دالة تحدد بدقة متناهية ما إذا كان السؤال يصحح آلياً
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
   return t.includes('multiple_choice') || t.includes('true_false') || t.includes('multi_select') || t.includes('checkbox');
@@ -29,7 +28,6 @@ export default function TakeQuiz() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
-  const [hasManualQuestions, setHasManualQuestions] = useState(false);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -67,10 +65,6 @@ export default function TakeQuiz() {
       setExam({ ...examData, description: examData.description ?? "", settings: {} });
       setQuestions(questionsData || []);
 
-      // ✅ اكتشاف الأسئلة المقالية بالهندسة العكسية: أي سؤال ليس اختياري فهو مقالي!
-      const hasManual = (questionsData || []).some(q => !isAutoGradedType(q.type as string));
-      setHasManualQuestions(hasManual);
-
       if (examData.duration) {
         const finalTimeLeft = Math.min(examData.duration * 60, Math.floor((endDateTime.getTime() - now.getTime()) / 1000));
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
@@ -93,6 +87,9 @@ export default function TakeQuiz() {
       let totalScore = 0;
       const formattedAnswers: Record<string, any> = {};
 
+      // 💡 الحل الجذري للمشكلة: فحص نوع الأسئلة "في لحظة الإرسال" بدلاً من الاعتماد على متغير خارجي!
+      let hasManualQuestions = false;
+
       for (const q of questions) {
         const studentAnswer = answers[q.id];
         let isCorrect = false;
@@ -100,6 +97,10 @@ export default function TakeQuiz() {
         
         const qType = (q.type as string || '').toLowerCase();
         const isAuto = isAutoGradedType(qType);
+
+        if (!isAuto) {
+           hasManualQuestions = true; // اكتشاف السؤال المقالي بدقة 100%
+        }
 
         if (isAuto && studentAnswer !== undefined) {
           if (qType.includes('multiple_choice') || qType.includes('true_false')) {
@@ -126,7 +127,7 @@ export default function TakeQuiz() {
 
       const timeSpent = exam?.duration ? (exam.duration * 60) - (timeLeft || 0) : 0;
       
-      // ✅ إذا وجد مقالي يذهب للمراجعة (completed)، إذا كله اختياري تصدر النتيجة فورا (graded)
+      // ✅ الحقيقة المطلقة هنا: إذا فيه مقالي = completed، إذا كله اختياري = graded
       const attemptStatus = hasManualQuestions ? 'completed' : 'graded';
 
       await submitExam(params.id as string, formattedAnswers, totalScore, attemptStatus, timeSpent);
@@ -136,7 +137,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft, hasManualQuestions]);
+  }, [isSubmitting, questions, answers, params.id, submitExam, exam, timeLeft]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished) {
@@ -152,6 +153,9 @@ export default function TakeQuiz() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
+  // فحص ذكي قبل عرض شاشة النهاية
+  const hasManual = questions.some(q => !isAutoGradedType(q.type as string));
+
   if (isFinished) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
@@ -160,13 +164,13 @@ export default function TakeQuiz() {
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
              لقد استلمنا إجاباتك. 
-             {hasManualQuestions ? (
+             {hasManual ? (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
                  سيتم إعلان النتيجة النهائية بعد أن يقوم المعلم بتصحيح الأسئلة المقالية.
                </span>
              ) : (
                <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                 تم تصحيح الاختبار وتصدير نتيجتك. يمكنك رؤيتها من لوحة التحكم.
+                 تم تصحيح الاختبار وتصدير نتيجتك. يمكنك رؤيتها من لوحة التحكم الآن.
                </span>
              )}
           </p>
