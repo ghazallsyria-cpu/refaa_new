@@ -13,6 +13,24 @@ import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'published': return 'bg-emerald-50 text-emerald-700 border-emerald-100 shadow-emerald-50';
+    case 'draft': return 'bg-amber-50 text-amber-700 border-amber-100 shadow-amber-50';
+    case 'archived': return 'bg-slate-50 text-slate-700 border-slate-100 shadow-slate-50';
+    default: return 'bg-slate-50 text-slate-700 border-slate-100 shadow-slate-50';
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'published': return 'منشور';
+    case 'draft': return 'مسودة';
+    case 'archived': return 'مؤرشف';
+    default: return status;
+  }
+};
+
 export default function AssignmentsPage() {
   const { user, authRole, userRole, isChecking: authLoading } = useAuth() as { user: any, authRole: string | null, userRole: string | null, isChecking: boolean };
   const currentRole = authRole || userRole;
