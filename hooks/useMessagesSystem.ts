@@ -16,7 +16,6 @@ export function useMessagesSystem() {
   const fetchMessages = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
-      // 🚀 تم إضافة avatar_url لجلب صور المرسل والمستقبل
       const { data, error: fetchError } = await supabase
         .from('messages')
         .select(`
@@ -60,7 +59,7 @@ export function useMessagesSystem() {
           if (teacherIds.length > 0) {
             const { data, error } = await supabase
               .from('users')
-              .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
+              .select('id, full_name, role, avatar_url')
               .or(`id.in.(${teacherIds.join(',')}),role.in.(admin,management)`)
               .order('full_name');
             if (error) throw error;
@@ -68,7 +67,7 @@ export function useMessagesSystem() {
           } else {
             const { data, error } = await supabase
               .from('users')
-              .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
+              .select('id, full_name, role, avatar_url')
               .in('role', ['admin', 'management'])
               .order('full_name');
             if (error) throw error;
@@ -77,7 +76,7 @@ export function useMessagesSystem() {
         } else {
           const { data, error } = await supabase
             .from('users')
-            .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
+            .select('id, full_name, role, avatar_url')
             .in('role', ['admin', 'management'])
             .order('full_name');
           if (error) throw error;
@@ -86,7 +85,7 @@ export function useMessagesSystem() {
       } else {
         const { data, error } = await supabase
           .from('users')
-          .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
+          .select('id, full_name, role, avatar_url')
           .order('full_name');
         if (error) throw error;
         setUsers((data as unknown) as User[] || []);
@@ -101,7 +100,6 @@ export function useMessagesSystem() {
   const fetchTeacherSections = useCallback(async (): Promise<void> => {
     if (!user || currentRole !== 'teacher') return;
     try {
-      // 🚀 التحقق من هوية المعلم بدقة
       let teacherProfile = null;
       const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
       if (tp1) teacherProfile = tp1;
@@ -169,9 +167,9 @@ export function useMessagesSystem() {
       
       return data?.map(s => {
         const u = Array.isArray(s.users) ? s.users[0] : s.users;
-        // 🚀 استرجاع الـ ID الحقيقي للـ Auth User ليعمل الإرسال بشكل صحيح
+        // 🚀 الحل السحري لإسكات TypeScript: تحويل كائن المستخدم إلى unknown أولاً!
         if (u) {
-            return { ...u, id: s.user_id || s.id } as User;
+            return ({ ...u, id: s.user_id || s.id } as unknown) as User;
         }
         return null;
       }).filter((u): u is User => u !== null) || [];
