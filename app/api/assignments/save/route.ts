@@ -72,10 +72,10 @@ export async function POST(req: Request) {
         question_text: q.content || q.text || q.question_text || 'سؤال',
         question_type: q.type || q.question_type || 'text',
         options: q.options || null,
-        points: q.type === 'section_header' ? 0 : (q.points || 0), // الترويسة بدون نقاط
+        points: q.type === 'section_header' ? 0 : (q.points || 0), 
         is_required: q.type === 'section_header' ? false : (q.isRequired || q.is_required || false),
         order: idx,
-        media_url: q.media_url || q.mediaUrl || null // 🚀 حفظ رابط الصورة للسؤال
+        media_url: q.media_url || q.mediaUrl || null 
       }));
       const { error: qErr } = await adminSupabase.from('assignment_questions').insert(qPayload);
       if (qErr) throw new Error('فشل حفظ الأسئلة: ' + qErr.message);
