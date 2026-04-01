@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       subject_id: (payload.subject_id && payload.subject_id.trim() !== '') ? payload.subject_id : null,
       teacher_id: realTeacherId,
       due_date: payload.due_date || new Date().toISOString(),
-      file_url: payload.file_url || null,
+      file_url: payload.file_url || null, // 🚀 تأمين حفظ رابط الصورة
       status: payload.status || 'published'
     };
 
@@ -46,7 +46,6 @@ export async function POST(req: Request) {
       
       await adminSupabase.from('assignment_questions').delete().eq('assignment_id', finalAssignmentId);
       
-      // 🚨 نمنع حذف الفصول إذا كانت المصفوفة المرسلة فارغة (لتأمين زر التعديل السريع)
       if (sectionIds && sectionIds.length > 0) {
          await adminSupabase.from('assignment_sections').delete().eq('assignment_id', finalAssignmentId);
       }
@@ -93,5 +92,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-
