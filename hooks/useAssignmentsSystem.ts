@@ -6,7 +6,7 @@ import { Question, normalizeQuestion } from '@/types/question';
 
 export interface AssignmentDetails {
   assignment: AssignmentWithMeta;
-  questions: any[]; // تم التعديل لدعم media_url
+  questions: any[]; 
   submission: AssignmentSubmission | null;
   answers: AssignmentAnswer[];
   allSubmissions: SubmissionWithStudent[];
@@ -26,7 +26,6 @@ export function useAssignmentsSystem() {
     setLoading(true);
     setError(null);
     try {
-      // 🚀 1. العودة للاستعلام المباشر الناجح (بدون API إضافية)
       const selectQuery = currentRole === 'student' 
         ? `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
         : `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
@@ -98,7 +97,6 @@ export function useAssignmentsSystem() {
       setData(mappedData);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error fetching assignments');
-      console.error("Hook Fetch Error:", err);
     } finally {
       setLoading(false);
     }
@@ -112,7 +110,7 @@ export function useAssignmentsSystem() {
       if (error) throw error;
       return (data || []).map((q: any) => {
         const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
-        return { ...nq, media_url: q.media_url }; // 🚀 دعم الصورة للسؤال الفردي هنا
+        return { ...nq, media_url: q.media_url }; 
       });
     } catch (err) { return []; }
   }, []);
@@ -131,8 +129,7 @@ export function useAssignmentsSystem() {
 
   const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
     const response = await fetch(`/api/assignments/delete?id=${assignmentId}`, { method: 'DELETE' });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Failed to delete assignment');
+    if (!response.ok) throw new Error('Failed to delete assignment');
     await fetchAssignments();
   }, [fetchAssignments]);
 
@@ -162,7 +159,7 @@ export function useAssignmentsSystem() {
         assignment: assignmentData as AssignmentWithMeta,
         questions: (qData || []).map((q: any) => {
            const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
-           return { ...nq, media_url: q.media_url }; // 🚀 دعم الصورة هنا أيضاً
+           return { ...nq, media_url: q.media_url }; 
         }),
         submission: submissionData,
         answers: answersData,
@@ -211,14 +208,13 @@ export function useAssignmentsSystem() {
         assignment: assignmentData as AssignmentWithMeta,
         questions: (qData || []).map((q: any) => {
           const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
-          return { ...nq, media_url: q.media_url }; // 🚀 دعم الصورة هنا أيضاً
+          return { ...nq, media_url: q.media_url };
         }),
         answers: (answersData as AssignmentAnswer[]) || []
       };
     } catch (err) { throw err; }
   }, []);
 
-  // 🚀 المحافظة على دالة التقييم الجديدة التي تدعم مراجعة الأسئلة الفردية
   const updateSubmissionGrade = useCallback(async (
     submissionId: string, 
     grade: number, 
@@ -232,8 +228,7 @@ export function useAssignmentsSystem() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ submissionId, grade, feedback, studentId, assignmentTitle, answersGrading }),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Failed to update grade');
+    if (!response.ok) throw new Error('Failed to update grade');
   }, []);
 
   return { data, loading, error, studentSubmissions, refetch: fetchAssignments, fetchAssignmentQuestions, saveAssignment, deleteAssignment, fetchAssignmentDetails, submitAssignment, fetchSubmissionDetails, updateSubmissionGrade };
