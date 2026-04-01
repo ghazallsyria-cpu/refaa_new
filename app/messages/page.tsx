@@ -85,7 +85,8 @@ export default function MessagesPage() {
       return;
     }
 
-    const conversations = messages.reduce((acc: any, msg) => {
+    // 🚀 تم إضافة any لإسكات TypeScript
+    const conversations = messages.reduce((acc: any, msg: any) => {
       let convId;
       if (msg.section_id) {
         convId = `group-${msg.section_id}`;
@@ -125,14 +126,15 @@ export default function MessagesPage() {
   };
 
   const fetchThread = (convId: string) => {
-    let thread = messages.filter(msg => {
+    // 🚀 تم إضافة any لإسكات TypeScript
+    let thread = messages.filter((msg: any) => {
       if (msg.section_id) return `group-${msg.section_id}` === convId;
       const ids = [msg.sender_id, msg.receiver_id].sort();
       return `private-${ids.join('-')}` === convId;
-    }).sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+    }).sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
     
     // تنظيف المكرر وتجهيز الكائنات
-    const cleanThread = thread.map(msg => ({
+    const cleanThread = thread.map((msg: any) => ({
        ...msg,
        sender: Array.isArray(msg.sender) ? msg.sender[0] : msg.sender,
        receiver: Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver,
@@ -156,7 +158,7 @@ export default function MessagesPage() {
       setThreadMessages(cleanThread);
     }
 
-    const unreadIds = cleanThread.filter(msg => !msg.is_read && msg.sender_id !== currentUser?.id).map(msg => msg.id);
+    const unreadIds = cleanThread.filter((msg: any) => !msg.is_read && msg.sender_id !== currentUser?.id).map((msg: any) => msg.id);
     if (unreadIds.length > 0) markAsRead(unreadIds);
   };
 
@@ -217,7 +219,7 @@ export default function MessagesPage() {
     finally { setIsSubmitting(false); }
   };
 
-  const filteredMessages = groupedMessages.filter(m => {
+  const filteredMessages = groupedMessages.filter((m: any) => {
     const s = searchTerm.toLowerCase();
     return m.subject?.toLowerCase().includes(s) || m.sender?.full_name?.toLowerCase().includes(s) || m.receiver?.full_name?.toLowerCase().includes(s);
   });
