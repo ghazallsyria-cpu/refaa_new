@@ -6,7 +6,7 @@ import { Question, normalizeQuestion } from '@/types/question';
 
 export interface AssignmentDetails {
   assignment: AssignmentWithMeta;
-  questions: Question[];
+  questions: any[];
   submission: AssignmentSubmission | null;
   answers: AssignmentAnswer[];
   allSubmissions: SubmissionWithStudent[];
@@ -22,83 +22,28 @@ export function useAssignmentsSystem() {
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
   const fetchAssignments = useCallback(async (): Promise<void> => {
-    if (!user || !currentRole) return;
+    if (!user?.id || !currentRole) return;
     setLoading(true);
     setError(null);
     try {
-      // 🚀 1. العودة للاستعلام المباشر الناجح الذي لا يحتاج لملفات API إضافية!
-      const selectQuery = currentRole === 'student' 
-        ? `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
-        : `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
+      const response = await fetch('/api/assignments/get-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, role: currentRole }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'فشل جلب الواجبات');
 
-      let query = supabase.from('assignments').select(selectQuery).order('created_at', { ascending: false });
-
-      if (currentRole === 'student') {
-        let studentProfile = null;
-        const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
-        if (sp1) studentProfile = sp1;
-        else {
-          const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
-          if (sp2) studentProfile = sp2;
-        }
-
-        if (studentProfile?.section_id) {
-          query = query.eq('assignment_sections.section_id', studentProfile.section_id).eq('status', 'published');
-        } else {
-          setData([]); setLoading(false); return;
-        }
-      } else if (currentRole === 'teacher') {
-        let teacherProfile = null;
-        const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (tp1) teacherProfile = tp1;
-        else {
-          const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-          if (tp2) teacherProfile = tp2;
-        }
-          
-        if (teacherProfile) {
-          query = query.eq('teacher_id', teacherProfile.id);
-        } else {
-          setData([]); setLoading(false); return;
-        }
-      }
-
-      const { data: assignmentsData, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-
-      let mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => ({
-        ...a,
-        subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
-        teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
-        section_name: a.assignment_sections && a.assignment_sections.length > 0 
-           ? a.assignment_sections.map((es: any) => es.sections?.name).join('، ') 
-           : 'غير محدد',
-      }));
-
-      if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        const assignmentsWithStats = await Promise.all(mappedData.map(async (a) => {
-          const { data: attempts } = await supabase.from('assignment_submissions').select('status').eq('assignment_id', a.id);
-          const subs = attempts || [];
-          return {
-            ...a,
-            submission_count: subs.length,
-            graded_count: subs.filter(s => s.status === 'graded').length,
-          };
-        }));
-        mappedData = assignmentsWithStats;
-      }
-
-      if (currentRole === 'student') {
-        const { data: subData } = await supabase.from('assignment_submissions').select('assignment_id, status, grade, id, student_id, submitted_at').eq('student_id', user.id);
+      setData(result.data || []);
+      
+      if (currentRole === 'student' && result.studentSubmissions) {
         const subMap: Record<string, AssignmentSubmission> = {};
-        (subData || []).forEach((s: any) => { subMap[s.assignment_id] = s; });
+        (result.studentSubmissions || []).forEach((s: any) => { subMap[s.assignment_id] = s; });
         setStudentSubmissions(subMap);
       }
-
-      setData(mappedData);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error fetching assignments');
-      console.error("Hook Fetch Error:", err);
+    } catch (err: any) {
+      console.error("Fetch Assignments Error:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -106,15 +51,25 @@ export function useAssignmentsSystem() {
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
-  const fetchAssignmentQuestions = useCallback(async (assignmentId: string): Promise<Question[]> => {
+  const fetchAssignmentQuestions = useCallback(async (assignmentId: string): Promise<any[]> => {
     try {
-      const { data, error } = await supabase.from('assignment_questions').select('*').eq('assignment_id', assignmentId).order('order');
-      if (error) throw error;
-      return (data || []).map((q: any) => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required }));
-    } catch (err) { return []; }
-  }, []);
+      const response = await fetch('/api/assignments/get-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentId, userId: user?.id, role: currentRole }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+      return (result.questions || []).map((q: any) => {
+        const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
+        return { ...nq, media_url: q.media_url }; // 🚀 استخراج الصورة
+      });
+    } catch (err) { 
+      return []; 
+    }
+  }, [user, currentRole]);
 
-  const saveAssignment = useCallback(async (payload: Partial<Assignment>, assignmentId: string | null, questions: Question[], sectionIds: string[], subjects: Subject[]): Promise<string> => {
+  const saveAssignment = useCallback(async (payload: Partial<Assignment>, assignmentId: string | null, questions: any[], sectionIds: string[], subjects: Subject[]): Promise<string> => {
     const response = await fetch('/api/assignments/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -128,39 +83,29 @@ export function useAssignmentsSystem() {
 
   const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
     const response = await fetch(`/api/assignments/delete?id=${assignmentId}`, { method: 'DELETE' });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Failed to delete assignment');
+    if (!response.ok) throw new Error('Failed to delete assignment');
     await fetchAssignments();
   }, [fetchAssignments]);
 
   const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
     try {
-      const { data: assignmentData, error: assignmentError } = await supabase.from('assignments').select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`).eq('id', assignmentId).single();
-      if (assignmentError) throw assignmentError;
-
-      const { data: qData } = await supabase.from('assignment_questions').select('*').eq('assignment_id', assignmentId).order('order');
-      let submissionData: AssignmentSubmission | null = null;
-      let answersData: AssignmentAnswer[] = [];
-      let allSubmissionsData: SubmissionWithStudent[] = [];
-
-      if (currentRole === 'student' && user) {
-        const { data: subData } = await supabase.from('assignment_submissions').select('*').eq('assignment_id', assignmentId).eq('student_id', user.id).maybeSingle();
-        if (subData) {
-          submissionData = subData as AssignmentSubmission;
-          const { data: aData } = await supabase.from('assignment_answers').select('*').eq('submission_id', subData.id);
-          answersData = (aData as AssignmentAnswer[]) || [];
-        }
-      } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        const { data: subsData } = await supabase.from('assignment_submissions').select(`*, student:students(users(full_name, email), sections(name, classes(name)))`).eq('assignment_id', assignmentId).order('submitted_at', { ascending: false });
-        if (subsData) allSubmissionsData = subsData as unknown as SubmissionWithStudent[];
-      }
+      const response = await fetch('/api/assignments/get-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignmentId, userId: user?.id, role: currentRole }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
 
       return {
-        assignment: assignmentData as AssignmentWithMeta,
-        questions: (qData || []).map((q: any) => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required })),
-        submission: submissionData,
-        answers: answersData,
-        allSubmissions: allSubmissionsData
+        assignment: result.assignment,
+        questions: result.questions.map((q: any) => {
+           const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
+           return { ...nq, media_url: q.media_url }; // 🚀 استخراج الصورة
+        }),
+        submission: result.submission,
+        answers: result.answers,
+        allSubmissions: result.allSubmissions
       };
     } catch (err) { throw err; }
   }, [user, currentRole]);
@@ -193,23 +138,26 @@ export function useAssignmentsSystem() {
 
   const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
     try {
-      const { data: submissionData, error: subError } = await supabase.from('assignment_submissions').select(`*, student:students(users(full_name, email), sections(name, classes(name)))`).eq('id', submissionId).single();
-      if (subError) throw subError;
+      const response = await fetch('/api/assignments/get-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId }),
+      });
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
       
-      const { data: assignmentData } = await supabase.from('assignments').select('*, subject:subjects(name)').eq('id', (submissionData as any).assignment_id).single();
-      const { data: qData } = await supabase.from('assignment_questions').select('*').eq('assignment_id', (submissionData as any).assignment_id).order('order');
-      const { data: answersData } = await supabase.from('assignment_answers').select('*').eq('submission_id', submissionId);
-
       return {
-        submission: submissionData as unknown as SubmissionWithStudent,
-        assignment: assignmentData as AssignmentWithMeta,
-        questions: (qData || []).map((q: any) => normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required })),
-        answers: (answersData as AssignmentAnswer[]) || []
+        submission: result.submission,
+        assignment: result.assignment,
+        questions: (result.questions || []).map((q: any) => {
+          const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
+          return { ...nq, media_url: q.media_url }; // 🚀 استخراج الصورة
+        }),
+        answers: result.answers || []
       };
     } catch (err) { throw err; }
   }, []);
 
-  // 🚀 إضافة الحقل الجديد (answersGrading) ليدعم التصحيح الفردي!
   const updateSubmissionGrade = useCallback(async (
     submissionId: string, 
     grade: number, 
@@ -223,8 +171,7 @@ export function useAssignmentsSystem() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ submissionId, grade, feedback, studentId, assignmentTitle, answersGrading }),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Failed to update grade');
+    if (!response.ok) throw new Error('Failed to update grade');
   }, []);
 
   return { data, loading, error, studentSubmissions, refetch: fetchAssignments, fetchAssignmentQuestions, saveAssignment, deleteAssignment, fetchAssignmentDetails, submitAssignment, fetchSubmissionDetails, updateSubmissionGrade };
