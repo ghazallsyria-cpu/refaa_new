@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
 import AssignmentForm from '@/components/assignment-form';
-import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -76,7 +75,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             const answersMap: Record<string, string | string[] | null> = {};
             const fullMap: Record<string, any> = {};
             
-            details.answers.forEach((a) => {
+            details.answers.forEach((a: any) => {
               answersMap[a.question_id] = a.selected_options || a.answer_text;
               fullMap[a.question_id] = a;
             });
@@ -102,7 +101,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setIsSubmitting(true);
     try {
       const answersPayload: RawAssignmentAnswer[] = Object.entries(answers).map(([qId, value]) => {
-        const question = questions.find(q => q.id === qId);
+        // 🚀 Fix TypeScript error by explicitly typing q as any
+        const question = questions.find((q: any) => q.id === qId);
         const isMultiple = question?.type === 'multiple_choice' || question?.type === 'checkbox';
         return {
           question_id: qId,
@@ -277,7 +277,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                    <div className="shrink-0 flex flex-col items-center bg-white px-8 py-5 rounded-2xl shadow-sm border border-emerald-100">
                      <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">الدرجة النهائية</span>
                      <div className="text-4xl font-black text-emerald-600">
-                       {mySubmission.grade} <span className="text-lg opacity-50">/ {questions.reduce((acc, q) => acc + (Number(q.points)||0), 0) || 100}</span>
+                       {mySubmission.grade} <span className="text-lg opacity-50">/ {questions.reduce((acc: number, q: any) => acc + (Number(q.points)||0), 0) || 100}</span>
                      </div>
                    </div>
                 </div>
@@ -296,7 +296,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                    <Target className="h-6 w-6 text-indigo-500" /> المراجعة التفصيلية لأسئلة الواجب
                 </h3>
                 
-                {questions.map((q, idx) => {
+                {questions.map((q: any, idx: number) => {
                   const studentAns = myAnswers[q.id];
                   const answerDetails = fullAnswersMap[q.id]; 
                   
@@ -316,7 +316,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
                   let studentAnswerText = studentAns;
                   if ((q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'checkbox') && safeOptions.length > 0) {
-                     const selectedOpt = safeOptions.find(o => o.id === studentAns || o.content === studentAns || o === studentAns);
+                     // 🚀 Fix TypeScript error by explicitly typing o as any
+                     const selectedOpt = safeOptions.find((o: any) => o.id === studentAns || o.content === studentAns || o === studentAns);
                      if (selectedOpt) studentAnswerText = selectedOpt.content || selectedOpt;
                      else if (Array.isArray(studentAns)) studentAnswerText = studentAns.join('، ');
                   }
