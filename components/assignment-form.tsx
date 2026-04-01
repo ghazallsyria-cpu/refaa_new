@@ -38,21 +38,14 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
   };
 
-  // 🚀 السحر: معالجة إجابات جدول المقارنة المتعدد الأبعاد (Matrix Grid)
   const handleComparisonGridChange = (questionId: string, rowIndex: number, colIndex: number, value: string) => {
      if (readOnly) return;
      try {
-       // قراءة المصفوفة الثنائية من النص المحفوظ، أو تهيئتها
        const currentGrid = answers[questionId] ? JSON.parse(answers[questionId]) : [];
-       
-       // التأكد من وجود السطر المطلوب
        while (currentGrid.length <= rowIndex) currentGrid.push(["", ""]);
-       
-       // التحديث
        currentGrid[rowIndex][colIndex] = value;
        handleAnswerChange(questionId, JSON.stringify(currentGrid));
      } catch(e) {
-       // في حال وجود خطأ بالتحليل، نبدأ من الصفر
        const newGrid = [];
        for(let i=0; i<=rowIndex; i++) newGrid.push(["", ""]);
        newGrid[rowIndex][colIndex] = value;
@@ -136,7 +129,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     />
                   )}
 
-                  {/* 🚀 جدول المقارنة التفاعلي الحقيقي (Matrix Grid) */}
                   {isComparison && (
                     <div className="rounded-3xl border border-slate-300 overflow-hidden bg-white shadow-sm mt-4">
                        <div className="overflow-x-auto">
@@ -150,7 +142,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                            </thead>
                            <tbody>
                              {question.options?.slice(2).map((aspect: string, rIdx: number) => {
-                               // قراءة مصفوفة الإجابات الحالية
                                let parsedAns: any[] = [];
                                try { parsedAns = JSON.parse(answers[question.id] || '[]'); } catch(e){}
                                
@@ -184,7 +175,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     </div>
                   )}
 
-                  {/* خيارات متعددة وصح/خطأ */}
                   {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {question.options?.map((option: string, optIndex: number) => {
