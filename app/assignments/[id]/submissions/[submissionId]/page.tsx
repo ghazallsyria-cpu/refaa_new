@@ -87,7 +87,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-        {/* Header content... */}
         <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href={`/assignments/${assignmentId}`} className="p-2.5 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all text-slate-500 border border-slate-200"><ArrowRight className="h-5 w-5" /></Link>
@@ -105,7 +104,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
       <div className="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <div className="glass-card p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm bg-white">
-             {/* Student info box... */}
              <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
                <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100"><User className="h-7 w-7" /></div>
                <div>
@@ -114,7 +112,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                </div>
              </div>
 
-             {/* 🚀 عرض أسئلة الواجب التفصيلية */}
              <div className="mt-8 space-y-8">
                {questions.map((q, idx) => {
                  const isHeader = q.type === 'section_header';
@@ -122,7 +119,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                  const studentAns = answers[q.id];
                  const qGrade = questionGrades[q.id] || { isCorrect: false, pointsEarned: 0, feedback: '' };
 
-                 // إذا كانت ترويسة، نعرضها فقط بشكل أنيق دون أدوات تصحيح
                  if (isHeader) {
                    return (
                      <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100">
@@ -138,27 +134,38 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm shrink-0">{idx + 1}</div>
                        <div className="flex-1 pt-1">
                           <h4 className="text-lg font-bold text-slate-800 leading-relaxed">{q.content || q.text}</h4>
-                          {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية للسؤال" />}
+                          {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
                        </div>
                      </div>
 
                      <div className="p-5 sm:p-8 border-b border-slate-100 bg-white">
                         <div className="text-sm font-black text-slate-400 mb-3 flex items-center gap-2"><User className="w-4 h-4" /> إجابة الطالب:</div>
                         
-                        {/* عرض إجابة المقارنة كجدول للتقييم */}
                         {isComparison ? (
-                          <div className="rounded-2xl border border-indigo-100 overflow-hidden bg-indigo-50/30">
-                            <div className="grid grid-cols-2 divide-x divide-x-reverse divide-indigo-100 bg-indigo-50/80 border-b border-indigo-100">
-                              <div className="p-3 text-center font-black text-indigo-900 text-sm">{(q.options && q.options[0]) || 'الطرف الأول'}</div>
-                              <div className="p-3 text-center font-black text-indigo-900 text-sm">{(q.options && q.options[1]) || 'الطرف الثاني'}</div>
-                            </div>
-                            <div className="grid grid-cols-2 divide-x divide-x-reverse divide-slate-100">
-                              <div className="p-5 font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                {(() => { try { return JSON.parse(studentAns || '["",""]')[0] || <span className="text-slate-400 italic">فارغ</span>; } catch(e){return studentAns;} })()}
-                              </div>
-                              <div className="p-5 font-bold text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                {(() => { try { return JSON.parse(studentAns || '["",""]')[1] || <span className="text-slate-400 italic">فارغ</span>; } catch(e){return studentAns;} })()}
-                              </div>
+                          <div className="rounded-2xl border border-slate-300 overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-right border-collapse min-w-[600px]">
+                                <thead>
+                                  <tr className="bg-indigo-50">
+                                    <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
+                                    <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(q.options && q.options[0]) || 'الطرف الأول'}</th>
+                                    <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(q.options && q.options[1]) || 'الطرف الثاني'}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {q.options?.slice(2).map((aspect: string, rIdx: number) => {
+                                    let parsedAns: any[] = [];
+                                    try { parsedAns = JSON.parse(studentAns || '[]'); } catch(e){}
+                                    return (
+                                      <tr key={rIdx} className="hover:bg-slate-50 transition-colors">
+                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top">{aspect}</td>
+                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[0] || <span className="text-slate-300 italic">فارغ</span>}</td>
+                                        <td className="p-4 border-b border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[1] || <span className="text-slate-300 italic">فارغ</span>}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
                           </div>
                         ) : (
@@ -168,7 +175,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                         )}
                      </div>
 
-                     {/* أدوات التصحيح (للمقالية والعادية) */}
                      <div className="p-5 sm:p-8 bg-slate-50 border-t-4 border-indigo-100">
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-4">
                            <div className="sm:col-span-7 flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200">
