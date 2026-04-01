@@ -359,7 +359,7 @@ export function useDashboardSystem() {
 
       const assignmentStats = sections.map(section => {
         // البحث عن الواجبات المسندة لهذا الفصل من ضمن الواجبات النشطة
-        const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section.id));
+        const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section[0]?.id));
         
         // حساب عدد الطلاب الفعلي في الفصل
         const studentCount = Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0;
