@@ -87,7 +87,6 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      // 🚀 البحث المزدوج لضمان جلب ملف الطالب
       const { data: student } = await supabase
         .from('students')
         .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
@@ -173,8 +172,7 @@ export function useDashboardSystem() {
   const fetchTeacherDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      // 🚀 البحث المزدوج الخارق لجلب ملف المعلم
-      let { data: teacher, error: teacherError } = await supabase
+      let { data: teacher } = await supabase
         .from('teachers')
         .select('*, users(*)')
         .or(`user_id.eq.${user.id},id.eq.${user.id}`)
@@ -403,14 +401,40 @@ export function useDashboardSystem() {
     }
   }, [user]);
 
+  // 🚀 الدالة التي كانت مفقودة في التصدير وتم إصلاحها
+  const fetchTrackSelectionStats = useCallback(async (classId?: string) => {
+    try {
+      let query = supabase
+        .from('students')
+        .select('next_year_track, sections!inner(class_id)')
+        .not('next_year_track', 'is', null);
+      
+      if (classId) {
+        query = query.eq('sections.class_id', classId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return {
+        scientific: data.filter(s => s.next_year_track === 'scientific').length,
+        literary: data.filter(s => s.next_year_track === 'literary').length,
+        total: data.length
+      };
+    } catch (error) {
+      console.error('Error fetching track selection stats:', error);
+      throw error;
+    }
+  }, []);
+
   return {
     fetchAdminDashboardStats,
     fetchAdminRecentActivities,
     fetchStudentDashboardData,
     fetchStudentSchedule,
-    fetchParentDashboardData,
     fetchTeacherDashboardData,
     fetchTeacherSchedule,
-    updateStudentTrack
+    updateStudentTrack,
+    fetchTrackSelectionStats // 🚀 تم إضافتها بنجاح هنا
   };
 }
