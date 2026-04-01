@@ -1,122 +1,205 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Upload, X, Loader2 } from 'lucide-react';
-import imageCompression from 'browser-image-compression';
+import { useState, useRef } from 'react';
+import { Upload, X, Image as ImageIcon, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import Image from 'next/image';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
 
-interface Props {
+interface ImageUploadProps {
   initialImageUrl?: string;
-  onUploadSuccess: (url: string | null) => void;
+  onUploadSuccess: (url: string) => void;
   label?: string;
 }
 
-export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = "اختر صورة" }: Props) {
-  const [uploading, setUploading] = useState(false);
+export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 'ارفع صورة' }: ImageUploadProps) {
+  const [imageUrl, setImageUrl] = useState<string>(initialImageUrl || '');
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(initialImageUrl || null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (initialImageUrl !== undefined) {
-      setImageUrl(initialImageUrl);
-    }
-  }, [initialImageUrl]);
+  // 🚀 خوارزمية ضغط الصور السحرية (تعمل داخل متصفح المستخدم)
+  const compressImage = async (file: File): Promise<File> => {
+    // 1. الضغط يطبق على الصور فقط
+    if (!file.type.startsWith('image/')) return file;
+    
+    // 2. إذا كان الملف أقل من 1 ميجا، لا داعي للضغط ونرجعه كما هو
+    const MAX_SIZE = 1 * 1024 * 1024; // 1 MB
+    if (file.size <= MAX_SIZE) return file;
+
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 3. أقصى أبعاد مقبولة للصورة (تمنع الصور العملاقة)
+        const MAX_WIDTH = 1920;
+        const MAX_HEIGHT = 1920;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // 4. تحويل اللوحة إلى ملف JPEG مضغوط بجودة 70%
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(newFile);
+            } else {
+              reject(new Error('فشل ضغط الصورة'));
+            }
+          },
+          'image/jpeg',
+          0.7
+        );
+      };
+      
+      img.onerror = () => reject(new Error('فشل قراءة ملف الصورة'));
+      img.src = url;
+    });
+  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 1024 * 1024) {
-      setError('حجم الملف يجب أن يكون أقل من 1 ميجابايت');
-      return;
-    }
-
+    setIsUploading(true);
     setError(null);
-    setUploading(true);
-
-    if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME === 'YOUR_CLOUDINARY_CLOUD_NAME') {
-      setError('يرجى إعداد Cloudinary Cloud Name في المتغيرات البيئية (Settings -> Secrets)');
-      setUploading(false);
-      return;
-    }
-
-    if (!process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET === 'YOUR_CLOUDINARY_UPLOAD_PRESET') {
-      setError('يرجى إعداد Cloudinary Upload Preset في المتغيرات البيئية (Settings -> Secrets)');
-      setUploading(false);
-      return;
-    }
 
     try {
-      const compressedFile = await imageCompression(file, {
-        maxSizeMB: 1,
-        maxWidthOrHeight: 1024,
-        fileType: 'image/webp',
-        initialQuality: 0.7,
-      });
+      // 🚀 استدعاء دالة الضغط قبل الرفع!
+      const processedFile = await compressImage(file);
 
       const formData = new FormData();
-      formData.append('file', compressedFile);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+      formData.append('file', processedFile);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
 
-      const res = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
-        { method: 'POST', body: formData }
-      );
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      const data = await res.json();
-      if (!res.ok) {
-        if (data.error?.message?.includes('disabled')) {
-          throw new Error('حساب Cloudinary الخاص بك معطل أو اسم السحابة غير صحيح. يرجى التحقق من إعدادات Cloudinary.');
-        }
-        throw new Error(data.error?.message || 'فشل الرفع');
-      }
-
-      setImageUrl(data.secure_url);
-      onUploadSuccess(data.secure_url);
+      const data = await response.json();
       
-      // Delete old image if it exists and is different
-      if (imageUrl && imageUrl !== data.secure_url) {
-        await deleteFromCloudinary(imageUrl);
+      if (data.secure_url) {
+        setImageUrl(data.secure_url);
+        onUploadSuccess(data.secure_url);
+      } else {
+        throw new Error(data.error?.message || 'فشل رفع الملف');
       }
     } catch (err: any) {
-      setError(err.message || 'حدث خطأ أثناء الرفع');
+      setError(err.message || 'حدث خطأ أثناء رفع الملف');
     } finally {
-      setUploading(false);
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
+  const handleRemove = () => {
+    setImageUrl('');
+    onUploadSuccess('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const isImage = imageUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || imageUrl.includes('cloudinary.com/image');
+
   return (
-    <div className="space-y-4">
+    <div className="w-full">
       {!imageUrl ? (
-        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50">
-          {uploading ? (
-            <Loader2 className="animate-spin text-indigo-600" />
+        <div 
+          onClick={() => !isUploading && fileInputRef.current?.click()}
+          className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer flex flex-col items-center justify-center min-h-[160px]
+            ${isUploading ? 'bg-slate-50 border-slate-200' : 'bg-indigo-50/50 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400'}`}
+        >
+          {isUploading ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-sm font-bold text-indigo-600">جاري معالجة ورفع الملف...</p>
+            </div>
           ) : (
-            <>
-              <Upload className="text-slate-400" />
-              <span className="text-sm text-slate-500 mt-2">{label}</span>
-            </>
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-12 w-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                <Upload className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-indigo-900">{label}</p>
+                <p className="text-[10px] font-bold text-indigo-500 mt-1">سيتم ضغط الصور الكبيرة (أكثر من 1MB) تلقائياً لتسريع الرفع</p>
+              </div>
+            </div>
           )}
-          <input type="file" className="hidden" accept="image/*" onChange={handleUpload} disabled={uploading} />
-        </label>
+        </div>
       ) : (
-        <div className="relative w-full h-48">
-          <Image src={imageUrl} alt="Uploaded" fill className="object-contain rounded-lg" referrerPolicy="no-referrer" />
-          <button 
-            onClick={async () => { 
-              const oldUrl = imageUrl;
-              setImageUrl(null); 
-              onUploadSuccess(null); 
-              if (oldUrl) await deleteFromCloudinary(oldUrl);
-            }} 
-            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full z-10"
-          >
-            <X size={16} />
-          </button>
+        <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 group shadow-sm">
+          {isImage ? (
+            <div className="relative w-full h-48 flex items-center justify-center p-2 bg-white">
+              <Image 
+                src={imageUrl} 
+                alt="Uploaded" 
+                fill 
+                className="object-contain"
+                unoptimized
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-4 p-6">
+              <div className="h-14 w-14 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-200">
+                <FileText className="h-7 w-7" />
+              </div>
+              <div className="flex-1 truncate">
+                <p className="text-sm font-black text-slate-900 truncate">تم إرفاق الملف بنجاح</p>
+                <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 hover:underline truncate block mt-1" dir="ltr">
+                  انقر هنا لعرض الملف
+                </a>
+              </div>
+            </div>
+          )}
+          
+          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleRemove}
+              className="h-10 w-10 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700 shadow-sm transition-all hover:scale-105 active:scale-95"
+              title="إزالة الملف"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       )}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+
+      {error && (
+        <div className="mt-3 flex items-center gap-2 text-red-600 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100 animate-in fade-in">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleUpload} 
+        className="hidden" 
+        accept="image/*,.pdf,.doc,.docx"
+      />
     </div>
   );
 }
