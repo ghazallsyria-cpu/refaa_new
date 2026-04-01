@@ -105,6 +105,9 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     );
   }
 
+  // 🚀 تصحيح قراءة اسم الطالب ليتوافق مع السيرفر
+  const studentName = submission?.student?.users?.full_name || submission?.student?.user?.full_name || 'طالب غير معروف';
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
@@ -148,7 +151,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                 <User className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-slate-900">{submission?.student?.user?.full_name || 'طالب غير معروف'}</h2>
+                <h2 className="text-lg font-black text-slate-900">{studentName}</h2>
                 <div className="flex items-center gap-4 mt-1">
                   <span className="flex items-center gap-1 text-xs font-bold text-slate-400">
                     <Calendar className="h-3 w-3" />
@@ -284,4 +287,3 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     </div>
   );
 }
-
