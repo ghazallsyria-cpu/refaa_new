@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { Subject, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
+import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
 
 export interface AssignmentDetails {
@@ -27,7 +27,7 @@ export function useAssignmentsSystem() {
     setError(null);
 
     try {
-      // 🚀 التحول إلى الـ API المنيع لتجنب أي فشل صامت أو RLS
+      // 🚀 الاتصال بالـ API المنيع بدلاً من استعلامات قاعدة البيانات المباشرة
       const response = await fetch('/api/assignments/list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,7 +63,7 @@ export function useAssignmentsSystem() {
         setData(mappedData);
       }
 
-      // جلب تسليمات الطالب
+      // جلب تسليمات الطالب إن وجدت
       if (currentRole === 'student') {
         const { data: subData } = await supabase.from('assignment_submissions').select('assignment_id, status, grade, id, student_id, submitted_at').eq('student_id', user.id);
         const subMap: Record<string, AssignmentSubmission> = {};
