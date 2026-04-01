@@ -247,7 +247,9 @@ export function useAssignmentsSystem() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ submissionId, grade, feedback, studentId, assignmentTitle, answersGrading }),
     });
-    if (!response.ok) throw new Error('Failed to update grade');
+    
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to update grade');
   }, []);
 
   return { data, loading, error, studentSubmissions, refetch: fetchAssignments, fetchAssignmentQuestions, saveAssignment, deleteAssignment, fetchAssignmentDetails, submitAssignment, fetchSubmissionDetails, updateSubmissionGrade };
