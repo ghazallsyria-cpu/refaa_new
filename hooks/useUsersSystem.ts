@@ -20,6 +20,7 @@ export function useUsersSystem() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,8 +119,6 @@ export function useUsersSystem() {
     }
   }, []);
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-
   const fetchSubjects = useCallback(async (): Promise<void> => {
     try {
       const { data, error } = await supabase
@@ -132,7 +131,7 @@ export function useUsersSystem() {
     }
   }, []);
 
-  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string }>): Promise<{ success: boolean }> => {
+  const addStudent = useCallback(async (studentData: Partial<Student & { email: string, full_name: string, phone: string, parent_id?: string | null }>): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -212,7 +211,7 @@ export function useUsersSystem() {
     }
   }, [fetchStudents]);
 
-  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link: string }>): Promise<{ success: boolean, password?: string }> => {
+  const addTeacher = useCallback(async (teacherData: Partial<Teacher & { email: string, full_name: string, phone: string, zoom_link?: string, specialization?: string }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -252,7 +251,7 @@ export function useUsersSystem() {
     }
   }, [fetchTeachers]);
 
-  const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, updateData: Partial<Teacher & { email: string }>): Promise<{ success: boolean }> => {
+  const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, updateData: Partial<Teacher & { email: string, zoom_link?: string, specialization?: string }>): Promise<{ success: boolean }> => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
@@ -296,7 +295,7 @@ export function useUsersSystem() {
     }
   }, [fetchTeachers]);
 
-  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title: string, workplace: string, student_ids: string[] }>): Promise<{ success: boolean, password?: string }> => {
+  const addParent = useCallback(async (parentData: Partial<Parent & { email: string, full_name: string, phone: string, job_title?: string, workplace?: string, student_ids?: string[] }>): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -441,7 +440,6 @@ export function useUsersSystem() {
 
   const fetchStudentProfile = useCallback(async (studentId: string): Promise<{ student: Student, attendanceStats: any, absentDates: string[], recentGrades: any[] }> => {
     try {
-      // Fetch student profile
       const { data: student, error: studentError } = await supabase
         .from('students')
         .select('*, users(*), sections(*, classes(*))')
@@ -455,7 +453,6 @@ export function useUsersSystem() {
       let recentGrades: any[] = [];
 
       if (student) {
-        // Fetch attendance stats
         const { data: attendance, error: attendanceError } = await supabase
           .from('daily_attendance_summary')
           .select('daily_status, date')
@@ -479,7 +476,6 @@ export function useUsersSystem() {
           absentDates = absent.map(a => a.date);
         }
 
-        // Fetch recent grades
         const { data: grades, error: gradesError } = await supabase
           .from('exam_attempts')
           .select('*, exam:exams(title, subject:subjects(name))')
