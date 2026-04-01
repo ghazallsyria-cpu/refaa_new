@@ -38,6 +38,9 @@ export const SubjectSchema = z.object({
   created_at: z.string().optional(),
 });
 
+// 🚀 السطر المعدل للسماح بحفظ أسئلة المقارنة والترويسة!
+export const QuestionTypeSchema = z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox', 'true_false', 'comparison', 'section_header', 'multi_select', 'essay', 'fill_in_blank', 'open']);
+
 export const TeacherSectionSchema = z.object({
   teacher_id: z.string().uuid(),
   section_id: z.string().uuid(),
@@ -66,7 +69,7 @@ export const StudentSchema = z.object({
   track_selection_date: z.string().optional().nullable(),
   users: UserSchema.partial().optional(),
   sections: SectionSchema.partial().optional(),
-  parents: z.any().optional(), // Avoid circular dependency for now
+  parents: z.any().optional(),
 });
 
 export const ParentSchema = z.object({
@@ -175,9 +178,9 @@ export const ExamSchema = z.object({
   description: nullableString,
   subject_id: z.string().uuid(),
   teacher_id: z.string().uuid(),
-  duration: z.coerce.number().int().min(1),
-  max_attempts: z.coerce.number().int().min(1).default(1),
-  max_score: z.coerce.number().min(0),
+  duration: z.number().int().min(1),
+  max_attempts: z.number().int().min(1).default(1),
+  max_score: z.number().min(0),
   exam_date: z.string(),
   start_time: z.string(),
   end_time: z.string(),
@@ -185,8 +188,6 @@ export const ExamSchema = z.object({
   settings: ExamSettingsSchema.optional().nullable(),
   created_at: z.string().optional(),
 });
-
-export const QuestionTypeSchema = z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'matching', 'ordering', 'file']);
 
 export const SaveExamRequestSchema = z.object({
   examData: ExamSchema.partial().extend({
@@ -197,9 +198,9 @@ export const SaveExamRequestSchema = z.object({
     id: z.string().uuid().optional(),
     type: QuestionTypeSchema,
     content: z.string(),
-    points: z.coerce.number().min(0),
+    points: z.number().min(0),
     explanation: z.string().optional().nullable(),
-    media_url: z.string().optional().nullable().transform(v => v === "" ? null : v),
+    media_url: z.string().url().optional().nullable(),
     media_type: z.enum(['image', 'video', 'audio']).optional().nullable(),
     options: z.array(z.object({
       content: z.string(),
@@ -262,13 +263,12 @@ export const SaveAssignmentRequestSchema = z.object({
     id: z.string().uuid().optional(),
     content: z.string().min(1),
     type: QuestionTypeSchema,
-    options: z.array(z.any()).optional().nullable(),
+    options: z.array(z.string()).optional().nullable(),
     points: z.number().min(0),
-    isRequired: z.boolean().optional(),
+    isRequired: z.boolean(),
   })),
   sectionIds: z.array(z.string().uuid()),
   subjects: z.array(z.object({ id: z.string().uuid(), name: z.string() })),
-  userId: z.string().uuid().optional(),
 });
 
 export const RawAssignmentAnswerSchema = z.object({
@@ -317,7 +317,7 @@ export const SaveScheduleRequestSchema = z.object({
   subject_id: z.string().uuid(),
   teacher_id: z.string().uuid(),
   day_of_week: z.number().int().min(0).max(6),
-  period: z.number().int().min(1).max(12),
+  period_number: z.number().int().min(1).max(12),
   room_number: z.string().optional().nullable(),
 });
 
