@@ -57,7 +57,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const sectionClass = (sub.student?.section?.class as any)?.name || (sub.student?.section as any)?.classes?.name || '';
        const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
-       const isGraded = sub.status === 'graded' || sub.status === 'completed';
+       // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
+       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
        const date = new Date(sub.submitted_at || sub.created_at).toLocaleString('ar-EG');
@@ -86,14 +87,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
 
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
-    const gradedSubs = submissions.filter(s => s.status === 'graded' || s.status === 'completed');
+    // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
+    const gradedSubs = submissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
     const avgScore = gradedSubs.length > 0 ? Math.round(gradedSubs.reduce((sum, s) => sum + (Number(s.grade) || 0), 0) / gradedSubs.length) : 0;
 
     const tableRows = submissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const sectionClass = (sub.student?.section?.class as any)?.name || (sub.student?.section as any)?.classes?.name || '';
        const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
-       const isGraded = sub.status === 'graded' || sub.status === 'completed';
+       // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
+       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const date = new Date(sub.submitted_at || sub.created_at).toLocaleString('ar-EG');
        
@@ -283,7 +286,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const dueDateObj = new Date(assignment.due_date);
   const isOverdue = dueDateObj < new Date();
   
-  // 🚀 إظهار اسم الصف كاملاً (مثل: حادي عشر علمي - 1)
   const firstSection = (assignment as any).assignment_sections?.[0]?.sections || (assignment as any).assignment_sections?.[0]?.section;
   const classObj = firstSection?.classes || firstSection?.class;
   const className = Array.isArray(classObj) ? classObj[0]?.name : classObj?.name || '';
@@ -612,7 +614,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     <button
                       type="submit"
                       disabled={isSubmitting || (!content && !fileUrl)}
-                      className="w-full flex justify-center items-center gap-3 rounded-[2rem] bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="w-full flex justify-center items-center gap-3 rounded-2xl bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (
                         <div className="h-6 w-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -682,6 +684,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="divide-y divide-slate-100">
                     {submissions.map((sub) => {
                        const st = sub.student as any;
+                       // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
+                       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
+
                        return (
                          <div key={sub.id} className="p-6 hover:bg-slate-50/50 transition-colors">
                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -698,7 +703,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                </div>
                              </div>
                              <div className="flex items-center gap-3 justify-end border-t md:border-0 pt-4 md:pt-0 mt-2 md:mt-0 border-slate-100 w-full md:w-auto">
-                               {sub.status === 'graded' || sub.status === 'completed' ? (
+                               {isGraded ? (
                                  <div className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-black flex items-center gap-2">
                                    <CheckCircle2 className="w-4 h-4" /> الدرجة: {sub.grade}
                                  </div>
