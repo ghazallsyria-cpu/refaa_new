@@ -55,6 +55,11 @@ export default function AssignmentsPage() {
     return (matchTitle || matchSubject) && matchStatus;
   });
 
+  // تحديد الواجبات المعروضة بناءً على الصلاحيات
+  const displayedAssignments = (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') 
+    ? filteredAssignments 
+    : filteredAssignments.filter(e => e?.status === 'published');
+
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -76,7 +81,7 @@ export default function AssignmentsPage() {
         subject_id: currentAssignment.subject_id,
         teacher_id: currentRole === 'teacher' ? user.id : currentAssignment.teacher_id,
         due_date: currentAssignment.due_date,
-        file_url: currentAssignment.file_url, // هنا يتم حفظ رابط الصورة المرفوعة
+        file_url: currentAssignment.file_url,
         status: currentAssignment.status || 'draft'
       };
 
@@ -119,7 +124,7 @@ export default function AssignmentsPage() {
     setCurrentAssignment({
       ...assignment,
       due_date: formattedDate,
-      section_ids: assignment.assignment_sections?.map((as: any) => as.section_id) || []
+      section_ids: assignment.assignment_sections?.map((as: any) => as.section_id) || assignment.section_ids || []
     });
     const qData = await fetchAssignmentQuestions(assignment.id);
     setQuestions(qData);
@@ -227,7 +232,7 @@ export default function AssignmentsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
           <p className="text-slate-500 font-bold animate-pulse">جاري تحميل الواجبات...</p>
         </div>
-      ) : filteredAssignments.length === 0 ? (
+      ) : displayedAssignments.length === 0 ? (
         <div className="text-center py-32 glass-card rounded-4xl border border-white/60 shadow-2xl shadow-slate-200/50">
           <div className="h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
             <FileText className="h-12 w-12 text-slate-300" />
@@ -238,45 +243,33 @@ export default function AssignmentsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredAssignments.map((assignment) => {
-            const overdue = isOverdue(assignment.due_date!);
-            const dueDateObj = new Date(assignment.due_date!);
+        <div className={currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10" : "flex flex-col gap-5"}>
+          {displayedAssignments.map((assignment, index) => {
             
-            return (
-              <div key={assignment.id} className="group glass-card rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white/60 overflow-hidden flex flex-col transition-all hover:shadow-2xl hover:-translate-y-2">
-                <div className="p-8 flex-1">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="inline-flex items-center rounded-2xl bg-indigo-50 px-4 py-1.5 text-xs font-black text-indigo-700 uppercase tracking-widest border border-indigo-100 shadow-sm">
-                        {assignment.subject_name}
-                      </span>
-                      
-                      {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
-                         <span className={`inline-flex items-center gap-1.5 rounded-2xl px-4 py-1.5 text-xs font-black uppercase tracking-widest border shadow-sm ${
-                           assignment.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                           assignment.status === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                           'bg-slate-50 text-slate-700 border-slate-100'
-                         }`}>
-                           {assignment.status === 'published' ? 'منشور' : assignment.status === 'draft' ? 'مسودة' : 'مؤرشف'}
-                         </span>
-                      )}
+            // 👨‍🏫 واجهة المعلم / المشرف (بطاقات كبيرة وتفاصيل التسليم)
+            if (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') {
+              const pendingGradesCount = (assignment.submission_count || 0) - (assignment.graded_count || 0);
+              const needsTeacherGrading = pendingGradesCount > 0;
+              const overdue = isOverdue(assignment.due_date!);
+              const dueDateObj = new Date(assignment.due_date!);
 
-                      {currentRole === 'student' && studentSubmissions[assignment.id] && (
-                        <span className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-50 px-4 py-1.5 text-xs font-black text-emerald-700 uppercase tracking-widest border border-emerald-100 shadow-sm">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          تم التسليم
-                        </span>
+              return (
+                <div key={assignment.id} className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col">
+                  <div className="p-10 flex-1">
+                    <div className="flex items-start justify-between mb-8 gap-2">
+                      <div className={`px-5 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border shadow-sm whitespace-nowrap ${getStatusColor(assignment.status)}`}>
+                        {getStatusLabel(assignment.status)}
+                      </div>
+
+                      {needsTeacherGrading && (
+                        <div className="flex-1 flex justify-end">
+                          <div className="px-3 py-2 rounded-2xl text-[10px] font-black border shadow-sm bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1.5 animate-pulse">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>{pendingGradesCount} بحاجة لتصحيحك</span>
+                          </div>
+                        </div>
                       )}
-                      {overdue && assignment.status === 'published' && (
-                        <span className="inline-flex items-center gap-1.5 rounded-2xl bg-red-50 px-4 py-1.5 text-xs font-black text-red-700 uppercase tracking-widest border border-red-100 shadow-sm">
-                          <AlertCircle className="h-3.5 w-3.5" />
-                          انتهى الوقت
-                        </span>
-                      )}
-                    </div>
-                    
-                    {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
+                      
                       <div className="flex gap-2">
                         <Link 
                            href={`/assignments/${assignment.id}`}
@@ -300,65 +293,114 @@ export default function AssignmentsPage() {
                           <Trash2 className="h-5 w-5" />
                         </button>
                       </div>
-                    )}
+                    </div>
+
+                    <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
+                      {assignment.title}
+                    </h3>
+                    <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-lg leading-relaxed">
+                      {assignment.description || 'لا يوجد وصف لهذا الواجب'}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-5">
+                      <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
+                        <div className="h-10 w-10 rounded-2xl bg-indigo-50 flex items-center justify-center"><BookOpen className="h-5 w-5 text-indigo-500" /></div>
+                        <span className="truncate">{assignment.subject_name}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm font-black text-slate-600 bg-slate-50/50 p-4 rounded-3xl border border-slate-100/50">
+                        <div className="h-10 w-10 rounded-2xl bg-emerald-50 flex items-center justify-center"><Users className="h-5 w-5 text-emerald-500" /></div>
+                        <span>{assignment.submission_count || 0} تسليم</span>
+                      </div>
+                    </div>
                   </div>
-                  
-                  <h3 className="text-2xl font-black text-slate-900 mb-3 line-clamp-2 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
-                    {assignment.title}
-                  </h3>
-                  
-                  <p className="text-slate-500 font-medium mb-6 line-clamp-3 leading-relaxed">
-                    {assignment.description || 'لا يوجد وصف'}
-                  </p>
-                  
-                  <div className="space-y-3 mt-auto">
-                    <div className="flex items-center text-sm font-bold text-slate-600 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
-                      <Users className="h-5 w-5 text-indigo-500" />
-                      <span className="line-clamp-1">
-                        {assignment.assignment_sections?.map((as: any) => `${as.section?.class?.name || ''} - ${as.section?.name || ''}`).join('، ') || 'لا يوجد فصول مستهدفة'}
-                      </span>
+
+                  <div className={`px-8 py-5 border-t flex flex-col sm:flex-row items-center justify-between gap-4 ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
+                    <div className={`flex items-center gap-2 text-sm font-black ${overdue && assignment.status === 'published' ? 'text-red-600' : 'text-slate-700'}`}>
+                      <Clock className="h-5 w-5" />
+                      <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      {assignment.file_url && (
+                        <a 
+                          href={assignment.file_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="h-11 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                        >
+                          <ImageIcon className="h-4 w-4" />
+                          <span>المرفق</span>
+                        </a>
+                      )}
+                      <Link 
+                        href={`/assignments/${assignment.id}`}
+                        className="h-11 px-6 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-black shadow-md transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                      >
+                        <span>التفاصيل والنتائج</span>
+                      </Link>
                     </div>
                   </div>
                 </div>
-                
-                <div className={`px-8 py-5 border-t flex flex-col sm:flex-row items-center justify-between gap-4 ${overdue && assignment.status === 'published' ? 'bg-red-50/50 border-red-100' : 'bg-slate-50/50 border-slate-100'}`}>
-                  <div className={`flex items-center gap-2 text-sm font-black ${overdue && assignment.status === 'published' ? 'text-red-600' : 'text-slate-700'}`}>
-                    <Clock className="h-5 w-5" />
-                    <span dir="ltr">
-                      {format(dueDateObj, 'yyyy/MM/dd HH:mm')}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
-                    {assignment.file_url && (
-                      <a 
-                        href={assignment.file_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="h-11 px-4 rounded-xl bg-white text-xs font-black text-indigo-600 shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
-                      >
-                        <ImageIcon className="h-4 w-4" />
-                        <span>عرض المرفق</span>
-                      </a>
-                    )}
-                    <Link 
-                      href={`/assignments/${assignment.id}`}
-                      className={`h-11 px-6 rounded-xl text-sm font-black shadow-md transition-all flex items-center gap-2 active:scale-95 flex-1 sm:flex-none justify-center ${
-                        currentRole === 'student' && studentSubmissions[assignment.id]
-                          ? 'bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200'
-                      }`}
-                    >
-                      <span>
-                        {currentRole === 'student' 
-                          ? (studentSubmissions[assignment.id] ? 'عرض الإجابة' : 'عرض وتسليم') 
-                          : 'التفاصيل والنتائج'}
-                      </span>
-                    </Link>
-                  </div>
+              );
+            } 
+            
+            // 👨‍🎓 واجهة الطالب (صفوف مضغوطة وأنيقة)
+            else {
+              const statusStr = String((studentSubmissions[assignment.id] as any)?.status || '');
+              const isStudentDone = ['submitted', 'graded'].includes(statusStr);
+              const overdue = isOverdue(assignment.due_date!);
+              const dueDateObj = new Date(assignment.due_date!);
+              
+              return (
+                <div key={assignment.id} className="w-full bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 group hover:border-indigo-200 hover:shadow-md transition-all">
+                   <div className="flex items-center gap-5 w-full md:w-auto">
+                      <div className={`p-4 rounded-2xl shrink-0 border transition-colors ${
+                        isStudentDone 
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-100 group-hover:bg-emerald-600 group-hover:text-white' 
+                          : overdue
+                            ? 'bg-red-50 text-red-600 border-red-100 group-hover:bg-red-600 group-hover:text-white'
+                            : 'bg-indigo-50 text-indigo-600 border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white'
+                      }`}>
+                        <FileText className="h-8 w-8" />
+                      </div>
+                      <div className="text-right">
+                        <h3 className="text-xl font-black text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">{assignment.title}</h3>
+                        <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
+                          <span className="flex items-center gap-1.5"><BookOpen className="w-4 h-4"/> {assignment.subject_name}</span>
+                          <span className="opacity-50">•</span>
+                          <span className={`flex items-center gap-1.5 ${overdue && !isStudentDone ? 'text-red-500 animate-pulse' : ''}`}>
+                            <Clock className="w-4 h-4"/> 
+                            <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+                          </span>
+                        </div>
+                      </div>
+                   </div>
+                   
+                   <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto justify-end border-t md:border-0 border-slate-100 pt-4 md:pt-0 mt-2 md:mt-0">
+                      {isStudentDone ? (
+                        <div className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest border ${statusStr === 'graded' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                          {statusStr === 'graded' ? 'تم التقييم' : 'قيد المراجعة'}
+                        </div>
+                      ) : (
+                        <div className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest border ${overdue ? 'bg-red-50 text-red-700 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                          {overdue ? 'متأخر' : 'مطلوب حله'}
+                        </div>
+                      )}
+                      
+                      <Link href={`/assignments/${assignment.id}`} className="w-full md:w-auto">
+                        <button className={`w-full md:w-auto px-8 py-3 rounded-xl text-sm font-black shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                          isStudentDone 
+                            ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600' 
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200'
+                        }`}>
+                           {isStudentDone ? <Eye className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                           {isStudentDone ? 'عرض النتيجة' : 'فتح الواجب'}
+                        </button>
+                      </Link>
+                   </div>
                 </div>
-              </div>
-            );
+              );
+            }
           })}
         </div>
       )}
@@ -508,7 +550,7 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
 
-                  {/* 🚀 استبدال رابط النص بأداة رفع الصور */}
+                  {/* 🚀 أداة رفع الصور للمسائل */}
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
                     <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
                       <ImageIcon className="w-5 h-5 text-indigo-500" />
@@ -562,5 +604,3 @@ export default function AssignmentsPage() {
     </div>
   );
 }
-
-
