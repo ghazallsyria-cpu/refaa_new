@@ -10,6 +10,7 @@ export interface ProfileSettings {
   phone: string;
   role: string;
   zoom_link: string;
+  avatar_url?: string; // 🚀 إضافة دعم الصورة الشخصية
 }
 
 export function useSettingsSystem() {
@@ -20,9 +21,10 @@ export function useSettingsSystem() {
   const fetchProfile = useCallback(async (): Promise<ProfileSettings | null> => {
     if (!user) return null;
     try {
+      // 🚀 جلب حقل الصورة (avatar_url) من جدول المستخدمين
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('full_name, email, phone, role')
+        .select('full_name, email, phone, role, avatar_url')
         .eq('id', user.id)
         .single();
       
@@ -30,11 +32,15 @@ export function useSettingsSystem() {
 
       let zoomLink = '';
       if (userData.role === 'teacher') {
-        const { data: teacherData } = await supabase
-          .from('teachers')
-          .select('zoom_link')
-          .eq('id', user.id)
-          .single();
+        // 🚀 بحث أكثر دقة عن المعلم
+        let teacherData = null;
+        const { data: t1 } = await supabase.from('teachers').select('zoom_link').eq('user_id', user.id).maybeSingle();
+        if (t1) teacherData = t1;
+        else {
+          const { data: t2 } = await supabase.from('teachers').select('zoom_link').eq('id', user.id).maybeSingle();
+          if (t2) teacherData = t2;
+        }
+
         if (teacherData) {
           zoomLink = teacherData.zoom_link || '';
         }
@@ -45,7 +51,8 @@ export function useSettingsSystem() {
         email: userData.email || '',
         phone: userData.phone || '',
         role: userData.role || '',
-        zoom_link: zoomLink
+        zoom_link: zoomLink,
+        avatar_url: userData.avatar_url || '' // 🚀 إرجاع الصورة للواجهة
       } as ProfileSettings;
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error fetching profile';
@@ -63,7 +70,7 @@ export function useSettingsSystem() {
         .limit(1)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows returned"
+      if (error && error.code !== 'PGRST116') throw error; 
 
       if (data) {
         return {
