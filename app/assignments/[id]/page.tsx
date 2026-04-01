@@ -33,20 +33,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [mySubmission, setMySubmission] = useState<SubmissionWithStudent | null>(null);
   const [myAnswers, setMyAnswers] = useState<Record<string, string | string[] | null>>({});
   
-  // 🚀 إضافة حالة لحفظ الإجابات الكاملة لكي نعرض التغذية الراجعة
   const [fullAnswersMap, setFullAnswersMap] = useState<Record<string, any>>({});
   
   const [loading, setLoading] = useState(true);
   const [studentId, setStudentId] = useState<string | null>(null);
 
-  // Management State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'submissions' | 'preview'>('submissions');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [editData, setEditData] = useState<Partial<AssignmentWithMeta>>({});
 
-  // Submission Form State
   const [content, setContent] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,8 +54,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const exportToExcel = () => { /* ... (Same as before) ... */ };
-  const exportToPDF = () => { /* ... (Same as before) ... */ };
+  const exportToExcel = () => { /* ... */ };
+  const exportToPDF = () => { /* ... */ };
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -78,7 +75,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
           if (details.answers) {
             const answersMap: Record<string, string | string[] | null> = {};
-            const fullMap: Record<string, any> = {}; // لحفظ تفاصيل الدرجة والملاحظة
+            const fullMap: Record<string, any> = {};
             
             details.answers.forEach((a) => {
               answersMap[a.question_id] = a.selected_options || a.answer_text;
@@ -176,7 +173,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-24" dir="rtl">
-      {/* ... [Header and Notification code remains exactly the same] ... */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-6">
         <div className="flex items-center gap-4">
           <Link href="/assignments" className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
@@ -270,7 +266,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
           <div className="p-8">
             
-            {/* 🚀 عرض الدرجة والملاحظة العامة إذا كان مقيماً */}
             {isGraded && (
               <div className="mb-10 p-8 rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 rounded-full blur-2xl -mr-10 -mt-10"></div>
@@ -297,7 +292,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               </div>
             )}
 
-            {/* 🚀 السحر: عرض تفاصيل كل سؤال بملاحظته إذا كان مقيماً، وإلا يظهر الـ Form العادي للحل */}
             {isGraded && questions.length > 0 ? (
               <div className="space-y-6">
                 <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2 px-2">
@@ -306,8 +300,19 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 
                 {questions.map((q, idx) => {
                   const studentAns = myAnswers[q.id];
-                  const answerDetails = fullAnswersMap[q.id]; // جلب تفاصيل التقييم للسؤال
+                  const answerDetails = fullAnswersMap[q.id]; 
+                  const isHeader = q.type === 'section_header';
+                  const isComparison = q.type === 'comparison';
                   
+                  if (isHeader) {
+                     return (
+                       <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100 mt-8">
+                          <h3 className="text-2xl font-black text-indigo-900 leading-relaxed">{q.content || (q as any).text}</h3>
+                          {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200" alt="مرفق" />}
+                       </div>
+                     );
+                  }
+
                   let studentAnswerText = studentAns;
                   if ((q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'checkbox') && q.options) {
                      const selectedOpt = (q.options as any[]).find(o => o.id === studentAns || o.content === studentAns);
@@ -315,12 +320,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                      else if (Array.isArray(studentAns)) studentAnswerText = studentAns.join('، ');
                   }
 
-                  const isUnanswered = !studentAnswerText;
+                  const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                   const isCorrect = answerDetails?.is_correct;
 
                   return (
                     <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border-2 transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
-                      {/* رأس السؤال */}
                       <div className="p-6 sm:p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                         <div className="flex gap-4 items-start">
                           <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${isUnanswered ? 'bg-slate-200 text-slate-600' : isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
@@ -328,6 +332,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                           </div>
                           <div className="pt-2">
                              <h3 className="font-bold text-xl text-slate-800 leading-relaxed">{(q as any).text || q.content}</h3>
+                             {q.media_url && <img src={q.media_url} className="mt-4 max-h-48 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 bg-white px-5 py-2.5 rounded-xl font-bold text-base border border-slate-200 shrink-0 shadow-sm">
@@ -338,19 +343,46 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                         </div>
                       </div>
 
-                      {/* إجابة الطالب وملاحظة المعلم */}
                       <div className="p-6 sm:p-8">
-                        <div className={`p-5 rounded-2xl border mb-4 ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed' : isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
-                          <div className="text-sm font-black mb-3 flex items-center gap-2">
-                            {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
-                            <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك:</span>
+                        {isComparison ? (
+                          <div className={`rounded-2xl border overflow-hidden shadow-sm ${isUnanswered ? 'border-slate-200 bg-slate-50' : isCorrect ? 'border-emerald-200 bg-emerald-50/30' : 'border-rose-200 bg-rose-50/30'}`}>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-right border-collapse min-w-[600px]">
+                                <thead>
+                                  <tr className={isUnanswered ? 'bg-slate-100' : isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
+                                    <th className="p-4 border-b border-l border-white/50 font-black text-slate-800 text-sm w-1/3">وجه المقارنة</th>
+                                    <th className="p-4 border-b border-l border-white/50 font-black text-slate-800 text-sm text-center w-1/3">{(q.options && q.options[0]) || 'الطرف الأول'}</th>
+                                    <th className="p-4 border-b border-white/50 font-black text-slate-800 text-sm text-center w-1/3">{(q.options && q.options[1]) || 'الطرف الثاني'}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {q.options?.slice(2).map((aspect: string, rIdx: number) => {
+                                    let parsedAns: any[] = [];
+                                    try { parsedAns = JSON.parse((studentAns as string) || '[]'); } catch(e){}
+                                    return (
+                                      <tr key={rIdx} className="hover:bg-white/50 transition-colors">
+                                        <td className="p-4 border-b border-l border-white/50 font-bold text-slate-700 bg-white/30 align-top">{aspect}</td>
+                                        <td className="p-4 border-b border-l border-white/50 font-bold text-slate-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[0] || <span className="text-slate-400 italic">فارغ</span>}</td>
+                                        <td className="p-4 border-b border-white/50 font-bold text-slate-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[1] || <span className="text-slate-400 italic">فارغ</span>}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                          <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
-                              {isUnanswered ? 'لم تقم بتقديم إجابة لهذا السؤال.' : studentAnswerText}
-                          </p>
-                        </div>
+                        ) : (
+                          <div className={`p-5 rounded-2xl border mb-4 ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed' : isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
+                            <div className="text-sm font-black mb-3 flex items-center gap-2">
+                              {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
+                              <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك:</span>
+                            </div>
+                            <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
+                                {isUnanswered ? 'لم تقم بتقديم إجابة لهذا السؤال.' : (studentAnswerText as string)}
+                            </p>
+                          </div>
+                        )}
 
-                        {/* ظهور ملاحظة المعلم المتألقة إذا وجدت */}
                         {answerDetails?.feedback && (
                           <div className="mt-4 p-5 rounded-2xl bg-indigo-50/80 border border-indigo-200/50 relative overflow-hidden">
                             <div className="absolute right-0 top-0 w-1 h-full bg-indigo-500"></div>
@@ -365,7 +397,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   );
                 })}
 
-                {/* 🚀 إظهار الملف المرفق من الطالب في التقييم */}
                 {(mySubmission?.content || mySubmission?.file_url) && (
                   <div className="mt-8 p-8 rounded-3xl bg-slate-50 border border-slate-200 shadow-sm">
                     <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
@@ -386,7 +417,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 )}
               </div>
             ) : questions.length > 0 ? (
-              /* إذا لم يتم التقييم بعد، يظهر الفورم للحل أو العرض كـ ReadOnly */
               <AssignmentForm 
                 questions={questions} 
                 onSubmit={handleSubmitAnswers} 
@@ -476,7 +506,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
       
-      {/* ... [Teacher Tabs section remains the same] ... */}
       {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
         <div className="space-y-8">
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
@@ -596,7 +625,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      {/* Delete Confirmation Modal & Edit Modal (Same as before) */}
+      {/* Delete and Edit Modals */}
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
