@@ -90,12 +90,12 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
           <div className="flex flex-col gap-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
-                  {question.content}
+                <h3 dir="auto" className="text-xl font-black text-slate-900 tracking-tight leading-tight whitespace-pre-wrap">
+                  {(question as unknown as { text?: string }).text}
                   {question.isRequired && <span className="text-red-500 mr-1">*</span>}
                 </h3>
               </div>
-              <div className="px-3 py-1 bg-slate-50 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
+              <div className="px-3 py-1 bg-slate-50 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100 shrink-0">
                 {question.points} نقاط
               </div>
             </div>
@@ -104,6 +104,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
               {question.type === 'text' && (
                 <input
                   type="text"
+                  dir="auto"
                   placeholder="إجابتك..."
                   className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold disabled:opacity-50"
                   value={answers[question.id] || ''}
@@ -115,6 +116,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
               {question.type === 'paragraph' && (
                 <textarea
                   rows={4}
+                  dir="auto"
                   placeholder="إجابتك..."
                   className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none disabled:opacity-50"
                   value={answers[question.id] || ''}
@@ -134,26 +136,26 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                           : 'bg-white border-slate-100 hover:bg-slate-50'
                       } ${readOnly ? 'cursor-default' : ''}`}
                     >
-                      <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                        answers[question.id] === option.content 
+                      <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
+                        answers[question.id] === option 
                           ? 'border-indigo-600 bg-indigo-600' 
                           : 'border-slate-300 group-hover:border-indigo-400'
                       }`}>
-                        {answers[question.id] === option.content && <div className="h-2 w-2 bg-white rounded-full" />}
+                        {answers[question.id] === option && <div className="h-2 w-2 bg-white rounded-full" />}
                       </div>
                       <input
                         type="radio"
                         className="hidden"
                         name={question.id}
-                        value={option.content}
-                        checked={answers[question.id] === option.content}
-                        onChange={() => handleAnswerChange(question.id, option.content)}
+                        value={option as unknown as string}
+                        checked={answers[question.id] === option}
+                        onChange={() => handleAnswerChange(question.id, option)}
                         disabled={readOnly}
                       />
-                      <span className={`text-sm font-bold transition-colors ${
-                        answers[question.id] === option.content ? 'text-indigo-900' : 'text-slate-600'
+                      <span dir="auto" className={`text-sm font-bold transition-colors w-full ${
+                        answers[question.id] === option ? 'text-indigo-900' : 'text-slate-600'
                       }`}>
-                        {option.content}
+                        {option as unknown as string}
                       </span>
                     </label>
                   ))}
@@ -163,7 +165,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
               {question.type === 'checkbox' && (
                 <div className="space-y-3">
                   {question.options?.map((option, optIndex) => {
-                    const isChecked = (answers[question.id] as string[] || []).includes(option.content);
+                    const isChecked = (answers[question.id] as string[] || []).includes(option as unknown as string);
                     return (
                       <label
                         key={optIndex}
@@ -173,7 +175,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                             : 'bg-white border-slate-100 hover:bg-slate-50'
                         } ${readOnly ? 'cursor-default' : ''}`}
                       >
-                        <div className={`h-5 w-5 rounded-lg border-2 flex items-center justify-center transition-all ${
+                        <div className={`h-5 w-5 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ${
                           isChecked 
                             ? 'border-indigo-600 bg-indigo-600' 
                             : 'border-slate-300 group-hover:border-indigo-400'
@@ -183,15 +185,15 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                         <input
                           type="checkbox"
                           className="hidden"
-                          value={option.content}
+                          value={option as unknown as string}
                           checked={isChecked}
-                          onChange={(e) => handleCheckboxChange(question.id, option.content, e.target.checked)}
+                          onChange={(e) => handleCheckboxChange(question.id, option as unknown as string, e.target.checked)}
                           disabled={readOnly}
                         />
-                        <span className={`text-sm font-bold transition-colors ${
+                        <span dir="auto" className={`text-sm font-bold transition-colors w-full ${
                           isChecked ? 'text-indigo-900' : 'text-slate-600'
                         }`}>
-                          {option.content}
+                          {option as unknown as string}
                         </span>
                       </label>
                     );
