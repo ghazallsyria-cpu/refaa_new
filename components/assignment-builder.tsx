@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
-import { Question, QuestionType, Option } from '@/types/question';
+import { Question, QuestionType } from '@/types/question';
 
 interface AssignmentBuilderProps {
   questions: Question[];
@@ -12,14 +12,14 @@ interface AssignmentBuilderProps {
 
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
   const addQuestion = () => {
-    const newQuestion: Question = {
+    const newQuestion = {
       id: crypto.randomUUID(),
-      content: '',
+      text: '',
       type: 'text',
       points: 5,
-      options: [],
       isRequired: true,
-    };
+    } as unknown as Question;
+    
     onChange([...questions, newQuestion]);
   };
 
@@ -34,30 +34,27 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
   const addOption = (questionId: string) => {
     const question = questions.find(q => q.id === questionId);
     if (question) {
-      const newOption: Option = {
-        id: crypto.randomUUID(),
-        content: `خيار جديد ${ (question.options?.length || 0) + 1 }`,
-        is_correct: false
-      };
-      const options = [...(question.options || []), newOption];
-      updateQuestion(questionId, { options });
+      // التعامل مع الخيارات كنصوص ليتوافق مع واجهة المستخدم
+      const currentOptions = (question.options as unknown as string[]) || [];
+      const options = [...currentOptions, `خيار جديد ${currentOptions.length + 1}`];
+      updateQuestion(questionId, { options: options as unknown as Question['options'] });
     }
   };
 
   const updateOption = (questionId: string, index: number, value: string) => {
     const question = questions.find(q => q.id === questionId);
     if (question && question.options) {
-      const options = [...question.options];
-      options[index] = { ...options[index], content: value };
-      updateQuestion(questionId, { options });
+      const options = [...(question.options as unknown as string[])];
+      options[index] = value;
+      updateQuestion(questionId, { options: options as unknown as Question['options'] });
     }
   };
 
   const removeOption = (questionId: string, index: number) => {
     const question = questions.find(q => q.id === questionId);
     if (question && question.options) {
-      const options = question.options.filter((_, i) => i !== index);
-      updateQuestion(questionId, { options });
+      const options = (question.options as unknown as string[]).filter((_, i) => i !== index);
+      updateQuestion(questionId, { options: options as unknown as Question['options'] });
     }
   };
 
@@ -91,10 +88,11 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                 <div className="flex-1 w-full">
                   <input
                     type="text"
-                    placeholder="نص السؤال..."
+                    dir="auto"
+                    placeholder="نص السؤال (المعادلات ستتجه لليسار تلقائياً)..."
                     className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
-                    value={question.content}
-                    onChange={(e) => updateQuestion(question.id, { content: e.target.value })}
+                    value={(question as unknown as { text?: string }).text || ''}
+                    onChange={(e) => updateQuestion(question.id, { text: e.target.value } as unknown as Partial<Question>)}
                   />
                 </div>
                 <div className="w-full md:w-48">
@@ -105,7 +103,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       const type = e.target.value as QuestionType;
                       const updates: Partial<Question> = { type };
                       if ((type === 'multiple_choice' || type === 'checkbox') && !question.options) {
-                        updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
+                        updates.options = ['خيار 1'] as unknown as Question['options'];
                       }
                       updateQuestion(question.id, updates);
                     }}
@@ -130,8 +128,9 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       )}
                       <input
                         type="text"
+                        dir="auto"
                         className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-indigo-600 focus:ring-0 p-1 text-sm font-medium text-slate-700 transition-all"
-                        value={option.content}
+                        value={option as unknown as string}
                         onChange={(e) => updateOption(question.id, optIndex, e.target.value)}
                       />
                       <button
