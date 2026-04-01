@@ -118,6 +118,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                  const isComparison = q.type === 'comparison';
                  const studentAns = answers[q.id];
                  const qGrade = questionGrades[q.id] || { isCorrect: false, pointsEarned: 0, feedback: '' };
+                 // 🚀 التحصين ضد الـ null
+                 const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
 
                  if (isHeader) {
                    return (
@@ -141,6 +143,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      <div className="p-5 sm:p-8 border-b border-slate-100 bg-white">
                         <div className="text-sm font-black text-slate-400 mb-3 flex items-center gap-2"><User className="w-4 h-4" /> إجابة الطالب:</div>
                         
+                        {/* 🚀 جدول المقارنة المحصن */}
                         {isComparison ? (
                           <div className="rounded-2xl border border-slate-300 overflow-hidden shadow-sm">
                             <div className="overflow-x-auto">
@@ -148,12 +151,12 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                 <thead>
                                   <tr className="bg-indigo-50">
                                     <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
-                                    <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(q.options && q.options[0]) || 'الطرف الأول'}</th>
-                                    <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(q.options && q.options[1]) || 'الطرف الثاني'}</th>
+                                    <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
+                                    <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {q.options?.slice(2).map((aspect: string, rIdx: number) => {
+                                  {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
                                     let parsedAns: any[] = [];
                                     try { parsedAns = JSON.parse(studentAns || '[]'); } catch(e){}
                                     return (
