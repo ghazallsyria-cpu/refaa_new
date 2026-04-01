@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon, Play } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
@@ -550,7 +550,6 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
 
-                  {/* 🚀 أداة رفع الصور للمسائل */}
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
                     <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
                       <ImageIcon className="w-5 h-5 text-indigo-500" />
