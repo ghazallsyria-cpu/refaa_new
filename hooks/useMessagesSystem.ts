@@ -4,7 +4,9 @@ import { useAuth } from '@/context/auth-context';
 import { Message, User, Section } from '@/types';
 
 export function useMessagesSystem() {
-  const { user, authRole } = useAuth();
+  const { user, authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [teacherSections, setTeacherSections] = useState<Section[]>([]);
@@ -14,12 +16,13 @@ export function useMessagesSystem() {
   const fetchMessages = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
+      // 🚀 تم إضافة avatar_url لجلب صور المرسل والمستقبل
       const { data, error: fetchError } = await supabase
         .from('messages')
         .select(`
           *,
-          sender:sender_id(full_name),
-          receiver:receiver_id(full_name),
+          sender:sender_id(full_name, avatar_url, role),
+          receiver:receiver_id(full_name, avatar_url, role),
           section:section_id(name, classes(name))
         `)
         .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
@@ -37,25 +40,27 @@ export function useMessagesSystem() {
   const fetchUsers = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
-      if (authRole === 'student') {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('section_id')
-          .eq('id', user.id)
-          .single();
+      if (currentRole === 'student') {
+        let studentData = null;
+        const { data: s1 } = await supabase.from('students').select('section_id').eq('user_id', user.id).maybeSingle();
+        if (s1) studentData = s1;
+        else {
+          const { data: s2 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
+          if (s2) studentData = s2;
+        }
 
         if (studentData?.section_id) {
-          const { data: teacherSections } = await supabase
+          const { data: teacherSectionsData } = await supabase
             .from('teacher_sections')
             .select('teacher_id')
             .eq('section_id', studentData.section_id);
 
-          const teacherIds = teacherSections?.map(ts => ts.teacher_id) || [];
+          const teacherIds = teacherSectionsData?.map(ts => ts.teacher_id) || [];
           
           if (teacherIds.length > 0) {
             const { data, error } = await supabase
               .from('users')
-              .select('id, full_name, role')
+              .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
               .or(`id.in.(${teacherIds.join(',')}),role.in.(admin,management)`)
               .order('full_name');
             if (error) throw error;
@@ -63,7 +68,7 @@ export function useMessagesSystem() {
           } else {
             const { data, error } = await supabase
               .from('users')
-              .select('id, full_name, role')
+              .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
               .in('role', ['admin', 'management'])
               .order('full_name');
             if (error) throw error;
@@ -72,7 +77,7 @@ export function useMessagesSystem() {
         } else {
           const { data, error } = await supabase
             .from('users')
-            .select('id, full_name, role')
+            .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
             .in('role', ['admin', 'management'])
             .order('full_name');
           if (error) throw error;
@@ -81,7 +86,7 @@ export function useMessagesSystem() {
       } else {
         const { data, error } = await supabase
           .from('users')
-          .select('id, full_name, role')
+          .select('id, full_name, role, avatar_url') // 🚀 جلب الصورة
           .order('full_name');
         if (error) throw error;
         setUsers((data as unknown) as User[] || []);
@@ -91,37 +96,49 @@ export function useMessagesSystem() {
       console.error('Error fetching users:', err);
       setError(errorMessage);
     }
-  }, [user, authRole]);
+  }, [user, currentRole]);
 
   const fetchTeacherSections = useCallback(async (): Promise<void> => {
-    if (!user || authRole !== 'teacher') return;
+    if (!user || currentRole !== 'teacher') return;
     try {
+      // 🚀 التحقق من هوية المعلم بدقة
+      let teacherProfile = null;
+      const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+      if (tp1) teacherProfile = tp1;
+      else {
+        const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+        if (tp2) teacherProfile = tp2;
+      }
+
+      if (!teacherProfile) return;
+
       const { data: sectionsData } = await supabase
         .from('teacher_sections')
         .select(`
           section_id,
           section:sections(id, name, classes(name))
         `)
-        .eq('teacher_id', user.id);
+        .eq('teacher_id', teacherProfile.id);
       
       const uniqueSections = Array.from(new Set((sectionsData || []).map(s => s.section_id)))
         .map(id => {
           const s = sectionsData?.find(item => item.section_id === id);
           const section = Array.isArray(s?.section) ? s.section[0] : s?.section;
           if (!section) return null;
-          const classes = Array.isArray(section.classes) ? section.classes[0] : section.classes;
-          return {
-            id: section.id,
-            name: section.name,
+          const classes = Array.isArray((section as any).classes) ? (section as any).classes[0] : (section as any).classes;
+          
+          return ({
+            id: (section as any).id,
+            name: (section as any).name,
             classes: classes
-          } as Section;
+          } as unknown) as Section;
         });
       
       setTeacherSections(uniqueSections.filter((s): s is Section => s !== null));
     } catch (err: unknown) {
       console.error('Error fetching teacher sections:', err);
     }
-  }, [user, authRole]);
+  }, [user, currentRole]);
 
   const loadInitialData = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -143,7 +160,8 @@ export function useMessagesSystem() {
         .from('students')
         .select(`
           id,
-          users(id, full_name, role)
+          user_id,
+          users(id, full_name, role, avatar_url)
         `)
         .eq('section_id', sectionId);
       
@@ -151,7 +169,11 @@ export function useMessagesSystem() {
       
       return data?.map(s => {
         const u = Array.isArray(s.users) ? s.users[0] : s.users;
-        return u as User;
+        // 🚀 استرجاع الـ ID الحقيقي للـ Auth User ليعمل الإرسال بشكل صحيح
+        if (u) {
+            return { ...u, id: s.user_id || s.id } as User;
+        }
+        return null;
       }).filter((u): u is User => u !== null) || [];
     } catch (error) {
       console.error('Error fetching students by section:', error);
@@ -284,8 +306,8 @@ export function useMessagesSystem() {
     fetchStudentsBySection,
     sendMessage, 
     sendGroupMessage,
-    markAsRead,
-    deleteMessages,
+    markAsRead, 
+    deleteMessages, 
     updateMessage
   } as const;
 }
