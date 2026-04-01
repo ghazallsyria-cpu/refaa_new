@@ -24,14 +24,16 @@ export async function POST(req: Request) {
       if (tProfile2?.id) realTeacherId = tProfile2.id;
     }
 
-    const safePayload: any = {
+    // 🚀 تأمين البيانات المكتملة لمنع ضياع الواجب
+    const safePayload = {
       title: payload.title || 'واجب بدون عنوان',
       description: payload.description || '',
       subject_id: (payload.subject_id && payload.subject_id.trim() !== '') ? payload.subject_id : null,
       teacher_id: realTeacherId,
       due_date: payload.due_date || new Date().toISOString(),
-      file_url: payload.file_url || null, // 🚀 تأمين حفظ رابط الصورة
-      status: payload.status || 'published'
+      file_url: payload.file_url || null,
+      status: payload.status || 'published',
+      section_ids: sectionIds || [] // 🚀 تأمين الفصول بوضعها في جدول الواجب نفسه
     };
 
     let finalAssignmentId = assignmentId;
@@ -39,8 +41,9 @@ export async function POST(req: Request) {
     if (finalAssignmentId) {
       const { error: updErr } = await adminSupabase.from('assignments').update(safePayload).eq('id', finalAssignmentId);
       if (updErr) {
-          delete safePayload.status;
-          const { error: retryErr } = await adminSupabase.from('assignments').update(safePayload).eq('id', finalAssignmentId);
+          const fallbackPayload = { ...safePayload };
+          delete (fallbackPayload as any).status;
+          const { error: retryErr } = await adminSupabase.from('assignments').update(fallbackPayload).eq('id', finalAssignmentId);
           if (retryErr) throw new Error('فشل تحديث الواجب: ' + retryErr.message);
       }
       
@@ -52,8 +55,9 @@ export async function POST(req: Request) {
     } else {
       const { data: newAss, error: insErr } = await adminSupabase.from('assignments').insert([safePayload]).select('id').single();
       if (insErr) {
-          delete safePayload.status;
-          const { data: retryAss, error: retryErr } = await adminSupabase.from('assignments').insert([safePayload]).select('id').single();
+          const fallbackPayload = { ...safePayload };
+          delete (fallbackPayload as any).status;
+          const { data: retryAss, error: retryErr } = await adminSupabase.from('assignments').insert([fallbackPayload]).select('id').single();
           if (retryErr) throw new Error('فشل إضافة الواجب: ' + retryErr.message);
           finalAssignmentId = retryAss.id;
       } else {
@@ -66,11 +70,11 @@ export async function POST(req: Request) {
     if (questions && questions.length > 0) {
       const qPayload = questions.map((q: any, idx: number) => ({
         assignment_id: finalAssignmentId,
-        question_text: q.content || q.question_text || 'سؤال',
-        question_type: q.type || q.question_type || 'open',
+        question_text: q.content || q.text || q.question_text || 'سؤال',
+        question_type: q.type || q.question_type || 'text',
         options: q.options || null,
         points: q.points || 0,
-        is_required: q.isRequired || false,
+        is_required: q.isRequired || q.is_required || false,
         order: idx
       }));
       const { error: qErr } = await adminSupabase.from('assignment_questions').insert(qPayload);
