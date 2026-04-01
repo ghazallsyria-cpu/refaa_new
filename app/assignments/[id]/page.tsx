@@ -200,13 +200,13 @@ const fetchData = useCallback(async () => {
         setFileUrl((details.submission as any).file_url || '');
 
         if (details.answers) {
-          const answersMap = {};
-          const fullMap = {};
+const answersMap: Record<string, string | string[] | null> = {};
+const fullMap: Record<string, any> = {};
 
-          details.answers.forEach((a: any) => {
-            answersMap[a.question_id] = a.selected_options || a.answer_text;
-            fullMap[a.question_id] = a;
-          });
+details.answers.forEach((a: any) => {
+  answersMap[a.question_id] = a.selected_options || a.answer_text;
+  fullMap[a.question_id] = a;
+});
 
           setMyAnswers(answersMap);
           setFullAnswersMap(fullMap);
