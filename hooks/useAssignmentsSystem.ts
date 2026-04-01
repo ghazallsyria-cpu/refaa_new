@@ -160,7 +160,7 @@ export function useAssignmentsSystem() {
     await fetchAssignments();
   }, [fetchAssignments]);
 
-  // 🚀 التعديل السحري: الاعتماد على API لتخطي قيود حماية قاعدة البيانات!
+  // 🚀 مسار جلب تفاصيل الواجب الخارق (محصن ضد الانهيارات)
   const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
     try {
       const response = await fetch('/api/assignments/get-details', {
@@ -169,7 +169,15 @@ export function useAssignmentsSystem() {
         body: JSON.stringify({ assignmentId, userId: user?.id, role: currentRole }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'فشل تحميل تفاصيل الواجب');
+      
+      if (!response.ok || !result.success) {
+         console.warn("API Warning:", result.error);
+         throw new Error(result.error || 'فشل تحميل تفاصيل الواجب');
+      }
+
+      if (!result.assignment) {
+         throw new Error('لم يتم العثور على الواجب');
+      }
 
       return {
         assignment: result.assignment as AssignmentWithMeta,
@@ -207,7 +215,7 @@ export function useAssignmentsSystem() {
     return result.id;
   }, [user]);
 
-  // 🚀 التعديل السحري للمعلم: إجبار جلب الإجابات عبر API متخطياً جميع الحواجز الأمنية!
+  // 🚀 مسار جلب التسليم للتصحيح
   const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
     try {
       const response = await fetch('/api/assignments/get-submission', {
@@ -216,7 +224,10 @@ export function useAssignmentsSystem() {
         body: JSON.stringify({ submissionId }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'فشل تحميل إجابات الطالب للتقييم');
+      
+      if (!response.ok || !result.success) {
+         throw new Error(result.error || 'فشل تحميل إجابات الطالب للتقييم');
+      }
 
       return {
         submission: result.submission,
