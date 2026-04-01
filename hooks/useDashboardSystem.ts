@@ -4,7 +4,7 @@ import { useAuth } from '@/context/auth-context';
 
 interface StudentQueryResult {
   created_at: string;
-  users: { full_name: string } | { full_name: string }[] | null;
+  users: { full_name: string, avatar_url?: string } | { full_name: string, avatar_url?: string }[] | null;
 }
 
 export function useDashboardSystem() {
@@ -87,20 +87,23 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
+      // 🚀 البحث المزدوج لضمان جلب ملف الطالب
       const { data: student } = await supabase
         .from('students')
-        .select('*, users(full_name), sections(name, classes(name))')
-        .eq('user_id', user.id)
-        .single();
+        .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
+        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+        .maybeSingle();
       
       if (!student) return null;
+
+      const sectionId = (student as any).section_id;
 
       const [
         { data: assignmentSections },
         { data: examSections }
       ] = await Promise.all([
-        supabase.from('assignment_sections').select('assignment_id').eq('section_id', (student as any).section_id),
-        supabase.from('exam_sections').select('exam_id').eq('section_id', (student as any).section_id)
+        sectionId ? supabase.from('assignment_sections').select('assignment_id').eq('section_id', sectionId) : Promise.resolve({ data: [] }),
+        sectionId ? supabase.from('exam_sections').select('exam_id').eq('section_id', sectionId) : Promise.resolve({ data: [] })
       ]);
 
       const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
@@ -136,12 +139,12 @@ export function useDashboardSystem() {
           .eq('student_id', student.id)
           .order('completed_at', { ascending: false })
           .limit(5),
-        supabase
+        sectionId ? supabase
           .from('schedules')
           .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
-          .eq('section_id', (student as any).section_id)
+          .eq('section_id', sectionId)
           .eq('day_of_week', new Date().getDay() + 1)
-          .order('period'),
+          .order('period') : Promise.resolve({ data: [] }),
         supabase
           .from('class_periods')
           .select('*')
@@ -167,111 +170,25 @@ export function useDashboardSystem() {
     }
   }, [user]);
 
-  const fetchStudentSchedule = useCallback(async () => {
-    if (!user) return null;
-    try {
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('section_id, sections(name, classes(name))')
-        .eq('user_id', user.id)
-        .single();
-
-      if (studentError) throw studentError;
-      if (!student) return null;
-
-      const [
-        { data: schedule },
-        { data: periods }
-      ] = await Promise.all([
-        supabase
-          .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:user_id(full_name))')
-          .eq('section_id', (student as any).section_id)
-          .order('day_of_week')
-          .order('period'),
-        supabase
-          .from('class_periods')
-          .select('*')
-          .order('period_number')
-      ]);
-
-      return {
-        student,
-        schedule: schedule || [],
-        periods: periods || []
-      };
-    } catch (error) {
-      console.error('Error fetching student schedule:', error);
-      throw error;
-    }
-  }, [user]);
-
-  const fetchParentDashboardData = useCallback(async () => {
-    if (!user) return null;
-    try {
-      const { data: parentProfile } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!parentProfile) return null;
-
-      const [
-        { data: children },
-        { data: notifications }
-      ] = await Promise.all([
-        supabase
-          .from('students')
-          .select('*, users(full_name), sections(name, classes(name))')
-          .eq('parent_id', parentProfile.id),
-        supabase
-          .from('notifications')
-          .select('*')
-          .eq('type', 'announcement')
-          .order('created_at', { ascending: false })
-          .limit(5)
-      ]);
-
-      return {
-        children: children || [],
-        notifications: notifications || []
-      };
-    } catch (error) {
-      console.error('Error fetching parent dashboard data:', error);
-      throw error;
-    }
-  }, [user]);
-
   const fetchTeacherDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
+      // 🚀 البحث المزدوج الخارق لجلب ملف المعلم
       let { data: teacher, error: teacherError } = await supabase
         .from('teachers')
         .select('*, users(*)')
-        .eq('user_id', user.id)
-        .single();
+        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+        .maybeSingle();
       
-      if ((teacherError || !teacher) && user.user_metadata?.role === 'teacher') {
-        const { data: newUser, error: userFetchError } = await supabase.from('users').select('full_name, role').eq('id', user.id).single();
-        if (!userFetchError && newUser?.role === 'teacher') {
-          const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
-              user_id: user.id,
-              national_id: 'TEMP_' + user.id.substring(0, 8),
-              specialization: 'غير محدد'
-            }).select('*, users(*)').single();
-          if (!createError && newTeacher) { teacher = newTeacher; teacherError = null; }
-        }
-      }
-
-      if (teacherError || !teacher) return null;
+      if (!teacher) return null;
 
       const { data: teacherSections } = await supabase
         .from('teacher_sections')
         .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
         .eq('teacher_id', teacher.id);
       
-      const sections = (teacherSections?.map(ts => ts.section) || []).filter(Boolean);
+      const rawSections = (teacherSections?.map(ts => ts.section) || []).filter(Boolean);
+      const sections = rawSections.map(s => Array.isArray(s) ? s[0] : s);
       const sectionIds = sections.map((s: any) => s.id);
 
       const [
@@ -327,20 +244,22 @@ export function useDashboardSystem() {
       ]);
 
       const exams = (recentExams || []).map((e: any) => {
-        const sec = e.exam_sections?.[0]?.section;
+        const sec = Array.isArray(e.exam_sections) ? e.exam_sections[0]?.section : e.exam_sections?.section;
+        const subj = Array.isArray(e.subject) ? e.subject[0] : e.subject;
         return {
           ...e,
-          subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name || 'غير محدد',
-          section_name: sec ? `${sec.classes?.name || ''} - ${sec.name}` : 'غير محدد'
+          subject_name: subj?.name || 'غير محدد',
+          section_name: sec ? `${Array.isArray(sec.classes) ? sec.classes[0]?.name : sec.classes?.name || ''} - ${sec.name}` : 'غير محدد'
         };
       });
 
       const assignments = (recentAssignments || []).map((a: any) => {
-        const sec = a.assignment_sections?.[0]?.section;
+        const sec = Array.isArray(a.assignment_sections) ? a.assignment_sections[0]?.section : a.assignment_sections?.section;
+        const subj = Array.isArray(a.subject) ? a.subject[0] : a.subject;
         return {
           ...a,
-          subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name || 'غير محدد',
-          section_name: sec ? `${sec.classes?.name || ''} - ${sec.name}` : 'غير محدد'
+          subject_name: subj?.name || 'غير محدد',
+          section_name: sec ? `${Array.isArray(sec.classes) ? sec.classes[0]?.name : sec.classes?.name || ''} - ${sec.name}` : 'غير محدد'
         };
       });
 
@@ -351,26 +270,16 @@ export function useDashboardSystem() {
          submissionsData = subs || [];
       }
 
-      // 🚀 الإصلاح: استخدام (s as any) لتخطي صرامة TypeScript عند معالجة المصفوفات المتداخلة
-      const assignmentStats = sections.map(s => {
-        const section = (Array.isArray(s) ? s[0] : s) as any;
-        if (!section) return null;
-
+      const assignmentStats = sections.map((section: any) => {
         const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section.id));
         const studentCount = Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0;
 
         if (secAssignments.length === 0 || studentCount === 0) return null;
 
-        let expectedSubmissions = 0;
-        let actualSubmissions = 0;
-
-        secAssignments.forEach(a => {
-            expectedSubmissions += studentCount;
-            actualSubmissions += submissionsData.filter(sub => sub.assignment_id === a.id).length;
-        });
+        let expectedSubmissions = secAssignments.length * studentCount;
+        let actualSubmissions = submissionsData.filter(sub => secAssignments.some(a => a.id === sub.assignment_id)).length;
 
         const percentage = expectedSubmissions > 0 ? Math.min(Math.round((actualSubmissions / expectedSubmissions) * 100), 100) : 0;
-        
         const classObj = Array.isArray(section.classes) ? section.classes[0] : section.classes;
 
         return {
@@ -403,10 +312,69 @@ export function useDashboardSystem() {
     }
   }, [user]);
 
+  const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
+    if (!user) return null;
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .update({ 
+          next_year_track: track,
+          track_selection_date: new Date().toISOString()
+        })
+        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating student track:', error);
+      throw error;
+    }
+  }, [user]);
+
+  const fetchStudentSchedule = useCallback(async () => {
+    if (!user) return null;
+    try {
+      const { data: student } = await supabase
+        .from('students')
+        .select('section_id, sections(name, classes(name))')
+        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
+        .maybeSingle();
+
+      if (!student || !(student as any).section_id) return null;
+
+      const [
+        { data: schedule },
+        { data: periods }
+      ] = await Promise.all([
+        supabase
+          .from('schedules')
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:user_id(full_name))')
+          .eq('section_id', (student as any).section_id)
+          .order('day_of_week')
+          .order('period'),
+        supabase
+          .from('class_periods')
+          .select('*')
+          .order('period_number')
+      ]);
+
+      return {
+        student,
+        schedule: schedule || [],
+        periods: periods || []
+      };
+    } catch (error) {
+      console.error('Error fetching student schedule:', error);
+      throw error;
+    }
+  }, [user]);
+
   const fetchTeacherSchedule = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+      const { data: teacherProfile } = await supabase.from('teachers').select('id').or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle();
       if (!teacherProfile) return null;
 
       const [
@@ -435,54 +403,6 @@ export function useDashboardSystem() {
     }
   }, [user]);
 
-  const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
-    if (!user) return null;
-    try {
-      const { data, error } = await supabase
-        .from('students')
-        .update({ 
-          next_year_track: track,
-          track_selection_date: new Date().toISOString()
-        })
-        .eq('user_id', user.id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error updating student track:', error);
-      throw error;
-    }
-  }, [user]);
-
-  const fetchTrackSelectionStats = useCallback(async (classId?: string) => {
-    try {
-      let query = supabase
-        .from('students')
-        .select('next_year_track, sections!inner(class_id)')
-        .not('next_year_track', 'is', null);
-      
-      if (classId) {
-        query = query.eq('sections.class_id', classId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      const stats = {
-        scientific: data.filter(s => s.next_year_track === 'scientific').length,
-        literary: data.filter(s => s.next_year_track === 'literary').length,
-        total: data.length
-      };
-
-      return stats;
-    } catch (error) {
-      console.error('Error fetching track selection stats:', error);
-      throw error;
-    }
-  }, []);
-
   return {
     fetchAdminDashboardStats,
     fetchAdminRecentActivities,
@@ -491,7 +411,6 @@ export function useDashboardSystem() {
     fetchParentDashboardData,
     fetchTeacherDashboardData,
     fetchTeacherSchedule,
-    updateStudentTrack,
-    fetchTrackSelectionStats
+    updateStudentTrack
   };
 }
