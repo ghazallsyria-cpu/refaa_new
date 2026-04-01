@@ -27,7 +27,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment } = useAssignmentsSystem();
   
   const [assignment, setAssignment] = useState<AssignmentWithMeta | null>(null);
-  // 🚀 تم تغيير النوع إلى any[] لإسكات اعتراضات TypeScript الصارمة
   const [questions, setQuestions] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionWithStudent[]>([]);
   const [mySubmission, setMySubmission] = useState<SubmissionWithStudent | null>(null);
@@ -167,7 +166,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const firstSection = (assignment as any).assignment_sections?.[0]?.section;
   const className = firstSection?.class?.name || '';
   const sectionName = firstSection?.name || '';
-  const isImageUrl = (url: string) => url?.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || url?.includes('cloudinary.com/image');
 
   const isGraded = mySubmission?.status === 'graded';
 
@@ -232,9 +230,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 <FileText className="h-5 w-5 text-indigo-600" />
                 المرفقات
               </h3>
-              {isImageUrl(assignment.file_url) ? (
+              {assignment.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || assignment.file_url.includes('cloudinary.com/image') ? (
                 <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2">
-                  <Image src={assignment.file_url} alt="مرفق الواجب" width={800} height={600} className="object-contain rounded-2xl" referrerPolicy="no-referrer" unoptimized />
+                  <img src={assignment.file_url} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl" />
                 </div>
               ) : (
                 <div className="p-6 rounded-3xl bg-indigo-50/50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -302,9 +300,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   const studentAns = myAnswers[q.id];
                   const answerDetails = fullAnswersMap[q.id]; 
                   
-                  // 🚀 المعالجة الصارمة للـ TypeScript لتفادي No Overlap Error
                   const isHeader = String(q.type) === 'section_header';
                   const isComparison = String(q.type) === 'comparison';
+                  // 🚀 التحصين: التأكد من وجود الخيارات
+                  const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
                   
                   if (isHeader) {
                      return (
@@ -316,9 +315,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   }
 
                   let studentAnswerText = studentAns;
-                  if ((q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'checkbox') && q.options) {
-                     const selectedOpt = (q.options as any[]).find(o => o.id === studentAns || o.content === studentAns);
-                     if (selectedOpt) studentAnswerText = selectedOpt.content;
+                  if ((q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'checkbox') && safeOptions.length > 0) {
+                     const selectedOpt = safeOptions.find(o => o.id === studentAns || o.content === studentAns || o === studentAns);
+                     if (selectedOpt) studentAnswerText = selectedOpt.content || selectedOpt;
                      else if (Array.isArray(studentAns)) studentAnswerText = studentAns.join('، ');
                   }
 
@@ -353,12 +352,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 <thead>
                                   <tr className={isUnanswered ? 'bg-slate-100' : isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
                                     <th className="p-4 border-b border-l border-white/50 font-black text-slate-800 text-sm w-1/3">وجه المقارنة</th>
-                                    <th className="p-4 border-b border-l border-white/50 font-black text-slate-800 text-sm text-center w-1/3">{(q.options && q.options[0]) || 'الطرف الأول'}</th>
-                                    <th className="p-4 border-b border-white/50 font-black text-slate-800 text-sm text-center w-1/3">{(q.options && q.options[1]) || 'الطرف الثاني'}</th>
+                                    <th className="p-4 border-b border-l border-white/50 font-black text-slate-800 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
+                                    <th className="p-4 border-b border-white/50 font-black text-slate-800 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {q.options?.slice(2).map((aspect: string, rIdx: number) => {
+                                  {/* 🚀 التحصين ضد الأخطاء */}
+                                  {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
                                     let parsedAns: any[] = [];
                                     try { parsedAns = JSON.parse((studentAns as string) || '[]'); } catch(e){}
                                     return (
@@ -412,7 +412,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     )}
                     {mySubmission?.file_url && (
                       <div className="relative w-full h-72 bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-2">
-                        <Image src={mySubmission.file_url} alt="إجابة الطالب المرفقة" fill className="object-contain" referrerPolicy="no-referrer" unoptimized />
+                        <img src={mySubmission.file_url} alt="إجابة الطالب المرفقة" className="max-h-full w-auto object-contain rounded-xl" />
                       </div>
                     )}
                   </div>
@@ -447,7 +447,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   ) : (
                     fileUrl && (
                       <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
-                        <Image src={fileUrl} alt="إجابة الطالب" fill className="object-contain" referrerPolicy="no-referrer" unoptimized />
+                        <img src={fileUrl} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
                       </div>
                     )
                   )}
@@ -479,7 +479,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     ) : (
                       fileUrl && (
                         <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center">
-                          <Image src={fileUrl} alt="إجابة الطالب" fill className="object-contain" referrerPolicy="no-referrer" unoptimized />
+                          <img src={fileUrl} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
                         </div>
                       )
                     )}
@@ -508,7 +508,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </div>
       )}
       
-      {['teacher', 'admin', 'management'].includes(authRole || '') && (
+      {(authRole === 'teacher' || authRole === 'admin' || authRole === 'management') && (
         <div className="space-y-8">
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
             <button 
