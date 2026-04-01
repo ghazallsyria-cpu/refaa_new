@@ -377,8 +377,8 @@ const studentCount = Array.isArray(section[0]?.students) ? section[0].students[0
 
         return {
             title: 'إنجاز الواجبات النشطة',
-            className: `${section.classes?.name} - ${section.name}`,
-            percentage,
+className: `${section.classes?.[0]?.name} - ${section.name}`,
+          percentage,
             submissionCount: actualSubmissions,
             totalStudents: expectedSubmissions
         };
