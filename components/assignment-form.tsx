@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Send, Columns } from 'lucide-react';
 import { motion } from 'motion/react';
-import Image from 'next/image';
 
 interface AssignmentFormProps {
   questions: any[];
@@ -39,17 +38,25 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
   };
 
-  // معالجة إجابة المقارنة (تحفظ كـ JSON String Array)
-  const handleComparisonChange = (questionId: string, colIndex: number, value: string) => {
+  // 🚀 السحر: معالجة إجابات جدول المقارنة المتعدد الأبعاد (Matrix Grid)
+  const handleComparisonGridChange = (questionId: string, rowIndex: number, colIndex: number, value: string) => {
      if (readOnly) return;
      try {
-       const currentArr = answers[questionId] ? JSON.parse(answers[questionId]) : ["", ""];
-       currentArr[colIndex] = value;
-       handleAnswerChange(questionId, JSON.stringify(currentArr));
+       // قراءة المصفوفة الثنائية من النص المحفوظ، أو تهيئتها
+       const currentGrid = answers[questionId] ? JSON.parse(answers[questionId]) : [];
+       
+       // التأكد من وجود السطر المطلوب
+       while (currentGrid.length <= rowIndex) currentGrid.push(["", ""]);
+       
+       // التحديث
+       currentGrid[rowIndex][colIndex] = value;
+       handleAnswerChange(questionId, JSON.stringify(currentGrid));
      } catch(e) {
-       const newArr = ["", ""];
-       newArr[colIndex] = value;
-       handleAnswerChange(questionId, JSON.stringify(newArr));
+       // في حال وجود خطأ بالتحليل، نبدأ من الصفر
+       const newGrid = [];
+       for(let i=0; i<=rowIndex; i++) newGrid.push(["", ""]);
+       newGrid[rowIndex][colIndex] = value;
+       handleAnswerChange(questionId, JSON.stringify(newGrid));
      }
   };
 
@@ -58,7 +65,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     questions.forEach(q => {
       if (q.isRequired && q.type !== 'section_header') {
         const ans = answers[q.id];
-        if (!ans || (Array.isArray(ans) && ans.length === 0) || (q.type === 'comparison' && ans === '["",""]')) {
+        if (!ans || (Array.isArray(ans) && ans.length === 0) || (q.type === 'comparison' && ans === '[]')) {
           newErrors[q.id] = 'هذا السؤال مطلوب للإرسال';
         }
       }
@@ -89,7 +96,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
           >
             <div className="flex flex-col gap-5">
               
-              {/* رأس السؤال أو الترويسة */}
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <h3 dir="auto" className={isHeader 
@@ -107,14 +113,12 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                 )}
               </div>
 
-              {/* 🚀 عرض الصورة المرفقة مع السؤال (إن وجدت) */}
               {question.media_url && (
-                <div className="relative w-full rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center p-2 shadow-inner">
+                <div className="relative w-full rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center p-2 shadow-inner mt-2">
                    <img src={question.media_url} alt="صورة توضيحية للسؤال" className="max-h-[400px] w-auto object-contain rounded-xl" />
                 </div>
               )}
 
-              {/* حقول الإجابة بناءً على نوع السؤال */}
               {!isHeader && (
                 <div className="space-y-4 mt-2">
                   
@@ -132,31 +136,50 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     />
                   )}
 
-                  {/* 🚀 جدول المقارنة الفخم */}
+                  {/* 🚀 جدول المقارنة التفاعلي الحقيقي (Matrix Grid) */}
                   {isComparison && (
-                    <div className="rounded-3xl border border-slate-200 overflow-hidden bg-white shadow-sm">
-                       <div className="grid grid-cols-2 divide-x divide-x-reverse divide-slate-200">
-                          <div className="bg-indigo-50/50 p-4 text-center border-b border-slate-200">
-                            <span className="font-black text-indigo-900 text-sm">{(question.options && question.options[0]) || 'الطرف الأول'}</span>
-                          </div>
-                          <div className="bg-indigo-50/50 p-4 text-center border-b border-slate-200">
-                            <span className="font-black text-indigo-900 text-sm">{(question.options && question.options[1]) || 'الطرف الثاني'}</span>
-                          </div>
-                          
-                          <div className="p-0 h-full">
-                            <textarea dir="auto" disabled={readOnly} placeholder="اكتب هنا..."
-                              value={(() => { try { return JSON.parse(answers[question.id] || '["",""]')[0]; } catch(e){return '';} })()}
-                              onChange={(e) => handleComparisonChange(question.id, 0, e.target.value)}
-                              className="w-full h-full min-h-[150px] p-5 border-none resize-none bg-transparent outline-none focus:ring-0 text-slate-700 font-bold leading-relaxed disabled:bg-slate-50"
-                            />
-                          </div>
-                          <div className="p-0 h-full">
-                            <textarea dir="auto" disabled={readOnly} placeholder="اكتب هنا..."
-                              value={(() => { try { return JSON.parse(answers[question.id] || '["",""]')[1]; } catch(e){return '';} })()}
-                              onChange={(e) => handleComparisonChange(question.id, 1, e.target.value)}
-                              className="w-full h-full min-h-[150px] p-5 border-none resize-none bg-transparent outline-none focus:ring-0 text-slate-700 font-bold leading-relaxed disabled:bg-slate-50"
-                            />
-                          </div>
+                    <div className="rounded-3xl border border-slate-300 overflow-hidden bg-white shadow-sm mt-4">
+                       <div className="overflow-x-auto">
+                         <table className="w-full text-right border-collapse min-w-[600px]">
+                           <thead>
+                             <tr className="bg-indigo-50">
+                               <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
+                               <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(question.options && question.options[0]) || 'الطرف الأول'}</th>
+                               <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(question.options && question.options[1]) || 'الطرف الثاني'}</th>
+                             </tr>
+                           </thead>
+                           <tbody>
+                             {question.options?.slice(2).map((aspect: string, rIdx: number) => {
+                               // قراءة مصفوفة الإجابات الحالية
+                               let parsedAns: any[] = [];
+                               try { parsedAns = JSON.parse(answers[question.id] || '[]'); } catch(e){}
+                               
+                               return (
+                                 <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors">
+                                   <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50/50 align-top">
+                                     {aspect}
+                                   </td>
+                                   <td className="p-0 border-b border-l border-slate-200 align-top h-full">
+                                      <textarea 
+                                        dir="auto" disabled={readOnly} placeholder="..."
+                                        value={parsedAns[rIdx]?.[0] || ''}
+                                        onChange={(e) => handleComparisonGridChange(question.id, rIdx, 0, e.target.value)}
+                                        className="w-full h-full min-h-[80px] p-4 border-none resize-none bg-transparent outline-none focus:ring-0 text-slate-900 font-bold leading-relaxed focus:bg-white transition-colors"
+                                      />
+                                   </td>
+                                   <td className="p-0 border-b border-slate-200 align-top h-full">
+                                      <textarea 
+                                        dir="auto" disabled={readOnly} placeholder="..."
+                                        value={parsedAns[rIdx]?.[1] || ''}
+                                        onChange={(e) => handleComparisonGridChange(question.id, rIdx, 1, e.target.value)}
+                                        className="w-full h-full min-h-[80px] p-4 border-none resize-none bg-transparent outline-none focus:ring-0 text-slate-900 font-bold leading-relaxed focus:bg-white transition-colors"
+                                      />
+                                   </td>
+                                 </tr>
+                               );
+                             })}
+                           </tbody>
+                         </table>
                        </div>
                     </div>
                   )}
@@ -190,7 +213,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                 </div>
               )}
 
-              {/* تنبيه الخطأ */}
               {errors[question.id] && (
                 <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl border border-red-100 text-sm font-bold animate-in fade-in">
                   <AlertCircle className="h-4 w-4 shrink-0" /> <span>{errors[question.id]}</span>
