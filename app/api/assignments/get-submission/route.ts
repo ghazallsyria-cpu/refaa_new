@@ -13,48 +13,53 @@ export async function POST(req: Request) {
     const { submissionId } = await req.json();
 
     if (!submissionId) {
-       return NextResponse.json({ error: 'Missing submission ID' }, { status: 400 });
+       return NextResponse.json({ error: 'Missing submission ID', success: false }, { status: 400 });
     }
 
-    // 1. جلب تسليم الطالب
-    const { data: subData, error: subErr } = await adminSupabase.from('assignment_submissions').select('*').eq('id', submissionId).maybeSingle();
-    if (subErr) throw subErr;
-    if (!subData) throw new Error('التسليم غير موجود');
+    const cleanSubmissionId = String(submissionId).trim();
+
+    // 1. جلب تسليم الطالب بأمان
+    const { data: subData, error: subErr } = await adminSupabase.from('assignment_submissions').select('*').eq('id', cleanSubmissionId).maybeSingle();
+    if (subErr) throw new Error('DB Error: ' + subErr.message);
+    if (!subData) {
+        return NextResponse.json({ success: false, error: 'التسليم غير موجود' }, { status: 404 });
+    }
     
-    // 2. جلب باقي التفاصيل
-    const { data: assignmentData, error: aErr } = await adminSupabase.from('assignments').select('*').eq('id', subData.assignment_id).maybeSingle();
-    if (aErr) throw aErr;
+    // 2. جلب باقي التفاصيل بأمان
+    const { data: assignmentData } = await adminSupabase.from('assignments').select('*').eq('id', subData.assignment_id).maybeSingle();
 
     let subj = null;
-    if (assignmentData?.subject_id) {
-       const { data } = await adminSupabase.from('subjects').select('name').eq('id', assignmentData.subject_id).maybeSingle();
-       subj = data;
+    if (assignmentData?.subject_id && String(assignmentData.subject_id).trim() !== '') {
+       try {
+           const { data } = await adminSupabase.from('subjects').select('name').eq('id', String(assignmentData.subject_id).trim()).maybeSingle();
+           subj = data;
+       } catch(e) { console.warn("Subject fetch skipped"); }
     }
 
     const { data: qData } = await adminSupabase.from('assignment_questions').select('*').eq('assignment_id', subData.assignment_id).order('order');
-    const { data: answersData } = await adminSupabase.from('assignment_answers').select('*').eq('submission_id', submissionId);
+    const { data: answersData } = await adminSupabase.from('assignment_answers').select('*').eq('submission_id', cleanSubmissionId);
     
-    let stData = null;
-    if (subData.student_id) {
-        const { data } = await adminSupabase.from('students').select('*').eq('id', subData.student_id).maybeSingle();
-        stData = data;
-    }
+    let stData = null, stUser = null, stSec = null, stClass = null;
 
-    let stUser = null;
-    if (stData?.user_id) {
-        const { data } = await adminSupabase.from('users').select('*').eq('id', stData.user_id).maybeSingle();
-        stUser = data;
-    }
+    if (subData.student_id && String(subData.student_id).trim() !== '') {
+        try {
+            const { data } = await adminSupabase.from('students').select('*').eq('id', String(subData.student_id).trim()).maybeSingle();
+            stData = data;
 
-    let stSec = null;
-    let stClass = null;
-    if (stData?.section_id) {
-        const { data } = await adminSupabase.from('sections').select('*').eq('id', stData.section_id).maybeSingle();
-        stSec = data;
-        if (stSec?.class_id) {
-            const { data: cData } = await adminSupabase.from('classes').select('*').eq('id', stSec.class_id).maybeSingle();
-            stClass = cData;
-        }
+            if (stData?.user_id) {
+                const { data: uData } = await adminSupabase.from('users').select('*').eq('id', String(stData.user_id).trim()).maybeSingle();
+                stUser = uData;
+            }
+
+            if (stData?.section_id) {
+                const { data: sData } = await adminSupabase.from('sections').select('*').eq('id', String(stData.section_id).trim()).maybeSingle();
+                stSec = sData;
+                if (stSec?.class_id) {
+                    const { data: cData } = await adminSupabase.from('classes').select('*').eq('id', String(stSec.class_id).trim()).maybeSingle();
+                    stClass = cData;
+                }
+            }
+        } catch(e) { console.warn("Student data fetch skipped"); }
     }
 
     const enrichedAssignment = { ...assignmentData, subject: subj };
@@ -71,7 +76,7 @@ export async function POST(req: Request) {
         answers: answersData || []
     });
   } catch (err: any) {
-    console.error('Get Submission API Error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('API Error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
