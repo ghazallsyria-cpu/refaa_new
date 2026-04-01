@@ -61,7 +61,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
-       const date = new Date(sub.submitted_at || sub.created_at).toLocaleString('ar-EG');
+       const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
        
        return {
          'اسم الطالب': name,
@@ -98,7 +98,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
-       const date = new Date(sub.submitted_at || sub.created_at).toLocaleString('ar-EG');
+       const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
        
        return `
         <tr>
@@ -698,7 +698,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                  <h3 className="font-black text-slate-900 text-lg">{st?.users?.full_name || st?.user?.full_name || 'طالب غير معروف'}</h3>
                                  <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
                                    <Clock className="h-4 w-4" />
-                                   <span dir="ltr">{new Date(sub.submitted_at || sub.created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
+                                   <span dir="ltr">{new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
                                  </p>
                                </div>
                              </div>
