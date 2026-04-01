@@ -38,6 +38,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
   };
 
+  // 🚀 السحر: معالجة إجابات جدول المقارنة المتعدد الأبعاد
   const handleComparisonGridChange = (questionId: string, rowIndex: number, colIndex: number, value: string) => {
      if (readOnly) return;
      try {
@@ -129,6 +130,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     />
                   )}
 
+                  {/* 🚀 جدول المقارنة التفاعلي */}
                   {isComparison && (
                     <div className="rounded-3xl border border-slate-300 overflow-hidden bg-white shadow-sm mt-4">
                        <div className="overflow-x-auto">
@@ -219,7 +221,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
         <div className="pt-8">
           <button type="submit" disabled={isSubmitting} className="w-full flex justify-center items-center gap-3 rounded-[2rem] bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">
             {isSubmitting ? <div className="h-6 w-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div> : <Send className="h-6 w-6" />}
-            {isSubmitting ? 'جاري التشفير والإرسال...' : 'تأكيد وإرسال الواجب النهائي'}
+            {isSubmitting ? 'جاري الإرسال...' : 'تأكيد وإرسال الواجب'}
           </button>
         </div>
       )}
