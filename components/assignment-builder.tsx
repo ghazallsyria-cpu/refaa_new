@@ -19,7 +19,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
       type: type,
       points: type === 'section_header' ? 0 : 5,
       isRequired: type !== 'section_header',
-      options: type === 'comparison' ? ['العنصر الأول', 'العنصر الثاني', 'وجه المقارنة الأول'] : undefined,
+      // 🚀 تهيئة مصفوفة الخيارات لجدول المقارنة
+      options: type === 'comparison' ? ['الطرف الأول', 'الطرف الثاني', 'وجه المقارنة الأول'] : undefined,
       media_url: null
     };
     onChange([...questions, newQuestion]);
@@ -147,6 +148,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   )}
                 </div>
 
+                {/* 🚀 إعدادات جدول المقارنة الاحترافي */}
                 {isComparison && (
                   <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -199,6 +201,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
+                {/* الخيارات المتعددة وصح وخطأ */}
                 {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                   <div className="space-y-3 pr-4 border-r-2 border-indigo-100">
                     {question.options?.map((option: string, optIndex: number) => (
@@ -217,6 +220,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
+                {/* شريط الإعدادات السفلي */}
                 <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 gap-4">
                   {!isHeader ? (
                     <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
