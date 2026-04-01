@@ -39,8 +39,19 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         if (details.answers) {
           const answersMap: Record<string, any> = {};
           const gradesMap: Record<string, any> = {};
+          
           details.answers.forEach((a: any) => {
-            answersMap[a.question_id] = a.selected_options || a.answer_text;
+            // 🚀 استخراج الإجابة بذكاء شديد لتجنب أي فقدان للبيانات مهما كان نوع السؤال
+            let finalAns = a.answer_text;
+            if (a.selected_options) {
+              if (Array.isArray(a.selected_options) && a.selected_options.length > 0) {
+                 finalAns = a.selected_options;
+              } else if (typeof a.selected_options === 'string' && a.selected_options.trim() !== '') {
+                 finalAns = a.selected_options;
+              }
+            }
+            
+            answersMap[a.question_id] = finalAns;
             gradesMap[a.question_id] = { isCorrect: a.is_correct || false, pointsEarned: a.points_earned || 0, feedback: a.feedback || '' };
           });
           setAnswers(answersMap);
@@ -141,7 +152,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      <div className="p-5 sm:p-8 border-b border-slate-100 bg-white">
                         <div className="text-sm font-black text-slate-400 mb-3 flex items-center gap-2"><User className="w-4 h-4" /> إجابة الطالب:</div>
                         
-                        {/* 🚀 التحصين ضد الانهيار عند عرض الإجابات */}
                         {isComparison ? (
                           <div className="rounded-2xl border border-slate-300 overflow-hidden shadow-sm">
                             <div className="overflow-x-auto">
@@ -156,10 +166,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                 <tbody>
                                   {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
                                     let parsedAns: any[] = [];
-                                    try { 
-                                      if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
-                                      else if (Array.isArray(studentAns)) parsedAns = studentAns;
-                                    } catch(e){}
+                                    try { parsedAns = JSON.parse(studentAns || '[]'); } catch(e){}
                                     return (
                                       <tr key={rIdx} className="hover:bg-slate-50 transition-colors">
                                         <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top">{aspect}</td>
@@ -175,10 +182,10 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                         ) : (
                           <div className={`p-5 rounded-2xl border font-bold text-lg leading-relaxed ${studentAns ? 'bg-indigo-50/50 border-indigo-100 text-indigo-900' : 'bg-slate-50 border-dashed border-slate-300 text-slate-400 italic'}`}>
                             {Array.isArray(studentAns) 
-                               ? studentAns.join('، ') 
-                               : (typeof studentAns === 'object' && studentAns !== null) 
-                                   ? JSON.stringify(studentAns) 
-                                   : (studentAns || 'لم يجب الطالب على هذا السؤال.')}
+                                ? studentAns.join('، ') 
+                                : (typeof studentAns === 'object' && studentAns !== null) 
+                                    ? JSON.stringify(studentAns) 
+                                    : (studentAns || 'لم يجب الطالب على هذا السؤال.')}
                           </div>
                         )}
                      </div>
