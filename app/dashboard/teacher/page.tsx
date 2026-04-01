@@ -95,16 +95,10 @@ export default function TeacherDashboard() {
           ...prev,
           ...data.stats
         }));
-
-        if (data.sections && data.sections.length > 0) {
-            const mockStats = data.sections.map((sec: any) => ({
-                title: 'واجبات منجزة',
-                className: `${sec.classes?.name} - ${sec.name}`,
-                percentage: Math.floor(Math.random() * 40) + 60, 
-                submissionCount: Math.floor(Math.random() * 20) + 10,
-                totalStudents: 30
-            }));
-            setAssignmentStats(mockStats);
+        
+        // 🚀 استخدام الإحصائيات الحقيقية بدلاً من الوهمية!
+        if (data.assignmentStats) {
+            setAssignmentStats(data.assignmentStats);
         }
       }
     } catch (error) {
@@ -132,6 +126,9 @@ export default function TeacherDashboard() {
   const today = new Date().getDay() + 1; 
   const todaysSchedule = schedule.filter(s => s.day_of_week === today);
   const avatarUrl = teacherData?.users?.avatar_url;
+  
+  // 🚀 حساب عدد الرسائل غير المقروءة
+  const unreadMessagesCount = messages.filter(m => !m.is_read).length;
 
   return (
     <motion.div 
@@ -140,12 +137,11 @@ export default function TeacherDashboard() {
       className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
       dir="rtl"
     >
-      {/* 🚀 Header Section (التحفة المعمارية الفنية الخارقة) 🚀 */}
+      {/* 🚀 Header Section */}
       <div className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
           
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right">
-            {/* 📸 الصورة الشخصية الفخمة (Avatar Integration) */}
             <div className="relative group shrink-0">
               <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/20 shadow-2xl bg-white/10 backdrop-blur-md flex items-center justify-center relative z-10 transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3">
                 {avatarUrl ? (
@@ -155,7 +151,6 @@ export default function TeacherDashboard() {
                 )}
               </div>
               <div className="absolute inset-0 bg-white/20 rounded-[2.5rem] blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
-              {/* 🟢 مؤشر الأونلاين التفاعلي */}
               <div className="absolute bottom-2 left-2 w-6 h-6 bg-emerald-400 border-4 border-indigo-600 rounded-full z-20 shadow-lg animate-pulse"></div>
             </div>
 
@@ -192,13 +187,12 @@ export default function TeacherDashboard() {
           </div>
         </div>
 
-        {/* 🎆 تأثيرات الزجاج والضوء الخلفية (Glow Effects) */}
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl mix-blend-overlay animate-pulse"></div>
         <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay"></div>
         <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay"></div>
       </div>
 
-      {/* 🚀 Stats Grid (بطاقات إحصائية زجاجية) */}
+      {/* 🚀 Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {[
           { label: 'إجمالي الطلاب', value: stats.totalStudents, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', gradient: 'from-blue-50 to-white', border: 'border-blue-100' },
@@ -231,7 +225,7 @@ export default function TeacherDashboard() {
         {/* 🚀 Main Content - Left 2 Columns */}
         <div className="xl:col-span-2 space-y-8">
           
-          {/* Today's Schedule Timeline (تصميم هندسي متطور لجدول الحصص) */}
+          {/* Today's Schedule Timeline */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -mr-10 -mt-10"></div>
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white/50 relative z-10 gap-4">
@@ -351,7 +345,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* My Sections Grid (فصولي الدراسية) */}
+          {/* My Sections Grid */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -384,7 +378,7 @@ export default function TeacherDashboard() {
                       <div className="mt-auto pt-5 border-t border-slate-100 flex items-center justify-between text-sm relative z-10">
                         <span className="text-slate-600 font-bold flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
                           <Users className="h-4 w-4 text-slate-400" />
-                          {section.students?.[0]?.count || 0} طالب
+                          {Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0} طالب
                         </span>
                         <span className="text-blue-600 font-black group-hover:underline flex items-center gap-1 bg-white px-2 py-1 rounded-lg">
                           إدارة الفصل <ChevronLeft className="w-4 h-4" />
@@ -401,7 +395,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* Assignment Statistics by Class */}
+          {/* 🚀 Assignment Statistics by Class (Real Data) */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -444,7 +438,7 @@ export default function TeacherDashboard() {
                   ))
                 ) : (
                   <div className="text-center py-10 text-slate-400 font-bold border border-dashed border-slate-200 rounded-3xl">
-                    لا توجد بيانات إحصائية متاحة حالياً
+                    لا توجد واجبات نشطة حالياً لحساب نسبة الإنجاز
                   </div>
                 )}
               </div>
@@ -458,7 +452,7 @@ export default function TeacherDashboard() {
           
           <AnnouncementsWidget authRole="teacher" />
 
-          {/* Recent Exams (الاختبارات الأخيرة) */}
+          {/* Recent Exams */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -505,7 +499,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* Recent Assignments (الواجبات الأخيرة) */}
+          {/* Recent Assignments */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -552,46 +546,55 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* Recent Messages (الرسائل) */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
+          {/* 🚀 Recent Messages (Unread Highlights) */}
+          <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-100">
                   <MessageSquare className="h-5 w-5 text-emerald-600" />
                 </div>
-                رسائل جديدة
+                صندوق الرسائل
               </h2>
-              {messages.length > 0 && (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-md shadow-rose-200">
-                  {messages.length}
+              {unreadMessagesCount > 0 && (
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-md shadow-rose-200 animate-pulse relative z-10">
+                  {unreadMessagesCount}
                 </span>
               )}
             </div>
             <div className="divide-y divide-slate-100 bg-slate-50/30">
               {messages.length > 0 ? (
-                messages.map((msg, i) => (
-                  <Link href={`/messages?id=${msg.id}`} key={i} className="flex gap-4 p-6 hover:bg-white transition-colors group">
-                    <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 border border-emerald-200 flex-shrink-0 flex items-center justify-center font-black text-lg text-emerald-700 shadow-sm group-hover:scale-110 transition-transform overflow-hidden">
-                      {msg.sender?.avatar_url ? (
-                        <img src={msg.sender.avatar_url} alt={msg.sender.full_name} className="w-full h-full object-cover" />
-                      ) : (
-                        msg.sender?.full_name?.charAt(0) || 'م'
+                messages.map((msg, i) => {
+                  const isUnread = !msg.is_read;
+                  return (
+                    <Link href={`/messages?id=${msg.id}`} key={i} className={`flex gap-4 p-6 transition-all group relative ${isUnread ? 'bg-indigo-50/60 hover:bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-white border-l-4 border-l-transparent'}`}>
+                      {/* 🚀 نقطة التنبيه للرسالة غير المقروءة */}
+                      {isUnread && (
+                        <div className="absolute top-1/2 right-3 w-2.5 h-2.5 rounded-full bg-indigo-500 transform -translate-y-1/2 shadow-sm animate-pulse"></div>
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex justify-between items-baseline mb-1">
-                        <p className="text-sm font-black text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
-                          {msg.sender?.full_name}
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-400 whitespace-nowrap mr-2 bg-slate-100 px-2 py-0.5 rounded-md">
-                          {mounted ? format(new Date(msg.created_at), 'd MMM', { locale: arSA }) : '...'}
-                        </p>
+                      
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 border border-emerald-200 flex-shrink-0 flex items-center justify-center font-black text-lg text-emerald-700 shadow-sm group-hover:scale-110 transition-transform overflow-hidden relative z-10">
+                        {msg.sender?.avatar_url ? (
+                          <img src={msg.sender.avatar_url} alt={msg.sender.full_name} className="w-full h-full object-cover" />
+                        ) : (
+                          msg.sender?.full_name?.charAt(0) || 'م'
+                        )}
                       </div>
-                      <p className="text-xs text-emerald-600 truncate font-black mb-1">{msg.subject}</p>
-                      <p className="text-xs text-slate-500 truncate font-medium leading-relaxed">{msg.content}</p>
-                    </div>
-                  </Link>
-                ))
+                      
+                      <div className="min-w-0 flex-1 relative z-10">
+                        <div className="flex justify-between items-baseline mb-1">
+                          <p className={`text-sm truncate transition-colors ${isUnread ? 'font-black text-indigo-900 group-hover:text-indigo-700' : 'font-bold text-slate-900 group-hover:text-emerald-600'}`}>
+                            {msg.sender?.full_name}
+                          </p>
+                          <p className={`text-[10px] whitespace-nowrap mr-2 px-2 py-0.5 rounded-md ${isUnread ? 'bg-indigo-100/50 text-indigo-700 font-black' : 'bg-slate-100 text-slate-400 font-bold'}`}>
+                            {mounted ? format(new Date(msg.created_at), 'd MMM', { locale: arSA }) : '...'}
+                          </p>
+                        </div>
+                        <p className={`text-xs truncate mb-1 ${isUnread ? 'text-indigo-700 font-black' : 'text-emerald-600 font-bold'}`}>{msg.subject}</p>
+                        <p className={`text-xs truncate leading-relaxed ${isUnread ? 'text-slate-600 font-medium' : 'text-slate-500 font-medium'}`}>{msg.content}</p>
+                      </div>
+                    </Link>
+                  );
+                })
               ) : (
                 <div className="p-12 text-center text-slate-400 text-sm flex flex-col items-center bg-white m-4 rounded-2xl border border-dashed border-slate-200">
                   <div className="h-14 w-14 rounded-full bg-slate-50 flex items-center justify-center mb-3 border border-slate-100">
