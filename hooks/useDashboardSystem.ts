@@ -266,16 +266,14 @@ export function useDashboardSystem() {
 
       if (teacherError || !teacher) return null;
 
-      // جلب فصول المعلم مع أعداد الطلاب
       const { data: teacherSections } = await supabase
         .from('teacher_sections')
         .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
         .eq('teacher_id', teacher.id);
       
-      const sections = teacherSections?.map(ts => ts.section) || [];
+      const sections = (teacherSections?.map(ts => ts.section) || []).filter(Boolean);
       const sectionIds = sections.map((s: any) => s.id);
 
-      // 🚀 جلب الواجبات والاختبارات المرتبطة بالمعلم بطريقة صحيحة ودقيقة
       const [
         { data: recentExams },
         { data: recentAssignments },
@@ -308,7 +306,6 @@ export function useDashboardSystem() {
           .from('class_periods')
           .select('*')
           .order('period_number'),
-        // 🚀 تم إضافة is_read و avatar_url لاستخراج الرسائل بشكل دقيق
         supabase
           .from('messages')
           .select('id, subject, content, created_at, is_read, sender:sender_id(full_name, avatar_url)')
@@ -329,7 +326,6 @@ export function useDashboardSystem() {
           .eq('teacher_id', teacher.id)
       ]);
 
-      // تنسيق الاختبارات
       const exams = (recentExams || []).map((e: any) => {
         const sec = e.exam_sections?.[0]?.section;
         return {
@@ -339,7 +335,6 @@ export function useDashboardSystem() {
         };
       });
 
-      // تنسيق الواجبات
       const assignments = (recentAssignments || []).map((a: any) => {
         const sec = a.assignment_sections?.[0]?.section;
         return {
@@ -349,7 +344,6 @@ export function useDashboardSystem() {
         };
       });
 
-      // 🚀 حساب إحصائيات الإنجاز الحقيقية لكل فصل
       const recentAssIds = assignments.map(a => a.id);
       let submissionsData: any[] = [];
       if (recentAssIds.length > 0) {
@@ -357,12 +351,14 @@ export function useDashboardSystem() {
          submissionsData = subs || [];
       }
 
-      const assignmentStats = sections.map(section => {
-        // البحث عن الواجبات المسندة لهذا الفصل من ضمن الواجبات النشطة
-        const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section[0]?.id));
-        
-        // حساب عدد الطلاب الفعلي في الفصل
-const studentCount = Array.isArray(section[0]?.students) ? section[0].students[0]?.count ?? 0 : 0;
+      // 🚀 الإصلاح: استخدام (s as any) لتخطي صرامة TypeScript عند معالجة المصفوفات المتداخلة
+      const assignmentStats = sections.map(s => {
+        const section = (Array.isArray(s) ? s[0] : s) as any;
+        if (!section) return null;
+
+        const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section.id));
+        const studentCount = Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0;
+
         if (secAssignments.length === 0 || studentCount === 0) return null;
 
         let expectedSubmissions = 0;
@@ -374,11 +370,13 @@ const studentCount = Array.isArray(section[0]?.students) ? section[0].students[0
         });
 
         const percentage = expectedSubmissions > 0 ? Math.min(Math.round((actualSubmissions / expectedSubmissions) * 100), 100) : 0;
+        
+        const classObj = Array.isArray(section.classes) ? section.classes[0] : section.classes;
 
         return {
             title: 'إنجاز الواجبات النشطة',
-className: `${section.classes?.[0]?.name} - ${section.name}`,
-          percentage,
+            className: `${classObj?.name || ''} - ${section.name}`,
+            percentage,
             submissionCount: actualSubmissions,
             totalStudents: expectedSubmissions
         };
@@ -392,7 +390,7 @@ className: `${section.classes?.[0]?.name} - ${section.name}`,
         schedule: schedule || [],
         periods: periods || [],
         messages: messages || [],
-        assignmentStats, // 🚀 الإحصائيات الحقيقية
+        assignmentStats,
         stats: {
           totalStudents: studentsCount || 0,
           totalExams: examsCount || 0,
@@ -446,7 +444,7 @@ className: `${section.classes?.[0]?.name} - ${section.name}`,
           next_year_track: track,
           track_selection_date: new Date().toISOString()
         })
-        .eq('user_id', user.id) // استخدام user_id بدلاً من id
+        .eq('user_id', user.id)
         .select()
         .single();
       
