@@ -9,6 +9,7 @@ import AssignmentForm from '@/components/assignment-form';
 import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
 import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
@@ -50,6 +51,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setTimeout(() => setNotification(null), 5000);
   };
 
+  // 🚀 استعادة كود تصدير الإكسل بالكامل
   const exportToExcel = () => {
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
     
@@ -57,7 +59,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const sectionClass = (sub.student?.section?.class as any)?.name || (sub.student?.section as any)?.classes?.name || '';
        const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
-       // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
@@ -79,6 +80,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     XLSX.writeFile(workbook, `تسليمات_${assignment?.title || 'الواجب'}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  // 🚀 استعادة كود تصدير الـ PDF بالكامل
   const exportToPDF = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -87,7 +89,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
 
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
-    // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
     const gradedSubs = submissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
     const avgScore = gradedSubs.length > 0 ? Math.round(gradedSubs.reduce((sum, s) => sum + (Number(s.grade) || 0), 0) / gradedSubs.length) : 0;
 
@@ -95,7 +96,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const sectionClass = (sub.student?.section?.class as any)?.name || (sub.student?.section as any)?.classes?.name || '';
        const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
-       // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
@@ -228,7 +228,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         const isMultiple = question?.type === 'multiple_choice' || question?.type === 'checkbox';
         return {
           question_id: qId,
-          answer_text: isMultiple ? null : (value as string),
+          answer_text: isMultiple ? null : (typeof value === 'object' && value !== null ? JSON.stringify(value) : (value as string)),
           selected_options: isMultiple ? (value as string[]) : null
         };
       });
@@ -483,7 +483,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 <tbody>
                                   {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
                                     let parsedAns: any[] = [];
-                                    try { parsedAns = JSON.parse((studentAns as string) || '[]'); } catch(e){}
+                                    try { 
+                                      if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
+                                      else if (Array.isArray(studentAns)) parsedAns = studentAns;
+                                    } catch(e){}
                                     return (
                                       <tr key={rIdx} className="hover:bg-white/50 transition-colors">
                                         <td className="p-4 border-b border-l border-white/50 font-bold text-slate-700 bg-white/30 align-top">{aspect}</td>
@@ -503,7 +506,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك:</span>
                             </div>
                             <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
-                                {isUnanswered ? 'لم تقم بتقديم إجابة لهذا السؤال.' : (studentAnswerText as string)}
+                                {isUnanswered ? 'لم تقم بتقديم إجابة لهذا السؤال.' : (typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : (studentAnswerText as string))}
                             </p>
                           </div>
                         )}
@@ -614,7 +617,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     <button
                       type="submit"
                       disabled={isSubmitting || (!content && !fileUrl)}
-                      className="w-full flex justify-center items-center gap-3 rounded-2xl bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="w-full flex justify-center items-center gap-3 rounded-[2rem] bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isSubmitting ? (
                         <div className="h-6 w-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -684,7 +687,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="divide-y divide-slate-100">
                     {submissions.map((sub) => {
                        const st = sub.student as any;
-                       // 🚀 تم تحويل المقارنة إلى String لإسكات TypeScript
                        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
 
                        return (
