@@ -38,7 +38,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
   };
 
-  // 🚀 السحر: معالجة إجابات جدول المقارنة المتعدد الأبعاد
   const handleComparisonGridChange = (questionId: string, rowIndex: number, colIndex: number, value: string) => {
      if (readOnly) return;
      try {
@@ -78,6 +77,8 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
       {questions.map((question, index) => {
         const isHeader = question.type === 'section_header';
         const isComparison = question.type === 'comparison';
+        // 🚀 التحصين: التأكد من وجود الخيارات دائماً
+        const safeOptions = question.options && Array.isArray(question.options) ? question.options : [];
 
         return (
           <motion.div
@@ -130,7 +131,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     />
                   )}
 
-                  {/* 🚀 جدول المقارنة التفاعلي */}
+                  {/* 🚀 جدول المقارنة المحصن ضد الأعطال */}
                   {isComparison && (
                     <div className="rounded-3xl border border-slate-300 overflow-hidden bg-white shadow-sm mt-4">
                        <div className="overflow-x-auto">
@@ -138,12 +139,12 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                            <thead>
                              <tr className="bg-indigo-50">
                                <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
-                               <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(question.options && question.options[0]) || 'الطرف الأول'}</th>
-                               <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{(question.options && question.options[1]) || 'الطرف الثاني'}</th>
+                               <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
+                               <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
                              </tr>
                            </thead>
                            <tbody>
-                             {question.options?.slice(2).map((aspect: string, rIdx: number) => {
+                             {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
                                let parsedAns: any[] = [];
                                try { parsedAns = JSON.parse(answers[question.id] || '[]'); } catch(e){}
                                
@@ -177,9 +178,10 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     </div>
                   )}
 
+                  {/* 🚀 الخيارات المتعددة المحصنة */}
                   {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {question.options?.map((option: string, optIndex: number) => {
+                      {safeOptions.map((option: string, optIndex: number) => {
                         const isChecked = question.type === 'checkbox' 
                             ? (answers[question.id] || []).includes(option) 
                             : answers[question.id] === option;
@@ -221,7 +223,7 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
         <div className="pt-8">
           <button type="submit" disabled={isSubmitting} className="w-full flex justify-center items-center gap-3 rounded-[2rem] bg-indigo-600 px-8 py-5 text-lg font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">
             {isSubmitting ? <div className="h-6 w-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div> : <Send className="h-6 w-6" />}
-            {isSubmitting ? 'جاري الإرسال...' : 'تأكيد وإرسال الواجب'}
+            {isSubmitting ? 'جاري التشفير والإرسال...' : 'تأكيد وإرسال الواجب النهائي'}
           </button>
         </div>
       )}
