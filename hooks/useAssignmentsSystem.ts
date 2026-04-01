@@ -27,27 +27,72 @@ export function useAssignmentsSystem() {
     setError(null);
 
     try {
-      // 🚀 الاتصال بالـ API المنيع بدلاً من استعلامات قاعدة البيانات المباشرة
-      const response = await fetch('/api/assignments/list', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, role: currentRole }),
+      // 🚀 1. جلب الواجبات بشكل مبسط بدون (!inner) المزعجة لتجنب الفشل الصامت
+      const { data: assignmentsData, error: fetchErr } = await supabase
+        .from('assignments')
+        .select(`
+          *,
+          subject:subjects(name),
+          teacher:teachers(users(full_name)),
+          assignment_sections(section_id, sections(name, classes(name)))
+        `)
+        .order('created_at', { ascending: false });
+
+      if (fetchErr) throw fetchErr;
+
+      let rawData = assignmentsData || [];
+
+      // 🚀 2. الفلترة الفولاذية داخل المتصفح (In-Memory Filter)
+      if (currentRole === 'teacher') {
+        const { data: tProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        const tId = tProfile?.id || user.id;
+        
+        rawData = rawData.filter((a: any) => 
+           String(a.teacher_id) === String(tId) || String(a.teacher_id) === String(user.id)
+        );
+      } else if (currentRole === 'student') {
+        const { data: sProfile } = await supabase.from('students').select('section_id').eq('user_id', user.id).maybeSingle();
+        const sSectionId = sProfile?.section_id;
+
+        if (sSectionId) {
+          rawData = rawData.filter((a: any) => {
+            if (a.status !== 'published') return false; // الطالب يرى المنشور فقط
+            
+            // التحقق من المصفوفة المباشرة (section_ids) أو الجدول المرتبط
+            const inArray = Array.isArray(a.section_ids) && a.section_ids.includes(sSectionId);
+            const inRel = Array.isArray(a.assignment_sections) && a.assignment_sections.some((rel: any) => String(rel.section_id) === String(sSectionId));
+            
+            return inArray || inRel;
+          });
+        } else {
+          rawData = [];
+        }
+      }
+
+      // 3. تنسيق البيانات (تجنب أخطاء المصفوفات في Supabase Joins)
+      const mappedData: AssignmentWithMeta[] = rawData.map((a: any) => {
+        const safeSubj = Array.isArray(a.subject) ? a.subject[0] : a.subject;
+        const safeTeacher = Array.isArray(a.teacher?.users) ? a.teacher.users[0] : a.teacher?.users;
+
+        let sectionName = 'غير محدد';
+        if (a.assignment_sections && a.assignment_sections.length > 0) {
+           sectionName = a.assignment_sections.map((es: any) => {
+             const sec = Array.isArray(es.sections) ? es.sections[0] : es.sections;
+             const cls = Array.isArray(sec?.classes) ? sec.classes[0] : sec?.classes;
+             return sec ? `${cls?.name || ''} - ${sec.name}` : '';
+           }).filter(Boolean).join('، ');
+        }
+
+        return {
+          ...a,
+          created_at: a.created_at || new Date().toISOString(),
+          subject_name: safeSubj?.name || 'مادة غير محددة',
+          teacher_name: safeTeacher?.full_name || 'معلم غير محدد',
+          section_name: sectionName,
+        };
       });
-      
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'فشل جلب الواجبات');
 
-      const mappedData: AssignmentWithMeta[] = (result.data || []).map((a: any) => ({
-        ...a,
-        created_at: a.created_at || new Date().toISOString(),
-        subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
-        teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
-        section_name: a.assignment_sections && a.assignment_sections.length > 0 
-            ? a.assignment_sections.map((es: any) => es.sections?.name).join('، ') 
-            : 'غير محدد',
-      }));
-
-      // حساب التسليمات للمشرفين
+      // 4. حساب التسليمات
       if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const { data: countsData } = await supabase.from('assignment_submissions').select('assignment_id, status');
         if (countsData) {
@@ -63,20 +108,17 @@ export function useAssignmentsSystem() {
         setData(mappedData);
       }
 
-      // جلب تسليمات الطالب إن وجدت
+      // 5. جلب تسليمات الطالب
       if (currentRole === 'student') {
         const { data: subData } = await supabase.from('assignment_submissions').select('assignment_id, status, grade, id, student_id, submitted_at').eq('student_id', user.id);
         const subMap: Record<string, AssignmentSubmission> = {};
-        (subData || []).forEach((s: unknown) => { 
-            const submission = s as AssignmentSubmission;
-            subMap[submission.assignment_id] = submission; 
-        });
+        (subData || []).forEach((s: any) => { subMap[s.assignment_id] = s; });
         setStudentSubmissions(subMap);
       }
 
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error("Fetch Assignments Error:", err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ غير معروف');
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -143,6 +185,7 @@ export function useAssignmentsSystem() {
     } catch (err) { throw err; }
   }, [user, currentRole]);
 
+  // 🚀 إرسال النص والملف إلى السيرفر بنجاح
   const submitAssignment = useCallback(async (
     assignmentId: string, 
     answers: RawAssignmentAnswer[], 
