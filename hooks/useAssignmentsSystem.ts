@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { Subject, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
-import { Question, normalizeQuestion } from '@/types/question';
+import { Question } from '@/types/question';
 
 export interface AssignmentDetails {
   assignment: AssignmentWithMeta;
@@ -11,6 +11,31 @@ export interface AssignmentDetails {
   answers: AssignmentAnswer[];
   allSubmissions: SubmissionWithStudent[];
 }
+
+// 🚀 فلتر التنظيف الصارم: يمنع تحول الخيارات إلى [object Object] ويعالج المسودات القديمة
+const formatAssignmentQuestion = (q: any) => {
+  let cleanOptions: string[] = [];
+  if (Array.isArray(q.options)) {
+    cleanOptions = q.options.map((opt: any) => {
+      if (typeof opt === 'string') return opt; // إذا كانت نصاً سليماً
+      if (typeof opt === 'object' && opt !== null) {
+        // إذا تلوثت وتحولت لكائن، نستخرج النص منها
+        return opt.content || opt.text || opt.id || String(opt);
+      }
+      return String(opt);
+    });
+  }
+
+  return {
+    id: q.id || crypto.randomUUID(),
+    content: q.question_text || q.content || '',
+    type: q.question_type || q.type || 'text',
+    options: cleanOptions,
+    points: q.points || 0,
+    isRequired: q.is_required ?? true,
+    media_url: q.media_url || q.mediaUrl || null
+  };
+};
 
 export function useAssignmentsSystem() {
   const { user, authRole, userRole } = useAuth() as any;
@@ -108,10 +133,8 @@ export function useAssignmentsSystem() {
     try {
       const { data, error } = await supabase.from('assignment_questions').select('*').eq('assignment_id', assignmentId).order('order');
       if (error) throw error;
-      return (data || []).map((q: any) => {
-        const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
-        return { ...nq, media_url: q.media_url }; 
-      });
+      // 🚀 استخدام الفلتر المنظف هنا
+      return (data || []).map(formatAssignmentQuestion);
     } catch (err) { return []; }
   }, []);
 
@@ -157,10 +180,8 @@ export function useAssignmentsSystem() {
 
       return {
         assignment: assignmentData as AssignmentWithMeta,
-        questions: (qData || []).map((q: any) => {
-           const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
-           return { ...nq, media_url: q.media_url }; 
-        }),
+        // 🚀 استخدام الفلتر المنظف هنا أيضاً
+        questions: (qData || []).map(formatAssignmentQuestion),
         submission: submissionData,
         answers: answersData,
         allSubmissions: allSubmissionsData
@@ -206,10 +227,8 @@ export function useAssignmentsSystem() {
       return {
         submission: submissionData as unknown as SubmissionWithStudent,
         assignment: assignmentData as AssignmentWithMeta,
-        questions: (qData || []).map((q: any) => {
-          const nq = normalizeQuestion({ id: q.id, content: q.question_text, type: q.question_type, options: q.options, points: q.points, isRequired: q.is_required });
-          return { ...nq, media_url: q.media_url };
-        }),
+        // 🚀 استخدام الفلتر المنظف هنا لضمان عمل واجهة التصحيح
+        questions: (qData || []).map(formatAssignmentQuestion),
         answers: (answersData as AssignmentAnswer[]) || []
       };
     } catch (err) { throw err; }
