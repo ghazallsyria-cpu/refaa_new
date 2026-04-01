@@ -178,43 +178,50 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     printWindow.document.close();
   };
 
-  const fetchData = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      if (authRole === 'student') setStudentId(user.id);
-      const details = await fetchAssignmentDetails(assignmentId);
-      setAssignment(details.assignment);
-      setEditData(details.assignment);
-      if (details.questions) setQuestions(details.questions);
+const fetchData = useCallback(async () => {
+  if (!user || !authRole) return; // 🔥 مهم جداً
 
-      if (authRole === 'student') {
-        if (details.submission) {
-          setMySubmission(details.submission as any);
-          setContent((details.submission as any).content || '');
-          setFileUrl((details.submission as any).file_url || '');
+  setLoading(true);
 
-          if (details.answers) {
-            const answersMap: Record<string, string | string[] | null> = {};
-            const fullMap: Record<string, any> = {};
-            
-            details.answers.forEach((a: any) => {
-              answersMap[a.question_id] = a.selected_options || a.answer_text;
-              fullMap[a.question_id] = a;
-            });
-            setMyAnswers(answersMap);
-            setFullAnswersMap(fullMap);
-          }
+  try {
+    if (authRole === 'student') setStudentId(user.id);
+
+    const details = await fetchAssignmentDetails(assignmentId);
+
+    setAssignment(details.assignment);
+    setEditData(details.assignment);
+
+    if (details.questions) setQuestions(details.questions);
+
+    if (authRole === 'student') {
+      if (details.submission) {
+        setMySubmission(details.submission as any);
+        setContent((details.submission as any).content || '');
+        setFileUrl((details.submission as any).file_url || '');
+
+        if (details.answers) {
+          const answersMap = {};
+          const fullMap = {};
+
+          details.answers.forEach((a: any) => {
+            answersMap[a.question_id] = a.selected_options || a.answer_text;
+            fullMap[a.question_id] = a;
+          });
+
+          setMyAnswers(answersMap);
+          setFullAnswersMap(fullMap);
         }
-      } else if (['teacher', 'admin', 'management'].includes(authRole || '')) {
-        setSubmissions(details.allSubmissions);
       }
-    } catch (error: any) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
+    } else if (['teacher', 'admin', 'management'].includes(authRole)) {
+      setSubmissions(details.allSubmissions);
     }
-  }, [assignmentId, user, authRole, fetchAssignmentDetails]);
+
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+}, [assignmentId, user, authRole, fetchAssignmentDetails]);
 
   useEffect(() => {
     fetchData();
@@ -275,13 +282,32 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     showNotification('success', 'تم نسخ رابط الواجب');
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div></div>;
-  }
+// 🚀 لا تعرض أي شيء قبل جاهزية المستخدم
+if (!user || !authRole) {
+  return (
+    <div className="flex justify-center items-center h-screen">
+      <p className="text-slate-500 font-bold">جاري التحقق من المستخدم...</p>
+    </div>
+  );
+}
 
-  if (!assignment) {
-    return <div className="text-center py-32"><h3 className="text-2xl font-black">الواجب غير موجود</h3></div>;
-  }
+// 🚀 loading الحقيقي
+if (loading) {
+  return (
+    <div className="flex justify-center items-center h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+    </div>
+  );
+}
+
+// 🚀 الآن فقط نحكم إذا موجود أو لا
+if (!assignment) {
+  return (
+    <div className="text-center py-32">
+      <h3 className="text-2xl font-black">الواجب غير موجود</h3>
+    </div>
+  );
+}
 
   const dueDateObj = new Date(assignment.due_date);
   const isOverdue = dueDateObj < new Date();
