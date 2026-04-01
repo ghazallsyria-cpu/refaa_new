@@ -17,9 +17,10 @@ import {
   MapPin,
   Clock,
   Video,
-  BookOpen
+  BookOpen,
+  Settings // 🚀 تم إضافة استيراد الأيقونة هنا لحل الخطأ
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
 
@@ -495,7 +496,7 @@ export default function SettingsPage() {
                     {[
                       { id: 'msgs', title: 'الرسائل المباشرة', desc: 'استلام بريد إلكتروني عند وصول رسالة جديدة من الإدارة أو الطلاب.' },
                       { id: 'ann', title: 'التعاميم والإعلانات', desc: 'تنبيه فوري عند نشر تعميم إداري جديد يخص قسمك.' },
-                      { id: 'rep', title: 'التقارير الدورية', desc: 'استلام ملخص أسبوعي عن أداء النظام والمهام المعلقة.' }
+                      { id: 'rep', title: 'التقارير الدورية', desc: 'استلام ملخص أسبوعي عن أداء المدرسة والحضور.' }
                     ].map((item) => (
                       <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-slate-50 border border-slate-100 hover:border-amber-200 transition-colors">
                         <div>
