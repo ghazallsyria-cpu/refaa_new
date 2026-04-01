@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns } from 'lucide-react';
+import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
 import { Question, QuestionType } from '@/types/question';
 import ImageUpload from '@/components/ImageUpload';
@@ -19,7 +19,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
       type: type,
       points: type === 'section_header' ? 0 : 5,
       isRequired: type !== 'section_header',
-      options: type === 'comparison' ? ['العنصر الأول', 'العنصر الثاني'] : undefined,
+      options: type === 'comparison' ? ['العنصر الأول', 'العنصر الثاني', 'وجه المقارنة الأول'] : undefined,
       media_url: null
     };
     onChange([...questions, newQuestion]);
@@ -33,11 +33,12 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     onChange(questions.filter(q => q.id !== id));
   };
 
-  const addOption = (questionId: string) => {
+  const addOption = (questionId: string, isAspect: boolean = false) => {
     const question = questions.find(q => q.id === questionId);
     if (question) {
       const currentOptions = question.options || [];
-      const options = [...currentOptions, `خيار جديد ${currentOptions.length + 1}`];
+      const newLabel = isAspect ? `وجه مقارنة جديد ${currentOptions.length - 1}` : `خيار جديد ${currentOptions.length + 1}`;
+      const options = [...currentOptions, newLabel];
       updateQuestion(questionId, { options });
     }
   };
@@ -71,7 +72,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
             <Heading className="h-4 w-4" /> عنوان رئيسي
           </button>
           <button type="button" onClick={() => addQuestion('comparison')} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-100 transition-all border border-emerald-200 shadow-sm">
-            <Columns className="h-4 w-4" /> جدول مقارنة
+            <Columns className="h-4 w-4" /> سؤال مقارنة
           </button>
           <button type="button" onClick={() => addQuestion('text')} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
             <Plus className="h-4 w-4" /> سؤال عادي
@@ -110,7 +111,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       onChange={(e) => updateQuestion(question.id, { text: e.target.value, content: e.target.value })}
                     />
                     
-                    {/* 🚀 رفع صورة مخصصة لكل سؤال */}
                     <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                       <ImageUpload 
                         initialImageUrl={question.media_url}
@@ -131,8 +131,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                           const updates: any = { type };
                           if ((type === 'multiple_choice' || type === 'checkbox') && !question.options) {
                             updates.options = ['خيار 1'];
-                          } else if (type === 'comparison' && (!question.options || question.options.length !== 2)) {
-                            updates.options = ['العنصر الأول', 'العنصر الثاني'];
+                          } else if (type === 'comparison' && (!question.options || question.options.length < 3)) {
+                            updates.options = ['الطرف الأول', 'الطرف الثاني', 'وجه المقارنة 1'];
                           }
                           updateQuestion(question.id, updates);
                         }}
@@ -141,42 +141,64 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                         <option value="paragraph">فقرة</option>
                         <option value="multiple_choice">خيارات متعددة</option>
                         <option value="checkbox">مربعات اختيار</option>
-                        <option value="comparison">جدول مقارنة</option>
+                        <option value="comparison">جدول مقارنة احترافي</option>
                       </select>
                     </div>
                   )}
                 </div>
 
-                {/* 🚀 إعدادات سؤال المقارنة */}
                 {isComparison && (
-                  <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-4">
-                    <p className="text-xs font-black text-emerald-800 flex items-center gap-2">
-                      <Columns className="h-4 w-4" /> حدد أطراف المقارنة (ستظهر كأعمدة للطلاب):
-                    </p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <input
-                           type="text" dir="auto"
-                           placeholder="الطرف الأول..."
-                           value={(question.options && question.options[0]) || ''}
-                           onChange={(e) => updateOption(question.id, 0, e.target.value)}
-                           className="w-full p-3 rounded-xl border border-emerald-200 font-bold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                        />
+                  <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <p className="text-xs font-black text-emerald-800 flex items-center gap-2">
+                          <Columns className="h-4 w-4" /> أطراف المقارنة (الأعمدة الرئيسية):
+                        </p>
+                        <div className="flex gap-3">
+                          <input
+                             type="text" dir="auto" placeholder="الطرف الأول..."
+                             value={(question.options && question.options[0]) || ''}
+                             onChange={(e) => updateOption(question.id, 0, e.target.value)}
+                             className="w-full p-3 rounded-xl border border-emerald-200 bg-white font-bold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
+                          <input
+                             type="text" dir="auto" placeholder="الطرف الثاني..."
+                             value={(question.options && question.options[1]) || ''}
+                             onChange={(e) => updateOption(question.id, 1, e.target.value)}
+                             className="w-full p-3 rounded-xl border border-emerald-200 bg-white font-bold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <input
-                           type="text" dir="auto"
-                           placeholder="الطرف الثاني..."
-                           value={(question.options && question.options[1]) || ''}
-                           onChange={(e) => updateOption(question.id, 1, e.target.value)}
-                           className="w-full p-3 rounded-xl border border-emerald-200 font-bold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
-                        />
+
+                      <div className="space-y-3">
+                        <p className="text-xs font-black text-emerald-800 flex items-center gap-2">
+                          <ListFilter className="h-4 w-4" /> أوجه المقارنة (أسطر الجدول):
+                        </p>
+                        <div className="space-y-2">
+                          {question.options?.slice(2).map((aspect: string, idx: number) => (
+                            <div key={idx + 2} className="flex gap-2">
+                              <input
+                                type="text" dir="auto" placeholder={`وجه المقارنة ${idx + 1}...`}
+                                value={aspect}
+                                onChange={(e) => updateOption(question.id, idx + 2, e.target.value)}
+                                className="w-full p-3 rounded-xl border border-emerald-200 bg-white font-bold text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                              />
+                              {(question.options.length > 3) && (
+                                <button type="button" onClick={() => removeOption(question.id, idx + 2)} className="px-3 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-colors">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addOption(question.id, true)} className="w-full py-3 border-2 border-dashed border-emerald-300 text-emerald-600 rounded-xl text-xs font-black hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2">
+                            <Plus className="w-4 h-4" /> إضافة وجه مقارنة جديد
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* الخيارات المتعددة */}
                 {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                   <div className="space-y-3 pr-4 border-r-2 border-indigo-100">
                     {question.options?.map((option: string, optIndex: number) => (
@@ -195,7 +217,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
-                {/* شريط الإعدادات السفلي */}
                 <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 gap-4">
                   {!isHeader ? (
                     <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
