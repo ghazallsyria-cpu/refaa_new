@@ -362,7 +362,7 @@ export function useDashboardSystem() {
         const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section[0]?.id));
         
         // حساب عدد الطلاب الفعلي في الفصل
-const studentCount = Array.isArray(section.students)  ? section.students[0]?.count || 0  : section.students?.count || 0;
+const studentCount = Array.isArray(section.students) ? section.students[0]?.count ?? 0 : 0;
         if (secAssignments.length === 0 || studentCount === 0) return null;
 
         let expectedSubmissions = 0;
