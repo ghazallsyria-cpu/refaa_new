@@ -19,7 +19,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
       type: type,
       points: type === 'section_header' ? 0 : 5,
       isRequired: type !== 'section_header',
-      // 🚀 تهيئة مصفوفة الخيارات لجدول المقارنة
+      // 🚀 تهيئة مصفوفة الخيارات لجدول المقارنة: [طرف 1, طرف 2, وجه مقارنة 1]
       options: type === 'comparison' ? ['الطرف الأول', 'الطرف الثاني', 'وجه المقارنة الأول'] : undefined,
       media_url: null
     };
