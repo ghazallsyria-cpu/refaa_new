@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { Subject, Section, Teacher, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
+import { Subject, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 import { Question, normalizeQuestion } from '@/types/question';
 
 export interface AssignmentDetails {
@@ -13,7 +13,7 @@ export interface AssignmentDetails {
 }
 
 export function useAssignmentsSystem() {
-  const { user, authRole, userRole } = useAuth() as any;
+  const { user, authRole, userRole } = useAuth() as { user: { id: string, user_metadata?: any } | null, authRole: string | null, userRole: string | null };
   const currentRole = authRole || userRole;
   
   const [data, setData] = useState<AssignmentWithMeta[]>([]);
@@ -22,60 +22,32 @@ export function useAssignmentsSystem() {
   const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
   const fetchAssignments = useCallback(async (): Promise<void> => {
-    if (!user || !currentRole) return;
+    if (!user?.id || !currentRole) return;
     setLoading(true);
     setError(null);
 
     try {
-      // 🚀 إصلاح الهيكلية: مطابقة أسماء الجداول بدقة لتفادي فشل الاستعلام الصامت
-      const selectQuery = currentRole === 'student' 
-        ? `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
-        : `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
+      // 🚀 التحول إلى الـ API المنيع لتجنب أي فشل صامت أو RLS
+      const response = await fetch('/api/assignments/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, role: currentRole }),
+      });
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'فشل جلب الواجبات');
 
-      let query = supabase.from('assignments').select(selectQuery).order('created_at', { ascending: false });
-
-      if (currentRole === 'student') {
-        let studentProfile = null;
-        const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
-        if (sp1) studentProfile = sp1;
-        else {
-          const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
-          if (sp2) studentProfile = sp2;
-        }
-
-        if (studentProfile?.section_id) {
-           query = query.eq('assignment_sections.section_id', studentProfile.section_id).eq('status', 'published');
-        } else {
-           setData([]); setLoading(false); return;
-        }
-      } else if (currentRole === 'teacher') {
-        let teacherProfile = null;
-        const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (tp1) teacherProfile = tp1;
-        else {
-          const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-          if (tp2) teacherProfile = tp2;
-        }
-
-        if (teacherProfile) {
-           query = query.eq('teacher_id', teacherProfile.id);
-        } else {
-           setData([]); setLoading(false); return;
-        }
-      }
-
-      const { data: assignmentsData, error: fetchErr } = await query;
-      if (fetchErr) throw fetchErr;
-
-      const mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => ({
+      const mappedData: AssignmentWithMeta[] = (result.data || []).map((a: any) => ({
         ...a,
         created_at: a.created_at || new Date().toISOString(),
         subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
         teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
-        section_name: a.assignment_sections && a.assignment_sections.length > 0 ? a.assignment_sections.map((es: any) => es.sections?.name).join('، ') : 'غير محدد',
+        section_name: a.assignment_sections && a.assignment_sections.length > 0 
+            ? a.assignment_sections.map((es: any) => es.sections?.name).join('، ') 
+            : 'غير محدد',
       }));
 
-      // حساب التسليمات
+      // حساب التسليمات للمشرفين
       if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const { data: countsData } = await supabase.from('assignment_submissions').select('assignment_id, status');
         if (countsData) {
@@ -91,18 +63,20 @@ export function useAssignmentsSystem() {
         setData(mappedData);
       }
 
+      // جلب تسليمات الطالب
       if (currentRole === 'student') {
         const { data: subData } = await supabase.from('assignment_submissions').select('assignment_id, status, grade, id, student_id, submitted_at').eq('student_id', user.id);
         const subMap: Record<string, AssignmentSubmission> = {};
-        (subData || []).forEach((s: any) => { 
-            subMap[s.assignment_id] = s; 
+        (subData || []).forEach((s: unknown) => { 
+            const submission = s as AssignmentSubmission;
+            subMap[submission.assignment_id] = submission; 
         });
         setStudentSubmissions(subMap);
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Fetch Assignments Error:", err);
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'حدث خطأ غير معروف');
     } finally {
       setLoading(false);
     }
@@ -139,11 +113,7 @@ export function useAssignmentsSystem() {
 
   const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
     try {
-      const { data: assignmentData, error: assignmentError } = await supabase
-        .from('assignments')
-        .select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
-        .eq('id', assignmentId)
-        .single();
+      const { data: assignmentData, error: assignmentError } = await supabase.from('assignments').select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`).eq('id', assignmentId).single();
       if (assignmentError) throw assignmentError;
 
       const { data: qData } = await supabase.from('assignment_questions').select('*').eq('assignment_id', assignmentId).order('order');
@@ -201,11 +171,7 @@ export function useAssignmentsSystem() {
 
   const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
     try {
-      const { data: submissionData, error: subError } = await supabase
-        .from('assignment_submissions')
-        .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
-        .eq('id', submissionId)
-        .single();
+      const { data: submissionData, error: subError } = await supabase.from('assignment_submissions').select(`*, student:students(users(full_name, email), sections(name, classes(name)))`).eq('id', submissionId).single();
       if (subError) throw subError;
       
       const { data: assignmentData } = await supabase.from('assignments').select('*, subject:subjects(name)').eq('id', (submissionData as any).assignment_id).single();
