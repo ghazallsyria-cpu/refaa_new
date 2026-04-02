@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
   Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
-  XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer
+  XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -23,9 +24,9 @@ export default function AttendanceReportsPage() {
   const [records, setRecords] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   
-  // Filters
+  // 🚀 Filters (تم تعيين الافتراضي إلى "كل الأوقات" لضمان ظهور البيانات)
   const [selectedSection, setSelectedSection] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
@@ -39,14 +40,12 @@ export default function AttendanceReportsPage() {
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // Fetch Attendance Records
+      // 🚀 جلب سجلات الغياب بطريقة محمية
       let query = supabase
         .from('attendance_records')
         .select(`
-          id, date, period, status,
-          student_id,
+          *,
           students (users(full_name, avatar_url)),
-          subjects (name),
           sections (id, name, classes(name))
         `)
         .order('date', { ascending: false });
@@ -55,7 +54,12 @@ export default function AttendanceReportsPage() {
         query = query.eq('teacher_id', currentTeacherId);
       }
 
-      const { data: attendanceData } = await query;
+      const { data: attendanceData, error } = await query;
+      
+      if (error) {
+        console.error("Error fetching attendance:", error);
+      }
+      
       setRecords(attendanceData || []);
 
       // 🚀 العزل والحماية: جلب الفصول الخاصة بالمعلم فقط أو كافة الفصول للمدير
@@ -68,7 +72,7 @@ export default function AttendanceReportsPage() {
           // حل احتياطي في حال عدم وجود فصول في لوحة التحكم
           const uniqueSectionsMap = new Map();
           (attendanceData || []).forEach(record => {
-            const sec = record.sections as any;
+            const sec = record.sections || (record as any).section;
             const secObj = Array.isArray(sec) ? sec[0] : sec;
             if (secObj && secObj.id && !uniqueSectionsMap.has(secObj.id)) {
               uniqueSectionsMap.set(secObj.id, secObj);
@@ -93,49 +97,67 @@ export default function AttendanceReportsPage() {
     fetchData();
   }, [fetchData]);
 
-  // 🚀 المحرك الذكي للفلترة والتجميع
+  // 🚀 المحرك الذكي المحمي للفلترة والتجميع
   const reportData = useMemo(() => {
-    let filtered = records;
+    let filtered = records || [];
 
+    // 1. فلترة الفصل
     if (selectedSection !== 'all') {
       filtered = filtered.filter(r => {
-        const sec = r.sections as any;
+        const sec = r.sections || (r as any).section;
         const secObj = Array.isArray(sec) ? sec[0] : sec;
-        return secObj?.id === selectedSection;
+        const secId = secObj?.id || r.section_id;
+        return secId === selectedSection;
       });
     }
 
-    const today = new Date();
-    filtered = filtered.filter(r => {
-      const recordDate = parseISO(r.date);
-      if (dateRange === 'today') {
-        return recordDate.toDateString() === today.toDateString();
-      } else if (dateRange === 'week') {
-        return isWithinInterval(recordDate, { start: startOfWeek(today, { weekStartsOn: 6 }), end: endOfWeek(today, { weekStartsOn: 6 }) });
-      } else if (dateRange === 'month') {
-        return isWithinInterval(recordDate, { start: startOfMonth(today), end: endOfMonth(today) });
-      } else if (dateRange === 'custom') {
-        return recordDate >= new Date(customStartDate) && recordDate <= new Date(customEndDate);
-      }
-      return true;
-    });
+    // 2. فلترة التاريخ
+    if (dateRange !== 'all') {
+      const today = new Date();
+      filtered = filtered.filter(r => {
+        if (!r.date) return true; // تجاوز السجلات التي لا تحتوي تاريخ
+        const recordDate = new Date(r.date);
+        
+        if (dateRange === 'today') {
+          return recordDate.toDateString() === today.toDateString();
+        } else if (dateRange === 'week') {
+          return recordDate >= startOfWeek(today, { weekStartsOn: 6 }) && recordDate <= endOfWeek(today, { weekStartsOn: 6 });
+        } else if (dateRange === 'month') {
+          return recordDate >= startOfMonth(today) && recordDate <= endOfMonth(today);
+        } else if (dateRange === 'custom') {
+          const start = new Date(customStartDate);
+          start.setHours(0,0,0,0);
+          const end = new Date(customEndDate);
+          end.setHours(23,59,59,999);
+          return recordDate >= start && recordDate <= end;
+        }
+        return true;
+      });
+    }
 
+    // 3. تجميع البيانات بمرونة عالية
     const studentMap = new Map<string, any>();
     
     filtered.forEach(record => {
       const sId = record.student_id;
+      if (!sId) return;
+
       if (!studentMap.has(sId)) {
-        const sec = record.sections as any;
+        // استخراج مرن لاسم الفصل
+        const sec = record.sections || (record as any).section;
         const secObj = Array.isArray(sec) ? sec[0] : sec;
         const classData = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
         const className = classData?.name || '';
-        const studentInfo = record.students as any;
+        
+        // استخراج مرن لاسم الطالب
+        const studentData = record.students || (record as any).student;
+        const studentUser = Array.isArray(studentData) ? studentData[0]?.users : studentData?.users || studentData?.user;
 
         studentMap.set(sId, {
           id: sId,
-          name: studentInfo?.users?.full_name || 'غير معروف',
-          avatar: studentInfo?.users?.avatar_url,
-          className: `${className} - ${secObj?.name || ''}`,
+          name: studentUser?.full_name || 'طالب غير معروف',
+          avatar: studentUser?.avatar_url,
+          className: className ? `${className} - ${secObj?.name || ''}` : (secObj?.name || 'فصل غير محدد'),
           present: 0,
           absent: 0,
           late: 0,
@@ -159,7 +181,7 @@ export default function AttendanceReportsPage() {
 
   const getReportTitle = () => {
     const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => s.id === selectedSection)?.name || '';
-    const dateText = dateRange === 'today' ? 'اليوم' : dateRange === 'week' ? 'هذا الأسبوع' : dateRange === 'month' ? 'هذا الشهر' : 'فترة مخصصة';
+    const dateText = dateRange === 'all' ? 'كل الأوقات' : dateRange === 'today' ? 'اليوم' : dateRange === 'week' ? 'هذا الأسبوع' : dateRange === 'month' ? 'هذا الشهر' : 'فترة مخصصة';
     return `تقرير غياب (${secName}) - ${dateText}`;
   };
 
@@ -263,10 +285,13 @@ export default function AttendanceReportsPage() {
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
       
       {/* 🚀 Top Navigation */}
-      <div className="pt-6">
+      <div className="pt-6 flex justify-between items-center">
         <Link href="/attendance" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group text-sm sm:text-base">
           <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة لرصد الغياب
         </Link>
+        <button onClick={fetchData} className="flex items-center gap-2 text-indigo-600 font-bold bg-indigo-50 px-4 py-2.5 rounded-2xl shadow-sm border border-indigo-100 transition-all hover:bg-indigo-600 hover:text-white active:scale-95 text-sm sm:text-base">
+          <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" /> تحديث البيانات
+        </button>
       </div>
 
       {/* 🚀 Hero Section */}
@@ -310,7 +335,7 @@ export default function AttendanceReportsPage() {
             <select
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none cursor-pointer"
             >
               <option value="all">جميع الفصول والشعب</option>
               {sections.map(s => {
@@ -328,8 +353,9 @@ export default function AttendanceReportsPage() {
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value as any)}
-              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none cursor-pointer"
             >
+              <option value="all">كل الأوقات (الافتراضي)</option>
               <option value="today">اليوم الحالي</option>
               <option value="week">هذا الأسبوع</option>
               <option value="month">هذا الشهر</option>
