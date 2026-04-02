@@ -32,7 +32,7 @@ export default function AttendancePage() {
 
   // 🚀 حالات الطالب
   const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 });
-  const [subjectStats, setSubjectStats] = useState<any[]>([]); // إحصائيات المواد
+  const [subjectStats, setSubjectStats] = useState<any[]>([]);
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
   const [studentDbError, setStudentDbError] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export default function AttendancePage() {
       const { data: studentData, error: stuErr } = await supabase
         .from('students')
         .select('id, sections(name, classes(name))')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (stuErr) throw new Error("خطأ في جلب بيانات الطالب: " + stuErr.message);
@@ -107,7 +107,6 @@ export default function AttendancePage() {
       const className = Array.isArray(classData) ? classData[0]?.name : classData?.name || '';
       const fullClassName = className ? `${className} - ${secName}` : 'حصة مسجلة';
 
-      // 🚀 استعلام شامل يضم السجلات والمواد المرتبطة بها
       const { data: records, error: recErr } = await supabase
         .from('attendance_records')
         .select(`
@@ -124,15 +123,14 @@ export default function AttendancePage() {
         const subjectsMap = new Map<string, any>();
 
         records.forEach((r: any) => {
-           // 1. حساب الإحصائيات العامة
            if (r.status === 'present') calculatedStats.present++;
            else if (r.status === 'absent') calculatedStats.absent++;
            else if (r.status === 'late') calculatedStats.late++;
            else if (r.status === 'excused') calculatedStats.excused++;
 
-           // 2. تجميع الإحصائيات حسب المادة
-           const subjData = Array.isArray(r.subjects) ? r.subjects[0] : r.subjects;
-           const subjName = subjData?.name || 'نشاط / مادة غير محددة';
+           // التعامل الآمن مع المادة لتفادي أخطاء TypeScript
+           const subjData: any = r.subjects;
+           const subjName = (Array.isArray(subjData) ? subjData[0]?.name : subjData?.name) || 'نشاط / مادة غير محددة';
 
            if (!subjectsMap.has(subjName)) {
              subjectsMap.set(subjName, { name: subjName, present: 0, absent: 0, late: 0, excused: 0 });
@@ -145,17 +143,24 @@ export default function AttendancePage() {
            else if (r.status === 'excused') sStats.excused++;
         });
 
-        // 🚀 المعادلة السحرية: كل 5 غيابات (حصص) = يوم غياب كامل
         calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
 
         setStudentStats(calculatedStats);
-        setSubjectStats(Array.from(subjectsMap.values()).sort((a, b) => b.absent - a.absent)); // ترتيب تنازلي حسب الغياب
+        setSubjectStats(Array.from(subjectsMap.values()).sort((a, b) => b.absent - a.absent));
         
-        const enrichedRecords = records.map(r => ({
-            ...r,
-            displayClassName: fullClassName,
-            subjectName: Array.isArray(r.subjects) ? r.subjects[0]?.name : r.subjects?.name
-        }));
+        // 🚀 معالجة آمنة للسجلات لتفادي خطأ 'never' في الـ type
+        const enrichedRecords = records.map((r: any) => {
+            const subj: any = r.subjects;
+            let sName = 'مادة غير محددة';
+            if (subj) {
+                sName = Array.isArray(subj) ? subj[0]?.name : subj.name;
+            }
+            return {
+                ...r,
+                displayClassName: fullClassName,
+                subjectName: sName
+            };
+        });
         setStudentAttendance(enrichedRecords);
       }
     } catch (error: any) {
@@ -215,7 +220,7 @@ export default function AttendancePage() {
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
-  // 🚀 STUDENT VIEW (اللوحة المطورة تحليلياً للطالب)
+  // 🚀 STUDENT VIEW
   // ==========================================
   if (authRole === 'student') {
     if (studentDbError) {
@@ -242,7 +247,7 @@ export default function AttendancePage() {
         <div className="flex h-[80vh] items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-            <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تجميع إحصائياتك الشاملة...</p>
+            <p className="text-slate-500 font-bold animate-pulse tracking-widest text-lg">جاري تجميع إحصائياتك الشاملة...</p>
           </div>
         </div>
       );
@@ -251,7 +256,7 @@ export default function AttendancePage() {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
         
-        {/* 🚀 Hero Section */}
+        {/* 🚀 Hero Banner */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
           <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-right">
             <div>
@@ -268,10 +273,11 @@ export default function AttendancePage() {
               <PieChart className="h-8 w-8 sm:h-14 sm:w-14 text-white drop-shadow-md" />
             </div>
           </div>
-          <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
+          <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
         </div>
 
-        {/* 🚀 معادلة احتساب الغياب الفعلي (The 5-to-1 Rule Engine Banner) */}
+        {/* 🚀 معادلة احتساب الغياب الفعلي */}
         <div className="bg-gradient-to-br from-rose-50 to-red-50 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-start sm:items-center gap-4">
             <div className="p-3 sm:p-4 bg-rose-500 text-white rounded-2xl shadow-md shadow-rose-500/30 shrink-0">
@@ -338,7 +344,7 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* 🚀 التحليل المادي للغياب (Subject Aggregation) */}
+        {/* 🚀 التحليل المادي للغياب */}
         {subjectStats.length > 0 && (
           <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
             <div className="p-5 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-slate-50/30">
