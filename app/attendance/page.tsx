@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft } from 'lucide-react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft, Bug, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
@@ -30,10 +30,11 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // حالات الطالب
+  // 🚀 حالات الطالب
   const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0 });
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
+  const [studentDbError, setStudentDbError] = useState<string | null>(null); // رادار أخطاء الطالب
 
   useEffect(() => {
     setDate(new Date().toISOString().split('T')[0]);
@@ -84,54 +85,66 @@ export default function AttendancePage() {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
-  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب
-  useEffect(() => {
-    const fetchStudentDataDirectly = async () => {
-      if (authRole !== 'student' || !user) return;
-      setIsStudentLoading(true);
-      try {
-        const { data: studentData } = await supabase
-          .from('students')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
+  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب (مدرع ضد أخطاء الأعمدة)
+  const fetchStudentDataDirectly = useCallback(async () => {
+    if (authRole !== 'student' || !user) return;
+    setIsStudentLoading(true);
+    setStudentDbError(null);
+    try {
+      // 1. جلب بيانات الطالب والفصل الخاص به بأمان
+      const { data: studentData, error: stuErr } = await supabase
+        .from('students')
+        .select('id, sections(name, classes(name))')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-        if (!studentData) return;
+      if (stuErr) throw new Error("خطأ في جلب بيانات الطالب: " + stuErr.message);
+      if (!studentData) throw new Error("تعذر إيجاد ملف الطالب المرتبط بهذا الحساب.");
 
-        // 🚀 استعلام مدرع: لا نطلب أي أعمدة قد تسبب خطأ (مثل period أو subjects مباشرة)
-        const { data: records, error } = await supabase
-          .from('attendance_records')
-          .select(`
-            id, 
-            created_at, 
-            status, 
-            sections ( name )
-          `)
-          .eq('student_id', studentData.id)
-          .order('created_at', { ascending: false });
+      // استخراج اسم الفصل ليعرض في البطاقات
+      const sec: any = studentData.sections;
+      const secName = Array.isArray(sec) ? sec[0]?.name : sec?.name || '';
+      const classData: any = Array.isArray(sec) ? sec[0]?.classes : sec?.classes;
+      const className = Array.isArray(classData) ? classData[0]?.name : classData?.name || '';
+      const fullClassName = className ? `${className} - ${secName}` : 'حصة مسجلة';
 
-        if (error) throw error;
+      // 2. استعلام مدرع 100%: نطلب فقط الأعمدة الأساسية المضمونة في جدول الغياب
+      const { data: records, error: recErr } = await supabase
+        .from('attendance_records')
+        .select('id, created_at, status')
+        .eq('student_id', studentData.id)
+        .order('created_at', { ascending: false });
 
-        if (records) {
-          const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0 };
-          records.forEach((r: any) => {
-             if (r.status === 'present') calculatedStats.present++;
-             if (r.status === 'absent') calculatedStats.absent++;
-             if (r.status === 'late') calculatedStats.late++;
-             if (r.status === 'excused') calculatedStats.excused++;
-          });
-          setStudentStats(calculatedStats);
-          setStudentAttendance(records);
-        }
-      } catch (error) {
-        console.error("Error fetching student attendance:", error);
-      } finally {
-        setIsStudentLoading(false);
+      if (recErr) throw new Error("خطأ في قاعدة بيانات السجلات: " + recErr.message);
+
+      if (records) {
+        const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0 };
+        records.forEach((r: any) => {
+           if (r.status === 'present') calculatedStats.present++;
+           else if (r.status === 'absent') calculatedStats.absent++;
+           else if (r.status === 'late') calculatedStats.late++;
+           else if (r.status === 'excused') calculatedStats.excused++;
+        });
+        setStudentStats(calculatedStats);
+        
+        // دمج اسم الفصل برمجياً مع السجلات
+        const enrichedRecords = records.map(r => ({
+            ...r,
+            displayClassName: fullClassName
+        }));
+        setStudentAttendance(enrichedRecords);
       }
-    };
-
-    fetchStudentDataDirectly();
+    } catch (error: any) {
+      console.error("Error fetching student attendance:", error);
+      setStudentDbError(error.message);
+    } finally {
+      setIsStudentLoading(false);
+    }
   }, [authRole, user]);
+
+  useEffect(() => {
+    fetchStudentDataDirectly();
+  }, [fetchStudentDataDirectly]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -178,9 +191,29 @@ export default function AttendancePage() {
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
-  // 🚀 STUDENT VIEW
+  // 🚀 STUDENT VIEW 
   // ==========================================
   if (authRole === 'student') {
+    // 🚀 رادار الأخطاء الخاص بالطالب
+    if (studentDbError) {
+      return (
+        <div className="flex h-[80vh] items-center justify-center p-6" dir="rtl">
+          <div className="bg-white p-8 rounded-[3rem] shadow-2xl border border-rose-100 text-center max-w-lg w-full">
+            <div className="h-20 w-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
+               <Bug className="h-10 w-10 text-rose-500 animate-bounce" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-3">عذراً، حدث خطأ في قاعدة البيانات</h2>
+            <div className="bg-rose-50 p-4 rounded-xl text-right mb-6 overflow-auto max-h-32 border border-rose-100">
+               <p className="text-rose-600 font-mono text-xs" dir="ltr">{studentDbError}</p>
+            </div>
+            <button onClick={fetchStudentDataDirectly} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
+               <RefreshCw className="w-5 h-5" /> إعادة المحاولة
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (isStudentLoading) {
       return (
         <div className="flex h-[80vh] items-center justify-center">
@@ -271,9 +304,6 @@ export default function AttendancePage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {studentAttendance.map((record, idx) => {
-                  const secObj = Array.isArray(record.sections) ? record.sections[0] : record.sections;
-                  const secName = secObj?.name || 'حصة مسجلة';
-                  
                   return (
                   <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4">
                     <div>
@@ -281,7 +311,7 @@ export default function AttendancePage() {
                         {new Date(record.created_at || new Date()).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
                       </span>
                       <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-block">
-                        {secName}
+                        {record.displayClassName}
                       </span>
                     </div>
                     <span className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 w-full sm:w-auto border ${
