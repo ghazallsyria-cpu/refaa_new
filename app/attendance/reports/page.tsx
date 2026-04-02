@@ -23,7 +23,7 @@ export default function AttendanceReportsPage() {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
-  const [dbError, setDbError] = useState<string | null>(null); // 🚀 رادار الأخطاء
+  const [dbError, setDbError] = useState<string | null>(null);
   
   // Filters
   const [selectedSection, setSelectedSection] = useState<string>('all');
@@ -36,7 +36,12 @@ export default function AttendanceReportsPage() {
     setLoading(true);
     setDbError(null);
     try {
-      // 1. جلب الفصول الخاصة بالمعلم أو المدير
+      let currentTeacherId = null;
+      if (userRole === 'teacher') {
+        const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (teacherData) currentTeacherId = teacherData.id;
+      }
+
       let availableSections = [];
       if (userRole === 'teacher') {
         const dashData = await fetchTeacherDashboardData();
@@ -46,7 +51,6 @@ export default function AttendanceReportsPage() {
         availableSections = data || [];
       }
 
-      // تنظيف وترتيب بيانات الفصول في الذاكرة
       const validSections = availableSections.map(sec => {
         const classData = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
         return {
@@ -57,7 +61,6 @@ export default function AttendanceReportsPage() {
       });
       setSections(validSections);
 
-      // إذا كان معلماً وليس لديه فصول، أوقف البحث
       if (validSections.length === 0 && userRole === 'teacher') {
         setRecords([]);
         setLoading(false);
@@ -66,16 +69,15 @@ export default function AttendanceReportsPage() {
 
       const sectionIds = validSections.map(s => s.id);
 
-      // 2. جلب سجلات الغياب بذكاء (عبر section_id وليس teacher_id)
+      // 🚀 تم تغيير 'date' إلى 'created_at' لتطابق قاعدة البيانات بدقة
       let query = supabase
         .from('attendance_records')
         .select(`
-          id, date, period, status, section_id, student_id,
+          id, created_at, period, status, section_id, student_id,
           students (id, users(full_name, avatar_url))
         `)
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
 
-      // إذا كان معلماً، اجلب فقط سجلات فصوله
       if (userRole === 'teacher' && sectionIds.length > 0) {
         query = query.in('section_id', sectionIds);
       }
@@ -83,7 +85,7 @@ export default function AttendanceReportsPage() {
       const { data: attendanceData, error } = await query;
       
       if (error) {
-        throw error; // سيتم التقاطه في catch
+        throw error;
       }
       
       setRecords(attendanceData || []);
@@ -104,24 +106,24 @@ export default function AttendanceReportsPage() {
   const reportData = useMemo(() => {
     let filtered = records || [];
 
-    // 1. فلترة الفصل
     if (selectedSection !== 'all') {
       filtered = filtered.filter(r => String(r.section_id) === String(selectedSection));
     }
 
-    // 2. فلترة التاريخ (بطريقة آمنة جداً ضد مشاكل الـ Timezone)
     if (dateRange !== 'all') {
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+      const todayStr = today.toISOString().split('T')[0];
       
       filtered = filtered.filter(r => {
-        if (!r.date) return false;
+        // 🚀 نستخدم created_at كمرجع زمني
+        const targetDate = r.created_at || r.date;
+        if (!targetDate) return false;
         
         if (dateRange === 'today') {
-          return r.date.startsWith(todayStr);
+          return targetDate.startsWith(todayStr);
         } 
         
-        const recordDate = new Date(r.date);
+        const recordDate = new Date(targetDate);
         if (dateRange === 'week') {
           return recordDate >= startOfWeek(today, { weekStartsOn: 6 }) && recordDate <= endOfWeek(today, { weekStartsOn: 6 });
         } else if (dateRange === 'month') {
@@ -135,7 +137,6 @@ export default function AttendanceReportsPage() {
       });
     }
 
-    // 3. تجميع البيانات 
     const studentMap = new Map<string, any>();
     
     filtered.forEach(record => {
@@ -143,11 +144,9 @@ export default function AttendanceReportsPage() {
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
-        // استخراج اسم الفصل من القائمة المحلية المحفوظة
         const secInfo = sections.find(s => String(s.id) === String(record.section_id));
         const secName = secInfo ? `${secInfo.className} - ${secInfo.name}` : 'فصل غير محدد';
         
-        // استخراج اسم الطالب
         const studentData = Array.isArray(record.students) ? record.students[0] : record.students;
         const userData = Array.isArray(studentData?.users) ? studentData?.users[0] : studentData?.users;
 
@@ -285,7 +284,7 @@ export default function AttendanceReportsPage() {
     );
   }
 
-  // 🚀 رادار الأخطاء (يظهر فقط إذا كان هناك مشكلة في قاعدة البيانات)
+  // 🚀 رادار الأخطاء
   if (dbError) {
     return (
       <div className="flex h-screen items-center justify-center p-6" dir="rtl">
@@ -478,10 +477,9 @@ export default function AttendanceReportsPage() {
                   <td colSpan={6} className="py-16 sm:py-20 text-center">
                     <div className="flex flex-col items-center gap-3 sm:gap-4">
                       <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                        <SearchX className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
+                        <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
                       </div>
                       <p className="text-slate-500 font-bold text-xs sm:text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
-                      <p className="text-slate-400 font-medium text-[10px] sm:text-xs">تأكد من أنك قمت برصد الغياب لطلابك من لوحة الرصد أولاً.</p>
                     </div>
                   </td>
                 </tr>
