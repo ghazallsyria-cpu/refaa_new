@@ -71,7 +71,6 @@ export default function AttendanceReportsPage() {
       const sectionIds = validSections.map(s => String(s.id));
 
       // 🚀 2. استعلام ذكي ومحمي (بدون section_id من جدول الغياب)
-      // نذهب إلى جدول الطلاب لنستخرج منه بيانات الفصل
       let query = supabase
         .from('attendance_records')
         .select(`
@@ -97,9 +96,10 @@ export default function AttendanceReportsPage() {
       // فلترة برمجية آمنة جداً: التأكد من أن السجل يعود لأحد فصول المعلم
       let finalData = attendanceData || [];
       if (userRole === 'teacher' && sectionIds.length > 0) {
-        finalData = finalData.filter(record => {
-          const stu = Array.isArray(record.students) ? record.students[0] : record.students;
-          const stuSecId = stu?.section_id || stu?.sections?.id;
+        finalData = finalData.filter((record: any) => {
+          const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
+          const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+          const stuSecId = stu?.section_id || stuSec?.id;
           return sectionIds.includes(String(stuSecId));
         });
       }
@@ -122,11 +122,12 @@ export default function AttendanceReportsPage() {
   const reportData = useMemo(() => {
     let filtered = records || [];
 
-    // 1. فلترة الفصل (من بيانات الطالب المدمجة)
+    // 1. فلترة الفصل (من بيانات الطالب المدمجة) بشكل آمن
     if (selectedSection !== 'all') {
-      filtered = filtered.filter(r => {
-        const stu = Array.isArray(r.students) ? r.students[0] : r.students;
-        const secId = stu?.section_id || stu?.sections?.id;
+      filtered = filtered.filter((r: any) => {
+        const stu: any = Array.isArray(r.students) ? r.students[0] : r.students;
+        const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const secId = stu?.section_id || stuSec?.id;
         return String(secId) === String(selectedSection);
       });
     }
@@ -136,7 +137,7 @@ export default function AttendanceReportsPage() {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       
-      filtered = filtered.filter(r => {
+      filtered = filtered.filter((r: any) => {
         const targetDate = r.created_at || r.date;
         if (!targetDate) return false;
         
@@ -160,16 +161,16 @@ export default function AttendanceReportsPage() {
 
     const studentMap = new Map<string, any>();
     
-    filtered.forEach(record => {
+    filtered.forEach((record: any) => {
       const sId = record.student_id;
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
         // استخراج سلس وآمن لبيانات الطالب
-        const stu = Array.isArray(record.students) ? record.students[0] : record.students;
-        const userData = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
-        const secData = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-        const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+        const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
+        const userData: any = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
+        const secData: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const classData: any = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
         
         const className = classData?.name || '';
         const secName = secData?.name || '';
@@ -302,7 +303,7 @@ export default function AttendanceReportsPage() {
       <div className="flex h-[80vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب التقارير...</p>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب وتجميع التقارير...</p>
         </div>
       </div>
     );
