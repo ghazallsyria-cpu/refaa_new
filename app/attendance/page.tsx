@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Check, Info, ShieldCheck, BookOpen } from 'lucide-react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
 
 export default function AttendancePage() {
   const { authRole } = useAuth();
@@ -25,7 +27,6 @@ export default function AttendancePage() {
   const [period, setPeriod] = useState<number>(1);
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
-  const [stats, setStats] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
@@ -81,7 +82,6 @@ export default function AttendancePage() {
       if (res) {
         setStudents(res.students);
         setAttendance(res.attendance);
-        setStats(res.stats);
       }
     }
   }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance]);
@@ -124,6 +124,16 @@ export default function AttendancePage() {
     });
     setAttendance(newAttendance);
   };
+
+  // 🚀 المحرك الحي للإحصائيات (Live Stats Engine)
+  const totalStudents = students.length;
+  const presentCount = Object.values(attendance).filter(v => v === 'present').length;
+  const absentCount = Object.values(attendance).filter(v => v === 'absent').length;
+  const lateCount = Object.values(attendance).filter(v => v === 'late').length;
+  const excusedCount = Object.values(attendance).filter(v => v === 'excused').length;
+  const markedCount = presentCount + absentCount + lateCount + excusedCount;
+  const unmarkedCount = totalStudents - markedCount;
+  const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
   // 🚀 STUDENT VIEW (لوحة الطالب السحرية)
@@ -347,7 +357,6 @@ export default function AttendancePage() {
                 >
                   {sections.map((s, idx) => (
                     <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`} className="text-slate-900 font-bold">
-                      {/* 🚀 الحل الجذري للتغلب على اعتراض TypeScript */}
                       {(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
                     </option>
                   ))}
@@ -361,40 +370,57 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* مؤشر ذكي للتأكيد */}
         {selectedSection && selectedSubject && (
           <div className="mt-6 pt-5 border-t border-white/10 flex items-center gap-2 text-emerald-400 text-sm font-bold relative z-10">
             <Info className="w-5 h-5 shrink-0" />
-            <span>أنت الآن تقوم بتسجيل الغياب <strong>للحصة {period}</strong> - احرص على حفظ البيانات قبل تغيير الحصة.</span>
+            <span>أنت الآن تقوم بتسجيل الغياب <strong>للحصة {period}</strong> - إحصائيات هذه الحصة تظهر بالأسفل مباشرة.</span>
           </div>
         )}
       </div>
 
-      {/* 🚀 Quick Stats (Teacher View) */}
-      {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-200 hover:shadow-md transition-all">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 group-hover:scale-110 transition-transform">
-                <Users className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">إجمالي الطلاب في الفصل</p>
-                <p className="text-2xl font-black text-slate-900">{stats.daily.total}</p>
-              </div>
-            </div>
+      {/* 🚀 LIVE STATS ENGINE (إحصائيات الحصة الحالية مباشرة) */}
+      {students.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
+          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
+            <Users className="h-6 w-6 text-indigo-500 mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-2xl font-black text-slate-900">{totalStudents}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">إجمالي الطلاب</p>
           </div>
-          
-          <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-emerald-200 hover:shadow-md transition-all">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:scale-110 transition-transform">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">نسبة الحضور لهذه الحصة</p>
-                <p className="text-2xl font-black text-emerald-600">{stats.daily.rate}%</p>
-              </div>
-            </div>
+
+          <div className="bg-emerald-50 p-4 sm:p-5 rounded-[1.5rem] border border-emerald-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
+            <CheckCircle2 className="h-6 w-6 text-emerald-500 mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-2xl font-black text-emerald-700">{presentCount}</p>
+            <p className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-widest mt-1">حاضر</p>
+          </div>
+
+          <div className="bg-rose-50 p-4 sm:p-5 rounded-[1.5rem] border border-rose-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
+            <XCircle className="h-6 w-6 text-rose-500 mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-2xl font-black text-rose-700">{absentCount}</p>
+            <p className="text-[10px] font-bold text-rose-600/70 uppercase tracking-widest mt-1">غائب</p>
+          </div>
+
+          <div className="bg-amber-50 p-4 sm:p-5 rounded-[1.5rem] border border-amber-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
+            <Clock className="h-6 w-6 text-amber-500 mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-2xl font-black text-amber-700">{lateCount}</p>
+            <p className="text-[10px] font-bold text-amber-600/70 uppercase tracking-widest mt-1">متأخر</p>
+          </div>
+
+          <div className="bg-blue-50 p-4 sm:p-5 rounded-[1.5rem] border border-blue-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
+            <AlertCircle className="h-6 w-6 text-blue-500 mb-2 group-hover:scale-110 transition-transform" />
+            <p className="text-2xl font-black text-blue-700">{excusedCount}</p>
+            <p className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest mt-1">مستأذن</p>
+          </div>
+
+          <div className={`p-4 sm:p-5 rounded-[1.5rem] border shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all ${unmarkedCount > 0 ? 'bg-slate-100 border-slate-200' : 'bg-emerald-500 border-emerald-600 text-white'}`}>
+            {unmarkedCount > 0 ? (
+              <UserMinus className="h-6 w-6 text-slate-400 mb-2 group-hover:scale-110 transition-transform" />
+            ) : (
+              <CheckCircle2 className="h-6 w-6 text-white mb-2 group-hover:scale-110 transition-transform" />
+            )}
+            <p className={`text-2xl font-black ${unmarkedCount > 0 ? 'text-slate-700' : 'text-white'}`}>{unmarkedCount}</p>
+            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${unmarkedCount > 0 ? 'text-slate-500' : 'text-emerald-100'}`}>
+              {unmarkedCount > 0 ? 'متبقي للتحضير' : 'اكتمل التحضير!'}
+            </p>
           </div>
         </div>
       )}
@@ -403,26 +429,29 @@ export default function AttendancePage() {
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+            <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 shrink-0">
               <Users className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">قائمة الطلاب</h3>
-              <p className="text-sm text-slate-500 font-bold mt-1">تحديد حالة الطالب لهذه الحصة فقط</p>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">قائمة الطلاب</h3>
+              <div className="flex items-center gap-2 mt-1">
+                 <p className="text-xs sm:text-sm text-slate-500 font-bold">تحديد حالة الطالب لهذه الحصة فقط</p>
+                 <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">نسبة الحضور: {attendanceRate}%</span>
+              </div>
             </div>
           </div>
           
           {/* Quick Mark Buttons */}
-          <div className="flex items-center gap-2 bg-white p-1.5 rounded-[1.5rem] shadow-sm border border-slate-200 w-full lg:w-auto overflow-x-auto scrollbar-hide">
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-[1.5rem] shadow-sm border border-slate-200 w-full lg:w-auto overflow-x-auto scrollbar-hide shrink-0">
             <button 
               onClick={() => markAllAs('present')} 
-              className="flex-1 lg:flex-none px-4 py-2.5 text-xs sm:text-sm text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap border border-emerald-100"
+              className="flex-1 lg:flex-none px-4 py-2.5 text-xs sm:text-sm text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap border border-emerald-100 active:scale-95"
             >
               <CheckCircle2 className="w-4 h-4" /> الكل حاضر
             </button>
             <button 
               onClick={() => markAllAs('absent')} 
-              className="flex-1 lg:flex-none px-4 py-2.5 text-xs sm:text-sm text-rose-700 hover:bg-rose-50 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap border border-transparent hover:border-rose-100"
+              className="flex-1 lg:flex-none px-4 py-2.5 text-xs sm:text-sm text-rose-700 hover:bg-rose-50 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 whitespace-nowrap border border-transparent hover:border-rose-100 active:scale-95"
             >
               <XCircle className="w-4 h-4" /> الكل غائب
             </button>
@@ -492,7 +521,7 @@ export default function AttendancePage() {
                             onChange={() => handleStatusChange(student.id, opt.status as AttendanceStatus)}
                             className="peer sr-only"
                           />
-                          <div className={`px-4 py-2.5 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 font-bold text-xs shadow-sm
+                          <div className={`px-4 py-2.5 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 font-bold text-xs shadow-sm active:scale-95
                             border-slate-200 bg-white text-slate-400 group-hover/radio:border-${opt.color}-200 group-hover/radio:bg-${opt.color}-50
                             peer-checked:border-${opt.color}-500 peer-checked:bg-${opt.color}-50 peer-checked:text-${opt.color}-700 peer-checked:shadow-${opt.color}-100 peer-checked:shadow-md
                           `}>
@@ -542,7 +571,7 @@ export default function AttendancePage() {
                     <button
                       key={opt.status}
                       onClick={() => handleStatusChange(student.id, opt.status as AttendanceStatus)}
-                      className={`flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-2xl border-2 transition-all ${
+                      className={`flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-2xl border-2 transition-all active:scale-95 ${
                         attendance[student.id] === opt.status
                           ? `bg-${opt.color}-50 border-${opt.color}-500 text-${opt.color}-700 shadow-md shadow-${opt.color}-100`
                           : `bg-white border-slate-100 text-slate-400 hover:border-${opt.color}-200`
