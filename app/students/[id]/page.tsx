@@ -1,133 +1,497 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, use } from 'react';
 import { 
-  BookOpen, Calendar, CheckCircle2, Clock, 
-  FileText, GraduationCap, LayoutDashboard, 
-  TrendingUp, ArrowRight, User
+  User, GraduationCap, Calendar, Clock, BookOpen, 
+  FileText, CheckCircle2, XCircle, AlertCircle, 
+  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import { useUsersSystem } from '@/hooks/useUsersSystem';
 
-export default function StudentProfilePage() {
-  const params = useParams();
+export default function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const studentId = resolvedParams.id;
+  
   const router = useRouter();
-  const studentId = params.id as string;
-  const [studentData, setStudentData] = useState<any>(null);
-  const [attendanceStats, setAttendanceStats] = useState<any>(null);
-  const [absentDates, setAbsentDates] = useState<string[]>([]);
-  const [recentGrades, setRecentGrades] = useState<any[]>([]);
+  const { user, userRole } = useAuth();
+  
+  const [student, setStudent] = useState<any>(null);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [stats, setStats] = useState({ attendanceRate: 0, examsAvg: 0, assignmentsAvg: 0 });
+  
   const [loading, setLoading] = useState(true);
-  const { fetchStudentProfile } = useUsersSystem();
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'exams' | 'assignments'>('overview');
 
-  const fetchData = useCallback(async () => {
+  const fetchStudentData = useCallback(async () => {
+    if (!user || !userRole) return;
+    setLoading(true);
+
     try {
-      setLoading(true);
-      const profileData = await fetchStudentProfile(studentId);
+      // 1. جلب البيانات الأساسية للطالب (بدون الرقم المدني إذا كان معلماً)
+      const selectFields = userRole === 'teacher' 
+        ? 'id, user_id, users(full_name, avatar_url, email), sections(name, classes(name))' 
+        : '*, users(full_name, avatar_url, email), sections(name, classes(name))';
+
+      const { data: studentData, error: studentErr } = await supabase
+        .from('students')
+        .select(selectFields)
+        .eq('id', studentId)
+        .single();
+
+      if (studentErr || !studentData) {
+        router.push('/classes');
+        return;
+      }
+      setStudent(studentData);
+
+      // 2. تحديد المعلم الحالي (إذا كان المستخدم معلماً) لعزل البيانات
+      let currentTeacherId = null;
+      if (userRole === 'teacher') {
+        const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+        if (teacherData) currentTeacherId = teacherData.id;
+      }
+
+      // 3. جلب سجل الغياب
+      let attendanceQuery = supabase
+        .from('attendance_records')
+        .select('*, subjects(name)')
+        .eq('student_id', studentId)
+        .order('date', { ascending: false });
       
-      setStudentData(profileData.student);
-      setAttendanceStats(profileData.attendanceStats);
-      setAbsentDates(profileData.absentDates);
-      setRecentGrades(profileData.recentGrades);
+      if (currentTeacherId) {
+        attendanceQuery = attendanceQuery.eq('teacher_id', currentTeacherId);
+      }
+      const { data: attendanceData } = await attendanceQuery;
+      setAttendance(attendanceData || []);
+
+      // 4. جلب الاختبارات (باستخدام inner join لفلترة الاختبارات الخاصة بهذا المعلم فقط)
+      let examsQuery = supabase
+        .from('exam_attempts')
+        .select(`
+          id, score, status, completed_at,
+          exams!inner(id, title, max_score, total_marks, teacher_id, subjects(name))
+        `)
+        .eq('student_id', studentId)
+        .eq('status', 'graded')
+        .order('completed_at', { ascending: false });
+
+      if (currentTeacherId) {
+        examsQuery = examsQuery.eq('exams.teacher_id', currentTeacherId);
+      }
+      const { data: examsData } = await examsQuery;
+      setExams(examsData || []);
+
+      // 5. جلب الواجبات
+      let assignmentsQuery = supabase
+        .from('assignment_submissions')
+        .select(`
+          id, grade, status, submitted_at, feedback,
+          assignments!inner(id, title, total_marks, teacher_id, subjects(name), assignment_questions(points))
+        `)
+        .eq('student_id', studentId)
+        .eq('status', 'graded')
+        .order('submitted_at', { ascending: false });
+
+      if (currentTeacherId) {
+        assignmentsQuery = assignmentsQuery.eq('assignments.teacher_id', currentTeacherId);
+      }
+      const { data: assignmentsData } = await assignmentsQuery;
+      setAssignments(assignmentsData || []);
+
+      // 6. حساب الإحصائيات (الخاصة بهذا المعلم أو للإدارة)
+      let attRate = 0;
+      if (attendanceData && attendanceData.length > 0) {
+        const presents = attendanceData.filter(a => a.status === 'present' || a.status === 'late').length;
+        attRate = Math.round((presents / attendanceData.length) * 100);
+      }
+
+      let exAvg = 0;
+      if (examsData && examsData.length > 0) {
+        let totalPct = 0;
+        examsData.forEach((e: any) => {
+          const max = e.exams?.total_marks || e.exams?.max_score || 100;
+          totalPct += ((e.score || 0) / max) * 100;
+        });
+        exAvg = Math.round(totalPct / examsData.length);
+      }
+
+      let assAvg = 0;
+      if (assignmentsData && assignmentsData.length > 0) {
+        let totalPct = 0;
+        assignmentsData.forEach((a: any) => {
+          const qs = a.assignments?.assignment_questions;
+          const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
+          const max = calcMax > 0 ? calcMax : (a.assignments?.total_marks || 100);
+          totalPct += ((a.grade || 0) / max) * 100;
+        });
+        assAvg = Math.round(totalPct / assignmentsData.length);
+      }
+
+      setStats({ attendanceRate: attRate, examsAvg: exAvg, assignmentsAvg: assAvg });
+
     } catch (error) {
-      console.error('Error fetching student profile data:', error);
+      console.error('Error fetching student profile:', error);
     } finally {
       setLoading(false);
     }
-  }, [studentId, fetchStudentProfile]);
+  }, [studentId, user, userRole, router]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchStudentData();
+  }, [fetchStudentData]);
 
-  if (loading) return <div className="p-10 text-center">جاري التحميل...</div>;
-  if (!studentData) return <div className="p-10 text-center">الطالب غير موجود</div>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تحميل ملف الطالب...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!student) return null;
+
+  const avatarUrl = student.users?.avatar_url;
+  const fullName = student.users?.full_name || 'طالب';
+  const className = student.sections?.classes?.name || '';
+  const sectionName = student.sections?.name || '';
 
   return (
-    <div className="p-8 space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="h-20 w-20 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-3xl font-bold">
-            {studentData.users?.full_name?.charAt(0)}
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">{studentData.users?.full_name}</h1>
-            <p className="text-slate-500">{studentData.sections?.classes?.name} - {studentData.sections?.name}</p>
-          </div>
-        </div>
-        <button 
-          onClick={() => router.back()} 
-          className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all"
-        >
-          رجوع
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-20 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8" dir="rtl">
+      
+      {/* 🚀 Navigation Back */}
+      <div className="pt-6">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100 transition-all w-fit group">
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> العودة للقائمة
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-card p-6 rounded-3xl border border-slate-100">
-          <h3 className="text-lg font-bold mb-4">إحصائيات الحضور</h3>
-          {attendanceStats && (
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>نسبة الحضور:</span>
-                <span className="font-bold text-indigo-600">{attendanceStats.rate}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span>حاضر:</span>
-                <span className="font-bold text-emerald-600">{attendanceStats.present}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>غائب جزئي:</span>
-                <span className="font-bold text-amber-600">{attendanceStats.partial}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>غائب كامل:</span>
-                <span className="font-bold text-red-600">{attendanceStats.absent}</span>
-              </div>
+      {/* 🚀 Hero Section */}
+      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 p-8 sm:p-12 text-white shadow-2xl">
+        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-8 text-center md:text-right">
+          
+          <div className="relative group shrink-0">
+            <div className="h-32 w-32 rounded-[2rem] overflow-hidden border-4 border-white/20 shadow-2xl bg-white/10 backdrop-blur-md flex items-center justify-center transition-transform duration-500 group-hover:scale-105">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-5xl font-black text-white/70">{fullName.charAt(0)}</span>
+              )}
             </div>
-          )}
-        </div>
+            <div className="absolute bottom-2 left-2 w-6 h-6 bg-emerald-400 border-4 border-slate-900 rounded-full z-20 shadow-lg"></div>
+          </div>
 
-        <div className="glass-card p-6 rounded-3xl border border-slate-100">
-          <h3 className="text-lg font-bold mb-4">تواريخ الغياب</h3>
-          {absentDates.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {absentDates.map((date, index) => (
-                <span key={index} className="bg-red-50 text-red-700 px-3 py-1.5 rounded-xl text-sm font-bold text-center border border-red-100">
-                  {format(new Date(date), 'yyyy-MM-dd')}
+          <div className="pt-2 flex-1">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-xs font-bold uppercase tracking-widest mb-3 backdrop-blur-sm">
+              <User className="w-3.5 h-3.5 text-indigo-300" />
+              <span>ملف الطالب</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-black mb-3 tracking-tight">{fullName}</h1>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+              <span className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl text-sm font-bold backdrop-blur-md border border-white/10">
+                <GraduationCap className="w-4 h-4 text-indigo-300" /> {className} - شعبة {sectionName}
+              </span>
+              {/* Privacy Logic: Show National ID only to Admins */}
+              {(userRole === 'admin' || userRole === 'management') && student.national_id && (
+                <span className="flex items-center gap-2 bg-rose-500/20 text-rose-100 px-4 py-2 rounded-xl text-sm font-bold backdrop-blur-md border border-rose-500/30 font-mono">
+                  رقم مدني: {student.national_id}
                 </span>
-              ))}
+              )}
             </div>
-          ) : (
-            <p className="text-slate-500 font-bold">لا يوجد أيام غياب مسجلة.</p>
-          )}
+          </div>
+
         </div>
+        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"></div>
       </div>
 
-      <div className="glass-card p-6 rounded-3xl border border-slate-100">
-        <h3 className="text-lg font-bold mb-4">آخر الدرجات</h3>
-        <table className="w-full text-right">
-          <thead>
-            <tr className="border-b">
-              <th className="py-2">الاختبار</th>
-              <th className="py-2">المادة</th>
-              <th className="py-2">الدرجة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentGrades.map((grade) => (
-              <tr key={grade.id} className="border-b">
-                <td className="py-3">{grade.exam?.title}</td>
-                <td className="py-3">{grade.exam?.subject?.name}</td>
-                <td className="py-3 font-bold">{grade.score}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* 🚀 Stats Row (Contextual to Teacher or Admin) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-md hover:border-emerald-200 transition-all group">
+          <div className="h-14 w-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <CheckCircle2 className="w-7 h-7" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">نسبة الحضور</p>
+            <p className="text-3xl font-black text-slate-900">{stats.attendanceRate}%</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-md hover:border-amber-200 transition-all group">
+          <div className="h-14 w-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <FileText className="w-7 h-7" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">متوسط الاختبارات</p>
+            <p className="text-3xl font-black text-slate-900">{stats.examsAvg}%</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-md hover:border-indigo-200 transition-all group">
+          <div className="h-14 w-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <BookOpen className="w-7 h-7" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">متوسط الواجبات</p>
+            <p className="text-3xl font-black text-slate-900">{stats.assignmentsAvg}%</p>
+          </div>
+        </div>
       </div>
-    </div>
+      
+      {/* Disclaimer for Teachers */}
+      {userRole === 'teacher' && (
+        <div className="flex items-center gap-2 bg-sky-50 text-sky-700 px-4 py-3 rounded-xl text-sm font-bold border border-sky-100">
+          <Activity className="w-5 h-5 shrink-0" />
+          هذه الإحصائيات والسجلات تعكس أداء الطالب في مقرراتك وحصصك الدراسية فقط.
+        </div>
+      )}
+
+      {/* 🚀 Tabs Navigation */}
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide bg-white p-2 rounded-[2rem] shadow-sm border border-slate-100">
+        {[
+          { id: 'overview', label: 'نظرة عامة', icon: Activity },
+          { id: 'attendance', label: 'سجل الغياب', icon: CalendarDays, count: attendance.length },
+          { id: 'exams', label: 'الاختبارات', icon: FileText, count: exams.length },
+          { id: 'assignments', label: 'الواجبات', icon: BookOpen, count: assignments.length }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex items-center gap-2 px-6 py-3 rounded-[1.5rem] font-black text-sm transition-all whitespace-nowrap ${
+              activeTab === tab.id 
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' 
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* 🚀 Content Area */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden min-h-[400px]">
+        <AnimatePresence mode="wait">
+          
+          {/* TAB 1: OVERVIEW */}
+          {activeTab === 'overview' && (
+            <motion.div key="overview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-8 space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mb-4">
+                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><Calendar className="w-5 h-5"/></div>
+                    ملخص الغياب والتأخير
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
+                        <span className="text-3xl font-black text-emerald-600 block mb-1">{attendance.filter(a => a.status === 'present').length}</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">حضور كامل</span>
+                     </div>
+                     <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
+                        <span className="text-3xl font-black text-rose-600 block mb-1">{attendance.filter(a => a.status === 'absent').length}</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">غياب</span>
+                     </div>
+                     <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
+                        <span className="text-3xl font-black text-amber-600 block mb-1">{attendance.filter(a => a.status === 'late').length}</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">تأخير</span>
+                     </div>
+                     <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-center">
+                        <span className="text-3xl font-black text-blue-600 block mb-1">{attendance.filter(a => a.status === 'excused').length}</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">عذر مقبول</span>
+                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mb-4">
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Award className="w-5 h-5"/></div>
+                    ملخص الإنجاز الأكاديمي
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="bg-white border border-slate-200 p-5 rounded-3xl flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center"><FileText className="w-6 h-6"/></div>
+                        <div>
+                          <p className="font-bold text-slate-900">اختبارات تم تقييمها</p>
+                          <p className="text-sm text-slate-500">{exams.length} اختبارات</p>
+                        </div>
+                      </div>
+                      <div className="text-xl font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">{stats.examsAvg}%</div>
+                    </div>
+                    <div className="bg-white border border-slate-200 p-5 rounded-3xl flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center"><BookOpen className="w-6 h-6"/></div>
+                        <div>
+                          <p className="font-bold text-slate-900">واجبات تم تصحيحها</p>
+                          <p className="text-sm text-slate-500">{assignments.length} واجبات</p>
+                        </div>
+                      </div>
+                      <div className="text-xl font-black text-amber-600 bg-amber-50 px-4 py-2 rounded-xl">{stats.assignmentsAvg}%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* TAB 2: ATTENDANCE */}
+          {activeTab === 'attendance' && (
+            <motion.div key="attendance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6">
+              {attendance.length === 0 ? (
+                <div className="text-center py-20 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                   <CalendarDays className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                   <p className="font-bold text-slate-500">لا يوجد سجلات غياب مرصودة.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {attendance.map((record) => (
+                    <div key={record.id} className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm hover:border-slate-300 transition-colors flex flex-col justify-between">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <p className="font-black text-slate-800 text-lg mb-1" dir="ltr">{format(new Date(record.date), 'dd MMM yyyy', { locale: arSA })}</p>
+                          <p className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> الحصة {record.period}
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 ${
+                          record.status === 'present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                          record.status === 'absent' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
+                          record.status === 'late' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                          'bg-blue-50 text-blue-700 border border-blue-100'
+                        }`}>
+                          {record.status === 'present' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {record.status === 'absent' && <XCircle className="w-3.5 h-3.5" />}
+                          {record.status === 'late' && <Clock className="w-3.5 h-3.5" />}
+                          {record.status === 'excused' && <AlertCircle className="w-3.5 h-3.5" />}
+                          {record.status === 'present' ? 'حاضر' : record.status === 'absent' ? 'غائب' : record.status === 'late' ? 'متأخر' : 'مستأذن'}
+                        </span>
+                      </div>
+                      <div className="pt-3 border-t border-slate-100 mt-auto">
+                        <p className="text-sm font-bold text-slate-600 flex items-center gap-2">
+                           <BookOpen className="w-4 h-4 text-slate-400" /> {record.subjects?.name || 'مادة غير محددة'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* TAB 3: EXAMS */}
+          {activeTab === 'exams' && (
+            <motion.div key="exams" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6">
+              {exams.length === 0 ? (
+                <div className="text-center py-20 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                   <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                   <p className="font-bold text-slate-500">لا توجد اختبارات مقيمة للطالب حتى الآن.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {exams.map((attempt) => {
+                    const maxScore = attempt.exams?.total_marks || attempt.exams?.max_score || 100;
+                    const pct = Math.round((attempt.score / maxScore) * 100);
+                    return (
+                      <Link href={`/exams/results/${attempt.exams?.id}/student/${studentId}`} key={attempt.id} className="block group">
+                        <div className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm hover:shadow-md hover:border-indigo-200 transition-all flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="h-14 w-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                              <FileText className="w-7 h-7" />
+                            </div>
+                            <div>
+                              <h4 className="font-black text-slate-900 text-lg mb-1 group-hover:text-indigo-600 transition-colors line-clamp-1">{attempt.exams?.title}</h4>
+                              <p className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md inline-block mb-1">{attempt.exams?.subjects?.name}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest block">{format(new Date(attempt.completed_at), 'dd MMM yyyy', { locale: arSA })}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end shrink-0 pl-2">
+                            <p className={`text-2xl font-black ${pct >= 50 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {attempt.score} <span className="text-xs font-bold opacity-60">/ {maxScore}</span>
+                            </p>
+                            <span className="flex items-center gap-1 mt-1 text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              التفاصيل <ChevronRight className="w-3 h-3 rotate-180" />
+                            </span>
+                          </div>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* TAB 4: ASSIGNMENTS */}
+          {activeTab === 'assignments' && (
+            <motion.div key="assignments" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6">
+              {assignments.length === 0 ? (
+                <div className="text-center py-20 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                   <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                   <p className="font-bold text-slate-500">لا توجد واجبات مقيمة للطالب حتى الآن.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {assignments.map((submission) => {
+                    const qs = submission.assignments?.assignment_questions;
+                    const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
+                    const maxScore = calcMax > 0 ? calcMax : (submission.assignments?.total_marks || 100);
+                    const pct = Math.round((submission.grade / maxScore) * 100);
+
+                    return (
+                      <Link href={`/assignments/${submission.assignments?.id}/submissions/${submission.id}`} key={submission.id} className="block group">
+                        <div className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm hover:shadow-md hover:border-amber-200 transition-all">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-4">
+                              <div className="h-12 w-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <BookOpen className="w-6 h-6" />
+                              </div>
+                              <div>
+                                <h4 className="font-black text-slate-900 text-base mb-1 group-hover:text-amber-600 transition-colors line-clamp-1">{submission.assignments?.title}</h4>
+                                <p className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md inline-block">{submission.assignments?.subjects?.name}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end shrink-0 pl-2">
+                              <p className={`text-xl font-black ${pct >= 50 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {submission.grade} <span className="text-xs font-bold opacity-60">/ {maxScore}</span>
+                              </p>
+                            </div>
+                          </div>
+                          {submission.feedback && (
+                            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 relative mt-2">
+                              <p className="text-xs font-bold text-slate-600 line-clamp-2"><span className="text-indigo-500 font-black">ملاحظتك:</span> {submission.feedback}</p>
+                            </div>
+                          )}
+                          <div className="mt-3 text-left">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              التصحيح <ChevronRight className="w-3 h-3 rotate-180" />
+                            </span>
+                          </div>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 }
