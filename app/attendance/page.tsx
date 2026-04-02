@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Check, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft } from 'lucide-react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase'; // 🚀 إضافة مكتبة قاعدة البيانات
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
 
 export default function AttendancePage() {
-  const { authRole } = useAuth();
+  const { user, authRole } = useAuth(); // 🚀 جلب بيانات المستخدم لمعرفة الطالب
   const { 
     sections, 
     daySchedule, 
@@ -16,8 +17,7 @@ export default function AttendancePage() {
     fetchDaySchedule, 
     fetchSections, 
     fetchStudentsAndAttendance, 
-    saveAttendance,
-    fetchStudentAttendance
+    saveAttendance
   } = useAttendanceSystem();
 
   const [selectedSection, setSelectedSection] = useState<string>('');
@@ -30,13 +30,16 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  const [studentStats, setStudentStats] = useState<any>(null);
+  // 🚀 حالات الطالب المستقلة
+  const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0 });
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
+  const [isStudentLoading, setIsStudentLoading] = useState(false);
 
   useEffect(() => {
     setDate(new Date().toISOString().split('T')[0]);
   }, []);
 
+  // 🚀 جلب بيانات المعلم
   useEffect(() => {
     if (date && authRole === 'teacher') {
       fetchDaySchedule(date).then((schedule) => {
@@ -51,33 +54,24 @@ export default function AttendancePage() {
   }, [date, authRole, fetchDaySchedule, period]);
 
   useEffect(() => {
-    if (date && period) {
-      if (authRole === 'student') {
-        fetchStudentAttendance().then(res => {
-          if (res) {
-            setStudentAttendance(res.studentAttendance);
-            setStudentStats(res.studentStats);
+    if (date && period && authRole !== 'student') {
+      fetchSections(date, period).then(sectionsData => {
+        if (sectionsData && sectionsData.length > 0) {
+          setSelectedSection(sectionsData[0].id);
+          if (sectionsData[0].subject_id) {
+            setSelectedSubject(sectionsData[0].subject_id);
           }
-        });
-      } else {
-        fetchSections(date, period).then(sectionsData => {
-          if (sectionsData && sectionsData.length > 0) {
-            setSelectedSection(sectionsData[0].id);
-            if (sectionsData[0].subject_id) {
-              setSelectedSubject(sectionsData[0].subject_id);
-            }
-          } else {
-            setSelectedSection('');
-            setSelectedSubject('');
-            setStudents([]);
-          }
-        });
-      }
+        } else {
+          setSelectedSection('');
+          setSelectedSubject('');
+          setStudents([]);
+        }
+      });
     }
-  }, [date, period, fetchSections, fetchStudentAttendance, authRole]);
+  }, [date, period, fetchSections, authRole]);
 
   const loadStudentsAndAttendance = useCallback(async () => {
-    if (selectedSection && date) {
+    if (selectedSection && date && authRole !== 'student') {
       const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
       if (res) {
         setStudents(res.students);
@@ -85,11 +79,55 @@ export default function AttendancePage() {
         setStats(res.stats);
       }
     }
-  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance]);
+  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, authRole]);
 
   useEffect(() => {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
+
+  // 🚀 المحرك المستقل لجلب كل إحصائيات الطالب من قاعدة البيانات مباشرة
+  useEffect(() => {
+    const fetchStudentDataDirectly = async () => {
+      if (authRole !== 'student' || !user) return;
+      setIsStudentLoading(true);
+      try {
+        // 1. جلب المعرف الخاص بالطالب
+        const { data: studentData } = await supabase
+          .from('students')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!studentData) return;
+
+        // 2. جلب كل السجلات عبر استخدام created_at
+        const { data: records } = await supabase
+          .from('attendance_records')
+          .select('id, created_at, period, status, subjects(name)')
+          .eq('student_id', studentData.id)
+          .order('created_at', { ascending: false });
+
+        if (records) {
+          // 3. تجميع الإحصائيات الشاملة
+          const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0 };
+          records.forEach(r => {
+             if (r.status === 'present') calculatedStats.present++;
+             if (r.status === 'absent') calculatedStats.absent++;
+             if (r.status === 'late') calculatedStats.late++;
+             if (r.status === 'excused') calculatedStats.excused++;
+          });
+          setStudentStats(calculatedStats);
+          setStudentAttendance(records);
+        }
+      } catch (error) {
+        console.error("Error fetching student attendance:", error);
+      } finally {
+        setIsStudentLoading(false);
+      }
+    };
+
+    fetchStudentDataDirectly();
+  }, [authRole, user]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -136,9 +174,20 @@ export default function AttendancePage() {
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
-  // 🚀 STUDENT VIEW
+  // 🚀 STUDENT VIEW (اللوحة المطورة للطالب)
   // ==========================================
   if (authRole === 'student') {
+    if (isStudentLoading) {
+      return (
+        <div className="flex h-[80vh] items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+            <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تجميع إحصائياتك...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
@@ -146,11 +195,11 @@ export default function AttendancePage() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-3 backdrop-blur-sm shadow-sm mx-auto sm:mx-0">
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
-                <span>السجل الأكاديمي</span>
+                <span>السجل الأكاديمي الشامل</span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-black mb-2 tracking-tight drop-shadow-md">سجل الحضور والغياب</h1>
               <p className="text-indigo-100 text-xs sm:text-lg font-bold opacity-90 max-w-xl mx-auto sm:mx-0">
-                إحصائيات وسجل حضورك الشخصي مقسمة حسب الأيام. التزامك هو سر تفوقك.
+                إحصائيات وسجل حضورك الشخصي المجمعة من جميع المعلمين والمواد. التزامك هو سر تفوقك.
               </p>
             </div>
             <div className="h-20 w-20 sm:h-32 sm:w-32 bg-white/10 backdrop-blur-md rounded-full border-4 border-white/20 flex items-center justify-center shadow-xl shrink-0">
@@ -166,8 +215,8 @@ export default function AttendancePage() {
               <CheckCircle2 className="h-5 w-5 sm:h-7 sm:w-7" />
             </div>
             <div>
-              <p className="text-2xl sm:text-4xl font-black text-emerald-600">{studentStats?.present || 0}</p>
-              <p className="text-[9px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حاضر (يوم كامل)</p>
+              <p className="text-3xl sm:text-4xl font-black text-emerald-600">{studentStats.present}</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حاضر</p>
             </div>
           </div>
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
@@ -175,8 +224,8 @@ export default function AttendancePage() {
               <XCircle className="h-5 w-5 sm:h-7 sm:w-7" />
             </div>
             <div>
-              <p className="text-2xl sm:text-4xl font-black text-rose-600">{studentStats?.absent || 0}</p>
-              <p className="text-[9px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">غائب (يوم كامل)</p>
+              <p className="text-3xl sm:text-4xl font-black text-rose-600">{studentStats.absent}</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">غائب</p>
             </div>
           </div>
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-amber-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
@@ -184,8 +233,8 @@ export default function AttendancePage() {
               <Clock className="h-5 w-5 sm:h-7 sm:w-7" />
             </div>
             <div>
-              <p className="text-2xl sm:text-4xl font-black text-amber-600">{studentStats?.partial || 0}</p>
-              <p className="text-[9px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">غائب جزئي</p>
+              <p className="text-3xl sm:text-4xl font-black text-amber-600">{studentStats.late}</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">متأخر</p>
             </div>
           </div>
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-blue-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
@@ -193,8 +242,8 @@ export default function AttendancePage() {
               <AlertCircle className="h-5 w-5 sm:h-7 sm:w-7" />
             </div>
             <div>
-              <p className="text-2xl sm:text-4xl font-black text-blue-600">{studentStats?.incomplete || 0}</p>
-              <p className="text-[9px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">سجل غير مكتمل</p>
+              <p className="text-3xl sm:text-4xl font-black text-blue-600">{studentStats.excused}</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">مستأذن</p>
             </div>
           </div>
         </div>
@@ -203,8 +252,11 @@ export default function AttendancePage() {
           <div className="p-5 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-slate-50/30">
             <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
                <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar className="w-5 h-5 sm:w-6 sm:h-6"/></div>
-               سجل الأيام السابقة
+               سجل الأيام والحصص السابقة
             </h2>
+            <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+              إجمالي السجلات: {studentAttendance.length}
+            </span>
           </div>
           <div className="p-4 sm:p-8">
             {studentAttendance.length === 0 ? (
@@ -215,19 +267,28 @@ export default function AttendancePage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {studentAttendance.map((record, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors">
-                    <span className="text-xs sm:text-sm font-bold text-slate-700" dir="ltr">
-                      {new Date(record.date).toLocaleDateString('ar-EG', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-                    </span>
-                    <span className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-xl text-[10px] sm:text-xs font-black ${
-                      record.daily_status === 'present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                      record.daily_status === 'full_absent' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                      record.daily_status === 'partial_absent' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                      'bg-blue-50 text-blue-600 border border-blue-100'
+                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4">
+                    <div>
+                      <span className="text-sm font-black text-slate-800 block mb-2" dir="ltr">
+                        {new Date(record.created_at).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+                      </span>
+                      <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-block">
+                        الحصة {record.period} • {record.subjects?.name || 'مادة غير محددة'}
+                      </span>
+                    </div>
+                    <span className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 w-full sm:w-auto border ${
+                      record.status === 'present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                      record.status === 'absent' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                      record.status === 'late' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                      'bg-blue-50 text-blue-600 border-blue-100'
                     }`}>
-                      {record.daily_status === 'present' ? 'حاضر (يوم كامل)' :
-                       record.daily_status === 'full_absent' ? 'غائب كلياً' :
-                       record.daily_status === 'partial_absent' ? 'غائب جزئياً' : 'غير مكتمل'}
+                      {record.status === 'present' ? <CheckCircle2 className="w-4 h-4"/> :
+                       record.status === 'absent' ? <XCircle className="w-4 h-4"/> :
+                       record.status === 'late' ? <Clock className="w-4 h-4"/> :
+                       <AlertCircle className="w-4 h-4"/>}
+                      {record.status === 'present' ? 'حاضر' :
+                       record.status === 'absent' ? 'غائب' :
+                       record.status === 'late' ? 'متأخر' : 'مستأذن'}
                     </span>
                   </div>
                 ))}
