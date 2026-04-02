@@ -1,0 +1,451 @@
+'use client';
+
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
+  Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
+  XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { arSA } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
+
+export default function AttendanceReportsPage() {
+  const { user, userRole } = useAuth();
+  
+  const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
+  
+  // Filters
+  const [selectedSection, setSelectedSection] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
+  const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      let currentTeacherId = null;
+      if (userRole === 'teacher') {
+        const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (teacherData) currentTeacherId = teacherData.id;
+      }
+
+      // Fetch Sections
+      let sectionsQuery = supabase.from('sections').select('id, name, classes(name)');
+      const { data: sectionsData } = await sectionsQuery;
+      setSections(sectionsData || []);
+
+      // Fetch Attendance Records
+      let query = supabase
+        .from('attendance_records')
+        .select(`
+          id, date, period, status,
+          student_id,
+          students (users(full_name, avatar_url)),
+          subjects (name),
+          sections (id, name, classes(name))
+        `)
+        .order('date', { ascending: false });
+
+      if (currentTeacherId) {
+        query = query.eq('teacher_id', currentTeacherId);
+      }
+
+      const { data: attendanceData } = await query;
+      setRecords(attendanceData || []);
+
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, userRole]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // 🚀 المحرك الذكي للفلترة والتجميع (Smart Aggregation Engine)
+  const reportData = useMemo(() => {
+    let filtered = records;
+
+    // 1. فلترة حسب الفصل
+    if (selectedSection !== 'all') {
+      filtered = filtered.filter(r => r.sections?.id === selectedSection);
+    }
+
+    // 2. فلترة حسب التاريخ
+    const today = new Date();
+    filtered = filtered.filter(r => {
+      const recordDate = parseISO(r.date);
+      if (dateRange === 'today') {
+        return recordDate.toDateString() === today.toDateString();
+      } else if (dateRange === 'week') {
+        return isWithinInterval(recordDate, { start: startOfWeek(today, { weekStartsOn: 6 }), end: endOfWeek(today, { weekStartsOn: 6 }) });
+      } else if (dateRange === 'month') {
+        return isWithinInterval(recordDate, { start: startOfMonth(today), end: endOfMonth(today) });
+      } else if (dateRange === 'custom') {
+        return recordDate >= new Date(customStartDate) && recordDate <= new Date(customEndDate);
+      }
+      return true;
+    });
+
+    // 3. تجميع البيانات حسب الطالب (Aggregation)
+    const studentMap = new Map<string, any>();
+    
+    filtered.forEach(record => {
+      const sId = record.student_id;
+      if (!studentMap.has(sId)) {
+        studentMap.set(sId, {
+          id: sId,
+          name: record.students?.users?.full_name || 'غير معروف',
+          avatar: record.students?.users?.avatar_url,
+          className: `${record.sections?.classes?.name} - ${record.sections?.name}`,
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          totalRecords: 0
+        });
+      }
+      
+      const st = studentMap.get(sId);
+      st.totalRecords += 1;
+      if (record.status === 'present') st.present += 1;
+      if (record.status === 'absent') st.absent += 1;
+      if (record.status === 'late') st.late += 1;
+      if (record.status === 'excused') st.excused += 1;
+    });
+
+    return Array.from(studentMap.values()).sort((a, b) => b.absent - a.absent); // ترتيب تنازلي حسب الغياب
+  }, [records, selectedSection, dateRange, customStartDate, customEndDate]);
+
+  // 🚀 استخراج الطلاب المنذرين (الخطر)
+  const atRiskStudents = reportData.filter(s => s.absent >= 5);
+
+  const getReportTitle = () => {
+    const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => s.id === selectedSection)?.name || '';
+    const dateText = dateRange === 'today' ? 'اليوم' : dateRange === 'week' ? 'هذا الأسبوع' : dateRange === 'month' ? 'هذا الشهر' : 'فترة مخصصة';
+    return `تقرير غياب (${secName}) - ${dateText}`;
+  };
+
+  const exportToExcel = () => {
+    const data = reportData.map((s, index) => ({
+      'م': index + 1,
+      'اسم الطالب': s.name,
+      'الفصل': s.className,
+      'أيام الحضور': s.present,
+      'أيام الغياب': s.absent,
+      'التأخير': s.late,
+      'استئذان': s.excused,
+      'نسبة الغياب': `${Math.round((s.absent / s.totalRecords) * 100) || 0}%`
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير الغياب");
+    XLSX.writeFile(workbook, `${getReportTitle()}.xlsx`);
+  };
+
+  const exportToPDF = (isWarningReport = false) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
+
+    const dataToPrint = isWarningReport ? atRiskStudents : reportData;
+    const title = isWarningReport ? 'تقرير الطلاب المنذرين (تجاوز 5 غيابات)' : getReportTitle();
+
+    const rows = dataToPrint.map((s, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td><strong>${s.name}</strong></td>
+        <td>${s.className}</td>
+        <td style="color: #059669; font-weight: bold;">${s.present}</td>
+        <td style="color: #e11d48; font-weight: bold; background: ${s.absent >= 5 ? '#ffe4e6' : 'transparent'}">${s.absent}</td>
+        <td style="color: #d97706; font-weight: bold;">${s.late}</td>
+        <td>${Math.round((s.absent / s.totalRecords) * 100) || 0}%</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>${title}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+            body { font-family: 'Cairo', sans-serif; padding: 40px; color: #0f172a; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid ${isWarningReport ? '#e11d48' : '#4f46e5'}; padding-bottom: 20px; }
+            .header h1 { color: ${isWarningReport ? '#e11d48' : '#4f46e5'}; font-size: 28px; font-weight: 900; margin-bottom: 5px; }
+            .header p { color: #64748b; font-size: 16px; margin: 0; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; text-align: center; }
+            th { background-color: ${isWarningReport ? '#fef1f2' : '#f1f5f9'}; color: ${isWarningReport ? '#be123c' : '#1e293b'}; padding: 15px; font-weight: 900; border: 1px solid #cbd5e1; }
+            td { padding: 12px; border: 1px solid #cbd5e1; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 50px; font-size: 12px; color: #94a3b8; text-align: center; }
+            .stamp { float: left; border: 2px dashed ${isWarningReport ? '#e11d48' : '#4f46e5'}; padding: 10px; color: ${isWarningReport ? '#e11d48' : '#4f46e5'}; font-weight: bold; transform: rotate(-10deg); margin-top: 30px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${isWarningReport ? '⚠️ إشعار إنذار غياب للطلاب' : '📊 التقرير التحليلي للغياب والحضور'}</h1>
+            <p>${title} | تاريخ الإصدار: ${format(new Date(), 'yyyy/MM/dd')}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th width="5%">#</th>
+                <th width="30%">اسم الطالب</th>
+                <th width="20%">الفصل</th>
+                <th width="10%">حاضر</th>
+                <th width="10%">غائب</th>
+                <th width="10%">متأخر</th>
+                <th width="15%">مؤشر الخطر</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="stamp">اعتماد النظام الموحد<br/>تم الإصدار تلقائياً</div>
+          <div class="clearfix" style="clear: both;"></div>
+          <div class="footer">تطبيق الرفعة النموذجي - جميع الحقوق محفوظة</div>
+          <script>window.onload = () => { setTimeout(() => window.print(), 500); }</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب التقارير...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
+      
+      {/* 🚀 Top Navigation */}
+      <div className="pt-6">
+        <Link href="/attendance" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
+          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة لرصد الغياب
+        </Link>
+      </div>
+
+      {/* 🚀 Hero Section (اللوحة القيادية للتقارير) */}
+      <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 p-8 sm:p-12 text-white shadow-2xl shadow-slate-900/20">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm">
+              <BarChart2 className="w-3.5 h-3.5 text-indigo-300" />
+              <span>التحليل والإحصاء</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
+              تقارير الحضور والغياب
+            </h1>
+            <p className="text-indigo-100 text-sm sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
+              تحليل ذكي لسجلات غياب الطلاب في حصصك الدراسية. يمكنك تتبع الغياب، اكتشاف الطلاب المنذرين، وتصدير التقارير الرسمية بضغطة زر.
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <button onClick={exportToExcel} className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black shadow-lg shadow-emerald-500/30 transition-all active:scale-95">
+              <FileSpreadsheet className="w-5 h-5" /> تصدير Excel
+            </button>
+            <button onClick={() => exportToPDF(false)} className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-black shadow-lg shadow-rose-500/30 transition-all active:scale-95">
+              <Download className="w-5 h-5" /> تقرير PDF
+            </button>
+          </div>
+        </div>
+        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
+        <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"></div>
+      </div>
+
+      {/* 🚀 Smart Filter Bar */}
+      <div className="bg-white/80 backdrop-blur-xl p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30">
+        <div className="flex items-center gap-3 mb-4">
+          <Filter className="w-5 h-5 text-indigo-600" />
+          <h3 className="font-black text-slate-900">محددات التقرير</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفصل الدراسي</label>
+            <select
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none"
+            >
+              <option value="all">جميع الفصول والشعب</option>
+              {sections.map(s => (
+                <option key={s.id} value={s.id}>{s.classes?.name || s.classes?.[0]?.name} - {s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفترة الزمنية</label>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value as any)}
+              className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none"
+            >
+              <option value="today">اليوم الحالي</option>
+              <option value="week">هذا الأسبوع</option>
+              <option value="month">هذا الشهر</option>
+              <option value="custom">فترة مخصصة</option>
+            </select>
+          </div>
+
+          <AnimatePresence>
+            {dateRange === 'custom' && (
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-2 space-y-0">
+                <div className="flex-1 space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">من</label>
+                  <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">إلى</label>
+                  <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none" />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* 🚀 At-Risk Radar (نظام الإنذار المبكر) */}
+      <AnimatePresence>
+        {atRiskStudents.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-rose-50 to-red-50 p-6 sm:p-8 rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-rose-500 text-white rounded-2xl shadow-md shadow-rose-500/30 animate-pulse">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-rose-900">إنذار: طلاب تجاوزوا الحد (5 غيابات فأكثر)</h2>
+                  <p className="text-sm font-bold text-rose-600 mt-1">يتطلب هذا القسم انتباهك لرفع تقرير لإدارة المدرسة.</p>
+                </div>
+              </div>
+              <button onClick={() => exportToPDF(true)} className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-rose-600 font-black shadow-sm border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 shrink-0 w-full sm:w-auto">
+                <Printer className="w-4 h-4" /> طباعة تقرير إنذار
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              {atRiskStudents.map(student => (
+                <div key={student.id} className="bg-white p-5 rounded-2xl shadow-sm border border-rose-100 flex items-center justify-between group">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-10 bg-rose-100 text-rose-700 rounded-xl flex items-center justify-center font-black shrink-0">
+                      {student.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 text-sm truncate">{student.name}</p>
+                      <p className="text-[10px] font-bold text-slate-500 truncate">{student.className}</p>
+                    </div>
+                  </div>
+                  <div className="bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-black shadow-sm shrink-0">
+                    {student.absent} غياب
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🚀 Main Data Table (الجدول التحليلي الفخم) */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner border border-indigo-100">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">السجل التحليلي الشامل</h2>
+          </div>
+          <span className="text-xs font-bold text-slate-500 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+            إجمالي السجلات المعروضة: {reportData.length} طالب
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100">
+            <thead>
+              <tr className="bg-slate-50/30">
+                <th scope="col" className="py-5 pr-8 pl-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">اسم الطالب</th>
+                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-emerald-600">حاضر</th>
+                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-rose-600">غائب</th>
+                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-amber-600">متأخر</th>
+                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-blue-600">مستأذن</th>
+                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">مؤشر الغياب</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {reportData.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="h-16 w-16 rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                        <Calendar className="h-8 w-8 text-slate-300" />
+                      </div>
+                      <p className="text-slate-500 font-bold text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                reportData.map((student) => {
+                  const absenceRate = Math.round((student.absent / student.totalRecords) * 100) || 0;
+                  return (
+                    <tr key={student.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="whitespace-nowrap py-4 pr-8 pl-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center font-black text-lg shadow-sm shrink-0">
+                            {student.name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-black text-slate-900 text-sm group-hover:text-indigo-600 transition-colors truncate">{student.name}</span>
+                            <span className="text-[10px] text-slate-400 font-bold truncate">{student.className}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 text-center">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 font-black text-sm border border-emerald-100">{student.present}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-black text-sm border ${student.absent > 0 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.absent}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-black text-sm border ${student.late > 0 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.late}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 text-center">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-blue-50 text-blue-600 font-black text-sm border border-blue-100">{student.excused}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                            <div className={`h-full rounded-full ${absenceRate >= 20 ? 'bg-rose-500' : absenceRate > 0 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(absenceRate, 100)}%` }} />
+                          </div>
+                          <span className={`text-[10px] font-black w-8 text-right ${absenceRate >= 20 ? 'text-rose-600' : 'text-slate-500'}`}>{absenceRate}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
