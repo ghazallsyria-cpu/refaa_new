@@ -60,11 +60,12 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // 🚀 تحديد الفصول الفريدة للفلترة
+  // 🚀 تحديد الفصول الفريدة للفلترة (بشكل ذكي ومحسن)
   const uniqueSections = Array.from(new Set(submissions.map(sub => {
-     const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
-     const className = classObj?.name || '';
-     const sectionName = sub.student?.section?.name || '';
+     const sectionData = sub.student?.section as any;
+     const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
+     const className = classData?.name || '';
+     const sectionName = sectionData?.name || '';
      return className && sectionName ? `${className} - ${sectionName}` : 'بدون فصل';
   }))).filter(Boolean);
 
@@ -72,9 +73,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const filteredSubmissions = selectedSection === 'الكل' 
      ? submissions 
      : submissions.filter(sub => {
-         const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
-         const className = classObj?.name || '';
-         const sectionName = sub.student?.section?.name || '';
+         const sectionData = sub.student?.section as any;
+         const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
+         const className = classData?.name || '';
+         const sectionName = sectionData?.name || '';
          const full = className && sectionName ? `${className} - ${sectionName}` : 'بدون فصل';
          return full === selectedSection;
        });
@@ -85,9 +87,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     // 🚀 التصدير يستخدم القائمة المفلترة فقط
     const csvData = filteredSubmissions.map(sub => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
-       const sectionClass = classObj?.name || '';
-       const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
+       const sectionData = sub.student?.section as any;
+       const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
+       const sectionClass = classData?.name || '';
+       const section = sectionData ? `${sectionClass} - ${sectionData.name}` : 'بدون فصل';
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
@@ -122,9 +125,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
     const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
-       const sectionClass = classObj?.name || '';
-       const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
+       const sectionData = sub.student?.section as any;
+       const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
+       const sectionClass = classData?.name || '';
+       const section = sectionData ? `${sectionClass} - ${sectionData.name}` : 'بدون فصل';
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
@@ -508,9 +512,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   }
 
                   const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
-                  
-                  // 🚀 تحسين شروط عرض النتيجة: إذا أعطاه المعلم نقطة فهي صحيحة حتى لو لم يحدد is_correct
-                  const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
+                  const isCorrect = answerDetails?.is_correct;
 
                   return (
                     <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border-2 transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
