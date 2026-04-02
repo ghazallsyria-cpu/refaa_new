@@ -46,8 +46,14 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
+  // 🚀 حالات للخط الزمني السحري
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+
   useEffect(() => {
     setMounted(true);
+    setCurrentTime(new Date());
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
   }, []);
 
   const { fetchStudentDashboardData, updateStudentTrack } = useDashboardSystem();
@@ -112,6 +118,40 @@ export default function StudentDashboard() {
     fetchData();
   }, [fetchData]);
 
+  // 🚀 دوال التحقق من الحصة الحالية والقادمة
+  const isCurrentClass = (period: number) => {
+    if (!currentTime) return false;
+    const periodInfo = periods.find(p => p.period_number === period);
+    if (!periodInfo) return false;
+
+    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+    const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+    
+    const now = currentTime;
+    const start = new Date(now);
+    start.setHours(startH, startM, 0);
+    
+    const end = new Date(now);
+    end.setHours(endH, endM, 0);
+    
+    return now >= start && now <= end;
+  };
+
+  const isNextClass = (period: number) => {
+    if (!currentTime) return false;
+    const periodInfo = periods.find(p => p.period_number === period);
+    if (!periodInfo) return false;
+
+    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+    
+    const now = currentTime;
+    const start = new Date(now);
+    start.setHours(startH, startM, 0);
+    
+    const diff = (start.getTime() - now.getTime()) / (1000 * 60);
+    return diff > 0 && diff <= 60;
+  };
+
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
     try {
@@ -152,12 +192,11 @@ export default function StudentDashboard() {
       className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
       dir="rtl"
     >
-      {/* 🚀 Hero Section (التحفة المعمارية الفنية) */}
+      {/* 🚀 Hero Section */}
       <div className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
           
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right">
-            {/* 📸 الصورة الشخصية الفخمة */}
             <div className="relative group shrink-0">
               <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-[2.5rem] overflow-hidden border-4 border-white/20 shadow-2xl bg-white/10 backdrop-blur-md flex items-center justify-center relative z-10 transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3">
                 {avatarUrl ? (
@@ -167,7 +206,6 @@ export default function StudentDashboard() {
                 )}
               </div>
               <div className="absolute inset-0 bg-white/20 rounded-[2.5rem] blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
-              {/* 🟢 مؤشر الأونلاين التفاعلي */}
               <div className="absolute bottom-2 left-2 w-6 h-6 bg-emerald-400 border-4 border-indigo-600 rounded-full z-20 shadow-lg animate-pulse"></div>
             </div>
 
@@ -198,13 +236,11 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🎆 تأثيرات الزجاج والضوء الخلفية (Glow Effects) */}
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl mix-blend-overlay animate-pulse"></div>
         <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay"></div>
         <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay"></div>
       </div>
 
-      {/* 🚀 تحديد المسار (لطلاب العاشر) */}
       {isTenthGrade && !hasSelectedTrack && (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2.5rem] bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 p-8 sm:p-10 shadow-xl shadow-amber-100/50">
           <div className="flex flex-col md:flex-row items-center gap-8">
@@ -236,7 +272,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* 🚀 Quick Actions (الأزرار السريعة الزجاجية) */}
+      {/* 🚀 Quick Actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
         {[
           { href: '/dashboard/student/schedule', icon: Calendar, label: 'الجدول الدراسي', color: 'indigo' },
@@ -367,53 +403,120 @@ export default function StudentDashboard() {
         {/* 🚀 Sidebar Content - Right 1 Column */}
         <div className="space-y-8">
           
-          {/* Today's Schedule */}
-          <div className="rounded-[2.5rem] bg-white/80 backdrop-blur-xl p-6 sm:p-8 shadow-sm border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden">
-            <div className="mb-6 flex items-center justify-between relative z-10">
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          {/* 🚀 Today's Schedule Timeline (Magic Setup) */}
+          <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-50 rounded-full blur-3xl -mr-10 -mt-10"></div>
+            <div className="p-6 sm:p-8 border-b border-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white/50 relative z-10 gap-4">
+              <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
                 <div className="p-3 bg-sky-50 rounded-2xl border border-sky-100 shadow-inner">
                   <Clock className="h-6 w-6 text-sky-600" />
                 </div>
-                جدول اليوم
+                جدول حصص اليوم
               </h2>
-              <Link href="/dashboard/student/schedule" className="text-xs font-bold text-sky-600 hover:underline">الجدول الكامل</Link>
+              <Link href="/dashboard/student/schedule" className="text-xs font-bold text-sky-600 hover:underline px-4 py-2 bg-sky-50 rounded-xl shadow-sm border border-sky-100">
+                الجدول الكامل
+              </Link>
             </div>
             
-            <div className="space-y-3 relative z-10">
+            <div className="p-6 sm:p-8 relative z-10 bg-slate-50/30">
               {todaysSchedule.length > 0 ? (
-                todaysSchedule.map((item, i) => (
-                  <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50/80 border border-slate-100 group hover:border-sky-200 hover:bg-white hover:shadow-md transition-all cursor-pointer">
-                    <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg font-black text-slate-900 group-hover:bg-sky-600 group-hover:text-white group-hover:border-sky-600 transition-all shadow-sm shrink-0">
-                      {item.period}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base font-black text-slate-900 truncate mb-1">{item.subjects?.name}</p>
-                      <div className="flex flex-col gap-1">
-                        <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5 truncate">
-                          <GraduationCap className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{item.teachers?.users?.full_name}</span>
-                        </p>
-                        {(() => {
-                          const periodInfo = periods.find(p => p.period_number === item.period);
-                          const startTime = item.start_time || periodInfo?.start_time;
-                          const endTime = item.end_time || periodInfo?.end_time;
-                          if (startTime && endTime) {
-                            return (
-                              <p className="text-[10px] font-black uppercase tracking-widest text-sky-600/70 flex items-center gap-1.5" dir="ltr">
-                                <Clock className="h-3 w-3 shrink-0" />
-                                {startTime.substring(0, 5)} - {endTime.substring(0, 5)}
-                              </p>
-                            );
-                          }
-                          return null;
-                        })()}
+                <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-sky-100 before:via-slate-200 before:to-transparent">
+                  {todaysSchedule.map((item, i) => {
+                    const current = isCurrentClass(item.period);
+                    const next = isNextClass(item.period);
+                    
+                    return (
+                      <div key={i} className={cn(
+                        "relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group",
+                        current ? "is-active z-20" : "z-10"
+                      )}>
+                        <div className={cn(
+                          "flex items-center justify-center w-12 h-12 rounded-2xl border-4 border-white shadow-md shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-all duration-500",
+                          current ? "bg-sky-500 text-white scale-125 ring-4 ring-sky-100" : 
+                          next ? "bg-amber-400 text-white" : "bg-white text-slate-400 border-slate-200"
+                        )}>
+                          {current ? (
+                            <Play className="h-5 w-5 animate-pulse ml-1" />
+                          ) : (
+                            <span className="text-base font-black">{item.period}</span>
+                          )}
+                        </div>
+
+                        <div className={cn(
+                          "w-[calc(100%-4.5rem)] md:w-[calc(50%-3rem)] p-5 rounded-3xl border transition-all duration-500 cursor-pointer",
+                          current 
+                            ? "bg-gradient-to-br from-sky-50 to-white border-sky-200 shadow-xl shadow-sky-100/50 scale-[1.02]" 
+                            : next 
+                              ? "bg-amber-50 border-amber-200 shadow-md" 
+                              : "bg-white border-slate-100 shadow-sm hover:shadow-md hover:border-sky-200"
+                        )}>
+                          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-3">
+                            <h3 className={cn(
+                              "text-lg font-black transition-colors truncate pl-2",
+                              current ? "text-sky-900" : next ? "text-amber-900" : "text-slate-800"
+                            )}>
+                              {item.subjects?.name}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                              {current && (
+                                <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500 text-[10px] font-bold text-white shadow-md">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                                  الحصة الآن
+                                </span>
+                              )}
+                              {next && !current && (
+                                <span className="px-3 py-1 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold shadow-sm">
+                                  الحصة القادمة
+                                </span>
+                              )}
+                              <span className={cn(
+                                "text-xs font-black px-3 py-1 rounded-xl shadow-sm border whitespace-nowrap",
+                                current ? "bg-white text-sky-700 border-sky-100" : "bg-slate-50 text-slate-500 border-slate-200"
+                              )}>
+                                الحصة {item.period}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-100/80 gap-3">
+                            <p className={cn(
+                              "text-sm font-bold flex items-center gap-2",
+                              current ? "text-sky-700" : "text-slate-600"
+                            )}>
+                              <GraduationCap className="h-4 w-4 opacity-70 shrink-0" />
+                              <span className="truncate">أ. {item.teachers?.users?.full_name || 'غير محدد'}</span>
+                            </p>
+                            {(() => {
+                              const periodInfo = periods.find(p => p.period_number === item.period);
+                              const startTime = item.start_time || periodInfo?.start_time;
+                              const endTime = item.end_time || periodInfo?.end_time;
+                              
+                              if (startTime && endTime) {
+                                return (
+                                  <span className={cn(
+                                    "text-[11px] font-black tracking-widest flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border shadow-sm shrink-0",
+                                    current ? "text-sky-600 border-sky-100" : "text-slate-400 border-slate-100"
+                                  )} dir="ltr">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    {startTime.substring(0, 5)} - {endTime.substring(0, 5)}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))
+                    );
+                  })}
+                </div>
               ) : (
-                <div className="text-center py-10 text-slate-500 font-bold bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
-                  لا توجد حصص اليوم، استمتع بوقتك!
+                <div className="text-center py-16 bg-white rounded-[2rem] border border-dashed border-slate-200 shadow-sm">
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-50 mb-4 shadow-inner border border-slate-100">
+                    <Calendar className="h-10 w-10 text-slate-300" />
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 mb-2">لا توجد حصص اليوم</h3>
+                  <p className="text-slate-500 font-medium">استمتع بيومك! ليس لديك أي حصص مجدولة لهذا اليوم في النظام.</p>
                 </div>
               )}
             </div>
