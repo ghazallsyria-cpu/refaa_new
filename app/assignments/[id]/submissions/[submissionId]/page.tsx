@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { ArrowRight, User, Calendar, Clock, CheckCircle, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye, Edit, CheckCircle2, XCircle, Columns, MinusCircle } from 'lucide-react';
+import { ArrowRight, User, Calendar, Clock, CheckCircle, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye, Edit, CheckCircle2, XCircle, Columns, MinusCircle, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
