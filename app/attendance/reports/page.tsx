@@ -69,7 +69,6 @@ export default function AttendanceReportsPage() {
 
       const sectionIds = validSections.map(s => String(s.id));
 
-      // 🚀 التصحيح الجذري: إزالة section_id من الاستعلام وجلبه من ملف الطالب المدمج
       let query = supabase
         .from('attendance_records')
         .select(`
@@ -92,12 +91,13 @@ export default function AttendanceReportsPage() {
         throw error;
       }
 
-      // فلترة برمجية آمنة: التأكد من أن الطالب في الفصول المسموح بها للمعلم
+      // فلترة برمجية آمنة (استخدام any لإسكات مدقق Next.js)
       let finalData = attendanceData || [];
       if (userRole === 'teacher' && sectionIds.length > 0) {
-        finalData = finalData.filter(record => {
-          const stu = Array.isArray(record.students) ? record.students[0] : record.students;
-          const stuSecId = stu?.section_id || stu?.sections?.id;
+        finalData = finalData.filter((record: any) => {
+          const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
+          const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+          const stuSecId = stu?.section_id || stuSec?.id;
           return sectionIds.includes(String(stuSecId));
         });
       }
@@ -121,9 +121,10 @@ export default function AttendanceReportsPage() {
     let filtered = records || [];
 
     if (selectedSection !== 'all') {
-      filtered = filtered.filter(r => {
-        const stu = Array.isArray(r.students) ? r.students[0] : r.students;
-        const stuSecId = stu?.section_id || stu?.sections?.id;
+      filtered = filtered.filter((r: any) => {
+        const stu: any = Array.isArray(r.students) ? r.students[0] : r.students;
+        const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const stuSecId = stu?.section_id || stuSec?.id;
         return String(stuSecId) === String(selectedSection);
       });
     }
@@ -132,7 +133,7 @@ export default function AttendanceReportsPage() {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       
-      filtered = filtered.filter(r => {
+      filtered = filtered.filter((r: any) => {
         const targetDate = r.created_at || r.date;
         if (!targetDate) return false;
         
@@ -156,15 +157,15 @@ export default function AttendanceReportsPage() {
 
     const studentMap = new Map<string, any>();
     
-    filtered.forEach(record => {
+    filtered.forEach((record: any) => {
       const sId = record.student_id;
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
-        const stu = Array.isArray(record.students) ? record.students[0] : record.students;
-        const userData = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
-        const secData = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-        const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+        const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
+        const userData: any = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
+        const secData: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const classData: any = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
         
         const className = classData?.name || '';
         const secName = secData?.name || '';
