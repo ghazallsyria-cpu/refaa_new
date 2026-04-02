@@ -58,16 +58,18 @@ export default function AttendanceReportsPage() {
 
       // 🚀 العزل والحماية: تحديد الفصول المتاحة بناءً على الصلاحيات
       if (userRole === 'teacher' && attendanceData) {
-        // المعلم يرى فقط الفصول التي سجل لها غياباً
         const uniqueSectionsMap = new Map();
         attendanceData.forEach(record => {
-          if (record.sections && !uniqueSectionsMap.has(record.sections.id)) {
-            uniqueSectionsMap.set(record.sections.id, record.sections);
+          // الحل السحري الآمن لـ TypeScript
+          const sec = record.sections as any;
+          const secObj = Array.isArray(sec) ? sec[0] : sec;
+          
+          if (secObj && secObj.id && !uniqueSectionsMap.has(secObj.id)) {
+            uniqueSectionsMap.set(secObj.id, secObj);
           }
         });
         setSections(Array.from(uniqueSectionsMap.values()));
       } else if (userRole === 'admin' || userRole === 'management') {
-        // الإدارة ترى كل شيء
         let sectionsQuery = supabase.from('sections').select('id, name, classes(name)');
         const { data: sectionsData } = await sectionsQuery;
         setSections(sectionsData || []);
@@ -89,7 +91,11 @@ export default function AttendanceReportsPage() {
     let filtered = records;
 
     if (selectedSection !== 'all') {
-      filtered = filtered.filter(r => r.sections?.id === selectedSection);
+      filtered = filtered.filter(r => {
+        const sec = r.sections as any;
+        const secObj = Array.isArray(sec) ? sec[0] : sec;
+        return secObj?.id === selectedSection;
+      });
     }
 
     const today = new Date();
@@ -112,15 +118,17 @@ export default function AttendanceReportsPage() {
     filtered.forEach(record => {
       const sId = record.student_id;
       if (!studentMap.has(sId)) {
-        // Safe access for class name due to typescript strictness
-        const classData = Array.isArray(record.sections?.classes) ? record.sections?.classes[0] : record.sections?.classes;
+        const sec = record.sections as any;
+        const secObj = Array.isArray(sec) ? sec[0] : sec;
+        const classData = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
         const className = classData?.name || '';
+        const studentInfo = record.students as any;
 
         studentMap.set(sId, {
           id: sId,
-          name: record.students?.users?.full_name || 'غير معروف',
-          avatar: record.students?.users?.avatar_url,
-          className: `${className} - ${record.sections?.name}`,
+          name: studentInfo?.users?.full_name || 'غير معروف',
+          avatar: studentInfo?.users?.avatar_url,
+          className: `${className} - ${secObj?.name || ''}`,
           present: 0,
           absent: 0,
           late: 0,
@@ -299,7 +307,8 @@ export default function AttendanceReportsPage() {
             >
               <option value="all">جميع الفصول والشعب</option>
               {sections.map(s => {
-                const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
+                const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+                const className = classData?.name || '';
                 return (
                   <option key={s.id} value={s.id}>{className} - {s.name}</option>
                 );
