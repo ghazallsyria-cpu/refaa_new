@@ -42,7 +42,6 @@ export default function AttendanceReportsPage() {
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // 1. جلب الفصول الخاصة بالمعلم أو المدير
       let availableSections = [];
       if (userRole === 'teacher') {
         const dashData = await fetchTeacherDashboardData();
@@ -70,7 +69,7 @@ export default function AttendanceReportsPage() {
 
       const sectionIds = validSections.map(s => String(s.id));
 
-      // 🚀 2. استعلام ذكي ومحمي (بدون section_id من جدول الغياب)
+      // 🚀 التصحيح الجذري: إزالة section_id من الاستعلام وجلبه من ملف الطالب المدمج
       let query = supabase
         .from('attendance_records')
         .select(`
@@ -93,13 +92,12 @@ export default function AttendanceReportsPage() {
         throw error;
       }
 
-      // فلترة برمجية آمنة جداً: التأكد من أن السجل يعود لأحد فصول المعلم
+      // فلترة برمجية آمنة: التأكد من أن الطالب في الفصول المسموح بها للمعلم
       let finalData = attendanceData || [];
       if (userRole === 'teacher' && sectionIds.length > 0) {
-        finalData = finalData.filter((record: any) => {
-          const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
-          const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-          const stuSecId = stu?.section_id || stuSec?.id;
+        finalData = finalData.filter(record => {
+          const stu = Array.isArray(record.students) ? record.students[0] : record.students;
+          const stuSecId = stu?.section_id || stu?.sections?.id;
           return sectionIds.includes(String(stuSecId));
         });
       }
@@ -122,22 +120,19 @@ export default function AttendanceReportsPage() {
   const reportData = useMemo(() => {
     let filtered = records || [];
 
-    // 1. فلترة الفصل (من بيانات الطالب المدمجة) بشكل آمن
     if (selectedSection !== 'all') {
-      filtered = filtered.filter((r: any) => {
-        const stu: any = Array.isArray(r.students) ? r.students[0] : r.students;
-        const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-        const secId = stu?.section_id || stuSec?.id;
-        return String(secId) === String(selectedSection);
+      filtered = filtered.filter(r => {
+        const stu = Array.isArray(r.students) ? r.students[0] : r.students;
+        const stuSecId = stu?.section_id || stu?.sections?.id;
+        return String(stuSecId) === String(selectedSection);
       });
     }
 
-    // 2. فلترة التاريخ
     if (dateRange !== 'all') {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       
-      filtered = filtered.filter((r: any) => {
+      filtered = filtered.filter(r => {
         const targetDate = r.created_at || r.date;
         if (!targetDate) return false;
         
@@ -161,16 +156,15 @@ export default function AttendanceReportsPage() {
 
     const studentMap = new Map<string, any>();
     
-    filtered.forEach((record: any) => {
+    filtered.forEach(record => {
       const sId = record.student_id;
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
-        // استخراج سلس وآمن لبيانات الطالب
-        const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
-        const userData: any = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
-        const secData: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-        const classData: any = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+        const stu = Array.isArray(record.students) ? record.students[0] : record.students;
+        const userData = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
+        const secData = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
         
         const className = classData?.name || '';
         const secName = secData?.name || '';
@@ -309,7 +303,7 @@ export default function AttendanceReportsPage() {
     );
   }
 
-  // 🚀 رادار الأخطاء
+  // 🚀 رادار الأخطاء الذكي
   if (dbError) {
     return (
       <div className="flex h-screen items-center justify-center p-6" dir="rtl">
