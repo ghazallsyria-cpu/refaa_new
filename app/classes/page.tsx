@@ -1,8 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, BookOpen, ChevronDown, ChevronUp, Search, User, GraduationCap, Edit, Trash2, Plus, X, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Users, BookOpen, ChevronDown, Search, User, 
+  GraduationCap, Edit, Trash2, Plus, X, AlertCircle, 
+  ShieldCheck, LayoutGrid, Star, CheckCircle2
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useClassesSystem } from '@/hooks/useClassesSystem';
 import { useAuth } from '@/context/auth-context';
@@ -37,13 +41,13 @@ export default function ClassesPage() {
   const [inputLevel, setInputLevel] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 🚀 شرط الصلاحيات: الإدارة فقط ترى الأرقام المدنية وأزرار التعديل
   const isAdmin = userRole === 'admin' || userRole === 'management';
 
   useEffect(() => {
     fetchClassesData();
   }, [fetchClassesData]);
 
-  // Expand first class by default when classes load
   useEffect(() => {
     if (classes.length > 0 && !expandedClass) {
       setExpandedClass(classes[0].id);
@@ -58,7 +62,6 @@ export default function ClassesPage() {
       setExpandedClass(null);
     } else {
       setExpandedClass(classId);
-      // Automatically expand first section of this class
       const cls = classes.find(c => c.id === classId);
       if (cls && cls.sections.length > 0) {
         setExpandedSection(cls.sections[0].id);
@@ -87,11 +90,9 @@ export default function ClassesPage() {
       } else if (modalConfig.type === 'deleteSection') {
         await deleteSection(modalConfig.data.id);
       }
-      
       closeModal();
     } catch (error: any) {
       console.error('Error in modal action:', error);
-      // In a real app, show a toast notification here
     } finally {
       setIsSubmitting(false);
     }
@@ -119,7 +120,6 @@ export default function ClassesPage() {
   const filteredClasses = classes.map(cls => {
     if (!searchTerm) return cls;
     
-    // Filter sections and students based on search term
     const filteredSections = cls.sections.map((sec: OrganizedSection) => {
       const filteredStudents = sec.students.filter(stu => 
         stu.user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -133,252 +133,253 @@ export default function ClassesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex h-[80vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تحميل الفصول...</p>
+        </div>
       </div>
     );
   }
+
+  const totalStudents = classes.reduce((acc, cls) => acc + cls.sections.reduce((sAcc, sec) => sAcc + sec.students.length, 0), 0);
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-12"
+      className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+      dir="rtl"
     >
-      {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">إدارة الفصول والشعب</h1>
-          <p className="text-slate-500 font-medium text-lg">
-            تنظيم وعرض الطلاب حسب صفوفهم وشعبهم الدراسية 
-            <span className="mx-2 text-indigo-600 bg-indigo-50/80 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-bold border border-indigo-100/50">
-              {classes.reduce((acc, cls) => acc + cls.sections.reduce((sAcc, sec) => sAcc + sec.students.length, 0), 0)} طالب
-            </span>
-          </p>
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex flex-col sm:flex-row gap-4 glass-card p-2 rounded-3xl border-slate-200/60 shadow-xl shadow-slate-200/20"
-        >
-          <div className="relative group">
-            <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+      {/* 🚀 Hero Header (التحفة الفنية) */}
+      <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm">
+              <LayoutGrid className="w-3.5 h-3.5 text-blue-300" />
+              <span>إدارة الهيكل الأكاديمي</span>
             </div>
-            <input
-              type="text"
-              placeholder="ابحث عن طالب أو رقم مدني..."
-              className="block w-full sm:w-80 rounded-2xl border-0 py-3 pr-11 pl-4 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
+              الفصول والشعب الدراسية
+            </h1>
+            <p className="text-indigo-100 text-base sm:text-lg font-bold opacity-90 max-w-2xl">
+              تصفح الهيكل التنظيمي للمدرسة، استعرض الطلاب المسجلين، {isAdmin && 'وأدر الفصول وصلاحياتها بكل سهولة.'}
+              {!isAdmin && 'وتابع طلابك بفعالية.'}
+            </p>
           </div>
-          {isAdmin && (
-            <button
-              onClick={() => openModal('addClass', 'إضافة صف جديد')}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
-            >
-              <Plus className="h-5 w-5" />
-              إضافة صف جديد
-            </button>
-          )}
-        </motion.div>
+          
+          <div className="flex flex-col sm:flex-row items-center gap-4 shrink-0">
+            <div className="rounded-[2rem] bg-white/10 p-5 backdrop-blur-md border border-white/20 flex flex-col items-center justify-center min-w-[140px] shadow-lg">
+              <p className="text-xs text-indigo-200 uppercase tracking-widest font-black mb-1">إجمالي الطلاب</p>
+              <p className="text-4xl font-black drop-shadow-md flex items-center gap-2">
+                <Users className="h-6 w-6 text-blue-300" />
+                {totalStudents}
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => openModal('addClass', 'إضافة صف جديد')}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-[2rem] bg-white px-8 py-5 text-base font-black text-indigo-600 shadow-xl hover:bg-indigo-50 transition-all hover:scale-105 active:scale-95 hover:shadow-indigo-500/20 h-full"
+              >
+                <Plus className="h-6 w-6" /> إضافة صف
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
       </div>
 
+      {/* 🚀 Smart Search Bar */}
+      <div className="bg-white/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center gap-4 sticky top-24 z-30">
+        <div className="relative w-full group">
+          <div className="absolute inset-y-0 right-0 pr-5 flex items-center pointer-events-none">
+            <Search className="h-6 w-6 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+          </div>
+          <input
+            type="text"
+            placeholder="ابحث عن طالب بالاسم..."
+            className="block w-full rounded-2xl border-0 py-4 pr-14 pl-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-base font-bold transition-all shadow-inner"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* 🚀 Classes Content */}
       <div className="space-y-6">
         {filteredClasses.length === 0 ? (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-20 glass-card rounded-4xl border-slate-200/60 shadow-sm"
+            className="text-center py-20 bg-white/50 backdrop-blur-sm rounded-[3rem] border border-dashed border-slate-300 shadow-sm"
           >
-            <div className="mx-auto h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-              <GraduationCap className="h-12 w-12 text-slate-300" />
+            <div className="mx-auto h-24 w-24 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-6 shadow-inner border border-slate-200">
+              <Search className="h-10 w-10 text-slate-400" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2 tracking-tight">لا توجد نتائج بحث</h3>
-            <p className="text-slate-500 max-w-xs mx-auto">لم يتم العثور على طلاب أو فصول تطابق معايير البحث الحالية.</p>
+            <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">لا توجد نتائج</h3>
+            <p className="text-slate-500 font-bold text-lg">لم يتم العثور على فصول أو طلاب مطابقين لبحثك.</p>
           </motion.div>
         ) : (
           filteredClasses.map((cls, idx) => (
             <motion.div 
+              layout
               key={cls.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className="glass-card rounded-4xl border-slate-200/60 shadow-sm overflow-hidden transition-all hover:shadow-xl hover:shadow-indigo-100/30"
+              className={`bg-white rounded-[2.5rem] border-2 shadow-sm overflow-hidden transition-all ${expandedClass === cls.id ? 'border-indigo-200 shadow-xl shadow-indigo-100/50' : 'border-slate-100 hover:border-indigo-100 hover:shadow-md'}`}
             >
-              {/* Class Header */}
-              <div className="w-full flex items-center justify-between p-6 bg-slate-50/30 hover:bg-slate-50/60 transition-colors border-b border-slate-100/60">
+              {/* 🎯 Class Header Folder */}
+              <div className="w-full flex flex-col md:flex-row md:items-center justify-between p-6 sm:p-8 bg-gradient-to-l from-slate-50 to-white transition-colors relative group">
                 <button
                   onClick={() => toggleClass(cls.id)}
-                  className="flex-1 flex items-center justify-between text-right"
+                  className="flex-1 flex items-center text-right z-10 w-full"
                 >
                   <div className="flex items-center gap-5">
-                    <div className="bg-white p-4 rounded-3xl text-indigo-600 shadow-sm border border-slate-100 ring-4 ring-indigo-50/50">
-                      <BookOpen className="h-6 w-6" />
+                    <div className={`p-4 sm:p-5 rounded-[1.5rem] transition-colors shadow-sm border ${expandedClass === cls.id ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-600 border-slate-200 group-hover:border-indigo-200 group-hover:bg-indigo-50'}`}>
+                      <BookOpen className="h-7 w-7 sm:h-8 sm:w-8" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">{cls.name}</h2>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-sm font-bold text-slate-400 flex items-center gap-1">
-                          <Users className="h-3.5 w-3.5" />
-                          {cls.sections.length} شعب
+                      <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight mb-2 group-hover:text-indigo-700 transition-colors">{cls.name}</h2>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <span className="text-xs sm:text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 flex items-center gap-1.5">
+                          <LayoutGrid className="h-4 w-4" /> {cls.sections.length} شعب
                         </span>
-                        <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                        <span className="text-sm font-bold text-indigo-500">
-                          {cls.sections.reduce((acc, sec) => acc + sec.students.length, 0)} طالب مسجل
+                        <span className="text-xs sm:text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5">
+                          <Users className="h-4 w-4" /> {cls.sections.reduce((acc, sec) => acc + sec.students.length, 0)} طالب مسجل
                         </span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <motion.div 
-                      animate={{ rotate: expandedClass === cls.id ? 180 : 0 }}
-                      className={`p-2 rounded-xl transition-all ${expandedClass === cls.id ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}
-                    >
-                      <ChevronDown className="h-5 w-5" />
-                    </motion.div>
-                  </div>
                 </button>
                 
-                {isAdmin && (
-                  <div className="flex items-center gap-2 mr-6 border-r border-slate-200/60 pr-6">
-                    <button onClick={() => openModal('addSection', 'إضافة شعبة جديدة', { classId: cls.id })} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all" title="إضافة شعبة">
-                      <Plus className="h-5 w-5" />
-                    </button>
-                    <button onClick={() => openModal('editClass', 'تعديل الصف', cls)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all" title="تعديل">
-                      <Edit className="h-5 w-5" />
-                    </button>
-                    <button onClick={() => openModal('deleteClass', 'حذف الصف', cls)} className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all" title="حذف">
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center justify-end gap-3 mt-4 md:mt-0 z-10 w-full md:w-auto border-t md:border-0 border-slate-100 pt-4 md:pt-0">
+                  {isAdmin && (
+                    <div className="flex items-center gap-2 ml-4 border-l border-slate-200 pl-4">
+                      <button onClick={() => openModal('addSection', 'إضافة شعبة جديدة', { classId: cls.id })} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 font-bold hover:bg-emerald-500 hover:text-white rounded-xl transition-all shadow-sm border border-emerald-100 active:scale-95" title="إضافة شعبة">
+                        <Plus className="h-4 w-4" /> <span className="text-xs">شعبة</span>
+                      </button>
+                      <button onClick={() => openModal('editClass', 'تعديل الصف', cls)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all border border-transparent hover:border-indigo-100" title="تعديل">
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button onClick={() => openModal('deleteClass', 'حذف الصف', cls)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100" title="حذف">
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </div>
+                  )}
+                  <button onClick={() => toggleClass(cls.id)} className={`p-3 rounded-2xl transition-all shadow-sm border ${expandedClass === cls.id ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}>
+                    <motion.div animate={{ rotate: expandedClass === cls.id ? 180 : 0 }}>
+                      <ChevronDown className="h-6 w-6" />
+                    </motion.div>
+                  </button>
+                </div>
               </div>
 
-              {/* Sections List */}
+              {/* 🎯 Sections & Students Area */}
               <AnimatePresence>
                 {expandedClass === cls.id && (
                   <motion.div 
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
+                    className="overflow-hidden bg-slate-50/50"
                   >
-                    <div className="p-6 space-y-6 bg-slate-50/20">
+                    <div className="p-4 sm:p-8 space-y-6">
                       {cls.sections.length === 0 ? (
-                        <div className="text-center py-10 bg-white/50 rounded-3xl border border-dashed border-slate-200">
-                          <p className="text-slate-400 font-bold">لا توجد شعب دراسية مضافة لهذا الصف حتى الآن</p>
+                        <div className="text-center py-12 bg-white rounded-[2rem] border border-dashed border-slate-300">
+                          <LayoutGrid className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                          <p className="text-slate-500 font-bold text-lg">لا توجد شعب دراسية مضافة لهذا الصف حتى الآن</p>
                         </div>
                       ) : (
                         cls.sections.map((section) => (
-                          <div key={section.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden transition-all hover:border-indigo-100 hover:shadow-md">
+                          <div key={section.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all hover:border-indigo-200 hover:shadow-md">
+                            
                             {/* Section Header */}
-                            <div className="w-full flex items-center justify-between p-4 hover:bg-slate-50/50 transition-colors">
+                            <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white group">
                               <button
                                 onClick={() => toggleSection(section.id)}
-                                className="flex-1 flex items-center justify-between text-right"
+                                className="flex-1 flex items-center justify-between text-right w-full"
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className="bg-emerald-50 p-2 rounded-2xl text-emerald-600 border border-emerald-100">
-                                    <Users className="h-5 w-5" />
+                                <div className="flex items-center gap-4">
+                                  <div className="bg-blue-50 p-3 rounded-xl text-blue-600 border border-blue-100 shadow-sm group-hover:scale-110 transition-transform">
+                                    <Users className="h-6 w-6" />
                                   </div>
                                   <div>
-                                    <h3 className="text-lg font-bold text-slate-800">شعبة {section.name}</h3>
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-                                      {section.students.length} طالب في هذه الشعبة
+                                    <h3 className="text-xl font-black text-slate-800">شعبة {section.name}</h3>
+                                    <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1.5">
+                                      <GraduationCap className="w-4 h-4" /> {section.students.length} طالب
                                     </p>
                                   </div>
                                 </div>
                                 <motion.div 
                                   animate={{ rotate: expandedSection === section.id ? 180 : 0 }}
-                                  className={`p-1.5 rounded-lg transition-all ${expandedSection === section.id ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}
+                                  className={`p-2 rounded-xl transition-all hidden sm:block ${expandedSection === section.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'}`}
                                 >
-                                  <ChevronDown className="h-4 w-4" />
+                                  <ChevronDown className="h-5 w-5" />
                                 </motion.div>
                               </button>
                               
                               {isAdmin && (
-                                <div className="flex items-center gap-2 mr-4 border-r border-slate-100 pr-4">
-                                  <button onClick={() => openModal('editSection', 'تعديل الشعبة', section)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="تعديل">
+                                <div className="flex items-center gap-2 mt-4 sm:mt-0 border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 w-full sm:w-auto justify-end sm:mr-4 sm:border-r sm:pr-4">
+                                  <button onClick={() => openModal('editSection', 'تعديل الشعبة', section)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title="تعديل">
                                     <Edit className="h-4 w-4" />
                                   </button>
-                                  <button onClick={() => openModal('deleteSection', 'حذف الشعبة', section)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="حذف">
+                                  <button onClick={() => openModal('deleteSection', 'حذف الشعبة', section)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="حذف">
                                     <Trash2 className="h-4 w-4" />
                                   </button>
                                 </div>
                               )}
                             </div>
 
-                            {/* Students List */}
+                            {/* 🚀 Students Grid (The Modern Replacement for Tables) */}
                             <AnimatePresence>
                               {expandedSection === section.id && (
                                 <motion.div 
                                   initial={{ height: 0, opacity: 0 }}
                                   animate={{ height: 'auto', opacity: 1 }}
                                   exit={{ height: 0, opacity: 0 }}
-                                  className="overflow-hidden border-t border-slate-50"
+                                  className="overflow-hidden bg-slate-50/30 p-4 sm:p-6"
                                 >
                                   {section.students.length === 0 ? (
-                                    <div className="text-center py-12">
-                                      <User className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                                    <div className="text-center py-10 bg-white rounded-[1.5rem] border border-dashed border-slate-200">
+                                      <User className="h-10 w-10 text-slate-300 mx-auto mb-3" />
                                       <p className="text-slate-400 font-bold">لا يوجد طلاب مسجلين في هذه الشعبة</p>
                                     </div>
                                   ) : (
-                                    <div className="overflow-x-auto">
-                                      <table className="min-w-full">
-                                        <thead>
-                                          <tr className="bg-slate-50/50">
-                                            <th scope="col" className="py-4 pl-4 pr-8 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                              م
-                                            </th>
-                                            <th scope="col" className="py-4 px-6 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                              اسم الطالب
-                                            </th>
-                                            <th scope="col" className="py-4 px-6 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                              الرقم المدني
-                                            </th>
-                                            <th scope="col" className="py-4 px-8 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                              الإجراءات
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                          {section.students.map((student, index) => (
-                                            <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
-                                              <td className="py-4 pl-4 pr-8 whitespace-nowrap text-sm font-bold text-slate-400">
-                                                {index + 1}
-                                              </td>
-                                              <td className="py-4 px-6 whitespace-nowrap">
-                                                <div className="flex items-center">
-                                                  <div className="h-10 w-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 ml-4 flex-shrink-0 font-bold shadow-sm group-hover:scale-110 transition-transform">
-                                                    {student.user?.full_name?.charAt(0) || '؟'}
-                                                  </div>
-                                                  <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                                                    {student.user?.full_name || 'بدون اسم'}
-                                                  </div>
-                                                </div>
-                                              </td>
-                                              <td className="py-4 px-6 whitespace-nowrap">
-                                                <span className="inline-flex items-center rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 font-mono border border-slate-200">
-                                                  {student.national_id}
-                                                </span>
-                                              </td>
-                                              <td className="py-4 px-8 whitespace-nowrap text-sm">
-                                                <Link href={`/students/${student.id}`} className="text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-50 px-4 py-2 rounded-xl transition-all hover:bg-indigo-100 opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100">
-                                                  عرض الملف
-                                                </Link>
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                                      {section.students.map((student, index) => (
+                                        <div key={student.id} className="bg-white p-4 rounded-[1.5rem] border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group flex items-center justify-between gap-4">
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-100 to-violet-100 flex items-center justify-center text-indigo-700 font-black text-lg shadow-inner border border-indigo-200 shrink-0 group-hover:scale-105 transition-transform">
+                                              {student.user?.full_name?.charAt(0) || 'ط'}
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="font-black text-slate-900 text-sm sm:text-base truncate group-hover:text-indigo-700 transition-colors">
+                                                {student.user?.full_name || 'بدون اسم'}
+                                              </p>
+                                              <div className="mt-1 flex items-center gap-2">
+                                                {/* 🚀 Privacy Logic: Hide National ID from Teachers */}
+                                                {isAdmin ? (
+                                                  <span className="inline-flex items-center bg-slate-100 px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold text-slate-500 font-mono border border-slate-200">
+                                                    {student.national_id}
+                                                  </span>
+                                                ) : (
+                                                  <span className="inline-flex items-center bg-emerald-50 px-2 py-0.5 rounded-md text-[10px] font-black text-emerald-600 border border-emerald-100">
+                                                    <CheckCircle2 className="w-3 h-3 ml-1" /> مسجل فعال
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <Link 
+                                            href={`/students/${student.id}`} 
+                                            className="shrink-0 h-10 w-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100 hover:border-indigo-200"
+                                            title="عرض الملف الأكاديمي"
+                                          >
+                                            <ArrowRight className="w-5 h-5 rotate-180" />
+                                          </Link>
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
                                 </motion.div>
@@ -396,9 +397,9 @@ export default function ClassesPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* 🚀 Modals (Secured & Styled) */}
       <AnimatePresence>
-        {modalConfig.isOpen && (
+        {modalConfig.isOpen && isAdmin && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
             <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
               <motion.div 
@@ -413,59 +414,62 @@ export default function ClassesPage() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative transform overflow-hidden rounded-4xl bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md"
+                className="relative transform overflow-hidden rounded-[2.5rem] bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-slate-100"
+                dir="rtl"
               >
                 <div className="bg-white px-8 pb-8 pt-10 sm:p-10">
                   <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{modalConfig.title}</h3>
-                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-50 transition-all">
-                      <X className="h-6 w-6" />
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                      {modalConfig.type?.includes('delete') ? (
+                        <div className="p-2 bg-rose-50 text-rose-600 rounded-xl"><Trash2 className="w-6 h-6"/></div>
+                      ) : (
+                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Edit className="w-6 h-6"/></div>
+                      )}
+                      {modalConfig.title}
+                    </h3>
+                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition-all bg-slate-50">
+                      <X className="h-5 w-5" />
                     </button>
                   </div>
                   
                   <div className="space-y-6">
                     {modalConfig.type?.includes('delete') ? (
-                      <div className="flex flex-col items-center text-center">
-                        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-red-50 mb-6 transition-transform hover:scale-110">
-                          <AlertCircle className="h-10 w-10 text-red-600" />
-                        </div>
-                        <p className="text-slate-600 leading-relaxed">
-                          هل أنت متأكد من رغبتك في حذف 
-                          <span className="font-bold text-slate-900 mx-1">
-                            {modalConfig.data?.name}
-                          </span>؟
-                          <br />
-                          <span className="text-red-500 font-bold text-sm mt-3 block">
-                            تحذير: هذا الإجراء لا يمكن التراجع عنه وقد يؤثر على الطلاب المرتبطين.
-                          </span>
+                      <div className="flex flex-col items-center text-center p-6 bg-rose-50/50 rounded-3xl border border-rose-100">
+                        <AlertCircle className="h-14 w-14 text-rose-500 mb-4 animate-pulse" />
+                        <p className="text-slate-700 font-bold leading-relaxed text-lg">
+                          هل أنت متأكد من رغبتك في حذف <br/>
+                          <span className="font-black text-rose-600 text-xl block mt-2">"{modalConfig.data?.name}"</span>
                         </p>
+                        <span className="text-rose-500/80 font-bold text-xs mt-4 block bg-white px-3 py-2 rounded-xl shadow-sm">
+                          تحذير: الإجراء لا رجعة فيه وقد يؤثر على السجلات.
+                        </span>
                       </div>
                     ) : (
                       <>
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-slate-700 mr-1">
+                        <div className="space-y-3">
+                          <label className="text-sm font-black text-slate-700 block">
                             الاسم (مثال: {modalConfig.type?.includes('Class') ? 'الصف الأول' : 'أ'})
                           </label>
                           <input
                             type="text"
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
-                            className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all"
-                            placeholder="أدخل الاسم..."
+                            className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 font-bold transition-all shadow-inner"
+                            placeholder="أدخل الاسم هنا..."
                             autoFocus
                           />
                         </div>
                         
                         {modalConfig.type?.includes('Class') && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-bold text-slate-700 mr-1">
-                              المستوى (رقم للترتيب)
+                          <div className="space-y-3 mt-6">
+                            <label className="text-sm font-black text-slate-700 block">
+                              مستوى الصف (لأغراض الترتيب)
                             </label>
                             <input
                               type="number"
                               value={inputLevel}
                               onChange={(e) => setInputLevel(parseInt(e.target.value) || 1)}
-                              className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all"
+                              className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 font-bold transition-all shadow-inner"
                               min="1"
                             />
                           </div>
@@ -475,24 +479,25 @@ export default function ClassesPage() {
                   </div>
                 </div>
 
-                <div className="bg-slate-50/50 px-8 py-6 sm:flex sm:flex-row-reverse sm:px-10 gap-3">
+                <div className="bg-slate-50/80 px-8 py-6 border-t border-slate-100 flex flex-col sm:flex-row-reverse gap-3">
                   <button
                     onClick={handleModalSubmit}
                     disabled={isSubmitting || (!modalConfig.type?.includes('delete') && !inputValue.trim())}
-                    className={`inline-flex w-full justify-center rounded-2xl px-8 py-3 text-sm font-bold text-white shadow-lg transition-all active:scale-95 sm:w-auto
+                    className={`inline-flex w-full justify-center items-center rounded-2xl px-8 py-4 text-base font-black text-white shadow-lg transition-all active:scale-95 sm:w-auto
                       ${modalConfig.type?.includes('delete') 
-                        ? 'bg-red-600 shadow-red-200 hover:bg-red-700' 
+                        ? 'bg-rose-600 shadow-rose-200 hover:bg-rose-700' 
                         : 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700'} 
                       disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {isSubmitting && <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white ml-2"></div>}
-                    {modalConfig.type?.includes('delete') ? 'تأكيد الحذف' : 'حفظ البيانات'}
+                    {isSubmitting ? (
+                      <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : modalConfig.type?.includes('delete') ? 'تأكيد الحذف النهائي' : 'حفظ البيانات المكتوبة'}
                   </button>
                   <button
                     onClick={closeModal}
-                    className="mt-3 inline-flex w-full justify-center rounded-2xl bg-white px-8 py-3 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-200 hover:bg-slate-50 sm:mt-0 sm:w-auto transition-all"
+                    className="inline-flex w-full justify-center items-center rounded-2xl bg-white px-8 py-4 text-base font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 sm:w-auto transition-all"
                   >
-                    إلغاء
+                    إلغاء الأمر
                   </button>
                 </div>
               </motion.div>
