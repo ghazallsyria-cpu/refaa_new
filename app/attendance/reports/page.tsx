@@ -69,11 +69,11 @@ export default function AttendanceReportsPage() {
 
       const sectionIds = validSections.map(s => s.id);
 
-      // 🚀 تم تغيير 'date' إلى 'created_at' لتطابق قاعدة البيانات بدقة
+      // 🚀 إزالة عمود period من الاستعلام لتفادي خطأ قاعدة البيانات
       let query = supabase
         .from('attendance_records')
         .select(`
-          id, created_at, period, status, section_id, student_id,
+          id, created_at, status, section_id, student_id,
           students (id, users(full_name, avatar_url))
         `)
         .order('created_at', { ascending: false });
@@ -115,7 +115,6 @@ export default function AttendanceReportsPage() {
       const todayStr = today.toISOString().split('T')[0];
       
       filtered = filtered.filter(r => {
-        // 🚀 نستخدم created_at كمرجع زمني
         const targetDate = r.created_at || r.date;
         if (!targetDate) return false;
         
@@ -477,9 +476,10 @@ export default function AttendanceReportsPage() {
                   <td colSpan={6} className="py-16 sm:py-20 text-center">
                     <div className="flex flex-col items-center gap-3 sm:gap-4">
                       <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                        <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
+                        <SearchX className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
                       </div>
                       <p className="text-slate-500 font-bold text-xs sm:text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
+                      <p className="text-slate-400 font-medium text-[10px] sm:text-xs">تأكد من أنك قمت برصد الغياب لطلابك من لوحة الرصد أولاً.</p>
                     </div>
                   </td>
                 </tr>
