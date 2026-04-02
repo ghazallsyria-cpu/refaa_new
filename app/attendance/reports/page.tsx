@@ -10,12 +10,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
+import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 
 export default function AttendanceReportsPage() {
   const { user, userRole } = useAuth();
+  const { fetchTeacherDashboardData } = useDashboardSystem();
   
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<any[]>([]);
@@ -56,19 +58,24 @@ export default function AttendanceReportsPage() {
       const { data: attendanceData } = await query;
       setRecords(attendanceData || []);
 
-      // 🚀 العزل والحماية: تحديد الفصول المتاحة بناءً على الصلاحيات
-      if (userRole === 'teacher' && attendanceData) {
-        const uniqueSectionsMap = new Map();
-        attendanceData.forEach(record => {
-          // الحل السحري الآمن لـ TypeScript
-          const sec = record.sections as any;
-          const secObj = Array.isArray(sec) ? sec[0] : sec;
-          
-          if (secObj && secObj.id && !uniqueSectionsMap.has(secObj.id)) {
-            uniqueSectionsMap.set(secObj.id, secObj);
-          }
-        });
-        setSections(Array.from(uniqueSectionsMap.values()));
+      // 🚀 العزل والحماية: جلب الفصول الخاصة بالمعلم فقط أو كافة الفصول للمدير
+      if (userRole === 'teacher') {
+        // نستخدم النظام الذكي لجلب فصول المعلم المباشرة من لوحة التحكم
+        const dashData = await fetchTeacherDashboardData();
+        if (dashData && dashData.sections && dashData.sections.length > 0) {
+          setSections(dashData.sections);
+        } else {
+          // حل احتياطي في حال عدم وجود فصول في لوحة التحكم
+          const uniqueSectionsMap = new Map();
+          (attendanceData || []).forEach(record => {
+            const sec = record.sections as any;
+            const secObj = Array.isArray(sec) ? sec[0] : sec;
+            if (secObj && secObj.id && !uniqueSectionsMap.has(secObj.id)) {
+              uniqueSectionsMap.set(secObj.id, secObj);
+            }
+          });
+          setSections(Array.from(uniqueSectionsMap.values()));
+        }
       } else if (userRole === 'admin' || userRole === 'management') {
         let sectionsQuery = supabase.from('sections').select('id, name, classes(name)');
         const { data: sectionsData } = await sectionsQuery;
@@ -80,7 +87,7 @@ export default function AttendanceReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole]);
+  }, [user, userRole, fetchTeacherDashboardData]);
 
   useEffect(() => {
     fetchData();
