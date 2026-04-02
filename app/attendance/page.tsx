@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase'; // 🚀 إضافة مكتبة قاعدة البيانات
+import { supabase } from '@/lib/supabase'; 
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
 
 export default function AttendancePage() {
-  const { user, authRole } = useAuth(); // 🚀 جلب بيانات المستخدم لمعرفة الطالب
+  const { user, authRole } = useAuth(); 
   const { 
     sections, 
     daySchedule, 
@@ -30,7 +30,7 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 🚀 حالات الطالب المستقلة
+  // حالات الطالب
   const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0 });
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
@@ -39,7 +39,6 @@ export default function AttendancePage() {
     setDate(new Date().toISOString().split('T')[0]);
   }, []);
 
-  // 🚀 جلب بيانات المعلم
   useEffect(() => {
     if (date && authRole === 'teacher') {
       fetchDaySchedule(date).then((schedule) => {
@@ -85,13 +84,12 @@ export default function AttendancePage() {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
-  // 🚀 المحرك المستقل لجلب كل إحصائيات الطالب من قاعدة البيانات مباشرة
+  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب
   useEffect(() => {
     const fetchStudentDataDirectly = async () => {
       if (authRole !== 'student' || !user) return;
       setIsStudentLoading(true);
       try {
-        // 1. جلب المعرف الخاص بالطالب
         const { data: studentData } = await supabase
           .from('students')
           .select('id')
@@ -100,17 +98,23 @@ export default function AttendancePage() {
 
         if (!studentData) return;
 
-        // 2. جلب كل السجلات عبر استخدام created_at
-        const { data: records } = await supabase
+        // 🚀 استعلام مدرع: لا نطلب أي أعمدة قد تسبب خطأ (مثل period أو subjects مباشرة)
+        const { data: records, error } = await supabase
           .from('attendance_records')
-          .select('id, created_at, period, status, subjects(name)')
+          .select(`
+            id, 
+            created_at, 
+            status, 
+            sections ( name )
+          `)
           .eq('student_id', studentData.id)
           .order('created_at', { ascending: false });
 
+        if (error) throw error;
+
         if (records) {
-          // 3. تجميع الإحصائيات الشاملة
           const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0 };
-          records.forEach(r => {
+          records.forEach((r: any) => {
              if (r.status === 'present') calculatedStats.present++;
              if (r.status === 'absent') calculatedStats.absent++;
              if (r.status === 'late') calculatedStats.late++;
@@ -174,7 +178,7 @@ export default function AttendancePage() {
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
-  // 🚀 STUDENT VIEW (اللوحة المطورة للطالب)
+  // 🚀 STUDENT VIEW
   // ==========================================
   if (authRole === 'student') {
     if (isStudentLoading) {
@@ -266,14 +270,18 @@ export default function AttendancePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {studentAttendance.map((record, idx) => (
+                {studentAttendance.map((record, idx) => {
+                  const secObj = Array.isArray(record.sections) ? record.sections[0] : record.sections;
+                  const secName = secObj?.name || 'حصة مسجلة';
+                  
+                  return (
                   <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4">
                     <div>
                       <span className="text-sm font-black text-slate-800 block mb-2" dir="ltr">
-                        {new Date(record.created_at).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+                        {new Date(record.created_at || new Date()).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
                       </span>
                       <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-block">
-                        الحصة {record.period} • {record.subjects?.name || 'مادة غير محددة'}
+                        {secName}
                       </span>
                     </div>
                     <span className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 w-full sm:w-auto border ${
@@ -291,7 +299,7 @@ export default function AttendancePage() {
                        record.status === 'late' ? 'متأخر' : 'مستأذن'}
                     </span>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -319,7 +327,6 @@ export default function AttendancePage() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Header & Action Buttons */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 bg-white p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
@@ -354,7 +361,6 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* 🚀 Mission Control Panel */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
         
@@ -444,7 +450,6 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {/* 🚀 LIVE STATS ENGINE */}
       {students.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
@@ -491,7 +496,6 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* 🚀 Main Student List Area */}
       <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-5 sm:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-3 sm:gap-4">
@@ -507,7 +511,6 @@ export default function AttendancePage() {
             </div>
           </div>
           
-          {/* Quick Mark Buttons */}
           <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl sm:rounded-[1.5rem] shadow-sm border border-slate-200 w-full lg:w-auto overflow-x-auto scrollbar-hide shrink-0">
             <button 
               onClick={() => markAllAs('present')} 
@@ -524,7 +527,6 @@ export default function AttendancePage() {
           </div>
         </div>
         
-        {/* 🚀 Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100">
             <thead>
@@ -603,7 +605,6 @@ export default function AttendancePage() {
           </table>
         </div>
 
-        {/* 🚀 Mobile View */}
         <div className="md:hidden divide-y divide-slate-100 bg-slate-50/30">
           {systemLoading ? (
             <div className="py-16 text-center">
