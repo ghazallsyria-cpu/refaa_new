@@ -2,11 +2,6 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
-interface StudentQueryResult {
-  created_at: string;
-  users: { full_name: string } | { full_name: string }[] | null;
-}
-
 export function useDashboardSystem() {
   const { user } = useAuth();
 
@@ -59,19 +54,12 @@ export function useDashboardSystem() {
       ]);
 
       const activities: { title: string; time: string; type: string; color: string }[] = [
-        ...((recentStudents as unknown as StudentQueryResult[]) || []).map(s => {
-          const userData = s.users;
-          const fullName = Array.isArray(userData) 
-            ? userData[0]?.full_name 
-            : userData?.full_name;
-            
-          return { 
-            title: `إضافة الطالب ${fullName || 'غير معروف'}`, 
-            time: s.created_at, 
-            type: 'students', 
-            color: 'bg-indigo-100 text-indigo-600' 
-          };
-        }),
+        ...(recentStudents || []).map(s => ({ 
+          title: `إضافة الطالب ${Array.isArray(s.users) ? (s.users[0] as any)?.full_name : (s.users as any)?.full_name}`, 
+          time: s.created_at, 
+          type: 'students', 
+          color: 'bg-indigo-100 text-indigo-600' 
+        })),
         ...(recentDocs || []).map(d => ({ title: `مستند جديد: ${d.title}`, time: d.created_at, type: 'documents', color: 'bg-emerald-100 text-emerald-600' })),
         ...(recentExams || []).map(e => ({ title: `اختبار جديد: ${e.title}`, time: e.created_at, type: 'exams', color: 'bg-amber-100 text-amber-600' })),
         ...(recentNotifs || []).map(n => ({ title: `إعلان جديد: ${n.title}`, time: n.created_at, type: 'notifications', color: 'bg-sky-100 text-sky-600' }))
@@ -87,20 +75,26 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: student } = await supabase
+      console.log('Fetching student dashboard data for user:', user.id);
+      const { data: student, error: studentError } = await supabase
         .from('students')
         .select('*, users(full_name), sections(name, classes(name))')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
       
-      if (!student) return null;
+      if (studentError || !student) {
+        console.error('Student profile not found:', studentError);
+        return null;
+      }
+
+      console.log('Student section ID:', student.section_id);
 
       const [
         { data: assignmentSections },
         { data: examSections }
       ] = await Promise.all([
-        supabase.from('assignment_sections').select('assignment_id').eq('section_id', (student as any).section_id),
-        supabase.from('exam_sections').select('exam_id').eq('section_id', (student as any).section_id)
+        supabase.from('assignment_sections').select('assignment_id').eq('section_id', student.section_id),
+        supabase.from('exam_sections').select('exam_id').eq('section_id', student.section_id)
       ]);
 
       const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
@@ -114,32 +108,32 @@ export function useDashboardSystem() {
         { data: todaysSchedule },
         { data: periods }
       ] = await Promise.all([
-        assignmentIds.length > 0 ? supabase
+        supabase
           .from('assignments')
           .select('*, subject:subjects(name)')
           .in('id', assignmentIds)
           .order('due_date', { ascending: true })
-          .limit(3) : Promise.resolve({ data: [] }),
-        examIds.length > 0 ? supabase
+          .limit(3),
+        supabase
           .from('exams')
           .select('*, subject:subjects(name)')
           .in('id', examIds)
           .order('start_time', { ascending: true })
-          .limit(3) : Promise.resolve({ data: [] }),
+          .limit(3),
         supabase
           .from('daily_attendance_summary')
           .select('daily_status')
           .eq('student_id', student.id),
         supabase
           .from('exam_attempts')
-          .select('score, completed_at, exam:exams(title, total_points, subjects(name))')
+          .select('score, completed_at, exam:exams(title, total_points, subject:subjects(name))')
           .eq('student_id', student.id)
           .order('completed_at', { ascending: false })
           .limit(5),
         supabase
           .from('schedules')
           .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
-          .eq('section_id', (student as any).section_id)
+          .eq('section_id', student.section_id)
           .eq('day_of_week', new Date().getDay() + 1)
           .order('period'),
         supabase
@@ -173,7 +167,7 @@ export function useDashboardSystem() {
       const { data: student, error: studentError } = await supabase
         .from('students')
         .select('section_id, sections(name, classes(name))')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (studentError) throw studentError;
@@ -185,8 +179,8 @@ export function useDashboardSystem() {
       ] = await Promise.all([
         supabase
           .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:user_id(full_name))')
-          .eq('section_id', (student as any).section_id)
+          .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
+          .eq('section_id', student.section_id)
           .order('day_of_week')
           .order('period'),
         supabase
@@ -209,14 +203,6 @@ export function useDashboardSystem() {
   const fetchParentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: parentProfile } = await supabase
-        .from('parents')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!parentProfile) return null;
-
       const [
         { data: children },
         { data: notifications }
@@ -224,7 +210,7 @@ export function useDashboardSystem() {
         supabase
           .from('students')
           .select('*, users(full_name), sections(name, classes(name))')
-          .eq('parent_id', parentProfile.id),
+          .eq('parent_id', user.id),
         supabase
           .from('notifications')
           .select('*')
@@ -246,36 +232,72 @@ export function useDashboardSystem() {
   const fetchTeacherDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
+      console.log('Fetching teacher dashboard data for user:', user.id);
+      
+      // 1. Get teacher profile
       let { data: teacher, error: teacherError } = await supabase
         .from('teachers')
         .select('*, users(*)')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
       
+      // Self-healing: If teacher record is missing but user is a teacher, create it
       if ((teacherError || !teacher) && user.user_metadata?.role === 'teacher') {
-        const { data: newUser, error: userFetchError } = await supabase.from('users').select('full_name, role').eq('id', user.id).single();
+        console.log('Teacher profile missing, attempting self-healing...');
+        const { data: newUser, error: userFetchError } = await supabase
+          .from('users')
+          .select('full_name, role')
+          .eq('id', user.id)
+          .single();
+        
         if (!userFetchError && newUser?.role === 'teacher') {
-          const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
-              user_id: user.id,
+          const { data: newTeacher, error: createError } = await supabase
+            .from('teachers')
+            .insert({
+              id: user.id,
               national_id: 'TEMP_' + user.id.substring(0, 8),
               specialization: 'غير محدد'
-            }).select('*, users(*)').single();
-          if (!createError && newTeacher) { teacher = newTeacher; teacherError = null; }
+            })
+            .select('*, users(*)')
+            .single();
+          
+          if (!createError && newTeacher) {
+            console.log('Teacher profile created successfully via self-healing');
+            teacher = newTeacher;
+            teacherError = null;
+          } else {
+            console.error('Failed to self-heal teacher profile:', createError);
+          }
         }
       }
 
-      if (teacherError || !teacher) return null;
+      if (teacherError || !teacher) {
+        console.error('Teacher profile not found after self-healing attempt:', teacherError);
+        // We still want to return something so the dashboard doesn't crash
+        return {
+          teacher: null,
+          sections: [],
+          recentExams: [],
+          recentAssignments: [],
+          schedule: [],
+          periods: [],
+          messages: [],
+          stats: {
+            totalStudents: 0,
+            totalExams: 0,
+            totalAssignments: 0
+          }
+        };
+      }
 
-      // جلب فصول المعلم مع أعداد الطلاب
       const { data: teacherSections } = await supabase
         .from('teacher_sections')
         .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
-        .eq('teacher_id', teacher.id);
+        .eq('teacher_id', user.id);
       
       const sections = teacherSections?.map(ts => ts.section) || [];
       const sectionIds = sections.map((s: any) => s.id);
 
-      // 🚀 جلب الواجبات والاختبارات المرتبطة بالمعلم بطريقة صحيحة ودقيقة
       const [
         { data: recentExams },
         { data: recentAssignments },
@@ -286,32 +308,41 @@ export function useDashboardSystem() {
         { count: examsCount },
         { count: assignmentsCount }
       ] = await Promise.all([
+        // Fetch exams via exam_sections
         supabase
           .from('exams')
-          .select(`id, title, created_at, start_time, subject:subjects(name), exam_sections(section:sections(name, classes(name)))`)
-          .eq('teacher_id', teacher.id)
+          .select(`
+            id, title, created_at, start_time, 
+            subject:subjects(name),
+            exam_sections(section_id, section:sections(name))
+          `)
+          .or(`teacher_id.eq.${user.id}${sectionIds.length > 0 ? `,exam_sections.section_id.in.(${sectionIds.join(',')})` : ''}`)
           .order('created_at', { ascending: false })
           .limit(5),
+        // Fetch assignments via assignment_sections
         supabase
           .from('assignments')
-          .select(`id, title, due_date, subject:subjects(name), assignment_sections(section_id, section:sections(name, classes(name)))`)
-          .eq('teacher_id', teacher.id)
+          .select(`
+            id, title, due_date, 
+            subject:subjects(name), 
+            assignment_sections(section_id, section:sections(name, classes(name)))
+          `)
+          .or(`teacher_id.eq.${user.id}${sectionIds.length > 0 ? `,assignment_sections.section_id.in.(${sectionIds.join(',')})` : ''}`)
           .order('created_at', { ascending: false })
           .limit(5),
         supabase
           .from('schedules')
           .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(name, classes(name))')
-          .eq('teacher_id', teacher.id)
+          .eq('teacher_id', user.id)
           .order('day_of_week')
           .order('period'),
         supabase
           .from('class_periods')
           .select('*')
           .order('period_number'),
-        // 🚀 تم إضافة is_read و avatar_url لاستخراج الرسائل بشكل دقيق
         supabase
           .from('messages')
-          .select('id, subject, content, created_at, is_read, sender:sender_id(full_name, avatar_url)')
+          .select('id, subject, content, created_at, sender:sender_id(full_name)')
           .eq('receiver_id', user.id)
           .order('created_at', { ascending: false })
           .limit(5),
@@ -322,68 +353,24 @@ export function useDashboardSystem() {
         supabase
           .from('exams')
           .select('id', { count: 'exact', head: true })
-          .eq('teacher_id', teacher.id),
+          .eq('teacher_id', user.id),
         supabase
           .from('assignments')
           .select('id', { count: 'exact', head: true })
-          .eq('teacher_id', teacher.id)
+          .eq('teacher_id', user.id)
       ]);
 
-      // تنسيق الاختبارات
-      const exams = (recentExams || []).map((e: any) => {
-        const sec = e.exam_sections?.[0]?.section;
-        return {
-          ...e,
-          subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name || 'غير محدد',
-          section_name: sec ? `${sec.classes?.name || ''} - ${sec.name}` : 'غير محدد'
-        };
-      });
+      const exams = (recentExams || []).map((e: any) => ({
+        ...e,
+        subject_name: e.subject?.name || 'غير محدد',
+        section_name: e.exam_sections?.[0]?.section?.name || 'غير محدد'
+      }));
 
-      // تنسيق الواجبات
-      const assignments = (recentAssignments || []).map((a: any) => {
-        const sec = a.assignment_sections?.[0]?.section;
-        return {
-          ...a,
-          subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name || 'غير محدد',
-          section_name: sec ? `${sec.classes?.name || ''} - ${sec.name}` : 'غير محدد'
-        };
-      });
-
-      // 🚀 حساب إحصائيات الإنجاز الحقيقية لكل فصل
-      const recentAssIds = assignments.map(a => a.id);
-      let submissionsData: any[] = [];
-      if (recentAssIds.length > 0) {
-         const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id').in('assignment_id', recentAssIds);
-         submissionsData = subs || [];
-      }
-
-      const assignmentStats = sections.map(section => {
-        // البحث عن الواجبات المسندة لهذا الفصل من ضمن الواجبات النشطة
-        const secAssignments = assignments.filter(a => a.assignment_sections?.some((as: any) => as.section_id === section.id));
-        
-        // حساب عدد الطلاب الفعلي في الفصل
-        const studentCount = Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0;
-
-        if (secAssignments.length === 0 || studentCount === 0) return null;
-
-        let expectedSubmissions = 0;
-        let actualSubmissions = 0;
-
-        secAssignments.forEach(a => {
-            expectedSubmissions += studentCount;
-            actualSubmissions += submissionsData.filter(sub => sub.assignment_id === a.id).length;
-        });
-
-        const percentage = expectedSubmissions > 0 ? Math.min(Math.round((actualSubmissions / expectedSubmissions) * 100), 100) : 0;
-
-        return {
-            title: 'إنجاز الواجبات النشطة',
-            className: `${section.classes?.name} - ${section.name}`,
-            percentage,
-            submissionCount: actualSubmissions,
-            totalStudents: expectedSubmissions
-        };
-      }).filter(Boolean);
+      const assignments = (recentAssignments || []).map((a: any) => ({
+        ...a,
+        subject_name: a.subject?.name || 'غير محدد',
+        section_name: a.assignment_sections?.[0]?.section?.name || 'غير محدد'
+      }));
 
       return {
         teacher,
@@ -393,7 +380,6 @@ export function useDashboardSystem() {
         schedule: schedule || [],
         periods: periods || [],
         messages: messages || [],
-        assignmentStats, // 🚀 الإحصائيات الحقيقية
         stats: {
           totalStudents: studentsCount || 0,
           totalExams: examsCount || 0,
@@ -409,17 +395,14 @@ export function useDashboardSystem() {
   const fetchTeacherSchedule = useCallback(async () => {
     if (!user) return null;
     try {
-      const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
-      if (!teacherProfile) return null;
-
       const [
         { data: schedule },
         { data: periods }
       ] = await Promise.all([
         supabase
           .from('schedules')
-          .select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))')
-          .eq('teacher_id', teacherProfile.id)
+          .select('id, day_of_week, period, subjects(name), sections(id, name, classes(name))')
+          .eq('teacher_id', user.id)
           .order('day_of_week')
           .order('period'),
         supabase
@@ -447,7 +430,7 @@ export function useDashboardSystem() {
           next_year_track: track,
           track_selection_date: new Date().toISOString()
         })
-        .eq('user_id', user.id) // استخدام user_id بدلاً من id
+        .eq('id', user.id)
         .select()
         .single();
       
