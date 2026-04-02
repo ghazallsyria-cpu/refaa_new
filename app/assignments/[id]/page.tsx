@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -52,17 +52,41 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
+  // 🚀 حالة الفرز حسب الفصل
+  const [selectedSection, setSelectedSection] = useState<string>('الكل');
+
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000);
   };
 
+  // 🚀 تحديد الفصول الفريدة للفلترة
+  const uniqueSections = Array.from(new Set(submissions.map(sub => {
+     const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
+     const className = classObj?.name || '';
+     const sectionName = sub.student?.section?.name || '';
+     return className && sectionName ? `${className} - ${sectionName}` : 'بدون فصل';
+  }))).filter(Boolean);
+
+  // 🚀 التسليمات المفلترة
+  const filteredSubmissions = selectedSection === 'الكل' 
+     ? submissions 
+     : submissions.filter(sub => {
+         const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
+         const className = classObj?.name || '';
+         const sectionName = sub.student?.section?.name || '';
+         const full = className && sectionName ? `${className} - ${sectionName}` : 'بدون فصل';
+         return full === selectedSection;
+       });
+
   const exportToExcel = () => {
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
     
-    const csvData = submissions.map(sub => {
+    // 🚀 التصدير يستخدم القائمة المفلترة فقط
+    const csvData = filteredSubmissions.map(sub => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const sectionClass = (sub.student?.section?.class as any)?.name || (sub.student?.section as any)?.classes?.name || '';
+       const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
+       const sectionClass = classObj?.name || '';
        const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
@@ -82,7 +106,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     const worksheet = XLSX.utils.json_to_sheet(csvData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "التسليمات");
-    XLSX.writeFile(workbook, `تسليمات_${assignment?.title || 'الواجب'}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `تسليمات_${assignment?.title || 'الواجب'}_${selectedSection}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const exportToPDF = () => {
@@ -93,12 +117,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
 
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
-    const gradedSubs = submissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
+    const gradedSubs = filteredSubmissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
     const avgScore = gradedSubs.length > 0 ? Math.round(gradedSubs.reduce((sum, s) => sum + (Number(s.grade) || 0), 0) / gradedSubs.length) : 0;
 
-    const tableRows = submissions.map((sub, index) => {
+    const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const sectionClass = (sub.student?.section?.class as any)?.name || (sub.student?.section as any)?.classes?.name || '';
+       const classObj = Array.isArray((sub.student?.section as any)?.classes) ? (sub.student?.section as any)?.classes[0] : (sub.student?.section as any)?.classes;
+       const sectionClass = classObj?.name || '';
        const section = sub.student?.section ? `${sectionClass} - ${sub.student.section.name}` : 'بدون فصل';
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
@@ -144,10 +169,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           <div class="header">
             <h1>📄 كشف تسليمات الواجب</h1>
             <h2>${assignment?.title || 'واجب'} - ${(assignment as any)?.subject_name || 'مادة عامة'}</h2>
+            ${selectedSection !== 'الكل' ? `<h3 style="color:#ef4444; font-size: 16px; margin-top:10px;">خاص بطلاب: ${selectedSection}</h3>` : ''}
           </div>
           
           <div class="info-grid">
-            <div><strong>إجمالي الطلاب المٌسلمين:</strong> ${submissions.length}</div>
+            <div><strong>إجمالي الطلاب المٌسلمين:</strong> ${filteredSubmissions.length}</div>
             <div><strong>تم التقييم:</strong> ${gradedSubs.length}</div>
             <div><strong>العلامة الكاملة للواجب:</strong> ${maxScore}</div>
             <div><strong>متوسط درجات الطلاب:</strong> ${avgScore}</div>
@@ -482,7 +508,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   }
 
                   const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
-                  const isCorrect = answerDetails?.is_correct;
+                  
+                  // 🚀 تحسين شروط عرض النتيجة: إذا أعطاه المعلم نقطة فهي صحيحة حتى لو لم يحدد is_correct
+                  const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
 
                   return (
                     <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border-2 transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
@@ -669,21 +697,40 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       
       {['teacher', 'admin', 'management'].includes(currentRole || '') && (
         <div className="space-y-8">
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
-            <button 
-              onClick={() => setActiveTab('submissions')}
-              className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'submissions' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              <Users className="h-4 w-4" />
-              التسليمات
-            </button>
-            <button 
-              onClick={() => setActiveTab('preview')}
-              className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'preview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              <Eye className="h-4 w-4" />
-              معاينة الطالب
-            </button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
+              <button 
+                onClick={() => setActiveTab('submissions')}
+                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'submissions' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <Users className="h-4 w-4" />
+                التسليمات
+              </button>
+              <button 
+                onClick={() => setActiveTab('preview')}
+                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'preview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <Eye className="h-4 w-4" />
+                معاينة الطالب
+              </button>
+            </div>
+            
+            {/* 🚀 القائمة المنسدلة لفرز الطلاب حسب الفصل */}
+            {activeTab === 'submissions' && uniqueSections.length > 0 && (
+              <div className="relative w-full sm:w-64 z-20">
+                 <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                 <select 
+                    value={selectedSection}
+                    onChange={(e) => setSelectedSection(e.target.value)}
+                    className="w-full pl-4 pr-10 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 shadow-sm appearance-none cursor-pointer"
+                 >
+                    <option value="الكل">عرض جميع الفصول</option>
+                    {uniqueSections.map(sec => (
+                       <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                 </select>
+              </div>
+            )}
           </div>
 
           {activeTab === 'submissions' ? (
@@ -703,22 +750,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     <Download className="h-4 w-4" /> PDF
                   </button>
                   <div className="px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 text-sm font-bold text-slate-600">
-                    الإجمالي: {submissions.length}
+                    الإجمالي: {filteredSubmissions.length}
                   </div>
                 </div>
               </div>
               
               <div className="p-0">
-                {submissions.length === 0 ? (
+                {filteredSubmissions.length === 0 ? (
                   <div className="text-center py-16">
                     <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileText className="h-8 w-8 text-slate-300" />
                     </div>
-                    <p className="text-slate-500 font-medium text-lg">لم يقم أي طالب بتسليم الواجب حتى الآن.</p>
+                    <p className="text-slate-500 font-medium text-lg">لا توجد تسليمات متاحة في هذا التصنيف.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100">
-                    {submissions.map((sub) => {
+                    {filteredSubmissions.map((sub) => {
                        const st = sub.student as any;
                        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
 
