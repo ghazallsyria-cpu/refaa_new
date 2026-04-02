@@ -37,11 +37,6 @@ export default function AttendanceReportsPage() {
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // Fetch Sections
-      let sectionsQuery = supabase.from('sections').select('id, name, classes(name)');
-      const { data: sectionsData } = await sectionsQuery;
-      setSections(sectionsData || []);
-
       // Fetch Attendance Records
       let query = supabase
         .from('attendance_records')
@@ -61,6 +56,23 @@ export default function AttendanceReportsPage() {
       const { data: attendanceData } = await query;
       setRecords(attendanceData || []);
 
+      // 🚀 العزل والحماية: تحديد الفصول المتاحة بناءً على الصلاحيات
+      if (userRole === 'teacher' && attendanceData) {
+        // المعلم يرى فقط الفصول التي سجل لها غياباً
+        const uniqueSectionsMap = new Map();
+        attendanceData.forEach(record => {
+          if (record.sections && !uniqueSectionsMap.has(record.sections.id)) {
+            uniqueSectionsMap.set(record.sections.id, record.sections);
+          }
+        });
+        setSections(Array.from(uniqueSectionsMap.values()));
+      } else if (userRole === 'admin' || userRole === 'management') {
+        // الإدارة ترى كل شيء
+        let sectionsQuery = supabase.from('sections').select('id, name, classes(name)');
+        const { data: sectionsData } = await sectionsQuery;
+        setSections(sectionsData || []);
+      }
+
     } catch (error) {
       console.error('Error fetching reports:', error);
     } finally {
@@ -72,16 +84,14 @@ export default function AttendanceReportsPage() {
     fetchData();
   }, [fetchData]);
 
-  // 🚀 المحرك الذكي للفلترة والتجميع (Smart Aggregation Engine)
+  // 🚀 المحرك الذكي للفلترة والتجميع
   const reportData = useMemo(() => {
     let filtered = records;
 
-    // 1. فلترة حسب الفصل
     if (selectedSection !== 'all') {
       filtered = filtered.filter(r => r.sections?.id === selectedSection);
     }
 
-    // 2. فلترة حسب التاريخ
     const today = new Date();
     filtered = filtered.filter(r => {
       const recordDate = parseISO(r.date);
@@ -97,17 +107,20 @@ export default function AttendanceReportsPage() {
       return true;
     });
 
-    // 3. تجميع البيانات حسب الطالب (Aggregation)
     const studentMap = new Map<string, any>();
     
     filtered.forEach(record => {
       const sId = record.student_id;
       if (!studentMap.has(sId)) {
+        // Safe access for class name due to typescript strictness
+        const classData = Array.isArray(record.sections?.classes) ? record.sections?.classes[0] : record.sections?.classes;
+        const className = classData?.name || '';
+
         studentMap.set(sId, {
           id: sId,
           name: record.students?.users?.full_name || 'غير معروف',
           avatar: record.students?.users?.avatar_url,
-          className: `${record.sections?.classes?.name} - ${record.sections?.name}`,
+          className: `${className} - ${record.sections?.name}`,
           present: 0,
           absent: 0,
           late: 0,
@@ -124,10 +137,9 @@ export default function AttendanceReportsPage() {
       if (record.status === 'excused') st.excused += 1;
     });
 
-    return Array.from(studentMap.values()).sort((a, b) => b.absent - a.absent); // ترتيب تنازلي حسب الغياب
+    return Array.from(studentMap.values()).sort((a, b) => b.absent - a.absent);
   }, [records, selectedSection, dateRange, customStartDate, customEndDate]);
 
-  // 🚀 استخراج الطلاب المنذرين (الخطر)
   const atRiskStudents = reportData.filter(s => s.absent >= 5);
 
   const getReportTitle = () => {
@@ -237,33 +249,33 @@ export default function AttendanceReportsPage() {
       
       {/* 🚀 Top Navigation */}
       <div className="pt-6">
-        <Link href="/attendance" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة لرصد الغياب
+        <Link href="/attendance" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group text-sm sm:text-base">
+          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة لرصد الغياب
         </Link>
       </div>
 
-      {/* 🚀 Hero Section (اللوحة القيادية للتقارير) */}
-      <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 p-8 sm:p-12 text-white shadow-2xl shadow-slate-900/20">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm">
+      {/* 🚀 Hero Section */}
+      <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 p-6 sm:p-12 text-white shadow-2xl shadow-slate-900/20">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm">
               <BarChart2 className="w-3.5 h-3.5 text-indigo-300" />
               <span>التحليل والإحصاء</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
+            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
               تقارير الحضور والغياب
             </h1>
-            <p className="text-indigo-100 text-sm sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
+            <p className="text-indigo-100 text-xs sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
               تحليل ذكي لسجلات غياب الطلاب في حصصك الدراسية. يمكنك تتبع الغياب، اكتشاف الطلاب المنذرين، وتصدير التقارير الرسمية بضغطة زر.
             </p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <button onClick={exportToExcel} className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black shadow-lg shadow-emerald-500/30 transition-all active:scale-95">
-              <FileSpreadsheet className="w-5 h-5" /> تصدير Excel
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full lg:w-auto">
+            <button onClick={exportToExcel} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-emerald-500 hover:bg-emerald-600 text-white text-sm sm:text-base font-black shadow-lg shadow-emerald-500/30 transition-all active:scale-95">
+              <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" /> تصدير Excel
             </button>
-            <button onClick={() => exportToPDF(false)} className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-black shadow-lg shadow-rose-500/30 transition-all active:scale-95">
-              <Download className="w-5 h-5" /> تقرير PDF
+            <button onClick={() => exportToPDF(false)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-rose-500 hover:bg-rose-600 text-white text-sm sm:text-base font-black shadow-lg shadow-rose-500/30 transition-all active:scale-95">
+              <Download className="w-4 h-4 sm:w-5 sm:h-5" /> تقرير PDF
             </button>
           </div>
         </div>
@@ -272,32 +284,35 @@ export default function AttendanceReportsPage() {
       </div>
 
       {/* 🚀 Smart Filter Bar */}
-      <div className="bg-white/80 backdrop-blur-xl p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30">
-        <div className="flex items-center gap-3 mb-4">
-          <Filter className="w-5 h-5 text-indigo-600" />
-          <h3 className="font-black text-slate-900">محددات التقرير</h3>
+      <div className="bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30">
+        <div className="flex items-center gap-2 sm:gap-3 mb-4">
+          <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+          <h3 className="text-sm sm:text-base font-black text-slate-900">محددات التقرير</h3>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفصل الدراسي</label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفصل الدراسي</label>
             <select
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none"
             >
               <option value="all">جميع الفصول والشعب</option>
-              {sections.map(s => (
-                <option key={s.id} value={s.id}>{s.classes?.name || s.classes?.[0]?.name} - {s.name}</option>
-              ))}
+              {sections.map(s => {
+                const className = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
+                return (
+                  <option key={s.id} value={s.id}>{className} - {s.name}</option>
+                );
+              })}
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفترة الزمنية</label>
+          <div className="space-y-1.5 sm:space-y-2">
+            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفترة الزمنية</label>
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value as any)}
-              className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none"
             >
               <option value="today">اليوم الحالي</option>
               <option value="week">هذا الأسبوع</option>
@@ -309,13 +324,13 @@ export default function AttendanceReportsPage() {
           <AnimatePresence>
             {dateRange === 'custom' && (
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-2 space-y-0">
-                <div className="flex-1 space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">من</label>
-                  <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none" />
+                <div className="flex-1 space-y-1.5 sm:space-y-2">
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">من</label>
+                  <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-3 sm:px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none" />
                 </div>
-                <div className="flex-1 space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">إلى</label>
-                  <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-full rounded-2xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 font-bold transition-all outline-none" />
+                <div className="flex-1 space-y-1.5 sm:space-y-2">
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">إلى</label>
+                  <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-3 sm:px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none" />
                 </div>
               </motion.div>
             )}
@@ -323,38 +338,38 @@ export default function AttendanceReportsPage() {
         </div>
       </div>
 
-      {/* 🚀 At-Risk Radar (نظام الإنذار المبكر) */}
+      {/* 🚀 At-Risk Radar */}
       <AnimatePresence>
         {atRiskStudents.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-rose-50 to-red-50 p-6 sm:p-8 rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-rose-50 to-red-50 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5 sm:mb-6">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-rose-500 text-white rounded-2xl shadow-md shadow-rose-500/30 animate-pulse">
-                  <ShieldAlert className="w-6 h-6" />
+                <div className="p-2.5 sm:p-3 bg-rose-500 text-white rounded-xl sm:rounded-2xl shadow-md shadow-rose-500/30 animate-pulse shrink-0">
+                  <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-rose-900">إنذار: طلاب تجاوزوا الحد (5 غيابات فأكثر)</h2>
-                  <p className="text-sm font-bold text-rose-600 mt-1">يتطلب هذا القسم انتباهك لرفع تقرير لإدارة المدرسة.</p>
+                  <h2 className="text-lg sm:text-2xl font-black text-rose-900 leading-tight">إنذار: تجاوز الحد (5 غيابات فأكثر)</h2>
+                  <p className="text-[10px] sm:text-sm font-bold text-rose-600 mt-1">يتطلب هذا القسم انتباهك لرفع تقرير للإدارة.</p>
                 </div>
               </div>
-              <button onClick={() => exportToPDF(true)} className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-rose-600 font-black shadow-sm border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 shrink-0 w-full sm:w-auto">
-                <Printer className="w-4 h-4" /> طباعة تقرير إنذار
+              <button onClick={() => exportToPDF(true)} className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white text-rose-600 text-xs sm:text-sm font-black shadow-sm border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 shrink-0 w-full sm:w-auto">
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> طباعة تقرير إنذار
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {atRiskStudents.map(student => (
-                <div key={student.id} className="bg-white p-5 rounded-2xl shadow-sm border border-rose-100 flex items-center justify-between group">
+                <div key={student.id} className="bg-white p-4 sm:p-5 rounded-[1.5rem] shadow-sm border border-rose-100 flex items-center justify-between group hover:shadow-md transition-all">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 bg-rose-100 text-rose-700 rounded-xl flex items-center justify-center font-black shrink-0">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 bg-rose-100 text-rose-700 rounded-xl flex items-center justify-center font-black shrink-0 text-base sm:text-lg">
                       {student.name.charAt(0)}
                     </div>
                     <div className="min-w-0">
-                      <p className="font-black text-slate-900 text-sm truncate">{student.name}</p>
-                      <p className="text-[10px] font-bold text-slate-500 truncate">{student.className}</p>
+                      <p className="font-black text-slate-900 text-xs sm:text-sm truncate">{student.name}</p>
+                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 truncate">{student.className}</p>
                     </div>
                   </div>
-                  <div className="bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-black shadow-sm shrink-0">
+                  <div className="bg-rose-500 text-white px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black shadow-sm shrink-0">
                     {student.absent} غياب
                   </div>
                 </div>
@@ -364,17 +379,17 @@ export default function AttendanceReportsPage() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Main Data Table (الجدول التحليلي الفخم) */}
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* 🚀 Main Data Table */}
+      <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-5 sm:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner border border-indigo-100">
-              <TrendingUp className="w-5 h-5" />
+            <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner border border-indigo-100 shrink-0">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">السجل التحليلي الشامل</h2>
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">السجل التحليلي الشامل</h2>
           </div>
-          <span className="text-xs font-bold text-slate-500 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-            إجمالي السجلات المعروضة: {reportData.length} طالب
+          <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 shadow-sm w-full sm:w-auto text-center">
+            إجمالي السجلات: {reportData.length} طالب
           </span>
         </div>
 
@@ -382,23 +397,23 @@ export default function AttendanceReportsPage() {
           <table className="min-w-full divide-y divide-slate-100">
             <thead>
               <tr className="bg-slate-50/30">
-                <th scope="col" className="py-5 pr-8 pl-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-400">اسم الطالب</th>
-                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-emerald-600">حاضر</th>
-                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-rose-600">غائب</th>
-                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-amber-600">متأخر</th>
-                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-blue-600">مستأذن</th>
-                <th scope="col" className="px-4 py-5 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">مؤشر الغياب</th>
+                <th scope="col" className="py-4 sm:py-5 pr-6 sm:pr-8 pl-4 text-right text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">اسم الطالب</th>
+                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-600">حاضر</th>
+                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-600">غائب</th>
+                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-600">متأخر</th>
+                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-600">مستأذن</th>
+                <th scope="col" className="px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 hidden sm:table-cell">مؤشر الغياب</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {reportData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="h-16 w-16 rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                        <Calendar className="h-8 w-8 text-slate-300" />
+                  <td colSpan={6} className="py-16 sm:py-20 text-center">
+                    <div className="flex flex-col items-center gap-3 sm:gap-4">
+                      <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                        <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
                       </div>
-                      <p className="text-slate-500 font-bold text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
+                      <p className="text-slate-500 font-bold text-xs sm:text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
                     </div>
                   </td>
                 </tr>
@@ -407,35 +422,35 @@ export default function AttendanceReportsPage() {
                   const absenceRate = Math.round((student.absent / student.totalRecords) * 100) || 0;
                   return (
                     <tr key={student.id} className="group hover:bg-slate-50/50 transition-colors">
-                      <td className="whitespace-nowrap py-4 pr-8 pl-4">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center font-black text-lg shadow-sm shrink-0">
+                      <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center font-black text-sm sm:text-lg shadow-sm shrink-0">
                             {student.name.charAt(0)}
                           </div>
                           <div className="flex flex-col min-w-0">
-                            <span className="font-black text-slate-900 text-sm group-hover:text-indigo-600 transition-colors truncate">{student.name}</span>
-                            <span className="text-[10px] text-slate-400 font-bold truncate">{student.className}</span>
+                            <span className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{student.name}</span>
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate">{student.className}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 font-black text-sm border border-emerald-100">{student.present}</span>
+                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 font-black text-xs sm:text-sm border border-emerald-100">{student.present}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-center">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-black text-sm border ${student.absent > 0 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.absent}</span>
+                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.absent > 0 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.absent}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-center">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-black text-sm border ${student.late > 0 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.late}</span>
+                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.late > 0 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.late}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-blue-50 text-blue-600 font-black text-sm border border-blue-100">{student.excused}</span>
+                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-blue-50 text-blue-600 font-black text-xs sm:text-sm border border-blue-100">{student.excused}</span>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-center">
+                      <td className="whitespace-nowrap px-4 py-3 sm:py-4 text-center hidden sm:table-cell">
                         <div className="flex items-center justify-center gap-2">
-                          <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                          <div className="w-16 sm:w-20 h-1.5 sm:h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
                             <div className={`h-full rounded-full ${absenceRate >= 20 ? 'bg-rose-500' : absenceRate > 0 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(absenceRate, 100)}%` }} />
                           </div>
-                          <span className={`text-[10px] font-black w-8 text-right ${absenceRate >= 20 ? 'text-rose-600' : 'text-slate-500'}`}>{absenceRate}%</span>
+                          <span className={`text-[9px] sm:text-[10px] font-black w-8 text-right ${absenceRate >= 20 ? 'text-rose-600' : 'text-slate-500'}`}>{absenceRate}%</span>
                         </div>
                       </td>
                     </tr>
