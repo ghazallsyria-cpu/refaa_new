@@ -17,7 +17,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const [submission, setSubmission] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [questionGrades, setQuestionGrades] = useState<Record<string, { isCorrect: boolean, pointsEarned: number, feedback: string }>>({});
+  const [questionGrades, setQuestionGrades] = useState<Record<string, { isCorrect: boolean | null, pointsEarned: number, feedback: string }>>({});
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [grade, setGrade] = useState<string>('');
@@ -47,8 +47,18 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
             }
             
             answersMap[a.question_id] = finalAns;
+            
+            // 🚀 السحر هنا: قراءة حالة السؤال هل صححه المعلم مسبقاً أم لا!
+            // إذا كان is_correct موجوداً نأخذه، وإلا ننظر إذا كان قد أعطاه درجة، وإذا لم يحدث شيء نتركه null
+            let isCorrectVal = null;
+            if (a.is_correct === true || a.is_correct === false) {
+                isCorrectVal = a.is_correct;
+            } else if (Number(a.points_earned) > 0) {
+                isCorrectVal = true;
+            }
+
             gradesMap[a.question_id] = { 
-               isCorrect: a.is_correct || false, 
+               isCorrect: isCorrectVal, 
                pointsEarned: a.points_earned || 0, 
                feedback: a.feedback || '' 
             };
@@ -62,6 +72,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // تحديث المجموع التلقائي عند تغيير أي درجة جزئية
   useEffect(() => {
     if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
       let total = 0;
@@ -78,7 +89,10 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
       const numericGrade = parseFloat(grade);
       
       const answersGrading = Object.entries(questionGrades).map(([qId, data]) => ({
-         questionId: qId, isCorrect: data.isCorrect, pointsEarned: data.pointsEarned, feedback: data.feedback
+         questionId: qId, 
+         isCorrect: data.isCorrect !== null ? data.isCorrect : false, // حفظ الحالة
+         pointsEarned: data.pointsEarned, 
+         feedback: data.feedback
       }));
 
       await updateSubmissionGrade(submissionId, numericGrade, feedback, submission?.student_id || '', assignment?.title || '', answersGrading);
@@ -133,7 +147,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                  const isHeader = q.type === 'section_header';
                  const isComparison = q.type === 'comparison';
                  const studentAns = answers[q.id];
-                 const qGrade = questionGrades[q.id] || { isCorrect: false, pointsEarned: 0, feedback: '' };
+                 const qGrade = questionGrades[q.id] || { isCorrect: null, pointsEarned: 0, feedback: '' };
                  const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
 
                  if (isHeader) {
@@ -241,17 +255,17 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      <div className="p-5 sm:p-8 bg-slate-50 border-t-4 border-indigo-100">
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-4">
                            <div className="sm:col-span-7 flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200">
-                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: true, pointsEarned: q.points}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
+                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: true, pointsEarned: q.points}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
                                 <CheckCircle2 className="w-4 h-4" /> صحيح
                               </button>
-                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: false, pointsEarned: 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${!qGrade.isCorrect ? 'bg-red-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
+                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: false, pointsEarned: 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === false ? 'bg-red-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
                                 <XCircle className="w-4 h-4" /> خاطئ
                               </button>
                            </div>
                            <div className="sm:col-span-5 flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200">
                               <span className="text-xs font-black text-slate-500 px-3">الدرجة:</span>
                               <div className="flex items-center gap-2">
-                                <input type="number" min="0" max={q.points} value={qGrade.pointsEarned === 0 && !qGrade.isCorrect ? '' : qGrade.pointsEarned} onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], pointsEarned: Number(e.target.value)}}))} className="w-16 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center font-black text-indigo-700 outline-none focus:border-indigo-500" />
+                                <input type="number" min="0" max={q.points} value={qGrade.pointsEarned === 0 && qGrade.isCorrect !== true ? '' : qGrade.pointsEarned} onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], pointsEarned: Number(e.target.value)}}))} className="w-16 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center font-black text-indigo-700 outline-none focus:border-indigo-500" />
                                 <span className="text-xs font-black text-slate-400 pl-3">/ {q.points}</span>
                               </div>
                            </div>
