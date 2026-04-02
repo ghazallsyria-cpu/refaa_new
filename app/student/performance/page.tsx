@@ -69,7 +69,7 @@ export default function StudentPerformancePage() {
         return;
       }
 
-      // 🚀 تم إضافة exam_date و end_time للاستعلام لمعرفة وقت الانتهاء
+      // 🚀 تم إضافة جلب بيانات أسئلة الواجب (assignment_questions) لمعرفة المجموع الحقيقي
       const [examsRes, assignmentsRes] = await Promise.all([
         supabase.from('exam_attempts')
           .select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))')
@@ -77,7 +77,7 @@ export default function StudentPerformancePage() {
           .order('completed_at', { ascending: false }),
           
         supabase.from('assignment_submissions')
-          .select('*, assignments(id, title, total_marks, subjects(name))')
+          .select('*, assignments(id, title, total_marks, subjects(name), assignment_questions(points))')
           .eq('student_id', student.id)
           .order('submitted_at', { ascending: false })
       ]);
@@ -103,7 +103,11 @@ export default function StudentPerformancePage() {
       if (gradedAssignments.length > 0) {
          let totalPercent = 0;
          gradedAssignments.forEach((a: any) => {
-            const max = a.assignments?.total_marks || 100;
+            // 🚀 حساب المجموع الحقيقي لأسئلة الواجب
+            const qs = a.assignments?.assignment_questions;
+            const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
+            const max = calcMax > 0 ? calcMax : (a.assignments?.total_marks || 100);
+            
             totalPercent += ((a.grade || 0) / max) * 100;
          });
          avgAss = Math.round(totalPercent / gradedAssignments.length);
@@ -391,7 +395,11 @@ export default function StudentPerformancePage() {
               ) : (
                 filteredAssignments.map((submission, idx) => {
                   const isPending = submission.status === 'submitted' || submission.status === 'completed';
-                  const maxScore = submission.assignments?.total_marks || 100;
+                  
+                  // 🚀 حساب الدرجة النهائية بدقة (عن طريق جمع نقاط الأسئلة)
+                  const qs = submission.assignments?.assignment_questions;
+                  const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
+                  const maxScore = calcMax > 0 ? calcMax : (submission.assignments?.total_marks || 100);
 
                   return (
                     <motion.div 
@@ -457,4 +465,3 @@ export default function StudentPerformancePage() {
     </div>
   );
 }
-
