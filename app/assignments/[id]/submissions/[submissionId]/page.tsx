@@ -1,259 +1,304 @@
-'use client';
-
-import { useState, useEffect, useCallback, use } from 'react';
-import { ArrowRight, User, Calendar, Clock, CheckCircle, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye, Edit, CheckCircle2, XCircle, Columns } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
+import { Subject, Assignment, AssignmentSubmission, AssignmentAnswer, RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 
-export default function GradingPage({ params }: { params: Promise<{ id: string, submissionId: string }> }) {
-  const { id: assignmentId, submissionId } = use(params);
-  const router = useRouter();
-  const { user } = useAuth();
-  const { fetchSubmissionDetails, updateSubmissionGrade } = useAssignmentsSystem();
+export interface AssignmentDetails {
+  assignment: AssignmentWithMeta;
+  questions: any[]; 
+  submission: AssignmentSubmission | null;
+  answers: AssignmentAnswer[];
+  allSubmissions: SubmissionWithStudent[];
+}
+
+const formatAssignmentQuestion = (q: any) => {
+  let cleanOptions: string[] = [];
+  if (Array.isArray(q.options)) {
+    cleanOptions = q.options.map((opt: any) => {
+      if (typeof opt === 'string') return opt;
+      if (typeof opt === 'object' && opt !== null) {
+        return opt.content || opt.text || opt.id || String(opt);
+      }
+      return String(opt);
+    });
+  }
+
+  return {
+    id: q.id || crypto.randomUUID(),
+    content: q.question_text || q.content || '',
+    type: q.question_type || q.type || 'text',
+    options: cleanOptions,
+    points: q.points || 0,
+    isRequired: q.is_required ?? true,
+    media_url: q.media_url || q.mediaUrl || null
+  };
+};
+
+export function useAssignmentsSystem() {
+  const { user, authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
   
-  const [assignment, setAssignment] = useState<any>(null);
-  const [submission, setSubmission] = useState<any>(null);
-  const [questions, setQuestions] = useState<any[]>([]);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [questionGrades, setQuestionGrades] = useState<Record<string, { isCorrect: boolean, pointsEarned: number, feedback: string }>>({});
+  const [data, setData] = useState<AssignmentWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [grade, setGrade] = useState<string>('');
-  const [feedback, setFeedback] = useState<string>('');
-  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [studentSubmissions, setStudentSubmissions] = useState<Record<string, AssignmentSubmission>>({});
 
-  const fetchData = useCallback(async () => {
+  const fetchAssignments = useCallback(async (): Promise<void> => {
+    if (!user || !currentRole) return;
     setLoading(true);
+    setError(null);
     try {
-      const details = await fetchSubmissionDetails(submissionId);
-      if (details.assignment) setAssignment(details.assignment);
-      if (details.questions) setQuestions(details.questions);
+      const selectQuery = currentRole === 'student' 
+        ? `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
+        : `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
 
-      if (details.submission) {
-        setSubmission(details.submission);
-        setGrade(details.submission.grade?.toString() || '');
-        setFeedback(details.submission.feedback || '');
+      let query = supabase.from('assignments').select(selectQuery).order('created_at', { ascending: false });
 
-        if (details.answers) {
-          const answersMap: Record<string, any> = {};
-          const gradesMap: Record<string, any> = {};
+      if (currentRole === 'student') {
+        let studentProfile = null;
+        const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
+        if (sp1) studentProfile = sp1;
+        else {
+          const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
+          if (sp2) studentProfile = sp2;
+        }
+
+        if (studentProfile?.section_id) {
+          query = query.eq('assignment_sections.section_id', studentProfile.section_id).eq('status', 'published');
+        } else {
+          setData([]); setLoading(false); return;
+        }
+      } else if (currentRole === 'teacher') {
+        let teacherProfile = null;
+        const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (tp1) teacherProfile = tp1;
+        else {
+          const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+          if (tp2) teacherProfile = tp2;
+        }
           
-          details.answers.forEach((a: any) => {
-            // 🚀 استخراج الإجابة بذكاء شديد لتجنب أي فقدان للبيانات مهما كان نوع السؤال
-            let finalAns = a.answer_text;
-            if (a.selected_options) {
-              if (Array.isArray(a.selected_options) && a.selected_options.length > 0) {
-                 finalAns = a.selected_options;
-              } else if (typeof a.selected_options === 'string' && a.selected_options.trim() !== '') {
-                 finalAns = a.selected_options;
-              }
-            }
-            
-            answersMap[a.question_id] = finalAns;
-            gradesMap[a.question_id] = { isCorrect: a.is_correct || false, pointsEarned: a.points_earned || 0, feedback: a.feedback || '' };
-          });
-          setAnswers(answersMap);
-          setQuestionGrades(gradesMap);
+        if (teacherProfile) {
+          query = query.eq('teacher_id', teacherProfile.id);
+        } else {
+          setData([]); setLoading(false); return;
         }
       }
-    } catch (error) { console.error(error); } finally { setLoading(false); }
-  }, [submissionId, fetchSubmissionDetails]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+      const { data: assignmentsData, error: fetchError } = await query;
+      if (fetchError) throw fetchError;
 
-  useEffect(() => {
-    if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
-      let total = 0;
-      Object.values(questionGrades).forEach(g => { total += (Number(g.pointsEarned) || 0); });
-      setGrade(total.toString());
+      let mappedData: AssignmentWithMeta[] = (assignmentsData || []).map((a: any) => {
+        const aSections = a.assignment_sections || [];
+        const sectionNames = aSections.map((es: any) => {
+            const s = es.sections;
+            if (!s) return 'غير محدد';
+            const cName = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name;
+            return cName ? `${cName} - ${s.name}` : s.name;
+        }).join('، ');
+
+        return {
+          ...a,
+          subject_name: Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name,
+          teacher_name: Array.isArray(a.teacher?.users) ? a.teacher.users[0]?.full_name : a.teacher?.users?.full_name,
+          section_name: sectionNames || 'غير محدد',
+        };
+      });
+
+      if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+        const assignmentsWithStats = await Promise.all(mappedData.map(async (a) => {
+          const { data: attempts } = await supabase.from('assignment_submissions').select('status').eq('assignment_id', a.id);
+          const subs = attempts || [];
+          return {
+            ...a,
+            submission_count: subs.length,
+            graded_count: subs.filter(s => s.status === 'graded').length,
+          };
+        }));
+        mappedData = assignmentsWithStats;
+      }
+
+      if (currentRole === 'student') {
+        const { data: subData } = await supabase.from('assignment_submissions').select('assignment_id, status, grade, id, student_id, submitted_at').eq('student_id', user.id);
+        const subMap: Record<string, AssignmentSubmission> = {};
+        (subData || []).forEach((s: any) => { subMap[s.assignment_id] = s; });
+        setStudentSubmissions(subMap);
+      }
+
+      setData(mappedData);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error fetching assignments');
+    } finally {
+      setLoading(false);
     }
-  }, [questionGrades, questions.length]);
+  }, [user, currentRole]);
 
-  const handleSaveGrade = async () => {
-    if (grade === '') { setNotification({ type: 'error', message: 'يرجى إدخال الدرجة' }); return; }
-    setIsSaving(true);
+  useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+
+  const fetchAssignmentQuestions = useCallback(async (assignmentId: string): Promise<any[]> => {
     try {
-      if (!user) throw new Error('Not authenticated');
-      const numericGrade = parseFloat(grade);
+      const { data, error } = await supabase.from('assignment_questions').select('*').eq('assignment_id', assignmentId).order('order');
+      if (error) throw error;
+      return (data || []).map(formatAssignmentQuestion);
+    } catch (err) { return []; }
+  }, []);
+
+  const saveAssignment = useCallback(async (payload: Partial<Assignment>, assignmentId: string | null, questions: any[], sectionIds: string[], subjects: Subject[]): Promise<string> => {
+    const response = await fetch('/api/assignments/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload, assignmentId, questions, sectionIds, subjects, userId: user?.id }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'فشل حفظ الواجب');
+    await fetchAssignments();
+    return result.id;
+  }, [user, fetchAssignments]);
+
+  const deleteAssignment = useCallback(async (assignmentId: string): Promise<void> => {
+    const response = await fetch(`/api/assignments/delete?id=${assignmentId}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete assignment');
+    await fetchAssignments();
+  }, [fetchAssignments]);
+
+  // 🚀 مسار جلب تفاصيل الواجب - محصن ويعمل من جانب العميل بدون الحاجة لملفات API جديدة
+  const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
+    try {
+      const { data: assignmentData, error: assignmentError } = await supabase
+        .from('assignments')
+        .select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
+        .eq('id', assignmentId)
+        .maybeSingle();
+
+      if (assignmentError) throw assignmentError;
+      if (!assignmentData) throw new Error('الواجب غير موجود أو لا تملك صلاحية الوصول إليه');
+
+      const { data: qData } = await supabase
+        .from('assignment_questions')
+        .select('*')
+        .eq('assignment_id', assignmentId)
+        .order('order');
+
+      let submissionData = null;
+      let answersData: any[] = [];
+      let allSubmissionsData: any[] = [];
+
+      if (currentRole === 'student' && user) {
+        let studentProfile = null;
+        const { data: sp1 } = await supabase.from('students').select('id').eq('user_id', user.id).maybeSingle();
+        if (sp1) studentProfile = sp1;
+        else {
+          const { data: sp2 } = await supabase.from('students').select('id').eq('id', user.id).maybeSingle();
+          if (sp2) studentProfile = sp2;
+        }
+
+        if (studentProfile) {
+          const { data: subData } = await supabase
+            .from('assignment_submissions')
+            .select('*')
+            .eq('assignment_id', assignmentId)
+            .eq('student_id', studentProfile.id)
+            .maybeSingle();
+          
+          if (subData) {
+            submissionData = subData;
+            const { data: aData } = await supabase.from('assignment_answers').select('*').eq('submission_id', subData.id);
+            answersData = aData || [];
+          }
+        }
+      } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+        const { data: subsData } = await supabase
+          .from('assignment_submissions')
+          .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
+          .eq('assignment_id', assignmentId)
+          .order('submitted_at', { ascending: false });
+        
+        if (subsData) allSubmissionsData = subsData;
+      }
+
+      return {
+        assignment: assignmentData as AssignmentWithMeta,
+        questions: (qData || []).map(formatAssignmentQuestion),
+        submission: submissionData as any,
+        answers: answersData as any,
+        allSubmissions: allSubmissionsData as any
+      };
+    } catch (err) { 
+      console.error("fetchAssignmentDetails Error:", err);
+      throw err; 
+    }
+  }, [user, currentRole]);
+
+  const submitAssignment = useCallback(async (
+    assignmentId: string, 
+    answers: RawAssignmentAnswer[], 
+    submissionId?: string,
+    content?: string,
+    fileUrl?: string
+  ): Promise<string> => {
+    const studentName = user?.user_metadata?.full_name || 'طالب';
+    const response = await fetch('/api/assignments/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        assignmentId, 
+        studentId: user?.id, 
+        studentName, 
+        answers, 
+        submissionId,
+        content,
+        fileUrl
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to submit assignment');
+    return result.id;
+  }, [user]);
+
+  // 🚀 مسار جلب التسليم للتصحيح - محصن ويعمل من جانب العميل مباشرة
+  const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
+    try {
+      const { data: submissionData, error: subError } = await supabase
+        .from('assignment_submissions')
+        .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
+        .eq('id', submissionId)
+        .maybeSingle();
+        
+      if (subError) throw subError;
+      if (!submissionData) throw new Error('التسليم غير موجود');
       
-      const answersGrading = Object.entries(questionGrades).map(([qId, data]) => ({
-         questionId: qId, isCorrect: data.isCorrect, pointsEarned: data.pointsEarned, feedback: data.feedback
-      }));
+      const { data: assignmentData } = await supabase.from('assignments').select('*, subject:subjects(name)').eq('id', submissionData.assignment_id).maybeSingle();
+      const { data: qData } = await supabase.from('assignment_questions').select('*').eq('assignment_id', submissionData.assignment_id).order('order');
+      const { data: answersData } = await supabase.from('assignment_answers').select('*').eq('submission_id', submissionId);
 
-      await updateSubmissionGrade(submissionId, numericGrade, feedback, submission?.student_id || '', assignment?.title || '', answersGrading);
-      setNotification({ type: 'success', message: 'تم حفظ التقييم بنجاح' });
-      setTimeout(() => setNotification(null), 3000);
-    } catch (error: any) {
-      setNotification({ type: 'error', message: 'خطأ في الحفظ: ' + error.message });
-    } finally { setIsSaving(false); }
-  };
+      return {
+        submission: submissionData as any,
+        assignment: assignmentData as any,
+        questions: (qData || []).map(formatAssignmentQuestion),
+        answers: answersData || []
+      };
+    } catch (err) { 
+      console.error("fetchSubmissionDetails Error:", err);
+      throw err; 
+    }
+  }, []);
 
-  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  const updateSubmissionGrade = useCallback(async (
+    submissionId: string, 
+    grade: number, 
+    feedback: string, 
+    studentId: string, 
+    assignmentTitle: string,
+    answersGrading?: any[]
+  ): Promise<void> => {
+    const response = await fetch('/api/assignments/grade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId, grade, feedback, studentId, assignmentTitle, answersGrading }),
+    });
+    
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Failed to update grade');
+  }, []);
 
-  const studentName = submission?.student?.users?.full_name || submission?.student?.user?.full_name || 'طالب غير معروف';
-
-  return (
-    <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href={`/assignments/${assignmentId}`} className="p-2.5 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all text-slate-500 border border-slate-200"><ArrowRight className="h-5 w-5" /></Link>
-            <div>
-              <h1 className="text-xl font-black text-slate-900">تقييم إجابة الطالب</h1>
-              <p className="text-xs font-bold text-slate-500">{assignment?.title}</p>
-            </div>
-          </div>
-          <button onClick={handleSaveGrade} disabled={isSaving} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-black text-white hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-70 shadow-md">
-            {isSaving ? <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save className="h-4 w-4" />} حفظ التقييم
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="glass-card p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm bg-white">
-             <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
-               <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100"><User className="h-7 w-7" /></div>
-               <div>
-                 <h2 className="text-xl font-black text-slate-900">{studentName}</h2>
-                 <p className="text-xs font-bold text-slate-500 mt-1">تم التسليم: {new Date(submission?.submitted_at || '').toLocaleString('ar-EG')}</p>
-               </div>
-             </div>
-
-             <div className="mt-8 space-y-8">
-               {questions.map((q, idx) => {
-                 const isHeader = q.type === 'section_header';
-                 const isComparison = q.type === 'comparison';
-                 const studentAns = answers[q.id];
-                 const qGrade = questionGrades[q.id] || { isCorrect: false, pointsEarned: 0, feedback: '' };
-                 const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
-
-                 if (isHeader) {
-                   return (
-                     <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100">
-                        <h3 className="text-2xl font-black text-indigo-900 leading-relaxed">{q.content || q.text}</h3>
-                        {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200" alt="مرفق" />}
-                     </div>
-                   );
-                 }
-
-                 return (
-                   <div key={q.id} className="bg-white rounded-[2rem] overflow-hidden shadow-sm border border-slate-200 group transition-all">
-                     <div className="p-5 sm:p-8 bg-slate-50/80 border-b border-slate-100 flex items-start gap-4">
-                       <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm shrink-0">{idx + 1}</div>
-                       <div className="flex-1 pt-1">
-                          <h4 className="text-lg font-bold text-slate-800 leading-relaxed">{q.content || q.text}</h4>
-                          {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
-                       </div>
-                     </div>
-
-                     <div className="p-5 sm:p-8 border-b border-slate-100 bg-white">
-                        <div className="text-sm font-black text-slate-400 mb-3 flex items-center gap-2"><User className="w-4 h-4" /> إجابة الطالب:</div>
-                        
-                        {isComparison ? (
-                          <div className="rounded-2xl border border-slate-300 overflow-hidden shadow-sm">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-right border-collapse min-w-[600px]">
-                                <thead>
-                                  <tr className="bg-indigo-50">
-                                    <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
-                                    <th className="p-4 border-b border-l border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
-                                    <th className="p-4 border-b border-slate-300 font-black text-indigo-900 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
-                                    let parsedAns: any[] = [];
-                                    try { parsedAns = JSON.parse(studentAns || '[]'); } catch(e){}
-                                    return (
-                                      <tr key={rIdx} className="hover:bg-slate-50 transition-colors">
-                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top">{aspect}</td>
-                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[0] || <span className="text-slate-300 italic">فارغ</span>}</td>
-                                        <td className="p-4 border-b border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[1] || <span className="text-slate-300 italic">فارغ</span>}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className={`p-5 rounded-2xl border font-bold text-lg leading-relaxed ${studentAns ? 'bg-indigo-50/50 border-indigo-100 text-indigo-900' : 'bg-slate-50 border-dashed border-slate-300 text-slate-400 italic'}`}>
-                            {Array.isArray(studentAns) 
-                                ? studentAns.join('، ') 
-                                : (typeof studentAns === 'object' && studentAns !== null) 
-                                    ? JSON.stringify(studentAns) 
-                                    : (studentAns || 'لم يجب الطالب على هذا السؤال.')}
-                          </div>
-                        )}
-                     </div>
-
-                     <div className="p-5 sm:p-8 bg-slate-50 border-t-4 border-indigo-100">
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-4">
-                           <div className="sm:col-span-7 flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200">
-                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: true, pointsEarned: q.points}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
-                                <CheckCircle2 className="w-4 h-4" /> صحيح
-                              </button>
-                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: false, pointsEarned: 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${!qGrade.isCorrect ? 'bg-red-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
-                                <XCircle className="w-4 h-4" /> خاطئ
-                              </button>
-                           </div>
-                           <div className="sm:col-span-5 flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200">
-                              <span className="text-xs font-black text-slate-500 px-3">الدرجة:</span>
-                              <div className="flex items-center gap-2">
-                                <input type="number" min="0" max={q.points} value={qGrade.pointsEarned === 0 ? '' : qGrade.pointsEarned} onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], pointsEarned: Number(e.target.value)}}))} className="w-16 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center font-black text-indigo-700 outline-none focus:border-indigo-500" />
-                                <span className="text-xs font-black text-slate-400 pl-3">/ {q.points}</span>
-                              </div>
-                           </div>
-                        </div>
-                        <div className="bg-white rounded-2xl border border-slate-200 focus-within:border-indigo-500 overflow-hidden">
-                           <textarea rows={2} placeholder="ملاحظة مخصصة لهذه الإجابة لتوضيح الخطأ للطالب..." value={qGrade.feedback} onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], feedback: e.target.value}}))} className="w-full bg-transparent border-none focus:ring-0 p-4 text-sm font-bold text-slate-700 resize-none outline-none" />
-                        </div>
-                     </div>
-                   </div>
-                 );
-               })}
-             </div>
-          </div>
-        </div>
-
-        {/* Right Column: Final Grading Panel */}
-        <div className="space-y-6">
-          <div className="glass-card p-6 sm:p-8 rounded-4xl border border-slate-200 shadow-xl shadow-slate-200/50 sticky top-28 bg-white">
-            <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
-              <Star className="h-6 w-6 text-amber-500" /> النتيجة النهائية
-            </h3>
-            <div className="space-y-8">
-              <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 relative overflow-hidden">
-                <label className="block text-sm font-black text-indigo-800 mb-3 relative z-10">المجموع (تلقائي)</label>
-                <div className="relative z-10 flex items-center gap-4">
-                  <input type="number" className="block w-full rounded-2xl border-2 border-indigo-200 py-4 px-4 text-indigo-700 text-4xl font-black text-center outline-none bg-white" value={grade} onChange={(e) => setGrade(e.target.value)} />
-                  <div className="shrink-0 bg-indigo-600 px-4 py-4 rounded-2xl text-center">
-                    <span className="block text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-1">من</span>
-                    <span className="block font-black text-2xl text-white">{questions.reduce((acc, q) => acc + (Number(q.points)||0), 0)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-slate-400" /> التقييم العام (يظهر للطالب)
-                </label>
-                <textarea rows={5} className="block w-full rounded-2xl border border-slate-200 py-4 px-5 bg-slate-50 focus:bg-white resize-none font-bold outline-none leading-relaxed" placeholder="تقييم عام..." value={feedback} onChange={(e) => setFeedback(e.target.value)} />
-              </div>
-
-              <div className="pt-2">
-                <button onClick={handleSaveGrade} disabled={isSaving} className="w-full flex justify-center items-center gap-3 rounded-2xl bg-slate-900 px-8 py-5 text-lg font-black text-white hover:bg-indigo-600 transition-all active:scale-95 disabled:opacity-70">
-                  {isSaving ? <div className="h-6 w-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <CheckCircle2 className="h-6 w-6" />}
-                  اعتماد وحفظ النتيجة
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return { data, loading, error, studentSubmissions, refetch: fetchAssignments, fetchAssignmentQuestions, saveAssignment, deleteAssignment, fetchAssignmentDetails, submitAssignment, fetchSubmissionDetails, updateSubmissionGrade };
 }
