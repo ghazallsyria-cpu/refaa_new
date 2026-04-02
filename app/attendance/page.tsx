@@ -347,7 +347,8 @@ export default function AttendancePage() {
                 >
                   {sections.map((s, idx) => (
                     <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`} className="text-slate-900 font-bold">
-                      {s.classes?.[0]?.name || s.classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
+                      {/* 🚀 الحل الجذري للتغلب على اعتراض TypeScript */}
+                      {(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name} {s.subject_name ? `(${s.subject_name})` : ''}
                     </option>
                   ))}
                 </select>
