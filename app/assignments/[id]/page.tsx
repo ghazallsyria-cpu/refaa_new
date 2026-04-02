@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -24,7 +24,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
   
-  const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment } = useAssignmentsSystem();
+  const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment, deleteSubmission } = useAssignmentsSystem();
   
   const [assignment, setAssignment] = useState<AssignmentWithMeta | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -39,6 +39,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  
+  const [submissionToDelete, setSubmissionToDelete] = useState<string | null>(null);
+  const [isDeletingSubmission, setIsDeletingSubmission] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'submissions' | 'preview'>('submissions');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [editData, setEditData] = useState<Partial<AssignmentWithMeta>>({});
@@ -280,6 +284,21 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
   };
 
+  const handleDeleteSubmissionAction = async () => {
+    if (!submissionToDelete) return;
+    setIsDeletingSubmission(true);
+    try {
+      await deleteSubmission(submissionToDelete);
+      showNotification('success', 'تم حذف تسليم الطالب بنجاح');
+      setSubmissionToDelete(null);
+      await fetchData();
+    } catch (error: any) {
+      showNotification('error', 'خطأ في الحذف: ' + error.message);
+    } finally {
+      setIsDeletingSubmission(false);
+    }
+  };
+
   const copyAssignmentLink = () => {
     navigator.clipboard.writeText(window.location.href);
     showNotification('success', 'تم نسخ رابط الواجب');
@@ -306,6 +325,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-24" dir="rtl">
+      {notification && (
+        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-lg font-bold text-white flex items-center gap-2 ${notification.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+          {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          {notification.message}
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-6">
         <div className="flex items-center gap-4">
           <Link href="/assignments" className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
@@ -721,6 +747,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                    بانتظار التقييم
                                  </span>
                                )}
+                               
+                               <button
+                                 onClick={() => setSubmissionToDelete(sub.id)}
+                                 className="h-11 w-11 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100 active:scale-95"
+                                 title="حذف هذا التسليم لإتاحة الفرصة للطالب"
+                               >
+                                 <Trash2 className="h-5 w-5" />
+                               </button>
+
                                <Link 
                                  href={`/assignments/${assignmentId}/submissions/${sub.id}`}
                                  className="h-11 px-6 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-indigo-600 transition-all flex items-center shadow-md active:scale-95"
@@ -776,6 +811,27 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100">إلغاء</button>
               </Dialog.Close>
               <button onClick={handleDeleteAssignmentAction} className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl hover:bg-red-700">تأكيد الحذف</button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={!!submissionToDelete} onOpenChange={(open) => !open && setSubmissionToDelete(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+            <div className="h-16 w-16 bg-rose-50 rounded-3xl flex items-center justify-center mb-6 border border-rose-100">
+              <AlertTriangle className="h-8 w-8 text-rose-500" />
+            </div>
+            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2">إلغاء تسليم الطالب</Dialog.Title>
+            <p className="text-slate-500 font-bold mb-8 leading-relaxed">هل أنت متأكد أنك تريد حذف هذا التسليم وإجاباته؟ سيُسمح للطالب بإعادة تسليم الواجب من جديد.</p>
+            <div className="flex justify-end gap-3">
+              <Dialog.Close asChild>
+                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all">إلغاء</button>
+              </Dialog.Close>
+              <button onClick={handleDeleteSubmissionAction} disabled={isDeletingSubmission} className="flex-1 rounded-2xl bg-rose-600 px-6 py-4 text-sm font-black text-white shadow-xl shadow-rose-200 hover:bg-rose-700 transition-all disabled:opacity-50">
+                {isDeletingSubmission ? 'جاري الحذف...' : 'تأكيد الحذف'}
+              </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
