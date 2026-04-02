@@ -52,7 +52,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
-  // 🚀 حالة الفرز حسب الفصل
   const [selectedSection, setSelectedSection] = useState<string>('الكل');
 
   const showNotification = (type: 'success' | 'error', message: string) => {
@@ -60,37 +59,41 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // 🚀 تحديد الفصول الفريدة للفلترة (بشكل ذكي ومحسن)
-  const uniqueSections = Array.from(new Set(submissions.map(sub => {
-     const sectionData = sub.student?.section as any;
-     const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
-     const className = classData?.name || '';
-     const sectionName = sectionData?.name || '';
-     return className && sectionName ? `${className} - ${sectionName}` : 'بدون فصل';
-  }))).filter(Boolean);
+  // 🚀 الدالة السحرية لاستخراج اسم الفصل والصف بدقة متناهية
+  const getStudentSectionName = (studentObj: any) => {
+    if (!studentObj || (!studentObj.sections && !studentObj.section)) return 'بدون فصل';
+    
+    // محاولة قراءة Sections (الجمع) أو Section (المفرد)
+    const sectionData = studentObj.sections || studentObj.section;
+    const sec = Array.isArray(sectionData) ? sectionData[0] : sectionData;
+    if (!sec) return 'بدون فصل';
+
+    const sectionName = sec.name || '';
+    
+    // محاولة قراءة Classes
+    const classData = sec.classes || sec.class;
+    const cls = Array.isArray(classData) ? classData[0] : classData;
+    const className = cls?.name || '';
+
+    if (className && sectionName) return `${className} - ${sectionName}`;
+    if (sectionName) return sectionName;
+    return 'بدون فصل';
+  };
+
+  // 🚀 تحديد الفصول الفريدة للفلترة
+  const uniqueSections = Array.from(new Set(submissions.map(sub => getStudentSectionName(sub.student)))).filter(Boolean);
 
   // 🚀 التسليمات المفلترة
   const filteredSubmissions = selectedSection === 'الكل' 
      ? submissions 
-     : submissions.filter(sub => {
-         const sectionData = sub.student?.section as any;
-         const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
-         const className = classData?.name || '';
-         const sectionName = sectionData?.name || '';
-         const full = className && sectionName ? `${className} - ${sectionName}` : 'بدون فصل';
-         return full === selectedSection;
-       });
+     : submissions.filter(sub => getStudentSectionName(sub.student) === selectedSection);
 
   const exportToExcel = () => {
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
     
-    // 🚀 التصدير يستخدم القائمة المفلترة فقط
     const csvData = filteredSubmissions.map(sub => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const sectionData = sub.student?.section as any;
-       const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
-       const sectionClass = classData?.name || '';
-       const section = sectionData ? `${sectionClass} - ${sectionData.name}` : 'بدون فصل';
+       const section = getStudentSectionName(sub.student); // 🚀 استخدام الدالة السحرية
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
@@ -125,10 +128,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
     const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const sectionData = sub.student?.section as any;
-       const classData = Array.isArray(sectionData?.classes) ? sectionData?.classes[0] : sectionData?.classes;
-       const sectionClass = classData?.name || '';
-       const section = sectionData ? `${sectionClass} - ${sectionData.name}` : 'بدون فصل';
+       const section = getStudentSectionName(sub.student); // 🚀 استخدام الدالة السحرية
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
@@ -512,7 +512,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   }
 
                   const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
-                  const isCorrect = answerDetails?.is_correct;
+                  
+                  // 🚀 اعتماد حالة الإجابة الصحيحة بناءً على تقييم المعلم
+                  const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
 
                   return (
                     <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border-2 transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
@@ -783,6 +785,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                  <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
                                    <Clock className="h-4 w-4" />
                                    <span dir="ltr">{new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
+                                 </p>
+                                 <p className="text-[10px] font-black text-indigo-600 mt-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block">
+                                    {getStudentSectionName(st)}
                                  </p>
                                </div>
                              </div>
