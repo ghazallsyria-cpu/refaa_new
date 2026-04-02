@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, MapPin, Sparkles, ChevronLeft } from 'lucide-react';
+import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, MapPin, Sparkles, ChevronLeft, Bug, LayoutGrid, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
@@ -338,7 +338,7 @@ export default function SchedulePage() {
                   >
                     {periods.map(p => {
                       const slot = scheduleData.find(s => s.day_of_week === activeDayTab && s.period === p.period_number);
-                      if (!slot) return null; // لا نعرض الحصص الفارغة للطالب في الجوال لتوفير المساحة
+                      if (!slot) return null;
 
                       return (
                         <div key={p.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col gap-4 relative overflow-hidden group hover:shadow-md transition-all">
@@ -907,7 +907,6 @@ export default function SchedulePage() {
                 )}
               </div>
             </div>
-          </div>
           </div>
 
           {/* 🚀 Printable Minimal View */}
