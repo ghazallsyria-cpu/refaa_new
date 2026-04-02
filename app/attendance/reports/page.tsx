@@ -42,6 +42,7 @@ export default function AttendanceReportsPage() {
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
+      // 1. جلب الفصول الخاصة بالمعلم أو المدير
       let availableSections = [];
       if (userRole === 'teacher') {
         const dashData = await fetchTeacherDashboardData();
@@ -67,19 +68,24 @@ export default function AttendanceReportsPage() {
         return;
       }
 
-      const sectionIds = validSections.map(s => s.id);
+      const sectionIds = validSections.map(s => String(s.id));
 
-      // 🚀 إزالة عمود period من الاستعلام لتفادي خطأ قاعدة البيانات
+      // 🚀 2. استعلام ذكي ومحمي (بدون section_id من جدول الغياب)
+      // نذهب إلى جدول الطلاب لنستخرج منه بيانات الفصل
       let query = supabase
         .from('attendance_records')
         .select(`
-          id, created_at, status, section_id, student_id,
-          students (id, users(full_name, avatar_url))
+          id, created_at, status, student_id,
+          students (
+            id, section_id,
+            users (full_name, avatar_url),
+            sections (id, name, classes(name))
+          )
         `)
         .order('created_at', { ascending: false });
 
-      if (userRole === 'teacher' && sectionIds.length > 0) {
-        query = query.in('section_id', sectionIds);
+      if (userRole === 'teacher' && currentTeacherId) {
+        query = query.eq('teacher_id', currentTeacherId);
       }
 
       const { data: attendanceData, error } = await query;
@@ -87,8 +93,18 @@ export default function AttendanceReportsPage() {
       if (error) {
         throw error;
       }
+
+      // فلترة برمجية آمنة جداً: التأكد من أن السجل يعود لأحد فصول المعلم
+      let finalData = attendanceData || [];
+      if (userRole === 'teacher' && sectionIds.length > 0) {
+        finalData = finalData.filter(record => {
+          const stu = Array.isArray(record.students) ? record.students[0] : record.students;
+          const stuSecId = stu?.section_id || stu?.sections?.id;
+          return sectionIds.includes(String(stuSecId));
+        });
+      }
       
-      setRecords(attendanceData || []);
+      setRecords(finalData);
 
     } catch (error: any) {
       console.error('Error fetching reports:', error);
@@ -106,10 +122,16 @@ export default function AttendanceReportsPage() {
   const reportData = useMemo(() => {
     let filtered = records || [];
 
+    // 1. فلترة الفصل (من بيانات الطالب المدمجة)
     if (selectedSection !== 'all') {
-      filtered = filtered.filter(r => String(r.section_id) === String(selectedSection));
+      filtered = filtered.filter(r => {
+        const stu = Array.isArray(r.students) ? r.students[0] : r.students;
+        const secId = stu?.section_id || stu?.sections?.id;
+        return String(secId) === String(selectedSection);
+      });
     }
 
+    // 2. فلترة التاريخ
     if (dateRange !== 'all') {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
@@ -143,17 +165,20 @@ export default function AttendanceReportsPage() {
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
-        const secInfo = sections.find(s => String(s.id) === String(record.section_id));
-        const secName = secInfo ? `${secInfo.className} - ${secInfo.name}` : 'فصل غير محدد';
+        // استخراج سلس وآمن لبيانات الطالب
+        const stu = Array.isArray(record.students) ? record.students[0] : record.students;
+        const userData = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
+        const secData = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
         
-        const studentData = Array.isArray(record.students) ? record.students[0] : record.students;
-        const userData = Array.isArray(studentData?.users) ? studentData?.users[0] : studentData?.users;
-
+        const className = classData?.name || '';
+        const secName = secData?.name || '';
+        
         studentMap.set(sId, {
           id: sId,
           name: userData?.full_name || 'طالب غير معروف',
           avatar: userData?.avatar_url,
-          className: secName,
+          className: className ? `${className} - ${secName}` : 'فصل غير محدد',
           present: 0,
           absent: 0,
           late: 0,
@@ -171,7 +196,7 @@ export default function AttendanceReportsPage() {
     });
 
     return Array.from(studentMap.values()).sort((a, b) => b.absent - a.absent);
-  }, [records, selectedSection, dateRange, customStartDate, customEndDate, sections]);
+  }, [records, selectedSection, dateRange, customStartDate, customEndDate]);
 
   const atRiskStudents = reportData.filter(s => s.absent >= 5);
 
@@ -277,7 +302,7 @@ export default function AttendanceReportsPage() {
       <div className="flex h-[80vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب وتجميع التقارير...</p>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب التقارير...</p>
         </div>
       </div>
     );
