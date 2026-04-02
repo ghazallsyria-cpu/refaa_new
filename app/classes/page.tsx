@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { 
   Users, BookOpen, ChevronDown, Search, User, 
   GraduationCap, Edit, Trash2, Plus, X, AlertCircle, 
-  ShieldCheck, LayoutGrid, Star, CheckCircle2
+  ShieldCheck, LayoutGrid, Star, CheckCircle2, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -30,7 +30,6 @@ export default function ClassesPage() {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modal State
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     type: 'addClass' | 'editClass' | 'deleteClass' | 'addSection' | 'editSection' | 'deleteSection' | null;
@@ -41,7 +40,6 @@ export default function ClassesPage() {
   const [inputLevel, setInputLevel] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 شرط الصلاحيات: الإدارة فقط ترى الأرقام المدنية وأزرار التعديل
   const isAdmin = userRole === 'admin' || userRole === 'management';
 
   useEffect(() => {
@@ -151,7 +149,6 @@ export default function ClassesPage() {
       className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
       dir="rtl"
     >
-      {/* 🚀 Hero Header (التحفة الفنية) */}
       <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="space-y-4">
@@ -189,7 +186,6 @@ export default function ClassesPage() {
         <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
       </div>
 
-      {/* 🚀 Smart Search Bar */}
       <div className="bg-white/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center gap-4 sticky top-24 z-30">
         <div className="relative w-full group">
           <div className="absolute inset-y-0 right-0 pr-5 flex items-center pointer-events-none">
@@ -205,7 +201,6 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      {/* 🚀 Classes Content */}
       <div className="space-y-6">
         {filteredClasses.length === 0 ? (
           <motion.div 
@@ -229,7 +224,6 @@ export default function ClassesPage() {
               transition={{ delay: idx * 0.05 }}
               className={`bg-white rounded-[2.5rem] border-2 shadow-sm overflow-hidden transition-all ${expandedClass === cls.id ? 'border-indigo-200 shadow-xl shadow-indigo-100/50' : 'border-slate-100 hover:border-indigo-100 hover:shadow-md'}`}
             >
-              {/* 🎯 Class Header Folder */}
               <div className="w-full flex flex-col md:flex-row md:items-center justify-between p-6 sm:p-8 bg-gradient-to-l from-slate-50 to-white transition-colors relative group">
                 <button
                   onClick={() => toggleClass(cls.id)}
@@ -275,7 +269,6 @@ export default function ClassesPage() {
                 </div>
               </div>
 
-              {/* 🎯 Sections & Students Area */}
               <AnimatePresence>
                 {expandedClass === cls.id && (
                   <motion.div 
@@ -294,7 +287,6 @@ export default function ClassesPage() {
                         cls.sections.map((section) => (
                           <div key={section.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all hover:border-indigo-200 hover:shadow-md">
                             
-                            {/* Section Header */}
                             <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white group">
                               <button
                                 onClick={() => toggleSection(section.id)}
@@ -331,7 +323,6 @@ export default function ClassesPage() {
                               )}
                             </div>
 
-                            {/* 🚀 Students Grid (The Modern Replacement for Tables) */}
                             <AnimatePresence>
                               {expandedSection === section.id && (
                                 <motion.div 
@@ -358,7 +349,6 @@ export default function ClassesPage() {
                                                 {student.user?.full_name || 'بدون اسم'}
                                               </p>
                                               <div className="mt-1 flex items-center gap-2">
-                                                {/* 🚀 Privacy Logic: Hide National ID from Teachers */}
                                                 {isAdmin ? (
                                                   <span className="inline-flex items-center bg-slate-100 px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold text-slate-500 font-mono border border-slate-200">
                                                     {student.national_id}
@@ -397,7 +387,6 @@ export default function ClassesPage() {
         )}
       </div>
 
-      {/* 🚀 Modals (Secured & Styled) */}
       <AnimatePresence>
         {modalConfig.isOpen && isAdmin && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -438,7 +427,7 @@ export default function ClassesPage() {
                         <AlertCircle className="h-14 w-14 text-rose-500 mb-4 animate-pulse" />
                         <p className="text-slate-700 font-bold leading-relaxed text-lg">
                           هل أنت متأكد من رغبتك في حذف <br/>
-                          <span className="font-black text-rose-600 text-xl block mt-2">"{modalConfig.data?.name}"</span>
+                          <span className="font-black text-rose-600 text-xl block mt-2">&quot;{modalConfig.data?.name}&quot;</span>
                         </p>
                         <span className="text-rose-500/80 font-bold text-xs mt-4 block bg-white px-3 py-2 rounded-xl shadow-sm">
                           تحذير: الإجراء لا رجعة فيه وقد يؤثر على السجلات.
