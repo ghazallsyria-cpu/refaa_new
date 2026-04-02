@@ -205,7 +205,7 @@ export function useAssignmentsSystem() {
           }
         }
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        // 🚀 إصلاح جلب بيانات الفصول والصفوف لكي يعمل الفرز
+        // 🚀 السحر هنا: استخدام sections بالجمع لضمان مطابقة بنية قاعدة البيانات
         const { data: subsData } = await supabase
           .from('assignment_submissions')
           .select(`*, student:students(users(full_name, email), sections(id, name, classes(id, name)))`)
