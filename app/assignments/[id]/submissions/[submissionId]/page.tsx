@@ -41,7 +41,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
           const gradesMap: Record<string, any> = {};
           
           details.answers.forEach((a: any) => {
-            // 🚀 الخوارزمية الذكية: سحب الإجابة سواء كانت نصاً أو خيارات متعددة
             let finalAns = a.answer_text;
             if (a.selected_options !== null && a.selected_options !== undefined) {
                finalAns = a.selected_options;
@@ -96,7 +95,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
-      {/* 🚀 Header التنبيهات */}
       {notification && (
         <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-lg font-bold text-white flex items-center gap-2 ${notification.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
           {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -147,7 +145,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                    );
                  }
 
-                 // 🚀 معالج الإجابات الفولاذي (لخيارات متعددة وصح وخطأ)
                  let studentAnswerText = studentAns;
                  let isUnanswered = false;
 
@@ -155,7 +152,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                     if (studentAns === undefined || studentAns === null || studentAns === '' || (Array.isArray(studentAns) && studentAns.length === 0)) {
                        isUnanswered = true;
                     } else {
-                       // توحيد شكل الإجابة لتصبح مصفوفة للبحث السهل
                        let normalizedAns: string[] = [];
                        if (Array.isArray(studentAns)) {
                          normalizedAns = studentAns.map(String);
@@ -170,7 +166,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                          normalizedAns = [String(studentAns)];
                        }
 
-                       // البحث عن التطابق في الخيارات الأساسية
                        const matchedOptions = safeOptions.filter((o: any) => {
                          const optId = String(o.id);
                          const optContent = String(o.content || o.text || o);
@@ -180,7 +175,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                        if (matchedOptions.length > 0) {
                          studentAnswerText = matchedOptions.map((o: any) => o.content || o.text || o).join('، ');
                        } else {
-                         // إذا لم يجد تطابقاً تاماً يعرض الإجابة كما هي
                          studentAnswerText = normalizedAns.join('، ');
                        }
                     }
