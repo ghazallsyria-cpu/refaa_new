@@ -160,33 +160,72 @@ export function useAssignmentsSystem() {
     await fetchAssignments();
   }, [fetchAssignments]);
 
-  // 🚀 مسار جلب تفاصيل الواجب الخارق (محصن ضد الانهيارات)
+  // 🚀 مسار جلب تفاصيل الواجب - محصن ويعمل من جانب العميل بدون الحاجة لملفات API جديدة
   const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
     try {
-      const response = await fetch('/api/assignments/get-details', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignmentId, userId: user?.id, role: currentRole }),
-      });
-      const result = await response.json();
-      
-      if (!response.ok || !result.success) {
-         console.warn("API Warning:", result.error);
-         throw new Error(result.error || 'فشل تحميل تفاصيل الواجب');
-      }
+      const { data: assignmentData, error: assignmentError } = await supabase
+        .from('assignments')
+        .select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
+        .eq('id', assignmentId)
+        .maybeSingle();
 
-      if (!result.assignment) {
-         throw new Error('لم يتم العثور على الواجب');
+      if (assignmentError) throw assignmentError;
+      if (!assignmentData) throw new Error('الواجب غير موجود أو لا تملك صلاحية الوصول إليه');
+
+      const { data: qData } = await supabase
+        .from('assignment_questions')
+        .select('*')
+        .eq('assignment_id', assignmentId)
+        .order('order');
+
+      let submissionData = null;
+      let answersData: any[] = [];
+      let allSubmissionsData: any[] = [];
+
+      if (currentRole === 'student' && user) {
+        let studentProfile = null;
+        const { data: sp1 } = await supabase.from('students').select('id').eq('user_id', user.id).maybeSingle();
+        if (sp1) studentProfile = sp1;
+        else {
+          const { data: sp2 } = await supabase.from('students').select('id').eq('id', user.id).maybeSingle();
+          if (sp2) studentProfile = sp2;
+        }
+
+        if (studentProfile) {
+          const { data: subData } = await supabase
+            .from('assignment_submissions')
+            .select('*')
+            .eq('assignment_id', assignmentId)
+            .eq('student_id', studentProfile.id)
+            .maybeSingle();
+          
+          if (subData) {
+            submissionData = subData;
+            const { data: aData } = await supabase.from('assignment_answers').select('*').eq('submission_id', subData.id);
+            answersData = aData || [];
+          }
+        }
+      } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+        const { data: subsData } = await supabase
+          .from('assignment_submissions')
+          .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
+          .eq('assignment_id', assignmentId)
+          .order('submitted_at', { ascending: false });
+        
+        if (subsData) allSubmissionsData = subsData;
       }
 
       return {
-        assignment: result.assignment as AssignmentWithMeta,
-        questions: (result.questions || []).map(formatAssignmentQuestion),
-        submission: result.submission,
-        answers: result.answers || [],
-        allSubmissions: result.allSubmissions || []
+        assignment: assignmentData as AssignmentWithMeta,
+        questions: (qData || []).map(formatAssignmentQuestion),
+        submission: submissionData as any,
+        answers: answersData as any,
+        allSubmissions: allSubmissionsData as any
       };
-    } catch (err) { throw err; }
+    } catch (err) { 
+      console.error("fetchAssignmentDetails Error:", err);
+      throw err; 
+    }
   }, [user, currentRole]);
 
   const submitAssignment = useCallback(async (
@@ -215,27 +254,32 @@ export function useAssignmentsSystem() {
     return result.id;
   }, [user]);
 
-  // 🚀 مسار جلب التسليم للتصحيح
+  // 🚀 مسار جلب التسليم للتصحيح - محصن ويعمل من جانب العميل مباشرة
   const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
     try {
-      const response = await fetch('/api/assignments/get-submission', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId }),
-      });
-      const result = await response.json();
+      const { data: submissionData, error: subError } = await supabase
+        .from('assignment_submissions')
+        .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
+        .eq('id', submissionId)
+        .maybeSingle();
+        
+      if (subError) throw subError;
+      if (!submissionData) throw new Error('التسليم غير موجود');
       
-      if (!response.ok || !result.success) {
-         throw new Error(result.error || 'فشل تحميل إجابات الطالب للتقييم');
-      }
+      const { data: assignmentData } = await supabase.from('assignments').select('*, subject:subjects(name)').eq('id', submissionData.assignment_id).maybeSingle();
+      const { data: qData } = await supabase.from('assignment_questions').select('*').eq('assignment_id', submissionData.assignment_id).order('order');
+      const { data: answersData } = await supabase.from('assignment_answers').select('*').eq('submission_id', submissionId);
 
       return {
-        submission: result.submission,
-        assignment: result.assignment,
-        questions: (result.questions || []).map(formatAssignmentQuestion),
-        answers: result.answers || []
+        submission: submissionData as any,
+        assignment: assignmentData as any,
+        questions: (qData || []).map(formatAssignmentQuestion),
+        answers: answersData || []
       };
-    } catch (err) { throw err; }
+    } catch (err) { 
+      console.error("fetchSubmissionDetails Error:", err);
+      throw err; 
+    }
   }, []);
 
   const updateSubmissionGrade = useCallback(async (
