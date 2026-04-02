@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus } from 'lucide-react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Check, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
-import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 
 export default function AttendancePage() {
   const { authRole } = useAuth();
@@ -27,6 +26,7 @@ export default function AttendancePage() {
   const [period, setPeriod] = useState<number>(1);
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
+  const [stats, setStats] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
@@ -82,6 +82,7 @@ export default function AttendancePage() {
       if (res) {
         setStudents(res.students);
         setAttendance(res.attendance);
+        setStats(res.stats);
       }
     }
   }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance]);
@@ -125,7 +126,6 @@ export default function AttendancePage() {
     setAttendance(newAttendance);
   };
 
-  // 🚀 المحرك الحي للإحصائيات (Live Stats Engine)
   const totalStudents = students.length;
   const presentCount = Object.values(attendance).filter(v => v === 'present').length;
   const absentCount = Object.values(attendance).filter(v => v === 'absent').length;
@@ -136,12 +136,11 @@ export default function AttendancePage() {
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
-  // 🚀 STUDENT VIEW (لوحة الطالب السحرية)
+  // 🚀 STUDENT VIEW
   // ==========================================
   if (authRole === 'student') {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
-        
         <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
           <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-right">
             <div>
@@ -171,7 +170,6 @@ export default function AttendancePage() {
               <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حاضر (يوم كامل)</p>
             </div>
           </div>
-
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center text-center gap-3 shadow-sm hover:shadow-lg transition-all group">
             <div className="h-14 w-14 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
               <XCircle className="h-7 w-7" />
@@ -181,7 +179,6 @@ export default function AttendancePage() {
               <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">غائب (يوم كامل)</p>
             </div>
           </div>
-
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-amber-100 flex flex-col items-center justify-center text-center gap-3 shadow-sm hover:shadow-lg transition-all group">
             <div className="h-14 w-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
               <Clock className="h-7 w-7" />
@@ -191,7 +188,6 @@ export default function AttendancePage() {
               <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">غائب جزئي</p>
             </div>
           </div>
-
           <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] border border-blue-100 flex flex-col items-center justify-center text-center gap-3 shadow-sm hover:shadow-lg transition-all group">
             <div className="h-14 w-14 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
               <AlertCircle className="h-7 w-7" />
@@ -244,12 +240,11 @@ export default function AttendancePage() {
   }
 
   // ==========================================
-  // 🚀 TEACHER / ADMIN VIEW (اللوحة الاحترافية للمعلم)
+  // 🚀 TEACHER / ADMIN VIEW
   // ==========================================
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8 overflow-x-hidden" dir="rtl">
       
-      {/* التنبيهات العلوية العائمة */}
       <AnimatePresence>
         {message.text && (
           <motion.div 
@@ -263,8 +258,8 @@ export default function AttendancePage() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Header & Save Button */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+      {/* 🚀 Header & Action Buttons */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">
             <LayoutGrid className="w-3.5 h-3.5" />
@@ -274,21 +269,32 @@ export default function AttendancePage() {
           <p className="text-sm sm:text-base text-slate-500 font-bold">يتم تسجيل غياب الطلاب بشكل منفصل لكل حصة دراسية لضمان الدقة.</p>
         </div>
         
-        <button 
-          onClick={handleSave}
-          disabled={saving || students.length === 0}
-          className="w-full md:w-auto inline-flex items-center justify-center gap-3 rounded-[1.5rem] bg-indigo-600 px-8 py-4 text-base font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-        >
-          {saving ? (
-            <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-          ) : (
-            <Save className="h-5 w-5" />
-          )}
-          {saving ? 'جاري الحفظ...' : 'اعتماد وحفظ السجل'}
-        </button>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          {/* 🚀 الزر السحري الجديد للوصول إلى التقارير */}
+          <Link 
+            href="/attendance/reports"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-amber-50 border border-amber-200 px-6 py-4 text-sm font-black text-amber-700 shadow-sm hover:bg-amber-100 transition-all active:scale-95 shrink-0"
+          >
+            <BarChart2 className="h-5 w-5" />
+            تقارير وإحصائيات الغياب
+          </Link>
+          
+          <button 
+            onClick={handleSave}
+            disabled={saving || students.length === 0}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-[1.5rem] bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {saving ? (
+              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <Save className="h-5 w-5" />
+            )}
+            {saving ? 'جاري الحفظ...' : 'اعتماد السجل'}
+          </button>
+        </div>
       </div>
 
-      {/* 🚀 Mission Control Panel (لوحة التحكم المركزية الزجاجية) */}
+      {/* 🚀 Mission Control Panel */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 sm:p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
         
@@ -378,7 +384,7 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {/* 🚀 LIVE STATS ENGINE (إحصائيات الحصة الحالية مباشرة) */}
+      {/* 🚀 LIVE STATS ENGINE */}
       {students.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
           <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center group hover:shadow-md transition-all">
@@ -441,7 +447,6 @@ export default function AttendancePage() {
             </div>
           </div>
           
-          {/* Quick Mark Buttons */}
           <div className="flex items-center gap-2 bg-white p-1.5 rounded-[1.5rem] shadow-sm border border-slate-200 w-full lg:w-auto overflow-x-auto scrollbar-hide shrink-0">
             <button 
               onClick={() => markAllAs('present')} 
@@ -458,7 +463,7 @@ export default function AttendancePage() {
           </div>
         </div>
         
-        {/* 🚀 Desktop Table View (Modern Pills Design) */}
+        {/* 🚀 Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100">
             <thead>
@@ -505,7 +510,6 @@ export default function AttendancePage() {
                       </div>
                     </td>
                     
-                    {/* Status Buttons (Radio Pills) */}
                     {[
                       { status: 'present', color: 'emerald', icon: CheckCircle2, label: 'حاضر' },
                       { status: 'absent', color: 'rose', icon: XCircle, label: 'غائب' },
@@ -538,7 +542,7 @@ export default function AttendancePage() {
           </table>
         </div>
 
-        {/* 🚀 Mobile View (Smart Cards) */}
+        {/* 🚀 Mobile View */}
         <div className="md:hidden divide-y divide-slate-100 bg-slate-50/30">
           {systemLoading ? (
             <div className="py-20 text-center">
