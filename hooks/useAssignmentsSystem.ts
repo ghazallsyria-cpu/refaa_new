@@ -205,9 +205,10 @@ export function useAssignmentsSystem() {
           }
         }
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+        // 🚀 إصلاح جلب بيانات الفصول والصفوف لكي يعمل الفرز
         const { data: subsData } = await supabase
           .from('assignment_submissions')
-          .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
+          .select(`*, student:students(users(full_name, email), sections(id, name, classes(id, name)))`)
           .eq('assignment_id', assignmentId)
           .order('submitted_at', { ascending: false });
         
@@ -298,7 +299,6 @@ export function useAssignmentsSystem() {
     if (!response.ok) throw new Error(result.error || 'Failed to update grade');
   }, []);
 
-  // 🚀 دالة الحذف الجديدة
   const deleteSubmission = useCallback(async (submissionId: string): Promise<void> => {
     const response = await fetch('/api/assignments/delete-submission', {
       method: 'POST',
