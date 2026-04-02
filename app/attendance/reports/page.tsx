@@ -5,14 +5,14 @@ import {
   BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
   Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
   XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer,
-  RefreshCw
+  RefreshCw, SearchX, Bug
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 
@@ -23,8 +23,9 @@ export default function AttendanceReportsPage() {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
+  const [dbError, setDbError] = useState<string | null>(null); // 🚀 رادار الأخطاء
   
-  // 🚀 Filters (تم تعيين الافتراضي إلى "كل الأوقات" لضمان ظهور البيانات)
+  // Filters
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
@@ -33,61 +34,63 @@ export default function AttendanceReportsPage() {
   const fetchData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    setDbError(null);
     try {
-      let currentTeacherId = null;
+      // 1. جلب الفصول الخاصة بالمعلم أو المدير
+      let availableSections = [];
       if (userRole === 'teacher') {
-        const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (teacherData) currentTeacherId = teacherData.id;
+        const dashData = await fetchTeacherDashboardData();
+        availableSections = dashData?.sections || [];
+      } else {
+        const { data } = await supabase.from('sections').select('id, name, classes(name)');
+        availableSections = data || [];
       }
 
-      // 🚀 جلب سجلات الغياب بطريقة محمية
+      // تنظيف وترتيب بيانات الفصول في الذاكرة
+      const validSections = availableSections.map(sec => {
+        const classData = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
+        return {
+          id: sec.id,
+          name: sec.name,
+          className: classData?.name || 'فصل غير محدد'
+        };
+      });
+      setSections(validSections);
+
+      // إذا كان معلماً وليس لديه فصول، أوقف البحث
+      if (validSections.length === 0 && userRole === 'teacher') {
+        setRecords([]);
+        setLoading(false);
+        return;
+      }
+
+      const sectionIds = validSections.map(s => s.id);
+
+      // 2. جلب سجلات الغياب بذكاء (عبر section_id وليس teacher_id)
       let query = supabase
         .from('attendance_records')
         .select(`
-          *,
-          students (users(full_name, avatar_url)),
-          sections (id, name, classes(name))
+          id, date, period, status, section_id, student_id,
+          students (id, users(full_name, avatar_url))
         `)
         .order('date', { ascending: false });
 
-      if (currentTeacherId) {
-        query = query.eq('teacher_id', currentTeacherId);
+      // إذا كان معلماً، اجلب فقط سجلات فصوله
+      if (userRole === 'teacher' && sectionIds.length > 0) {
+        query = query.in('section_id', sectionIds);
       }
 
       const { data: attendanceData, error } = await query;
       
       if (error) {
-        console.error("Error fetching attendance:", error);
+        throw error; // سيتم التقاطه في catch
       }
       
       setRecords(attendanceData || []);
 
-      // 🚀 العزل والحماية: جلب الفصول الخاصة بالمعلم فقط أو كافة الفصول للمدير
-      if (userRole === 'teacher') {
-        // نستخدم النظام الذكي لجلب فصول المعلم المباشرة من لوحة التحكم
-        const dashData = await fetchTeacherDashboardData();
-        if (dashData && dashData.sections && dashData.sections.length > 0) {
-          setSections(dashData.sections);
-        } else {
-          // حل احتياطي في حال عدم وجود فصول في لوحة التحكم
-          const uniqueSectionsMap = new Map();
-          (attendanceData || []).forEach(record => {
-            const sec = record.sections || (record as any).section;
-            const secObj = Array.isArray(sec) ? sec[0] : sec;
-            if (secObj && secObj.id && !uniqueSectionsMap.has(secObj.id)) {
-              uniqueSectionsMap.set(secObj.id, secObj);
-            }
-          });
-          setSections(Array.from(uniqueSectionsMap.values()));
-        }
-      } else if (userRole === 'admin' || userRole === 'management') {
-        let sectionsQuery = supabase.from('sections').select('id, name, classes(name)');
-        const { data: sectionsData } = await sectionsQuery;
-        setSections(sectionsData || []);
-      }
-
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching reports:', error);
+      setDbError(error.message || JSON.stringify(error));
     } finally {
       setLoading(false);
     }
@@ -97,45 +100,42 @@ export default function AttendanceReportsPage() {
     fetchData();
   }, [fetchData]);
 
-  // 🚀 المحرك الذكي المحمي للفلترة والتجميع
+  // 🚀 المحرك الذكي للفلترة والتجميع
   const reportData = useMemo(() => {
     let filtered = records || [];
 
     // 1. فلترة الفصل
     if (selectedSection !== 'all') {
-      filtered = filtered.filter(r => {
-        const sec = r.sections || (r as any).section;
-        const secObj = Array.isArray(sec) ? sec[0] : sec;
-        const secId = secObj?.id || r.section_id;
-        return secId === selectedSection;
-      });
+      filtered = filtered.filter(r => String(r.section_id) === String(selectedSection));
     }
 
-    // 2. فلترة التاريخ
+    // 2. فلترة التاريخ (بطريقة آمنة جداً ضد مشاكل الـ Timezone)
     if (dateRange !== 'all') {
       const today = new Date();
+      const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+      
       filtered = filtered.filter(r => {
-        if (!r.date) return true; // تجاوز السجلات التي لا تحتوي تاريخ
-        const recordDate = new Date(r.date);
+        if (!r.date) return false;
         
         if (dateRange === 'today') {
-          return recordDate.toDateString() === today.toDateString();
-        } else if (dateRange === 'week') {
+          return r.date.startsWith(todayStr);
+        } 
+        
+        const recordDate = new Date(r.date);
+        if (dateRange === 'week') {
           return recordDate >= startOfWeek(today, { weekStartsOn: 6 }) && recordDate <= endOfWeek(today, { weekStartsOn: 6 });
         } else if (dateRange === 'month') {
           return recordDate >= startOfMonth(today) && recordDate <= endOfMonth(today);
         } else if (dateRange === 'custom') {
-          const start = new Date(customStartDate);
-          start.setHours(0,0,0,0);
-          const end = new Date(customEndDate);
-          end.setHours(23,59,59,999);
+          const start = new Date(customStartDate); start.setHours(0,0,0,0);
+          const end = new Date(customEndDate); end.setHours(23,59,59,999);
           return recordDate >= start && recordDate <= end;
         }
         return true;
       });
     }
 
-    // 3. تجميع البيانات بمرونة عالية
+    // 3. تجميع البيانات 
     const studentMap = new Map<string, any>();
     
     filtered.forEach(record => {
@@ -143,21 +143,19 @@ export default function AttendanceReportsPage() {
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
-        // استخراج مرن لاسم الفصل
-        const sec = record.sections || (record as any).section;
-        const secObj = Array.isArray(sec) ? sec[0] : sec;
-        const classData = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
-        const className = classData?.name || '';
+        // استخراج اسم الفصل من القائمة المحلية المحفوظة
+        const secInfo = sections.find(s => String(s.id) === String(record.section_id));
+        const secName = secInfo ? `${secInfo.className} - ${secInfo.name}` : 'فصل غير محدد';
         
-        // استخراج مرن لاسم الطالب
-        const studentData = record.students || (record as any).student;
-        const studentUser = Array.isArray(studentData) ? studentData[0]?.users : studentData?.users || studentData?.user;
+        // استخراج اسم الطالب
+        const studentData = Array.isArray(record.students) ? record.students[0] : record.students;
+        const userData = Array.isArray(studentData?.users) ? studentData?.users[0] : studentData?.users;
 
         studentMap.set(sId, {
           id: sId,
-          name: studentUser?.full_name || 'طالب غير معروف',
-          avatar: studentUser?.avatar_url,
-          className: className ? `${className} - ${secObj?.name || ''}` : (secObj?.name || 'فصل غير محدد'),
+          name: userData?.full_name || 'طالب غير معروف',
+          avatar: userData?.avatar_url,
+          className: secName,
           present: 0,
           absent: 0,
           late: 0,
@@ -175,17 +173,18 @@ export default function AttendanceReportsPage() {
     });
 
     return Array.from(studentMap.values()).sort((a, b) => b.absent - a.absent);
-  }, [records, selectedSection, dateRange, customStartDate, customEndDate]);
+  }, [records, selectedSection, dateRange, customStartDate, customEndDate, sections]);
 
   const atRiskStudents = reportData.filter(s => s.absent >= 5);
 
   const getReportTitle = () => {
-    const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => s.id === selectedSection)?.name || '';
+    const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => String(s.id) === String(selectedSection))?.name || '';
     const dateText = dateRange === 'all' ? 'كل الأوقات' : dateRange === 'today' ? 'اليوم' : dateRange === 'week' ? 'هذا الأسبوع' : dateRange === 'month' ? 'هذا الشهر' : 'فترة مخصصة';
     return `تقرير غياب (${secName}) - ${dateText}`;
   };
 
   const exportToExcel = () => {
+    if (reportData.length === 0) return alert('لا توجد بيانات للتصدير');
     const data = reportData.map((s, index) => ({
       'م': index + 1,
       'اسم الطالب': s.name,
@@ -208,6 +207,11 @@ export default function AttendanceReportsPage() {
     if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
 
     const dataToPrint = isWarningReport ? atRiskStudents : reportData;
+    if (dataToPrint.length === 0) {
+      printWindow.close();
+      return alert('لا توجد بيانات للطباعة');
+    }
+    
     const title = isWarningReport ? 'تقرير الطلاب المنذرين (تجاوز 5 غيابات)' : getReportTitle();
 
     const rows = dataToPrint.map((s, i) => `
@@ -275,7 +279,32 @@ export default function AttendanceReportsPage() {
       <div className="flex h-[80vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب التقارير...</p>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب وتجميع التقارير...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 رادار الأخطاء (يظهر فقط إذا كان هناك مشكلة في قاعدة البيانات)
+  if (dbError) {
+    return (
+      <div className="flex h-screen items-center justify-center p-6" dir="rtl">
+        <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-rose-100 text-center max-w-lg w-full">
+          <div className="h-24 w-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
+             <Bug className="h-12 w-12 text-rose-500 animate-bounce" />
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 mb-3">عذراً، حدث خطأ في قاعدة البيانات</h2>
+          <div className="bg-rose-50 p-4 rounded-xl text-right mb-8 overflow-auto max-h-32 border border-rose-100">
+             <p className="text-rose-600 font-mono text-xs" dir="ltr">{dbError}</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={fetchData} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
+               <RefreshCw className="w-5 h-5" /> إعادة المحاولة
+            </button>
+            <Link href="/attendance" className="flex-1 bg-white text-slate-700 border border-slate-200 py-4 rounded-2xl font-black hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-2">
+               العودة
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -338,13 +367,9 @@ export default function AttendanceReportsPage() {
               className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none cursor-pointer"
             >
               <option value="all">جميع الفصول والشعب</option>
-              {sections.map(s => {
-                const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes;
-                const className = classData?.name || '';
-                return (
-                  <option key={s.id} value={s.id}>{className} - {s.name}</option>
-                );
-              })}
+              {sections.map(s => (
+                <option key={s.id} value={s.id}>{s.className} - {s.name}</option>
+              ))}
             </select>
           </div>
 
@@ -453,9 +478,10 @@ export default function AttendanceReportsPage() {
                   <td colSpan={6} className="py-16 sm:py-20 text-center">
                     <div className="flex flex-col items-center gap-3 sm:gap-4">
                       <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                        <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
+                        <SearchX className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
                       </div>
                       <p className="text-slate-500 font-bold text-xs sm:text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
+                      <p className="text-slate-400 font-medium text-[10px] sm:text-xs">تأكد من أنك قمت برصد الغياب لطلابك من لوحة الرصد أولاً.</p>
                     </div>
                   </td>
                 </tr>
