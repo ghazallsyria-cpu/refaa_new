@@ -34,7 +34,7 @@ export default function AttendancePage() {
   const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0 });
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
-  const [studentDbError, setStudentDbError] = useState<string | null>(null); // رادار أخطاء الطالب
+  const [studentDbError, setStudentDbError] = useState<string | null>(null);
 
   useEffect(() => {
     setDate(new Date().toISOString().split('T')[0]);
@@ -85,30 +85,30 @@ export default function AttendancePage() {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
-  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب (مدرع ضد أخطاء الأعمدة)
+  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب
   const fetchStudentDataDirectly = useCallback(async () => {
     if (authRole !== 'student' || !user) return;
     setIsStudentLoading(true);
     setStudentDbError(null);
     try {
       // 1. جلب بيانات الطالب والفصل الخاص به بأمان
+      // 🚀 تم تصحيح البحث ليتم بواسطة 'id' بدلاً من 'user_id' لتطابق قاعدة البيانات
       const { data: studentData, error: stuErr } = await supabase
         .from('students')
         .select('id, sections(name, classes(name))')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (stuErr) throw new Error("خطأ في جلب بيانات الطالب: " + stuErr.message);
       if (!studentData) throw new Error("تعذر إيجاد ملف الطالب المرتبط بهذا الحساب.");
 
-      // استخراج اسم الفصل ليعرض في البطاقات
       const sec: any = studentData.sections;
       const secName = Array.isArray(sec) ? sec[0]?.name : sec?.name || '';
       const classData: any = Array.isArray(sec) ? sec[0]?.classes : sec?.classes;
       const className = Array.isArray(classData) ? classData[0]?.name : classData?.name || '';
       const fullClassName = className ? `${className} - ${secName}` : 'حصة مسجلة';
 
-      // 2. استعلام مدرع 100%: نطلب فقط الأعمدة الأساسية المضمونة في جدول الغياب
+      // 2. استعلام مدرع لسجلات الغياب
       const { data: records, error: recErr } = await supabase
         .from('attendance_records')
         .select('id, created_at, status')
@@ -127,7 +127,6 @@ export default function AttendancePage() {
         });
         setStudentStats(calculatedStats);
         
-        // دمج اسم الفصل برمجياً مع السجلات
         const enrichedRecords = records.map(r => ({
             ...r,
             displayClassName: fullClassName
@@ -194,7 +193,6 @@ export default function AttendancePage() {
   // 🚀 STUDENT VIEW 
   // ==========================================
   if (authRole === 'student') {
-    // 🚀 رادار الأخطاء الخاص بالطالب
     if (studentDbError) {
       return (
         <div className="flex h-[80vh] items-center justify-center p-6" dir="rtl">
