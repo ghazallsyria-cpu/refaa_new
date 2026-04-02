@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
     const { submissionId, grade, feedback, studentId, assignmentTitle, answersGrading } = await req.json();
 
-    // 1. تحديث الدرجة النهائية للتسليم (ما تراه في صفحة الطالب الرئيسية)
+    // 1. تحديث الدرجة النهائية للتسليم العام
     const { error: subError } = await adminSupabase
       .from('assignment_submissions')
       .update({ grade, feedback, status: 'graded' })
@@ -21,22 +21,45 @@ export async function POST(req: Request) {
     
     if (subError) throw new Error('فشل تحديث درجة التسليم: ' + subError.message);
 
-    // 2. 🚀 السحر هنا: تحديث حالة كل سؤال (هل هو صحيح؟ وكم درجته؟) لكي تظهر للطالب!
+    // 2. تحديث درجات الأسئلة الفردية (السحر هنا)
     if (answersGrading && Array.isArray(answersGrading)) {
        for (const ans of answersGrading) {
-         await adminSupabase
+         
+         // البحث هل توجد إجابة مسجلة لهذا السؤال
+         const { data: existingAns } = await adminSupabase
            .from('assignment_answers')
-           .update({
-             is_correct: ans.isCorrect,
-             points_earned: ans.pointsEarned,
-             feedback: ans.feedback
-           })
+           .select('id')
            .eq('submission_id', submissionId)
-           .eq('question_id', ans.questionId);
+           .eq('question_id', ans.questionId)
+           .maybeSingle();
+
+         if (existingAns) {
+            // تحديث الإجابة الموجودة
+            await adminSupabase
+              .from('assignment_answers')
+              .update({
+                is_correct: ans.isCorrect,
+                points_earned: ans.pointsEarned,
+                feedback: ans.feedback
+              })
+              .eq('id', existingAns.id);
+         } else {
+            // إذا ترك الطالب السؤال فارغاً، ننشئ سجلاً لنحفظ تقييم المعلم (مثلاً خاطئ و 0)
+            await adminSupabase
+              .from('assignment_answers')
+              .insert({
+                submission_id: submissionId,
+                question_id: ans.questionId,
+                answer_text: 'لم يجب الطالب',
+                is_correct: ans.isCorrect,
+                points_earned: ans.pointsEarned,
+                feedback: ans.feedback
+              });
+         }
        }
     }
 
-    // 3. إرسال إشعار للطالب بأنه تم تقييم واجبه
+    // 3. إرسال إشعار للطالب
     if (studentId) {
         const { data: stUser } = await adminSupabase.from('students').select('user_id').eq('id', studentId).maybeSingle();
         if (stUser?.user_id) {
