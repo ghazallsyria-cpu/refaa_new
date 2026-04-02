@@ -160,7 +160,6 @@ export function useAssignmentsSystem() {
     await fetchAssignments();
   }, [fetchAssignments]);
 
-  // 🚀 مسار جلب تفاصيل الواجب - محصن ويعمل من جانب العميل بدون الحاجة لملفات API جديدة
   const fetchAssignmentDetails = useCallback(async (assignmentId: string): Promise<AssignmentDetails> => {
     try {
       const { data: assignmentData, error: assignmentError } = await supabase
@@ -254,7 +253,6 @@ export function useAssignmentsSystem() {
     return result.id;
   }, [user]);
 
-  // 🚀 مسار جلب التسليم للتصحيح - محصن ويعمل من جانب العميل مباشرة
   const fetchSubmissionDetails = useCallback(async (submissionId: string) => {
     try {
       const { data: submissionData, error: subError } = await supabase
@@ -300,5 +298,16 @@ export function useAssignmentsSystem() {
     if (!response.ok) throw new Error(result.error || 'Failed to update grade');
   }, []);
 
-  return { data, loading, error, studentSubmissions, refetch: fetchAssignments, fetchAssignmentQuestions, saveAssignment, deleteAssignment, fetchAssignmentDetails, submitAssignment, fetchSubmissionDetails, updateSubmissionGrade };
+  // 🚀 دالة الحذف الجديدة
+  const deleteSubmission = useCallback(async (submissionId: string): Promise<void> => {
+    const response = await fetch('/api/assignments/delete-submission', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'فشل حذف التسليم');
+  }, []);
+
+  return { data, loading, error, studentSubmissions, refetch: fetchAssignments, fetchAssignmentQuestions, saveAssignment, deleteAssignment, fetchAssignmentDetails, submitAssignment, fetchSubmissionDetails, updateSubmissionGrade, deleteSubmission };
 }
