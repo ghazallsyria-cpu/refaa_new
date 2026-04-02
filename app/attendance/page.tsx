@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Check, Info, ShieldCheck } from 'lucide-react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Check, Info, ShieldCheck, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
