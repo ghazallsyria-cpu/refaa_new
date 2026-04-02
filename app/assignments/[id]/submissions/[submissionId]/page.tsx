@@ -96,6 +96,14 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-sans" dir="rtl">
+      {/* 🚀 Header التنبيهات */}
+      {notification && (
+        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-lg font-bold text-white flex items-center gap-2 ${notification.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+          {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          {notification.message}
+        </div>
+      )}
+
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -263,6 +271,34 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                })}
              </div>
           </div>
+
+          {(submission?.content || submission?.file_url) && (
+            <div className="glass-card p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm bg-white mt-8">
+              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                 <FileText className="h-6 w-6 text-indigo-500" /> المرفقات والنصوص الإضافية
+              </h3>
+              
+              {submission?.content && (
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-6">
+                  <p className="text-slate-800 whitespace-pre-wrap font-bold text-lg leading-relaxed">{submission.content}</p>
+                </div>
+              )}
+              
+              {submission?.file_url && (
+                <div className="relative w-full h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden flex flex-col items-center justify-center p-4">
+                  {submission.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || submission.file_url.includes('cloudinary.com/image') ? (
+                    <img src={submission.file_url} alt="مرفق الطالب" className="max-h-[600px] w-auto object-contain rounded-xl shadow-sm" />
+                  ) : (
+                    <a href={submission.file_url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-4 text-indigo-600 hover:text-indigo-800">
+                       <FileText className="h-16 w-16" />
+                       <span className="font-black underline">تحميل الملف المرفق</span>
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
 
         {/* Right Column: Final Grading Panel */}
