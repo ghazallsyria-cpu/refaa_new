@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft, Bug, RefreshCw } from 'lucide-react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, ArrowLeft, Bug, RefreshCw, Calculator, Layers, PieChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
@@ -31,7 +31,8 @@ export default function AttendancePage() {
   const [message, setMessage] = useState({ text: '', type: '' });
 
   // 🚀 حالات الطالب
-  const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0 });
+  const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 });
+  const [subjectStats, setSubjectStats] = useState<any[]>([]); // إحصائيات المواد
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
   const [studentDbError, setStudentDbError] = useState<string | null>(null);
@@ -85,14 +86,12 @@ export default function AttendancePage() {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
-  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب
+  // 🚀 المحرك المستقل والمحمي لجلب إحصائيات الطالب الشاملة
   const fetchStudentDataDirectly = useCallback(async () => {
     if (authRole !== 'student' || !user) return;
     setIsStudentLoading(true);
     setStudentDbError(null);
     try {
-      // 1. جلب بيانات الطالب والفصل الخاص به بأمان
-      // 🚀 تم تصحيح البحث ليتم بواسطة 'id' بدلاً من 'user_id' لتطابق قاعدة البيانات
       const { data: studentData, error: stuErr } = await supabase
         .from('students')
         .select('id, sections(name, classes(name))')
@@ -108,28 +107,54 @@ export default function AttendancePage() {
       const className = Array.isArray(classData) ? classData[0]?.name : classData?.name || '';
       const fullClassName = className ? `${className} - ${secName}` : 'حصة مسجلة';
 
-      // 2. استعلام مدرع لسجلات الغياب
+      // 🚀 استعلام شامل يضم السجلات والمواد المرتبطة بها
       const { data: records, error: recErr } = await supabase
         .from('attendance_records')
-        .select('id, created_at, status')
+        .select(`
+          id, created_at, status, period,
+          subjects (name)
+        `)
         .eq('student_id', studentData.id)
         .order('created_at', { ascending: false });
 
       if (recErr) throw new Error("خطأ في قاعدة بيانات السجلات: " + recErr.message);
 
       if (records) {
-        const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0 };
+        const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 };
+        const subjectsMap = new Map<string, any>();
+
         records.forEach((r: any) => {
+           // 1. حساب الإحصائيات العامة
            if (r.status === 'present') calculatedStats.present++;
            else if (r.status === 'absent') calculatedStats.absent++;
            else if (r.status === 'late') calculatedStats.late++;
            else if (r.status === 'excused') calculatedStats.excused++;
+
+           // 2. تجميع الإحصائيات حسب المادة
+           const subjData = Array.isArray(r.subjects) ? r.subjects[0] : r.subjects;
+           const subjName = subjData?.name || 'نشاط / مادة غير محددة';
+
+           if (!subjectsMap.has(subjName)) {
+             subjectsMap.set(subjName, { name: subjName, present: 0, absent: 0, late: 0, excused: 0 });
+           }
+           
+           const sStats = subjectsMap.get(subjName);
+           if (r.status === 'present') sStats.present++;
+           else if (r.status === 'absent') sStats.absent++;
+           else if (r.status === 'late') sStats.late++;
+           else if (r.status === 'excused') sStats.excused++;
         });
+
+        // 🚀 المعادلة السحرية: كل 5 غيابات (حصص) = يوم غياب كامل
+        calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
+
         setStudentStats(calculatedStats);
+        setSubjectStats(Array.from(subjectsMap.values()).sort((a, b) => b.absent - a.absent)); // ترتيب تنازلي حسب الغياب
         
         const enrichedRecords = records.map(r => ({
             ...r,
-            displayClassName: fullClassName
+            displayClassName: fullClassName,
+            subjectName: Array.isArray(r.subjects) ? r.subjects[0]?.name : r.subjects?.name
         }));
         setStudentAttendance(enrichedRecords);
       }
@@ -190,7 +215,7 @@ export default function AttendancePage() {
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
   // ==========================================
-  // 🚀 STUDENT VIEW 
+  // 🚀 STUDENT VIEW (اللوحة المطورة تحليلياً للطالب)
   // ==========================================
   if (authRole === 'student') {
     if (studentDbError) {
@@ -217,7 +242,7 @@ export default function AttendancePage() {
         <div className="flex h-[80vh] items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-            <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تجميع إحصائياتك...</p>
+            <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تجميع إحصائياتك الشاملة...</p>
           </div>
         </div>
       );
@@ -225,6 +250,8 @@ export default function AttendancePage() {
 
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
+        
+        {/* 🚀 Hero Section */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
           <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-right">
             <div>
@@ -234,16 +261,44 @@ export default function AttendancePage() {
               </div>
               <h1 className="text-3xl sm:text-5xl font-black mb-2 tracking-tight drop-shadow-md">سجل الحضور والغياب</h1>
               <p className="text-indigo-100 text-xs sm:text-lg font-bold opacity-90 max-w-xl mx-auto sm:mx-0">
-                إحصائيات وسجل حضورك الشخصي المجمعة من جميع المعلمين والمواد. التزامك هو سر تفوقك.
+                متابعة دقيقة لغيابك موزعة حسب المواد والحصص، مع نظام الحساب التلقائي لأيام الغياب الفعلية.
               </p>
             </div>
             <div className="h-20 w-20 sm:h-32 sm:w-32 bg-white/10 backdrop-blur-md rounded-full border-4 border-white/20 flex items-center justify-center shadow-xl shrink-0">
-              <Calendar className="h-8 w-8 sm:h-14 sm:w-14 text-white drop-shadow-md" />
+              <PieChart className="h-8 w-8 sm:h-14 sm:w-14 text-white drop-shadow-md" />
             </div>
           </div>
           <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
         </div>
 
+        {/* 🚀 معادلة احتساب الغياب الفعلي (The 5-to-1 Rule Engine Banner) */}
+        <div className="bg-gradient-to-br from-rose-50 to-red-50 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="p-3 sm:p-4 bg-rose-500 text-white rounded-2xl shadow-md shadow-rose-500/30 shrink-0">
+              <Calculator className="w-6 h-6 sm:w-8 sm:h-8" />
+            </div>
+            <div>
+              <h3 className="text-lg sm:text-2xl font-black text-rose-900 leading-tight mb-1">المعادلة الرسمية لمعايرة الغياب</h3>
+              <p className="text-[10px] sm:text-sm font-bold text-rose-600">
+                حسب اللائحة: <strong>كل (5) حصص غياب منفصلة</strong> تُسجل في الإدارة كـ <strong>(1) يوم غياب كامل</strong>.
+              </p>
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 sm:p-5 rounded-[1.5rem] shadow-sm border border-rose-100 flex items-center gap-6 shrink-0 w-full md:w-auto justify-center">
+            <div className="text-center">
+              <p className="text-3xl sm:text-4xl font-black text-rose-600">{studentStats.absent}</p>
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">إجمالي الحصص</p>
+            </div>
+            <div className="text-rose-300 font-black text-2xl">÷ 5 =</div>
+            <div className="text-center">
+              <p className="text-3xl sm:text-4xl font-black text-rose-900">{studentStats.fullDaysAbsent}</p>
+              <p className="text-[9px] sm:text-[10px] font-bold text-rose-500 uppercase tracking-widest mt-1">أيام فعلية محسوبة</p>
+            </div>
+          </div>
+        </div>
+
+        {/* 🚀 إحصائيات الحصص الكلية */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-emerald-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
             <div className="h-10 w-10 sm:h-14 sm:w-14 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
@@ -251,7 +306,7 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-3xl sm:text-4xl font-black text-emerald-600">{studentStats.present}</p>
-              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حاضر</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حصة حضور</p>
             </div>
           </div>
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-rose-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
@@ -260,7 +315,7 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-3xl sm:text-4xl font-black text-rose-600">{studentStats.absent}</p>
-              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">غائب</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حصة غياب</p>
             </div>
           </div>
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-amber-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
@@ -269,7 +324,7 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-3xl sm:text-4xl font-black text-amber-600">{studentStats.late}</p>
-              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">متأخر</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">حصة تأخير</p>
             </div>
           </div>
           <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-blue-100 flex flex-col items-center justify-center text-center gap-2 sm:gap-3 shadow-sm hover:shadow-lg transition-all group">
@@ -278,16 +333,53 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-3xl sm:text-4xl font-black text-blue-600">{studentStats.excused}</p>
-              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">مستأذن</p>
+              <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mt-1">عذر مقبول</p>
             </div>
           </div>
         </div>
 
+        {/* 🚀 التحليل المادي للغياب (Subject Aggregation) */}
+        {subjectStats.length > 0 && (
+          <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-5 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-slate-50/30">
+              <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
+                 <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><Layers className="w-5 h-5 sm:w-6 sm:h-6"/></div>
+                 التحليل والتوزيع حسب المادة
+              </h2>
+            </div>
+            <div className="p-4 sm:p-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {subjectStats.map((sub, idx) => (
+                  <div key={idx} className="bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100 flex items-center justify-between group hover:bg-white hover:shadow-md hover:border-indigo-100 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-colors shadow-sm">
+                        <BookOpen className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base">{sub.name}</h4>
+                        <div className="flex gap-2 mt-1">
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">حضر: {sub.present}</span>
+                          {sub.late > 0 && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">تأخر: {sub.late}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center justify-center bg-white p-2 rounded-xl border border-slate-200 min-w-[60px] shadow-sm">
+                      <span className={`text-xl font-black ${sub.absent > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{sub.absent}</span>
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">غياب</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 السجل التاريخي التفصيلي */}
         <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-5 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-slate-50/30">
             <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
-               <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar className="w-5 h-5 sm:w-6 sm:h-6"/></div>
-               سجل الأيام والحصص السابقة
+               <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6"/></div>
+               السجل الزمني التفصيلي للحصص
             </h2>
             <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
               إجمالي السجلات: {studentAttendance.length}
@@ -303,14 +395,19 @@ export default function AttendancePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {studentAttendance.map((record, idx) => {
                   return (
-                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4">
+                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4 group">
                     <div>
                       <span className="text-sm font-black text-slate-800 block mb-2" dir="ltr">
                         {new Date(record.created_at || new Date()).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
                       </span>
-                      <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-block">
-                        {record.displayClassName}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> الحصة {record.period}
+                        </span>
+                        <span className="text-[10px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 inline-flex items-center gap-1">
+                          <BookOpen className="w-3 h-3" /> {record.subjectName || 'مادة غير محددة'}
+                        </span>
+                      </div>
                     </div>
                     <span className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 w-full sm:w-auto border ${
                       record.status === 'present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
