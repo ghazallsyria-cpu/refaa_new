@@ -299,9 +299,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
+              // 🚀 السحر الأول: إضافة إرجاع الحالة إلى false هنا لتُفتح المنصة فوراً
               if (!isOpen && role !== 'admin' && role !== 'management') {
                 setPlatformClosed(true);
                 setCloseMessage(settings.message || 'المنصة مغلقة حاليا للصيانة');
+              } else {
+                setPlatformClosed(false);
               }
             }
           } catch (settingsErr) {
@@ -317,6 +320,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     fetchUserData();
   }, [user, isPublicPage, isLoginPage, authRole, userName]);
+
+  // ==========================================
+  // 🚀 السحر الثاني: المحرك اللحظي لمراقبة حالة المنصة
+  // ==========================================
+  useEffect(() => {
+    // لا داعي للمراقبة إذا لم يسجل دخول أو كان في صفحة عامة أو كان مديراً
+    if (!user || isPublicPage || authRole === 'admin' || authRole === 'management') return;
+
+    // الاشتراك في التحديثات الحية لجدول إعدادات المنصة
+    const channel = supabase
+      .channel('platform_settings_listener')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'platform_settings' },
+        (payload) => {
+          const newSettings = payload.new;
+          let isOpen = newSettings.is_open;
+          const now = new Date();
+
+          if (newSettings.open_date && new Date(newSettings.open_date) > now) isOpen = false;
+          if (newSettings.close_date && new Date(newSettings.close_date) < now) isOpen = false;
+
+          // تطبيق الحالة الجديدة فوراً وبدون تحديث الصفحة!
+          if (!isOpen) {
+             setPlatformClosed(true);
+             setCloseMessage(newSettings.message || 'المنصة مغلقة حاليا للصيانة');
+          } else {
+             setPlatformClosed(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, isPublicPage, authRole]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
