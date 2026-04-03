@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, Search, Edit, Trash2, X, Key, Download, 
   UserPlus, Users, AlertCircle, FileSpreadsheet, 
-  GraduationCap, ChevronRight, ChevronLeft, BookOpen
+  GraduationCap, ChevronRight, ChevronLeft, BookOpen,
+  UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileText, ClipboardPaste
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
@@ -18,22 +19,28 @@ export default function StudentsPage() {
     addStudent, updateStudent, deleteUser, resetPassword
   } = useUsersSystem();
 
-  // فلاتر البحث والتصنيف
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSection, setSelectedSection] = useState('all');
   const [selectedTrack, setSelectedTrack] = useState('all');
 
-  // 🚀 نظام التصفح (Pagination) للسرعة الخارقة
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  // النوافذ المنبثقة
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   
-  // حالات النماذج
+  // 🚀 حالات نظام الاستيراد الجماعي الذكي
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importSectionId, setImportSectionId] = useState('');
+  const [importMethod, setImportMethod] = useState<'excel' | 'pdf'>('pdf'); // PDF هو الافتراضي الآن
+  const [rawPdfText, setRawPdfText] = useState('');
+  const [importData, setImportData] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, successful: 0, failed: 0, errors: [] as string[] });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [editingStudent, setEditingStudent] = useState<any>(null);
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
@@ -45,26 +52,21 @@ export default function StudentsPage() {
     full_name: string; national_id: string; email: string; phone: string; parent_id: string; next_year_track: 'scientific' | 'literary' | '' | null;
   }>({ full_name: '', national_id: '', email: '', phone: '', parent_id: '', next_year_track: '' });
 
-  // جلب البيانات الأولية
   useEffect(() => {
     fetchStudents();
     fetchSections();
     fetchParents();
   }, [fetchStudents, fetchSections, fetchParents]);
 
-  // 🧠 معالجة البيانات بسرعة عالية مع الفلترة الدقيقة (Deep Extraction)
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
-      // استخراج آمن للبيانات لتفادي مشاكل الـ Arrays من Supabase
       const userData = Array.isArray(s.users) ? s.users[0] : s.users;
       const fullName = userData?.full_name || '';
       const email = userData?.email || '';
 
       const matchesSection = selectedSection === 'all' || String(s.section_id) === String(selectedSection);
-      
       const matchesTrack = selectedTrack === 'all' || 
         (selectedTrack === 'none' ? !s.next_year_track : s.next_year_track === selectedTrack);
-      
       const matchesSearch = 
         fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -74,13 +76,10 @@ export default function StudentsPage() {
     });
   }, [students, searchTerm, selectedSection, selectedTrack]);
 
-  // حساب التصفح
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage) || 1;
   const currentStudents = filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // 🚀 إحصائيات سريعة للوحة (ذكية: تحسب المسارات لطلاب العاشر فقط!)
   const stats = useMemo(() => {
-    // فلترة طلاب الصف العاشر فقط لحساب إحصائيات المسارات بدقة
     const tenthGradeStudents = students.filter(s => {
       const secData = Array.isArray(s.sections) ? s.sections[0] : s.sections;
       const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
@@ -95,26 +94,168 @@ export default function StudentsPage() {
     };
   }, [students]);
 
-  // ================= الدوال التنفيذية =================
+  // ================= دوال الاستيراد الجماعي والمحلل الذكي =================
+  
+  // 1. محلل الإكسل
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws);
+      
+      let processed: any[] = [];
+      data.forEach((row: any) => {
+        const nameKey = Object.keys(row).find(k => k.includes('اسم') || k.includes('سم') || k.includes('Name'));
+        const idKey = Object.keys(row).find(k => k.includes('مدني') || k.includes('رقم') || k.includes('ID'));
+        const phoneKey = Object.keys(row).find(k => k.includes('هاتف') || k.includes('ولي') || k.includes('Phone'));
+
+        if (nameKey && idKey) {
+          const names = String(row[nameKey]).split('\n').map(s => s.trim()).filter(Boolean);
+          const ids = String(row[idKey]).split('\n').map(s => s.trim().replace(/\D/g, '')).filter(Boolean);
+          const phones = phoneKey ? String(row[phoneKey]).split('\n').map(s => s.trim()).filter(Boolean) : [];
+
+          const maxLen = Math.max(names.length, ids.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (names[i] && ids[i] && ids[i].length >= 10) {
+               processed.push({ full_name: names[i], national_id: ids[i], phone: phones[i] || '' });
+            }
+          }
+        }
+      });
+      setImportData(processed);
+    };
+    reader.readAsBinaryString(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // 2. 🚀 المحلل الذكي للنصوص المنسوخة من الـ PDF
+  const handlePdfTextParse = () => {
+    if (!rawPdfText.trim()) return alert('يرجى لصق النص المنسوخ من الـ PDF أولاً');
+
+    // 12 رقم للرقم المدني (يبدأ بـ 2 أو 3 للكويت غالباً)
+    const civilIdRegex = /\b[23]\d{11}\b/g;
+    const lines = rawPdfText.split('\n').map(l => l.trim()).filter(Boolean);
+    
+    let processed: any[] = [];
+    const existingIdsInBatch = new Set();
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const civilIdMatch = line.match(/\b[23]\d{11}\b/);
+
+      if (civilIdMatch) {
+        const national_id = civilIdMatch[0];
+        let full_name = "";
+        let phone = "";
+
+        // البحث عن رقم هاتف كويتي (8 أرقام تبدأ ب 5, 6, 9)
+        const phoneMatch = line.match(/\b[569]\d{7}\b/);
+        if (phoneMatch) phone = phoneMatch[0];
+
+        // تنظيف السطر من الأرقام وكلمة ذكر/أنثى للوصول للاسم
+        let cleanedLine = line.replace(national_id, '').replace(phone, '').replace(/ذكر|انثى|أنثى|ملاحظات|م/g, '').replace(/[0-9]/g, '').replace(/["',-]/g, '').trim();
+
+        if (cleanedLine.length > 8 && /[\u0600-\u06FF]/.test(cleanedLine)) {
+          full_name = cleanedLine;
+        } else {
+          // إذا لم نجد الاسم في نفس السطر، نبحث في السطور السابقة (لأن الـ PDF يكسر السطور)
+          for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
+             let prevLine = lines[j].replace(/ذكر|انثى|أنثى/g, '').replace(/[0-9]/g, '').replace(/["',-]/g, '').trim();
+             if (prevLine.length > 8 && /[\u0600-\u06FF]/.test(prevLine)) {
+                full_name = prevLine;
+                break;
+             }
+          }
+        }
+
+        // إذا لم نجد الهاتف في نفس السطر، نبحث قبله وبعده بقليل
+        if (!phone) {
+           for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 2); j++) {
+               const pMatch = lines[j].match(/\b[569]\d{7}\b/);
+               if (pMatch) {
+                   phone = pMatch[0];
+                   break;
+               }
+           }
+        }
+
+        if (full_name && national_id && !existingIdsInBatch.has(national_id)) {
+           full_name = full_name.replace(/\s+/g, ' ').trim();
+           processed.push({ full_name, national_id, phone });
+           existingIdsInBatch.add(national_id);
+        }
+      }
+    }
+
+    if (processed.length === 0) {
+      alert('لم يتم العثور على أرقام مدنية صحيحة في النص. تأكد من نسخ الجدول بالكامل من الـ PDF.');
+    } else {
+      setImportData(processed);
+    }
+  };
+
+  const startBulkImport = async () => {
+    if (!importSectionId) return alert('الرجاء اختيار الفصل والشعبة أولاً لربط الطلاب بهم.');
+    if (importData.length === 0) return alert('لا يوجد بيانات للاستيراد.');
+
+    setIsImporting(true);
+    setImportProgress({ current: 0, total: importData.length, successful: 0, failed: 0, errors: [] });
+
+    let successCount = 0;
+    let failCount = 0;
+    let currentErrors: string[] = [];
+
+    const existingIds = new Set(students.map(s => s.national_id));
+
+    for (let i = 0; i < importData.length; i++) {
+      const student = importData[i];
+      setImportProgress(prev => ({ ...prev, current: i + 1 }));
+
+      try {
+        if (existingIds.has(student.national_id)) {
+          throw new Error('الرقم المدني مسجل مسبقاً في النظام');
+        }
+
+        await addStudent({
+          full_name: student.full_name,
+          national_id: student.national_id,
+          phone: student.phone,
+          section_id: importSectionId,
+        });
+        
+        successCount++;
+        existingIds.add(student.national_id);
+      } catch (err: any) {
+        failCount++;
+        currentErrors.push(`الطالب (${student.full_name}): ${err.message}`);
+      }
+    }
+
+    setImportProgress(prev => ({ ...prev, successful: successCount, failed: failCount, errors: currentErrors }));
+    setIsImporting(false);
+    fetchStudents();
+  };
+
+  // ================= باقي الدوال التنفيذية =================
   const handleAddSubmit = async () => {
     try {
-      if (!addForm.full_name || !addForm.national_id) {
-        alert('يرجى تعبئة الحقول الإلزامية (الاسم والرقم المدني)');
-        return;
-      }
+      if (!addForm.full_name || !addForm.national_id) return alert('يرجى تعبئة الحقول الإلزامية');
       await addStudent(addForm);
       alert('تمت الإضافة بنجاح');
       setShowAddModal(false);
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', section_id: '', parent_id: '' });
-    } catch (error: any) {
-      alert(error.message || 'حدث خطأ أثناء إضافة الطالب');
-    }
+    } catch (error: any) { alert(error.message || 'حدث خطأ أثناء الإضافة'); }
   };
 
   const handleEditClick = (student: any) => {
     setEditingStudent(student);
     const userData = Array.isArray(student.users) ? student.users[0] : student.users;
-    
     setEditForm({
       full_name: userData?.full_name || '',
       national_id: student.national_id || '',
@@ -138,9 +279,9 @@ export default function StudentsPage() {
         next_year_track: editForm.next_year_track === '' ? null : (editForm.next_year_track as 'scientific' | 'literary')
       };
       await updateStudent(editingStudent.id, editingStudent.national_id, updateData);
-      alert('تم تحديث بيانات الطالب بنجاح');
+      alert('تم التحديث بنجاح');
       setShowEditModal(false);
-    } catch (error: any) { alert(error.message || 'حدث خطأ أثناء التحديث'); }
+    } catch (error: any) { alert(error.message); }
   };
 
   const handleResetPasswordClick = (student: any) => {
@@ -153,7 +294,7 @@ export default function StudentsPage() {
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword);
       alert(`تم تغيير كلمة المرور بنجاح.\nكلمة المرور الجديدة: ${result.newPassword}`);
       setShowPasswordResetModal(false);
-    } catch (error: any) { alert(error.message || 'حدث خطأ أثناء تغيير كلمة المرور'); }
+    } catch (error: any) { alert(error.message); }
   };
 
   const handleDeleteClick = (id: string) => {
@@ -165,11 +306,11 @@ export default function StudentsPage() {
     if (!studentToDelete) return;
     try {
       await deleteUser(studentToDelete);
-      alert('تم حذف الطالب بنجاح');
+      alert('تم الحذف بنجاح');
       setShowDeleteModal(false);
       setStudentToDelete(null);
       fetchStudents();
-    } catch (error: any) { alert(error.message || 'حدث خطأ أثناء الحذف'); }
+    } catch (error: any) { alert(error.message); }
   };
 
   const exportToExcel = () => {
@@ -193,7 +334,6 @@ export default function StudentsPage() {
     });
     
     if (data.length === 0) return alert('لا يوجد بيانات للتصدير');
-    
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب");
@@ -203,7 +343,6 @@ export default function StudentsPage() {
   return (
     <div className="relative min-h-screen bg-slate-50 font-cairo selection:bg-indigo-200" dir="rtl">
       
-      {/* 🎨 خلفية زجاجية سريعة الأداء */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 blur-[120px] opacity-70" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-violet-500/10 blur-[120px] opacity-70" />
@@ -211,7 +350,6 @@ export default function StudentsPage() {
 
       <div className="relative z-10 max-w-[1600px] mx-auto space-y-8 pb-20 px-4 sm:px-6 lg:px-8 pt-8">
         
-        {/* 🚀 الترويسة وأزرار التحكم */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">إدارة الطلاب</h1>
@@ -219,31 +357,20 @@ export default function StudentsPage() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            <button 
-              onClick={exportToExcel}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition-all active:scale-95 hover:shadow-md"
-            >
+            <button onClick={exportToExcel} className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition-all active:scale-95 hover:shadow-md">
               <Download className="h-5 w-5 text-slate-400" /> تصدير Excel
             </button>
             
-            {/* 🚀 تجهيز زر الرفع الجماعي */}
-            <button 
-              onClick={() => alert('ميزة الاستيراد الجماعي للطلاب قيد التطوير وستتوفر قريباً!')}
-              className="inline-flex items-center gap-2 rounded-2xl bg-indigo-50 px-5 py-3 text-sm font-black text-indigo-700 shadow-sm border border-indigo-100 hover:bg-indigo-100 transition-all active:scale-95"
-            >
+            <button onClick={() => { setShowImportModal(true); setImportData([]); setImportProgress({ current: 0, total: 0, successful: 0, failed: 0, errors: [] }); setRawPdfText(''); }} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-50 px-5 py-3 text-sm font-black text-indigo-700 shadow-sm border border-indigo-100 hover:bg-indigo-100 transition-all active:scale-95">
               <FileSpreadsheet className="h-5 w-5 text-indigo-500" /> استيراد دفعة واحدة
             </button>
 
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 hover:shadow-indigo-300"
-            >
+            <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 hover:shadow-indigo-300">
               <UserPlus className="h-5 w-5" /> إضافة طالب
             </button>
           </div>
         </div>
 
-        {/* 📊 مؤشرات سريعة (ذكية) */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600"><Users className="h-6 w-6"/></div>
@@ -265,53 +392,25 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* 🔍 شريط البحث والفلاتر */}
         <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-4">
           <div className="relative flex-1 w-full group">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-            <input
-              type="text"
-              className="w-full rounded-xl border-0 py-3.5 pr-12 pl-5 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold transition-all"
-              placeholder="البحث بالاسم، الرقم المدني..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1); 
-              }}
-            />
+            <input type="text" className="w-full rounded-xl border-0 py-3.5 pr-12 pl-5 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold transition-all" placeholder="البحث بالاسم، الرقم المدني..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
           </div>
           <div className="flex gap-2 w-full md:w-auto">
-            <select 
-              value={selectedSection} 
-              onChange={(e) => {
-                setSelectedSection(e.target.value);
-                setCurrentPage(1); 
-              }}
-              className="flex-1 md:w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-            >
+            <select value={selectedSection} onChange={(e) => { setSelectedSection(e.target.value); setCurrentPage(1); }} className="flex-1 md:w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
               <option value="all">جميع الفصول</option>
               {sections.map(s => {
                 const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes;
                 return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option>;
               })}
             </select>
-            <select 
-              value={selectedTrack} 
-              onChange={(e) => {
-                setSelectedTrack(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="flex-1 md:w-40 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-            >
-              <option value="all">جميع المسارات</option>
-              <option value="scientific">علمي</option>
-              <option value="literary">أدبي</option>
-              <option value="none">لم يحدد</option>
+            <select value={selectedTrack} onChange={(e) => { setSelectedTrack(e.target.value); setCurrentPage(1); }} className="flex-1 md:w-40 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="all">جميع المسارات</option><option value="scientific">علمي</option><option value="literary">أدبي</option><option value="none">لم يحدد</option>
             </select>
           </div>
         </div>
 
-        {/* 📋 الجدول (يعرض بيانات الصفحة الحالية فقط لسرعة الأداء) */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
           <div className="hidden lg:block overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
@@ -332,7 +431,6 @@ export default function StudentsPage() {
                   <tr><td colSpan={6} className="py-32 text-center"><div className="bg-slate-50 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4"><Search className="h-8 w-8 text-slate-300"/></div><p className="font-bold text-slate-500">لا يوجد نتائج تطابق الفلاتر</p></td></tr>
                 ) : (
                   currentStudents.map((student) => {
-                    // استخراج آمن للبيانات
                     const userData = Array.isArray(student.users) ? student.users[0] : student.users;
                     const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
                     const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
@@ -386,7 +484,6 @@ export default function StudentsPage() {
             </table>
           </div>
 
-          {/* العرض للموبايل (Cards) */}
           <div className="lg:hidden p-4 grid gap-4 bg-slate-50/50">
              {loading ? (
                <div className="py-10 text-center text-slate-400 font-bold">جاري التحميل...</div>
@@ -423,43 +520,165 @@ export default function StudentsPage() {
              )}
           </div>
 
-          {/* 🚀 نظام التصفح (Pagination UI) */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4">
               <p className="text-sm font-bold text-slate-500">
                 إظهار <span className="font-black text-slate-900">{((currentPage - 1) * itemsPerPage) + 1}</span> إلى <span className="font-black text-slate-900">{Math.min(currentPage * itemsPerPage, filteredStudents.length)}</span> من أصل <span className="font-black text-slate-900">{filteredStudents.length}</span>
               </p>
               <div className="flex gap-2">
-                <button 
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                  className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
-                ><ChevronRight className="w-5 h-5"/></button>
-                <div className="flex items-center gap-1 px-2 font-black text-sm text-slate-700">
-                  {currentPage} / {totalPages}
-                </div>
-                <button 
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                  className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"
-                ><ChevronLeft className="w-5 h-5"/></button>
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"><ChevronRight className="w-5 h-5"/></button>
+                <div className="flex items-center gap-1 px-2 font-black text-sm text-slate-700">{currentPage} / {totalPages}</div>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* النوافذ المنبثقة للنماذج (Add/Edit/Delete/Password) */}
-      {/* 🚀 Add Student Modal (مع تلميح الاستيراد) */}
-      {showAddModal && (
+      {/* 🚀 نافذة الاستيراد الجماعي (Bulk Import Modal with PDF/Excel Smart Options) */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-white">
+              <div>
+                 <h3 className="text-2xl font-black text-indigo-900 flex items-center gap-2"><FileSpreadsheet className="w-6 h-6 text-indigo-600"/> الاستيراد الجماعي للطلاب</h3>
+                 <p className="text-xs font-bold text-slate-500 mt-1">قم بلصق النص من كشوفات الـ PDF أو رفع ملف Excel ليقوم النظام بقراءتها تلقائياً.</p>
+              </div>
+              <button onClick={() => !isImporting && setShowImportModal(false)} disabled={isImporting} className="p-2 bg-white rounded-xl shadow-sm text-slate-400 hover:text-rose-500 transition-colors disabled:opacity-50"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              {!isImporting && importProgress.total === 0 && (
+                <>
+                  <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex gap-3 text-amber-800 text-sm font-bold">
+                    <AlertTriangle className="w-5 h-5 shrink-0" />
+                    <p>أولاً، اختر الصف والشعبة التي تريد استيراد الطلاب إليها. ثم اختر طريقة الإدخال (PDF أو Excel).</p>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-black text-slate-700 block mb-2">الفصل المستهدف <span className="text-rose-500">*</span></label>
+                    <select value={importSectionId} onChange={e => setImportSectionId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-lg">
+                      <option value="">-- يرجى اختيار الفصل والشعبة --</option>
+                      {sections.map(s => {
+                        const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+                        return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option>;
+                      })}
+                    </select>
+                  </div>
+
+                  {importSectionId && (
+                    <div className="border border-slate-200 rounded-[2rem] overflow-hidden">
+                      <div className="flex border-b border-slate-200 bg-slate-50">
+                        <button onClick={() => setImportMethod('pdf')} className={`flex-1 py-4 text-sm font-black flex items-center justify-center gap-2 transition-colors ${importMethod === 'pdf' ? 'bg-white text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}>
+                          <ClipboardPaste className="w-5 h-5" /> لصق ذكي (من PDF)
+                        </button>
+                        <button onClick={() => setImportMethod('excel')} className={`flex-1 py-4 text-sm font-black flex items-center justify-center gap-2 transition-colors ${importMethod === 'excel' ? 'bg-white text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}>
+                          <UploadCloud className="w-5 h-5" /> رفع ملف (Excel / CSV)
+                        </button>
+                      </div>
+
+                      <div className="p-6">
+                        {importMethod === 'pdf' ? (
+                          <div className="space-y-4 animate-in fade-in">
+                            <p className="text-xs font-bold text-slate-500">قم بفتح كشف الـ PDF، حدد الجدول الخاص بالشعبة بالكامل (Ctrl+A أو تظليل)، ثم انسخه والصقه في المربع أدناه.</p>
+                            <textarea 
+                              value={rawPdfText}
+                              onChange={(e) => setRawPdfText(e.target.value)}
+                              placeholder="ألصق النص هنا..."
+                              className="w-full h-48 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                            />
+                            <button onClick={handlePdfTextParse} className="w-full bg-indigo-50 text-indigo-700 border border-indigo-100 font-black py-3 rounded-xl hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2">
+                              <FileText className="w-5 h-5"/> استخراج البيانات ومعالجتها
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-[2rem] p-10 text-center hover:bg-indigo-50 transition-colors relative cursor-pointer group animate-in fade-in">
+                            <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} ref={fileInputRef} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                            <div className="flex flex-col items-center gap-4">
+                              <div className="h-16 w-16 bg-white rounded-full shadow-sm flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
+                                <UploadCloud className="h-8 w-8" />
+                              </div>
+                              <div>
+                                <p className="text-lg font-black text-indigo-900">اضغط أو اسحب ملف Excel هنا</p>
+                                <p className="text-sm font-bold text-indigo-400 mt-1">يتم دعم صيغ xlsx و csv (تأكد من وجود عامود للاسم وعامود للرقم المدني)</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Data Preview */}
+              {!isImporting && importData.length > 0 && importProgress.total === 0 && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-black text-slate-800 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> تم قراءة واستخراج {importData.length} طالب بنجاح</h4>
+                    <button onClick={() => setImportData([])} className="text-xs font-bold text-rose-500 hover:underline">إلغاء وإعادة المحاولة</button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-2xl bg-slate-50 p-2">
+                    <table className="w-full text-right text-sm">
+                      <thead><tr><th className="p-2 font-black text-slate-500 border-b">الاسم الرباعي</th><th className="p-2 font-black text-slate-500 border-b">الرقم المدني</th><th className="p-2 font-black text-slate-500 border-b">رقم الهاتف</th></tr></thead>
+                      <tbody>{importData.map((d, i) => (<tr key={i} className="border-b border-slate-100 last:border-0"><td className="p-2 font-bold text-slate-800">{d.full_name}</td><td className="p-2 font-mono text-slate-600">{d.national_id}</td><td className="p-2 font-mono text-slate-600">{d.phone || '-'}</td></tr>))}</tbody>
+                    </table>
+                  </div>
+                  <button onClick={startBulkImport} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 transition-colors shadow-xl shadow-indigo-200 flex justify-center gap-2 text-lg">
+                    <UploadCloud className="w-6 h-6"/> اعتماد وحفظ {importData.length} طالب في قاعدة البيانات
+                  </button>
+                </div>
+              )}
+
+              {/* Progress UI */}
+              {(isImporting || importProgress.total > 0) && (
+                <div className="space-y-6 py-4">
+                  <div className="text-center space-y-2">
+                    {isImporting ? <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mx-auto"/> : <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto"/>}
+                    <h3 className="text-xl font-black text-slate-900">{isImporting ? 'جاري تسجيل الطلاب وإنشاء الحسابات، يرجى عدم إغلاق النافذة...' : 'اكتملت عملية التسجيل!'}</h3>
+                    <p className="text-sm font-bold text-slate-500">تم معالجة {importProgress.current} من أصل {importProgress.total}</p>
+                  </div>
+                  
+                  <div className="h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                    <motion.div 
+                      className="h-full bg-indigo-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-1 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center"><p className="text-2xl font-black text-emerald-600">{importProgress.successful}</p><p className="text-xs font-bold text-emerald-800 mt-1">طالب مسجل بنجاح</p></div>
+                    <div className="flex-1 bg-rose-50 p-4 rounded-2xl border border-rose-100 text-center"><p className="text-2xl font-black text-rose-600">{importProgress.failed}</p><p className="text-xs font-bold text-rose-800 mt-1">تخطي (مسجل مسبقاً / خطأ)</p></div>
+                  </div>
+
+                  {importProgress.errors.length > 0 && (
+                    <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-4 max-h-48 overflow-y-auto">
+                      <p className="text-xs font-black text-rose-800 mb-2">سجل التخطي (تم تجاهلهم لمنع التكرار):</p>
+                      <ul className="space-y-1 text-[10px] font-bold text-rose-600 list-disc list-inside px-2">
+                        {importProgress.errors.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {!isImporting && (
+                    <button onClick={() => { setShowImportModal(false); setImportData([]); setImportProgress({ current: 0, total: 0, successful: 0, failed: 0, errors: [] }); setRawPdfText(''); }} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-colors text-lg">
+                      إغلاق ومتابعة العمل
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* باقي النوافذ (Add/Edit/Delete/Password) - لم يتم تغييرها للتبسيط */}
+      {showAddModal && !showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden my-8">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <div>
-                 <h3 className="text-2xl font-black text-slate-900">إضافة طالب جديد</h3>
-                 <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1">
-                   <AlertCircle className="w-3 h-3 text-indigo-500"/>
-                   تلميح: لإضافة مجموعة طلاب، انتظر ميزة &quot;الاستيراد عبر Excel&quot; قريباً.
-                 </p>
-              </div>
+              <h3 className="text-2xl font-black text-slate-900">إضافة طالب جديد (فردي)</h3>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-white rounded-xl shadow-sm text-slate-400 hover:text-rose-500 transition-colors"><X className="w-5 h-5"/></button>
             </div>
             <div className="p-8 space-y-6">
@@ -511,7 +730,6 @@ export default function StudentsPage() {
                  })}
                  </select></div>
                  
-                 {/* شرط ظهور التخصص: فقط للعاشر! */}
                  {(() => {
                    const secData = Array.isArray(editingStudent?.sections) ? editingStudent?.sections[0] : editingStudent?.sections;
                    const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
