@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { systemLogger } from '@/lib/logger';
 
 /**
- * 🛠️ مستشعر نبض النظام والسيرفر (نسخة محسنة لـ Netlify Build)
+ * 🛠️ مستشعر نبض النظام والسيرفر (مُحسن للموبايل)
  * المسار: app/report/page.tsx
  */
 export default function SystemReportPage() {
@@ -31,7 +31,6 @@ export default function SystemReportPage() {
   }, []);
 
   useEffect(() => {
-    // 🚀 الحل لخطأ Netlify (تغليف الدوال داخل Async Init)
     const initializeSystem = async () => {
       await fetchLogs();
       await measurePulse();
@@ -40,10 +39,8 @@ export default function SystemReportPage() {
     
     initializeSystem();
 
-    // 🚀 الاتصال اللحظي بقاعدة البيانات
     const channel = supabase.channel('system_errors')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'error_logs' }, (payload) => {
-        // إضافة الخطأ الجديد لأعلى القائمة مع تأثير بصري
         setLogs(prev => [payload.new, ...prev.slice(0, 39)]);
       })
       .subscribe();
@@ -58,7 +55,6 @@ export default function SystemReportPage() {
     };
   }, [fetchLogs, measurePulse]);
 
-  // 🚀 دالة لاختبار النظام برمجياً (افتعال خطأ)
   const fireTestSensor = async () => {
     setTesting(true);
     await systemLogger.log(
@@ -84,7 +80,7 @@ export default function SystemReportPage() {
     <div className="min-h-screen bg-[#020817] text-slate-300 font-mono p-4 sm:p-6 lg:p-8" dir="rtl">
       
       {/* 🚀 Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 bg-slate-900/50 p-6 rounded-3xl border border-white/5 backdrop-blur-xl gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 bg-slate-900/50 p-6 rounded-3xl border border-white/5 backdrop-blur-xl gap-4">
         <div className="flex items-center gap-4">
           <Activity className="text-indigo-400 animate-pulse w-8 h-8" />
           <div>
@@ -92,15 +88,15 @@ export default function SystemReportPage() {
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Status: Fully Operational | Subscribed to: error_logs</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-emerald-500 font-black text-xs bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20 flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-emerald-500 font-black text-xs bg-emerald-500/10 px-4 py-2.5 rounded-xl border border-emerald-500/20 flex items-center gap-2">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
             DB_LATENCY: {dbPulse}ms
           </div>
           <button 
             onClick={fireTestSensor} 
             disabled={testing}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_15px_rgba(79,70,229,0.4)]"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_15px_rgba(79,70,229,0.4)]"
           >
             <Zap className="w-4 h-4" />
             {testing ? 'Firing...' : 'اختبار الرادار'}
@@ -110,7 +106,7 @@ export default function SystemReportPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         
-        {/* 🚀 The Terminal (Log Stream) */}
+        {/* 🚀 The Terminal (Log Stream) - Mobile Optimized */}
         <div className="lg:col-span-8 bg-black/60 border border-white/5 rounded-[2.5rem] h-[650px] flex flex-col overflow-hidden shadow-2xl relative">
           <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent opacity-50"></div>
           <div className="p-5 border-b border-white/5 bg-white/5 flex items-center justify-between">
@@ -120,7 +116,7 @@ export default function SystemReportPage() {
             <span className="text-[10px] bg-slate-800 px-2 py-1 rounded text-slate-400 font-bold">Buffer: {logs.length} Events</span>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar flex flex-col gap-2">
             <AnimatePresence initial={false}>
               {logs.map(log => {
                 const isCritical = log.severity === 'critical';
@@ -132,32 +128,41 @@ export default function SystemReportPage() {
                     initial={{ opacity: 0, x: -20, backgroundColor: 'rgba(255,255,255,0.1)' }} 
                     animate={{ opacity: 1, x: 0, backgroundColor: 'rgba(0,0,0,0)' }}
                     transition={{ duration: 0.5 }}
-                    className={`grid grid-cols-12 gap-3 py-2.5 px-2 border-b border-white/5 hover:bg-white/[0.02] transition-colors text-[10px] sm:text-xs rounded-lg ${
-                      isCritical ? 'bg-rose-500/[0.03] border-rose-500/10' : 
-                      isTest ? 'bg-indigo-500/[0.05] border-indigo-500/20' : ''
+                    // 🚀 تصميم ذكي يعرض النص كاملاً في الجوال وشكل جدولي في الكمبيوتر
+                    className={`flex flex-col gap-2 p-4 border border-white/5 hover:bg-white/[0.02] transition-colors rounded-2xl ${
+                      isCritical ? 'bg-rose-500/[0.03] border-rose-500/20' : 
+                      isTest ? 'bg-indigo-500/[0.05] border-indigo-500/20' : 'bg-white/[0.01]'
                     }`}
                   >
-                    <span className="col-span-3 sm:col-span-2 opacity-50 font-bold">[{new Date(log.created_at).toLocaleTimeString()}]</span>
-                    <span className={`col-span-4 sm:col-span-3 font-black uppercase truncate ${isCritical ? 'text-rose-500' : isTest ? 'text-indigo-400' : 'text-amber-400'}`}>
-                      {log.error_type}
-                    </span>
-                    <span className="hidden sm:block col-span-2 text-center bg-white/5 rounded px-1 uppercase font-bold text-slate-500 truncate">
-                      {log.user_role}
-                    </span>
-                    <span className="col-span-5 sm:col-span-4 text-slate-300 truncate hover:whitespace-normal transition-all cursor-help leading-relaxed">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] opacity-40 font-bold">[{new Date(log.created_at).toLocaleTimeString()}]</span>
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${isCritical ? 'text-rose-500' : isTest ? 'text-indigo-400' : 'text-amber-400'}`}>
+                          {log.error_type}
+                        </span>
+                      </div>
+                      <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded bg-white/5 ${isCritical ? 'text-rose-500 animate-pulse' : isTest ? 'text-indigo-400' : 'text-emerald-500'}`}>
+                        {log.severity}
+                      </span>
+                    </div>
+                    
+                    <div className="text-xs text-slate-300 leading-relaxed whitespace-normal font-medium">
                       {log.message}
-                    </span>
-                    <span className={`hidden sm:block col-span-1 text-left font-black uppercase ${isCritical ? 'text-rose-600 animate-pulse' : isTest ? 'text-indigo-500' : 'text-emerald-500'}`}>
-                      {log.severity}
-                    </span>
+                    </div>
+
+                    <div className="mt-1">
+                       <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-900 px-2 py-0.5 rounded border border-white/5">
+                         USER: {log.user_role}
+                       </span>
+                    </div>
                   </motion.div>
                 );
               })}
             </AnimatePresence>
             {logs.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center opacity-20">
+              <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
                 <CheckCircle2 className="w-16 h-16 mb-4" />
-                <p>System Operating Normally. No Logs.</p>
+                <p className="text-sm">System Operating Normally. No Logs.</p>
               </div>
             )}
           </div>
@@ -177,7 +182,7 @@ export default function SystemReportPage() {
                    Telemetry Link Stable
                  </p>
                  <p className="text-xs text-slate-400 leading-relaxed font-bold">
-                   محرك تسجيل الأخطاء (System Logger) يعمل بكفاءة. يتم الآن رصد أخطاء المستخدمين، فشل الاتصال، وأي خلل برمجي وإرساله مباشرة إلى هذه الشاشة.
+                   محرك تسجيل الأخطاء (System Logger) يعمل بكفاءة. يتم الآن رصد أخطاء المستخدمين، فشل الاتصال، ومحاولات الدخول الخاطئة وإرسالها مباشرة إلى هذه الشاشة.
                  </p>
                </div>
             </div>
@@ -199,7 +204,7 @@ export default function SystemReportPage() {
                     className={`h-full ${dbPulse > 100 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
                  />
                </div>
-               <p className="text-[10px] text-slate-500 font-medium">Measuring round-trip time between Edge Network and Supabase Core.</p>
+               <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Measuring round-trip time between Edge Network and Supabase Core.</p>
             </div>
           </div>
         </div>
