@@ -226,6 +226,7 @@ export default function StudentsPage() {
               <Download className="h-5 w-5 text-slate-400" /> تصدير Excel
             </button>
             
+            {/* 🚀 تجهيز زر الرفع الجماعي */}
             <button 
               onClick={() => alert('ميزة الاستيراد الجماعي للطلاب قيد التطوير وستتوفر قريباً!')}
               className="inline-flex items-center gap-2 rounded-2xl bg-indigo-50 px-5 py-3 text-sm font-black text-indigo-700 shadow-sm border border-indigo-100 hover:bg-indigo-100 transition-all active:scale-95"
@@ -378,7 +379,8 @@ export default function StudentsPage() {
                         </div>
                       </td>
                     </tr>
-                  )})}
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -386,7 +388,11 @@ export default function StudentsPage() {
 
           {/* العرض للموبايل (Cards) */}
           <div className="lg:hidden p-4 grid gap-4 bg-slate-50/50">
-             {loading ? <div className="py-10 text-center text-slate-400 font-bold">جاري التحميل...</div> : currentStudents.length === 0 ? <div className="py-10 text-center text-slate-400 font-bold">لا يوجد نتائج</div> : 
+             {loading ? (
+               <div className="py-10 text-center text-slate-400 font-bold">جاري التحميل...</div>
+             ) : currentStudents.length === 0 ? (
+               <div className="py-10 text-center text-slate-400 font-bold">لا يوجد نتائج</div>
+             ) : (
                currentStudents.map((student) => {
                  const userData = Array.isArray(student.users) ? student.users[0] : student.users;
                  const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
@@ -412,8 +418,9 @@ export default function StudentsPage() {
                        <span className="text-slate-500 max-w-[120px] truncate">{parentUserData?.full_name || 'بدون ولي أمر'}</span>
                     </div>
                  </div>
-               )})}
-             
+                 );
+               })
+             )}
           </div>
 
           {/* 🚀 نظام التصفح (Pagination UI) */}
