@@ -5,7 +5,7 @@ import {
   BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
   Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
   XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer,
-  RefreshCw, SearchX, Bug
+  RefreshCw, SearchX, Bug, Calculator
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -13,11 +13,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 
 export default function AttendanceReportsPage() {
-  const { user, userRole } = useAuth();
+  const { user, authRole } = useAuth();
   const { fetchTeacherDashboardData } = useDashboardSystem();
   
   const [loading, setLoading] = useState(true);
@@ -37,13 +36,14 @@ export default function AttendanceReportsPage() {
     setDbError(null);
     try {
       let currentTeacherId = null;
-      if (userRole === 'teacher') {
+      if (authRole === 'teacher') {
         const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
+      // جلب الفصول المتاحة للفلترة
       let availableSections = [];
-      if (userRole === 'teacher') {
+      if (authRole === 'teacher') {
         const dashData = await fetchTeacherDashboardData();
         availableSections = dashData?.sections || [];
       } else {
@@ -61,27 +61,26 @@ export default function AttendanceReportsPage() {
       });
       setSections(validSections);
 
-      if (validSections.length === 0 && userRole === 'teacher') {
+      if (validSections.length === 0 && authRole === 'teacher') {
         setRecords([]);
         setLoading(false);
         return;
       }
 
-      const sectionIds = validSections.map(s => String(s.id));
-
+      // 🚀 قراءة السجلات من الهيكلة الجديدة
       let query = supabase
         .from('attendance_records')
         .select(`
-          id, created_at, status, student_id,
+          id, date, period, status, section_id,
           students (
-            id, section_id,
-            users (full_name, avatar_url),
-            sections (id, name, classes(name))
-          )
+            id,
+            users (full_name, avatar_url)
+          ),
+          sections (name, classes(name))
         `)
-        .order('created_at', { ascending: false });
+        .order('date', { ascending: false });
 
-      if (userRole === 'teacher' && currentTeacherId) {
+      if (authRole === 'teacher' && currentTeacherId) {
         query = query.eq('teacher_id', currentTeacherId);
       }
 
@@ -91,15 +90,11 @@ export default function AttendanceReportsPage() {
         throw error;
       }
 
-      // فلترة برمجية آمنة (استخدام any لإسكات مدقق Next.js)
+      // فلترة آمنة للفصول (إذا كان معلماً، يرى فصوله فقط)
       let finalData = attendanceData || [];
-      if (userRole === 'teacher' && sectionIds.length > 0) {
-        finalData = finalData.filter((record: any) => {
-          const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
-          const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-          const stuSecId = stu?.section_id || stuSec?.id;
-          return sectionIds.includes(String(stuSecId));
-        });
+      if (authRole === 'teacher' && validSections.length > 0) {
+        const sectionIds = validSections.map(s => String(s.id));
+        finalData = finalData.filter((record: any) => sectionIds.includes(String(record.section_id)));
       }
       
       setRecords(finalData);
@@ -110,38 +105,35 @@ export default function AttendanceReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, userRole, fetchTeacherDashboardData]);
+  }, [user, authRole, fetchTeacherDashboardData]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // 🚀 المحرك الذكي للفلترة والتجميع
+  // 🚀 المحرك الذكي للفلترة والتجميع وتطبيق معادلة (5 حصص = 1 يوم)
   const reportData = useMemo(() => {
     let filtered = records || [];
 
+    // فلترة الفصل
     if (selectedSection !== 'all') {
-      filtered = filtered.filter((r: any) => {
-        const stu: any = Array.isArray(r.students) ? r.students[0] : r.students;
-        const stuSec: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
-        const stuSecId = stu?.section_id || stuSec?.id;
-        return String(stuSecId) === String(selectedSection);
-      });
+      filtered = filtered.filter((r: any) => String(r.section_id) === String(selectedSection));
     }
 
+    // فلترة التاريخ (بناءً على عمود date الجديد)
     if (dateRange !== 'all') {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       
       filtered = filtered.filter((r: any) => {
-        const targetDate = r.created_at || r.date;
-        if (!targetDate) return false;
+        const targetDateStr = r.date;
+        if (!targetDateStr) return false;
         
         if (dateRange === 'today') {
-          return targetDate.startsWith(todayStr);
+          return targetDateStr === todayStr;
         } 
         
-        const recordDate = new Date(targetDate);
+        const recordDate = new Date(targetDateStr);
         if (dateRange === 'week') {
           return recordDate >= startOfWeek(today, { weekStartsOn: 6 }) && recordDate <= endOfWeek(today, { weekStartsOn: 6 });
         } else if (dateRange === 'month') {
@@ -155,16 +147,17 @@ export default function AttendanceReportsPage() {
       });
     }
 
+    // تجميع الإحصائيات لكل طالب
     const studentMap = new Map<string, any>();
     
     filtered.forEach((record: any) => {
-      const sId = record.student_id;
+      const stuObj: any = Array.isArray(record.students) ? record.students[0] : record.students;
+      const sId = stuObj?.id;
       if (!sId) return;
 
       if (!studentMap.has(sId)) {
-        const stu: any = Array.isArray(record.students) ? record.students[0] : record.students;
-        const userData: any = Array.isArray(stu?.users) ? stu?.users[0] : stu?.users;
-        const secData: any = Array.isArray(stu?.sections) ? stu?.sections[0] : stu?.sections;
+        const userData: any = Array.isArray(stuObj?.users) ? stuObj?.users[0] : stuObj?.users;
+        const secData: any = Array.isArray(record.sections) ? record.sections[0] : record.sections;
         const classData: any = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
         
         const className = classData?.name || '';
@@ -173,12 +166,12 @@ export default function AttendanceReportsPage() {
         studentMap.set(sId, {
           id: sId,
           name: userData?.full_name || 'طالب غير معروف',
-          avatar: userData?.avatar_url,
           className: className ? `${className} - ${secName}` : 'فصل غير محدد',
           present: 0,
           absent: 0,
           late: 0,
           excused: 0,
+          fullDaysAbsent: 0,
           totalRecords: 0
         });
       }
@@ -191,15 +184,22 @@ export default function AttendanceReportsPage() {
       if (record.status === 'excused') st.excused += 1;
     });
 
-    return Array.from(studentMap.values()).sort((a, b) => b.absent - a.absent);
+    // حساب الأيام الفعلية (كل 5 حصص = يوم)
+    const processedData = Array.from(studentMap.values()).map(st => {
+      st.fullDaysAbsent = Math.floor(st.absent / 5);
+      return st;
+    });
+
+    return processedData.sort((a, b) => b.absent - a.absent);
   }, [records, selectedSection, dateRange, customStartDate, customEndDate]);
 
+  // الطلاب الذين لديهم غياب يعادل يوم فأكثر (أي 5 حصص غياب فأكثر)
   const atRiskStudents = reportData.filter(s => s.absent >= 5);
 
   const getReportTitle = () => {
-    const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => String(s.id) === String(selectedSection))?.name || '';
+    const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => String(s.id) === String(selectedSection))?.className + ' - ' + sections.find(s => String(s.id) === String(selectedSection))?.name || '';
     const dateText = dateRange === 'all' ? 'كل الأوقات' : dateRange === 'today' ? 'اليوم' : dateRange === 'week' ? 'هذا الأسبوع' : dateRange === 'month' ? 'هذا الشهر' : 'فترة مخصصة';
-    return `تقرير غياب (${secName}) - ${dateText}`;
+    return `تقرير الغياب التحليلي (${secName}) - ${dateText}`;
   };
 
   const exportToExcel = () => {
@@ -208,16 +208,17 @@ export default function AttendanceReportsPage() {
       'م': index + 1,
       'اسم الطالب': s.name,
       'الفصل': s.className,
-      'أيام الحضور': s.present,
-      'أيام الغياب': s.absent,
-      'التأخير': s.late,
-      'استئذان': s.excused,
-      'نسبة الغياب': `${Math.round((s.absent / s.totalRecords) * 100) || 0}%`
+      'حصص الحضور': s.present,
+      'حصص الغياب': s.absent,
+      'أيام الغياب الفعلية': s.fullDaysAbsent,
+      'حصص التأخير': s.late,
+      'حصص مستأذن': s.excused,
+      'مؤشر الخطر': s.absent >= 15 ? 'خطير (3 أيام)' : s.absent >= 5 ? 'منذر (يوم فأكثر)' : 'سليم'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير الغياب");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير الغياب الشامل");
     XLSX.writeFile(workbook, `${getReportTitle()}.xlsx`);
   };
 
@@ -228,10 +229,10 @@ export default function AttendanceReportsPage() {
     const dataToPrint = isWarningReport ? atRiskStudents : reportData;
     if (dataToPrint.length === 0) {
       printWindow.close();
-      return alert('لا توجد بيانات للطباعة');
+      return alert('لا توجد بيانات للطباعة في هذا القسم');
     }
     
-    const title = isWarningReport ? 'تقرير الطلاب المنذرين (تجاوز 5 غيابات)' : getReportTitle();
+    const title = isWarningReport ? 'إشعار إنذار إداري (تجاوز 5 حصص غياب = يوم كامل)' : getReportTitle();
 
     const rows = dataToPrint.map((s, i) => `
       <tr>
@@ -239,9 +240,9 @@ export default function AttendanceReportsPage() {
         <td><strong>${s.name}</strong></td>
         <td>${s.className}</td>
         <td style="color: #059669; font-weight: bold;">${s.present}</td>
-        <td style="color: #e11d48; font-weight: bold; background: ${s.absent >= 5 ? '#ffe4e6' : 'transparent'}">${s.absent}</td>
+        <td style="color: #e11d48; font-weight: bold; background: ${s.absent >= 5 ? '#ffe4e6' : 'transparent'}">${s.absent} حصة</td>
+        <td style="color: #9f1239; font-weight: 900; background: ${s.fullDaysAbsent > 0 ? '#fecdd3' : 'transparent'}">${s.fullDaysAbsent} يوم</td>
         <td style="color: #d97706; font-weight: bold;">${s.late}</td>
-        <td>${Math.round((s.absent / s.totalRecords) * 100) || 0}%</td>
       </tr>
     `).join('');
 
@@ -254,10 +255,11 @@ export default function AttendanceReportsPage() {
             body { font-family: 'Cairo', sans-serif; padding: 40px; color: #0f172a; }
             .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid ${isWarningReport ? '#e11d48' : '#4f46e5'}; padding-bottom: 20px; }
             .header h1 { color: ${isWarningReport ? '#e11d48' : '#4f46e5'}; font-size: 28px; font-weight: 900; margin-bottom: 5px; }
-            .header p { color: #64748b; font-size: 16px; margin: 0; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; text-align: center; }
-            th { background-color: ${isWarningReport ? '#fef1f2' : '#f1f5f9'}; color: ${isWarningReport ? '#be123c' : '#1e293b'}; padding: 15px; font-weight: 900; border: 1px solid #cbd5e1; }
-            td { padding: 12px; border: 1px solid #cbd5e1; }
+            .header p { color: #64748b; font-size: 14px; margin: 0; font-weight: bold; }
+            .info-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 12px; font-weight: bold; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; text-align: center; }
+            th { background-color: ${isWarningReport ? '#fef1f2' : '#f1f5f9'}; color: ${isWarningReport ? '#be123c' : '#1e293b'}; padding: 12px; font-weight: 900; border: 1px solid #cbd5e1; }
+            td { padding: 10px; border: 1px solid #cbd5e1; }
             tr:nth-child(even) { background-color: #f8fafc; }
             .footer { margin-top: 50px; font-size: 12px; color: #94a3b8; text-align: center; }
             .stamp { float: left; border: 2px dashed ${isWarningReport ? '#e11d48' : '#4f46e5'}; padding: 10px; color: ${isWarningReport ? '#e11d48' : '#4f46e5'}; font-weight: bold; transform: rotate(-10deg); margin-top: 30px; }
@@ -265,8 +267,11 @@ export default function AttendanceReportsPage() {
         </head>
         <body>
           <div class="header">
-            <h1>${isWarningReport ? '⚠️ إشعار إنذار غياب للطلاب' : '📊 التقرير التحليلي للغياب والحضور'}</h1>
+            <h1>${isWarningReport ? '⚠️ إشعار إنذار غياب للطلاب' : '📊 التقرير التحليلي الشامل للغياب'}</h1>
             <p>${title} | تاريخ الإصدار: ${format(new Date(), 'yyyy/MM/dd')}</p>
+          </div>
+          <div class="info-box">
+            ملاحظة إدارية: يتم احتساب الأيام الفعلية بناءً على المعادلة (كل 5 حصص غياب متفرقة = 1 يوم غياب كامل).
           </div>
           <table>
             <thead>
@@ -274,10 +279,10 @@ export default function AttendanceReportsPage() {
                 <th width="5%">#</th>
                 <th width="30%">اسم الطالب</th>
                 <th width="20%">الفصل</th>
-                <th width="10%">حاضر</th>
-                <th width="10%">غائب</th>
-                <th width="10%">متأخر</th>
-                <th width="15%">مؤشر الخطر</th>
+                <th width="10%">حضـور (حصة)</th>
+                <th width="10%">غيـاب (حصة)</th>
+                <th width="15%">الغياب الفعلي (يوم)</th>
+                <th width="10%">تأخيـر (حصة)</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -298,13 +303,13 @@ export default function AttendanceReportsPage() {
       <div className="flex h-[80vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب وتجميع التقارير...</p>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب وتجميع التقارير المتطورة...</p>
         </div>
       </div>
     );
   }
 
-  // 🚀 رادار الأخطاء الذكي
+  // 🚀 رادار الأخطاء
   if (dbError) {
     return (
       <div className="flex h-screen items-center justify-center p-6" dir="rtl">
@@ -348,13 +353,13 @@ export default function AttendanceReportsPage() {
           <div className="space-y-3 sm:space-y-4">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm">
               <BarChart2 className="w-3.5 h-3.5 text-indigo-300" />
-              <span>التحليل والإحصاء</span>
+              <span>التحليل والإحصاء المتقدم</span>
             </div>
             <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
               تقارير الحضور والغياب
             </h1>
             <p className="text-indigo-100 text-xs sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
-              تحليل ذكي لسجلات غياب الطلاب في حصصك الدراسية. يمكنك تتبع الغياب، اكتشاف الطلاب المنذرين، وتصدير التقارير الرسمية بضغطة زر.
+              تحليل ذكي لسجلات الطلاب. النظام يقوم بحساب الغياب بناءً على الحصص، ويطبق تلقائياً معادلة (5 حصص = يوم غياب) لاستخراج الإنذارات الدقيقة.
             </p>
           </div>
           
@@ -362,8 +367,8 @@ export default function AttendanceReportsPage() {
             <button onClick={exportToExcel} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-emerald-500 hover:bg-emerald-600 text-white text-sm sm:text-base font-black shadow-lg shadow-emerald-500/30 transition-all active:scale-95">
               <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" /> تصدير Excel
             </button>
-            <button onClick={() => exportToPDF(false)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-rose-500 hover:bg-rose-600 text-white text-sm sm:text-base font-black shadow-lg shadow-rose-500/30 transition-all active:scale-95">
-              <Download className="w-4 h-4 sm:w-5 sm:h-5" /> تقرير PDF
+            <button onClick={() => exportToPDF(false)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-indigo-500 hover:bg-indigo-600 text-white text-sm sm:text-base font-black shadow-lg shadow-indigo-500/30 transition-all active:scale-95">
+              <Download className="w-4 h-4 sm:w-5 sm:h-5" /> التقرير الشامل PDF
             </button>
           </div>
         </div>
@@ -424,7 +429,7 @@ export default function AttendanceReportsPage() {
         </div>
       </div>
 
-      {/* 🚀 At-Risk Radar */}
+      {/* 🚀 At-Risk Radar (تحديث: إنذار يعتمد على الأيام الفعلية) */}
       <AnimatePresence>
         {atRiskStudents.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-rose-50 to-red-50 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50">
@@ -434,8 +439,8 @@ export default function AttendanceReportsPage() {
                   <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h2 className="text-lg sm:text-2xl font-black text-rose-900 leading-tight">إنذار: تجاوز الحد (5 غيابات فأكثر)</h2>
-                  <p className="text-[10px] sm:text-sm font-bold text-rose-600 mt-1">يتطلب هذا القسم انتباهك لرفع تقرير للإدارة.</p>
+                  <h2 className="text-lg sm:text-2xl font-black text-rose-900 leading-tight">إنذار: غياب يوم فأكثر (5 حصص فاكثر)</h2>
+                  <p className="text-[10px] sm:text-sm font-bold text-rose-600 mt-1">هؤلاء الطلاب يتطلبون استدعاء وطباعة إنذار لإدارة المدرسة.</p>
                 </div>
               </div>
               <button onClick={() => exportToPDF(true)} className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white text-rose-600 text-xs sm:text-sm font-black shadow-sm border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 shrink-0 w-full sm:w-auto">
@@ -455,8 +460,13 @@ export default function AttendanceReportsPage() {
                       <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 truncate">{student.className}</p>
                     </div>
                   </div>
-                  <div className="bg-rose-500 text-white px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-black shadow-sm shrink-0">
-                    {student.absent} غياب
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="bg-rose-50 text-rose-600 border border-rose-200 px-2 py-1 rounded-md text-[9px] font-black shrink-0 whitespace-nowrap">
+                      {student.absent} حصة
+                    </div>
+                    <div className="bg-rose-500 text-white px-2 py-1 rounded-md text-[9px] font-black shrink-0 whitespace-nowrap shadow-sm">
+                      {student.fullDaysAbsent} يوم فعلي
+                    </div>
                   </div>
                 </div>
               ))}
@@ -472,7 +482,12 @@ export default function AttendanceReportsPage() {
             <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner border border-indigo-100 shrink-0">
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">السجل التحليلي الشامل</h2>
+            <div>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">السجل التحليلي الشامل</h2>
+              <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500 font-bold">
+                 <Calculator className="w-3 h-3 text-indigo-500" /> يتم حساب الأيام الفعلية بناءً على المعادلة: كل 5 حصص = 1 يوم غياب.
+              </div>
+            </div>
           </div>
           <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 shadow-sm w-full sm:w-auto text-center">
             إجمالي السجلات: {reportData.length} طالب
@@ -483,30 +498,32 @@ export default function AttendanceReportsPage() {
           <table className="min-w-full divide-y divide-slate-100">
             <thead>
               <tr className="bg-slate-50/30">
-                <th scope="col" className="py-4 sm:py-5 pr-6 sm:pr-8 pl-4 text-right text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">اسم الطالب</th>
-                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-600">حاضر</th>
-                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-600">غائب</th>
-                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-600">متأخر</th>
-                <th scope="col" className="px-2 sm:px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-600">مستأذن</th>
-                <th scope="col" className="px-4 py-4 sm:py-5 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 hidden sm:table-cell">مؤشر الغياب</th>
+                <th scope="col" className="py-4 sm:py-5 pr-6 sm:pr-8 pl-4 text-right text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">اسم الطالب والفصل</th>
+                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-600">حضور<br/><span className="text-[8px]">(حصص)</span></th>
+                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-500">غياب<br/><span className="text-[8px]">(حصص)</span></th>
+                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-700 bg-rose-50 border-x border-rose-100">الأيام الفعلية<br/><span className="text-[8px]">(تجاوز)</span></th>
+                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-600">متأخر<br/><span className="text-[8px]">(حصص)</span></th>
+                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-600">مستأذن<br/><span className="text-[8px]">(حصص)</span></th>
+                <th scope="col" className="px-4 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 hidden sm:table-cell">مؤشر الخطر</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {reportData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 sm:py-20 text-center">
+                  <td colSpan={7} className="py-16 sm:py-20 text-center">
                     <div className="flex flex-col items-center gap-3 sm:gap-4">
                       <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
                         <SearchX className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
                       </div>
                       <p className="text-slate-500 font-bold text-xs sm:text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
-                      <p className="text-slate-400 font-medium text-[10px] sm:text-xs">تأكد من أنك قمت برصد الغياب لطلابك من لوحة الرصد أولاً.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 reportData.map((student) => {
-                  const absenceRate = Math.round((student.absent / student.totalRecords) * 100) || 0;
+                  const isWarning = student.fullDaysAbsent > 0;
+                  const isDanger = student.fullDaysAbsent >= 3;
+                  
                   return (
                     <tr key={student.id} className="group hover:bg-slate-50/50 transition-colors">
                       <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
@@ -520,25 +537,37 @@ export default function AttendanceReportsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 font-black text-xs sm:text-sm border border-emerald-100">{student.present}</span>
                       </td>
-                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.absent > 0 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.absent}</span>
+                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.absent > 0 ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.absent}</span>
                       </td>
-                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center bg-rose-50/30 border-x border-rose-50">
+                        <span className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl font-black text-sm sm:text-base border shadow-sm ${isDanger ? 'bg-rose-600 text-white border-rose-700 animate-pulse' : isWarning ? 'bg-rose-500 text-white border-rose-600' : 'bg-white text-slate-300 border-slate-200'}`}>
+                          {student.fullDaysAbsent}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
                         <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.late > 0 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.late}</span>
                       </td>
-                      <td className="whitespace-nowrap px-2 sm:px-4 py-3 sm:py-4 text-center">
+                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-blue-50 text-blue-600 font-black text-xs sm:text-sm border border-blue-100">{student.excused}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 sm:py-4 text-center hidden sm:table-cell">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="w-16 sm:w-20 h-1.5 sm:h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                            <div className={`h-full rounded-full ${absenceRate >= 20 ? 'bg-rose-500' : absenceRate > 0 ? 'bg-amber-400' : 'bg-emerald-500'}`} style={{ width: `${Math.min(absenceRate, 100)}%` }} />
-                          </div>
-                          <span className={`text-[9px] sm:text-[10px] font-black w-8 text-right ${absenceRate >= 20 ? 'text-rose-600' : 'text-slate-500'}`}>{absenceRate}%</span>
-                        </div>
+                         {isDanger ? (
+                           <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded-md text-[10px] font-black">
+                             <AlertCircle className="w-3 h-3" /> خطير (تجاوز 3 أيام)
+                           </span>
+                         ) : isWarning ? (
+                           <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-200 px-2 py-1 rounded-md text-[10px] font-black">
+                             <ShieldAlert className="w-3 h-3" /> منذر (يوم فأكثر)
+                           </span>
+                         ) : (
+                           <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-1 rounded-md text-[10px] font-black">
+                             <CheckCircle2 className="w-3 h-3" /> سليم
+                           </span>
+                         )}
                       </td>
                     </tr>
                   )
