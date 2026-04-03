@@ -87,7 +87,6 @@ export function useDashboardSystem() {
   const fetchStudentDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      // 🚀 البحث الآمن المتسلسل (يتجنب تعارض الأنواع في Supabase)
       let { data: student } = await supabase
         .from('students')
         .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
@@ -182,7 +181,6 @@ export function useDashboardSystem() {
   const fetchTeacherDashboardData = useCallback(async () => {
     if (!user) return null;
     try {
-      // 🚀 البحث الآمن المتسلسل (يتجنب تعارض الأنواع)
       let { data: teacher } = await supabase
         .from('teachers')
         .select('*, users(*)')
@@ -219,6 +217,16 @@ export function useDashboardSystem() {
       
       const rawSections = (teacherSections?.map(ts => ts.section) || []).filter(Boolean);
       const sections = rawSections.map(s => Array.isArray(s) ? s[0] : s).filter(Boolean);
+      
+      // 🚀 السحر هنا: الفرز الأبجدي العربي للفصول والشعب
+      sections.sort((a: any, b: any) => {
+        const classA = Array.isArray(a.classes) ? a.classes[0]?.name : a.classes?.name;
+        const classB = Array.isArray(b.classes) ? b.classes[0]?.name : b.classes?.name;
+        const nameA = `${classA || ''} - ${a.name || ''}`;
+        const nameB = `${classB || ''} - ${b.name || ''}`;
+        return nameA.localeCompare(nameB, 'ar', { numeric: true });
+      });
+
       const sectionIds = sections.map((s: any) => s.id);
 
       const [
@@ -345,7 +353,6 @@ export function useDashboardSystem() {
   const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
     if (!user) return null;
     try {
-      // 🚀 البحث الآمن المتسلسل
       let { data, error } = await supabase
         .from('students')
         .update({ 
@@ -525,7 +532,7 @@ export function useDashboardSystem() {
     fetchAdminRecentActivities,
     fetchStudentDashboardData,
     fetchStudentSchedule,
-    fetchParentDashboardData, // 🚀 تمت استعادتها هنا
+    fetchParentDashboardData, 
     fetchTeacherDashboardData,
     fetchTeacherSchedule,
     updateStudentTrack,
