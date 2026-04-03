@@ -72,7 +72,7 @@ export default function TeachersReportPage() {
 
       const data = await fetchTeachersReportData(reportType, todayStr, dbDay, weekAgoStr);
 
-      // 🚀 خوارزمية التدقيق لتقرير الطباعة
+      // 🚀 خوارزمية التدقيق لتقرير الطباعة مع إسكات TypeScript وتصحيح حقل التاريخ
       const results: TeacherReport[] = data.map((item: any) => {
         const { teacher, scheduleData, attendanceData } = item;
         
@@ -93,8 +93,9 @@ export default function TeachersReportPage() {
         const missed = total - recorded;
         let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
 
+        // 🚀 تم تصحيح created_at إلى date
         const lastRecorded = attendanceData && attendanceData.length > 0
-          ? [...attendanceData].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
+          ? [...attendanceData].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
           : null;
 
         let status: TeacherReport["status"] = "ممتاز";
