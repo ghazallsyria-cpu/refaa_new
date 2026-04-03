@@ -74,7 +74,7 @@ export default function TeachersMonitorPage() {
       const data = await fetchTeachersMonitorData(todayStr, dbDay, weekAgoStr);
       const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
-      // 🚀 خوارزمية التدقيق المتقدمة مع إسكات TypeScript بـ (any)
+      // 🚀 خوارزمية التدقيق المتقدمة مع إسكات TypeScript بـ (any) وتصحيح حقل التاريخ
       const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
         const teacherSchedules = allSchedules?.filter((s: any) => s.teacher_id === teacher.id && s.day_of_week === dbDay) || [];
         const total = teacherSchedules.length;
@@ -87,8 +87,9 @@ export default function TeachersMonitorPage() {
         const missed = total - recorded;
         const percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
 
+        // 🚀 تم تصحيح created_at إلى date
         const lastRecorded = teacherAttendance.length > 0
-          ? [...teacherAttendance].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
+          ? [...teacherAttendance].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
           : null;
 
         let status: TeacherMonitor["status"] = "ممتاز";
