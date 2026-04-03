@@ -28,6 +28,7 @@ export function useUsersSystem() {
     setLoading(true);
     setError(null);
     try {
+      // 🚀 تم إضافة section_id و next_year_track للحقول المطلوبة لتعمل الفلاتر
       const { data, error } = await supabase
         .from('students')
         .select(`
@@ -35,8 +36,11 @@ export function useUsersSystem() {
           national_id,
           gender,
           parent_id,
-          users (full_name, email, phone),
-          sections (name, classes (name)),
+          section_id,
+          next_year_track,
+          track_selection_date,
+          users (full_name, email, phone, avatar_url),
+          sections (id, name, classes (id, name, level)),
           parents (users (full_name))
         `);
 
@@ -61,7 +65,7 @@ export function useUsersSystem() {
           id,
           specialization,
           zoom_link,
-          users (full_name, email, phone),
+          users (full_name, email, phone, avatar_url),
           teacher_sections (
             section_id,
             subject_id,
@@ -93,7 +97,7 @@ export function useUsersSystem() {
           job_title,
           workplace,
           address,
-          users (full_name, email, phone)
+          users (full_name, email, phone, avatar_url)
         `);
 
       if (error) throw error;
@@ -111,7 +115,7 @@ export function useUsersSystem() {
     try {
       const { data, error } = await supabase
         .from('sections')
-        .select('id, name, classes(name)');
+        .select('id, name, classes(name, level)');
       if (error) throw error;
       setSections((data as unknown) as Section[] || []);
     } catch (err: unknown) {
