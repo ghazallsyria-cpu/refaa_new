@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { School, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,110 +34,88 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
-  // Derive authorization state
   const getAuthorization = () => {
     if (isChecking || isPublicPage || !user || !authRole) return true;
-
-    // Force password reset
     if (mustResetPassword && !isResetPasswordPage) return false;
 
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
     if (authRole === 'student') {
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
-        return false;
-      }
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) return false;
     } else if (authRole === 'teacher') {
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
-        return false;
-      }
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) return false;
     } else if (authRole === 'parent') {
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
-        return false;
-      }
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) return false;
     } else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) {
-      if (isRoot) {
-        return false;
-      }
+      if (isRoot) return false;
     } else {
-      if (isDashboardRoute) {
-        return false;
-      }
+      if (isDashboardRoute) return false;
     }
     return true;
   };
 
   const isAuthorized = getAuthorization();
 
-  // Handle Role-based routing on pathname change
   useEffect(() => {
     if (isChecking || isPublicPage || !user) return;
-
     if (mustResetPassword && !isResetPasswordPage) {
       router.push('/reset-password');
       return;
     }
-
     if (!authRole) return;
 
     const isRoot = pathname === '/';
     const isDashboardRoute = pathname.startsWith('/dashboard');
 
     if (authRole === 'student') {
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) {
-        router.push('/dashboard/student');
-      }
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/student'))) router.push('/dashboard/student');
     } else if (authRole === 'teacher') {
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) {
-        router.push('/dashboard/teacher');
-      }
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/teacher'))) router.push('/dashboard/teacher');
     } else if (authRole === 'parent') {
-      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) {
-        router.push('/dashboard/parent');
-      }
+      if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) router.push('/dashboard/parent');
     } else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) {
-      if (isRoot) {
-        router.push('/dashboard');
-      }
+      if (isRoot) router.push('/dashboard');
     } else {
-      if (isDashboardRoute) {
-        router.push('/');
-      }
+      if (isDashboardRoute) router.push('/');
     }
   }, [pathname, authRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50/80 backdrop-blur-sm">
+        <div className="relative">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600 shadow-lg"></div>
+          <div className="absolute inset-0 flex items-center justify-center"><School className="h-6 w-6 text-indigo-600 animate-pulse"/></div>
+        </div>
       </div>
     );
   }
 
   if (platformClosed && !isPublicPage) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4 text-center" dir="rtl">
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-indigo-600 shadow-xl mb-8">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4 text-center relative overflow-hidden" dir="rtl">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
+        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl mb-8 relative z-10 border-4 border-white">
           <School className="h-12 w-12 text-white" />
-        </div>
-        <div className="bg-white p-8 rounded-2xl shadow-sm ring-1 ring-slate-200 max-w-md w-full">
+        </motion.div>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="bg-white/80 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-xl border border-slate-200 max-w-md w-full relative z-10">
           <div className="flex justify-center mb-6">
-            <div className="bg-amber-100 p-3 rounded-full">
-              <AlertTriangle className="h-8 w-8 text-amber-600" />
+            <div className="bg-amber-50 p-4 rounded-full border border-amber-100 animate-bounce">
+              <AlertTriangle className="h-10 w-10 text-amber-500" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">المنصة مغلقة</h1>
-          <p className="text-slate-600 mb-8 leading-relaxed">
+          <h1 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">المنصة مغلقة مؤقتاً</h1>
+          <p className="text-slate-600 mb-8 leading-relaxed font-bold text-sm bg-slate-50 p-4 rounded-2xl border border-slate-100">
             {closeMessage}
           </p>
           <button
             onClick={signOut}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            className="w-full flex justify-center py-4 px-4 rounded-[1.5rem] shadow-lg text-sm font-black text-white bg-slate-900 hover:bg-slate-800 transition-all active:scale-95"
           >
             العودة لتسجيل الدخول
           </button>
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -152,27 +131,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // We will always show the sidebar, but its content will depend on the userRole
   const showSidebar = !isPublicPage;
 
   return (
-    <div className="flex h-full overflow-hidden bg-slate-50" dir="rtl">
-      {/* Mobile sidebar backdrop */}
-      {isSidebarOpen && showSidebar && (
-        <div 
-          className="fixed inset-0 z-40 bg-slate-900/80 lg:hidden backdrop-blur-sm transition-opacity"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+    <div className="flex h-full overflow-hidden bg-slate-50 selection:bg-indigo-100 selection:text-indigo-900" dir="rtl">
+      
+      {/* 🚀 Mobile Blur Backdrop */}
+      <AnimatePresence>
+        {isSidebarOpen && showSidebar && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden backdrop-blur-md"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
       
       {showSidebar && (
         <div 
           className={cn(
-            "fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-in-out print:hidden shadow-2xl lg:shadow-none",
+            "fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-2xl lg:shadow-none",
             isSidebarCollapsed ? "w-20" : "w-72",
             isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
-            // On desktop, if collapsed is true, we might want it to be hidden instead of mini
-            // But the user said "folds to the right", so maybe they want it to disappear
             !isSidebarOpen && "lg:translate-x-full lg:w-0",
             isSidebarOpen && "lg:translate-x-0 lg:static"
           )}
@@ -183,21 +163,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={() => {
               setIsSidebarCollapsed(!isSidebarCollapsed);
-              // If we are toggling collapse on desktop, we might actually want to close it
-              if (window.innerWidth >= 1024) {
-                setIsSidebarOpen(false);
-              }
+              if (window.innerWidth >= 1024) setIsSidebarOpen(false);
             }}
           />
         </div>
       )}
       
-      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full relative">
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full relative bg-slate-50/50">
         <div className="print:hidden sticky top-0 z-30">
           <Header 
-            onMenuClick={() => {
-              setIsSidebarOpen(!isSidebarOpen);
-            }} 
+            onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} 
             showMenuButton={showSidebar} 
             user={user} 
             authRole={authRole || ''} 
