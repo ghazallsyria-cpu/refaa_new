@@ -27,7 +27,18 @@ export default function LoginPage() {
     try {
       await signIn(civilId, password);
     } catch (err: any) {
-      setError(err.message || 'بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.');
+      // 🚀 مترجم الأخطاء الذكي: تحويل رسائل Supabase الإنجليزية إلى عربية
+      let errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
+      
+      if (err.message?.includes('Invalid login credentials')) {
+        errorMessage = 'بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.';
+      } else if (err.message?.includes('Email not confirmed')) {
+        errorMessage = 'يرجى تأكيد بريدك الإلكتروني أولاً.';
+      } else if (err.message?.includes('FetchError') || err.message?.includes('Failed to fetch')) {
+        errorMessage = 'يبدو أن هناك مشكلة في الاتصال بالإنترنت.';
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
