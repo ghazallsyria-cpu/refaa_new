@@ -6,7 +6,7 @@ import {
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
-  AlertTriangle, ShieldAlert
+  AlertTriangle, ShieldAlert, HeartHandshake // 🚀 أضفنا HeartHandshake لشكر المعلم
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -17,6 +17,9 @@ import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
 
+// 🚀 تاريخ بدء النظام الإلزامي (1-3-2026)
+const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
+
 export default function TeacherDashboard() {
   const [teacherData, setTeacherData] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
@@ -25,7 +28,16 @@ export default function TeacherDashboard() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
-  const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]); // 🚀 حالة الطلاب المنذرين
+  const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]); // حالة الطلاب المنذرين
+  
+  // 🚀 حالات المراقب الذكي للمعلم
+  const [attendanceStatus, setAttendanceStatus] = useState<{
+    isActive: boolean;
+    missedPeriods: number[];
+    completed: boolean;
+    totalToday: number;
+  }>({ isActive: false, missedPeriods: [], completed: false, totalToday: 0 });
+
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalExams: 0,
@@ -102,8 +114,10 @@ export default function TeacherDashboard() {
             setAssignmentStats(data.assignmentStats);
         }
 
-        // 🚀 جلب الطلاب المنذرين (تجاوزوا 5 حصص غياب مع هذا المعلم)
         if (data.teacher?.id) {
+            // ==========================================
+            // 1️⃣ جلب الطلاب المنذرين (تجاوزوا 5 حصص)
+            // ==========================================
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -130,11 +144,62 @@ export default function TeacherDashboard() {
                 studentAbsences.get(sid).count++;
               });
 
-              // تصفية الطلاب الذين تجاوزوا 5 حصص غياب فأكثر
               const atRisk = Array.from(studentAbsences.values())
                                   .filter((s: any) => s.count >= 5)
                                   .sort((a: any, b: any) => b.count - a.count);
               setAtRiskStudents(atRisk);
+            }
+
+            // ==========================================
+            // 2️⃣ خوارزمية المراقب الذكي لغياب المعلم
+            // ==========================================
+            const now = new Date();
+            if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
+              const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+              const currentDayOfWeek = now.getDay() + 1; // 1 للأحد إلى 7 للسبت (حسب ترتيبك)
+              
+              // حصص المعلم المجدولة اليوم
+              const todaysSchedule = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
+              const myPeriodsToday = Array.from(new Set(todaysSchedule.map((s: any) => s.period)));
+
+              if (myPeriodsToday.length === 0) {
+                setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
+              } else {
+                // جلب الحصص التي قام المعلم بتسجيلها اليوم
+                const { data: recs } = await supabase
+                  .from('attendance_records')
+                  .select('*') // جلب كل شيء لاستخراج period بأمان
+                  .eq('date', todayStr)
+                  .eq('teacher_id', data.teacher.id);
+
+                // استخراج أرقام الحصص المسجلة بأمان
+                const recordedPeriods = new Set(recs?.map((r: any) => r.period || r.period_number).filter(Boolean) || []);
+                const missed: number[] = [];
+                
+                myPeriodsToday.forEach((pNum: any) => {
+                  if (recordedPeriods.has(pNum)) return; // مسجلة مسبقاً
+
+                  // جلب وقت نهاية الحصة من قاعدة البيانات
+                  const pInfo = data.periods.find((p: any) => p.period_number === pNum);
+                  if (pInfo && pInfo.end_time) {
+                    const [h, m] = pInfo.end_time.split(':').map(Number);
+                    const endTime = new Date(now);
+                    endTime.setHours(h, m, 0, 0);
+
+                    // إذا انتهى وقت الحصة ولم يسجلها
+                    if (now > endTime) {
+                      missed.push(pNum);
+                    }
+                  }
+                });
+
+                setAttendanceStatus({
+                  isActive: true,
+                  missedPeriods: missed.sort((a, b) => a - b),
+                  completed: missed.length === 0 && recordedPeriods.size >= myPeriodsToday.length,
+                  totalToday: myPeriodsToday.length
+                });
+              }
             }
         }
       }
@@ -163,17 +228,74 @@ export default function TeacherDashboard() {
   const today = new Date().getDay() + 1; 
   const todaysSchedule = schedule.filter(s => s.day_of_week === today);
   const avatarUrl = teacherData?.users?.avatar_url;
-  
-  // حساب عدد الرسائل غير المقروءة
   const unreadMessagesCount = messages.filter(m => !m.is_read).length;
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+      className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo"
       dir="rtl"
     >
+      {/* 🚀 نظام الإنذار والشكر الذكي (المراقب الإداري) */}
+      <AnimatePresence>
+        {attendanceStatus.isActive && attendanceStatus.totalToday > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.98 }} 
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="w-full"
+          >
+            {attendanceStatus.missedPeriods.length > 0 ? (
+              <div className="bg-gradient-to-r from-rose-50 to-white border-2 border-rose-500/30 p-6 sm:p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-[0_10px_30px_-10px_rgba(244,63,94,0.3)] z-20">
+                <div className="absolute top-0 left-0 w-48 h-48 bg-rose-500/10 blur-3xl rounded-full"></div>
+                <div className="flex items-start gap-5 relative z-10 w-full md:w-auto">
+                  <div className="p-4 bg-gradient-to-br from-rose-500 to-red-600 rounded-2xl shadow-lg shadow-rose-500/30 animate-[pulse_2s_ease-in-out_infinite] shrink-0">
+                    <AlertTriangle className="h-8 w-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-black text-rose-700 mb-2 tracking-tight">تنبيه إداري: سجلات غياب غير مكتملة!</h3>
+                    <p className="text-sm font-bold text-slate-600 mb-4 leading-relaxed">
+                      أستاذي الكريم، بحسب <strong className="text-indigo-600">التوقيت الرسمي المعتمد من الإدارة</strong>، لقد انتهى وقت الحصص التالية ولم تقم بتسجيل غياب الطلاب لها حتى الآن:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {attendanceStatus.missedPeriods.map(p => (
+                        <span key={p} className="px-4 py-1.5 bg-white text-rose-600 font-black text-xs sm:text-sm rounded-xl shadow-sm border border-rose-200">
+                          الحصة {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <Link href="/attendance" className="relative z-10 shrink-0 px-8 py-4 bg-rose-600 hover:bg-rose-700 text-white font-black text-sm rounded-[1.5rem] shadow-xl shadow-rose-600/20 transition-all active:scale-95 w-full md:w-auto text-center border border-rose-500">
+                  تسجيل الغياب الآن
+                </Link>
+              </div>
+            ) : attendanceStatus.completed ? (
+              <div className="bg-gradient-to-r from-emerald-50 to-white border-2 border-emerald-500/30 p-6 sm:p-8 rounded-[2rem] flex items-center gap-5 relative overflow-hidden shadow-[0_10px_30px_-10px_rgba(16,185,129,0.3)] z-20">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 blur-3xl rounded-full"></div>
+                <div className="p-4 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl shadow-lg shadow-emerald-500/30 shrink-0">
+                  <HeartHandshake className="h-8 w-8 text-white" />
+                </div>
+                <div className="relative z-10">
+                  <h3 className="text-xl sm:text-2xl font-black text-emerald-800 mb-2 tracking-tight">شكراً لتعاونك وإخلاصك!</h3>
+                  <p className="text-sm font-bold text-slate-600 leading-relaxed">
+                    لقد قمت بتسجيل الغياب لجميع حصصك المجدولة اليوم (<strong className="text-emerald-600">{attendanceStatus.totalToday} حصص</strong>) بنجاح. جهودك مقدرة وسجلاتك مكتملة تماماً.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-indigo-50/50 border border-indigo-100 p-6 rounded-[2rem] flex items-start gap-4">
+                 <div className="p-3 bg-white rounded-xl shadow-sm border border-indigo-50 shrink-0"><Clock className="h-6 w-6 text-indigo-500" /></div>
+                 <div>
+                   <h4 className="text-base font-black text-indigo-900 mb-1">جدولك اليوم: {attendanceStatus.totalToday} حصص</h4>
+                   <p className="text-sm font-bold text-slate-500 leading-relaxed">النظام يراقب أوقات الحصص المعتمدة وسيقوم بتذكيرك آلياً بتسجيل الغياب فور انتهاء وقت كل حصة لضمان دقة السجلات.</p>
+                 </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 🚀 Header Section */}
       <div className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
@@ -229,7 +351,7 @@ export default function TeacherDashboard() {
         <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay"></div>
       </div>
 
-      {/* 🚀 نظام الإنذار المبكر للمعلم (The Danger Zone) */}
+      {/* 🚀 نظام الإنذار المبكر للمعلم (The Danger Zone) للطلاب */}
       <AnimatePresence>
         {atRiskStudents.length > 0 && (
           <motion.div
@@ -248,7 +370,7 @@ export default function TeacherDashboard() {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-white/10">
                     <ShieldAlert className="w-3.5 h-3.5 text-yellow-400" />
-                    <span>إنذار إداري مسجل</span>
+                    <span>إنذار سلوك ومواظبة</span>
                   </div>
                   <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-1 text-white leading-tight">
                     تنبيه: {atRiskStudents.length} طلاب تجاوزوا حد الغياب لديك!
@@ -473,7 +595,7 @@ export default function TeacherDashboard() {
                           {Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0} طالب
                         </span>
                         <span className="text-blue-600 font-black group-hover:underline flex items-center gap-1 bg-white px-2 py-1 rounded-lg">
-                          إدارة الفصل <ChevronLeft className="w-4 h-4" />
+                          إدارة الفصل <ChevronLeft className="h-4 h-4" />
                         </span>
                       </div>
                     </div>
