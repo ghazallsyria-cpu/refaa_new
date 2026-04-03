@@ -86,127 +86,130 @@ export default function AttendancePage() {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
-  // 🚀 المحرك الخارق لجلب إحصائيات الطالب (Smart Cross-Reference Engine)
+  // 🚀 المحرك الخارق لجلب إحصائيات الطالب (Manual Smart-Join Engine)
   const fetchStudentDataDirectly = useCallback(async () => {
     if (authRole !== 'student' || !user) return;
     setIsStudentLoading(true);
     setStudentDbError(null);
     
     try {
-      // 1. جلب بيانات الطالب ومعرفة فصله
+      // 1. جلب بيانات الطالب بشكل مجرد تماماً (بدون علاقات معقدة)
       const { data: studentData, error: stuErr } = await supabase
         .from('students')
-        .select('id, section_id, sections(id, name, classes(name))')
+        .select('*')
         .eq('id', user.id)
         .maybeSingle();
 
       if (stuErr) throw new Error("خطأ في جلب بيانات الطالب: " + stuErr.message);
       if (!studentData) throw new Error("تعذر إيجاد ملف الطالب المرتبط بهذا الحساب.");
 
-      // استخراج اسم الفصل بشكل آمن
-      const secData: any = Array.isArray(studentData.sections) ? studentData.sections[0] : studentData.sections;
-      const classData: any = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
-      const fullClassName = classData?.name ? `${classData.name} - ${secData?.name}` : 'فصل الطالب';
-      const actualSectionId = studentData.section_id || secData?.id;
+      const sectionId = studentData.section_id;
+      let fullClassName = 'فصل غير محدد';
+      let sectionSchedule: any[] = [];
 
-      // 2. جلب الجدول الدراسي لهذا الفصل (The Master Key للمطابقة)
-      const scheduleMap = new Map<string, string>();
-      if (actualSectionId) {
-        const { data: scheds } = await supabase
-          .from('schedules')
-          .select('day_of_week, period, subjects(name)')
-          .eq('section_id', actualSectionId);
-          
-        if (scheds) {
-          scheds.forEach((s: any) => {
-            const sName = Array.isArray(s.subjects) ? s.subjects[0]?.name : s.subjects?.name;
-            if (sName) {
-              scheduleMap.set(`${s.day_of_week}-${s.period}`, sName);
-            }
-          });
+      // 2. بناء بيانات الفصل والجدول يدوياً لتفادي أخطاء العلاقات (Foreign Keys)
+      if (sectionId) {
+        // جلب اسم الفصل
+        const { data: secData } = await supabase.from('sections').select('id, name, class_id').eq('id', sectionId).maybeSingle();
+        if (secData) {
+            const { data: classData } = await supabase.from('classes').select('name').eq('id', secData.class_id).maybeSingle();
+            fullClassName = classData?.name ? `${classData.name} - ${secData.name}` : secData.name;
         }
-      }
 
-      // 3. جلب سجلات الغياب الحقيقية بذكاء (يجرب عدة جداول محتملة للحماية المطلقة)
-      let rawRecords: any[] = [];
-      const queries = [
-        supabase.from('attendance').select('id, date, period, status, subjects(name)').eq('student_id', studentData.id),
-        supabase.from('attendances').select('id, date, period, status, subjects(name)').eq('student_id', studentData.id),
-        supabase.from('attendance_records').select('id, date, period, status, created_at').eq('student_id', studentData.id)
-      ];
-
-      for (const q of queries) {
-        const { data, error } = await q;
-        if (data && !error && data.length > 0) {
-          rawRecords = data;
-          break; // وجدنا الجدول الصحيح وفيه بيانات
-        } else if (data && !error && data.length === 0) {
-          rawRecords = data; // الجدول صحيح لكن الطالب لم يغب قط
-          break;
-        }
-      }
-
-      const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 };
-      const subjectsMap = new Map<string, any>();
-      const enrichedRecords: any[] = [];
-
-      // 4. خوارزمية الدمج والمعايرة
-      rawRecords.forEach((r: any) => {
-        // حساب الحصص
-        if (r.status === 'present') calculatedStats.present++;
-        else if (r.status === 'absent') calculatedStats.absent++;
-        else if (r.status === 'late') calculatedStats.late++;
-        else if (r.status === 'excused') calculatedStats.excused++;
-
-        // استنتاج اسم المادة بذكاء
-        let subjName = 'مادة غير محددة';
-        const targetDate = r.date || r.created_at;
-        const recordPeriod = r.period || 1;
-
-        // المحاولة 1: إذا كانت المادة مسجلة في الجدول
-        if (r.subjects) {
-          subjName = Array.isArray(r.subjects) ? r.subjects[0]?.name : r.subjects.name;
-        } 
+        // جلب الجدول الخاص بالفصل
+        const { data: schedData } = await supabase.from('schedules').select('*').eq('section_id', sectionId);
         
-        // المحاولة 2: المطابقة العكسية مع الجدول الدراسي
-        if ((!subjName || subjName === 'مادة غير محددة') && targetDate) {
-          const d = new Date(targetDate);
-          const dayOfWeek = d.getDay() + 1; // 1 = الأحد في جدولنا
-          const mappedSubject = scheduleMap.get(`${dayOfWeek}-${recordPeriod}`);
-          if (mappedSubject) {
-            subjName = mappedSubject;
-          }
+        if (schedData && schedData.length > 0) {
+            // جلب أسماء المواد ودمجها برمجياً
+            const subjectIds = [...new Set(schedData.map(s => s.subject_id).filter(Boolean))];
+            const { data: subjs } = await supabase.from('subjects').select('id, name').in('id', subjectIds);
+            
+            sectionSchedule = schedData.map(s => ({
+                ...s,
+                subject_name: subjs?.find(sub => sub.id === s.subject_id)?.name || 'مادة غير محددة'
+            }));
         }
+      }
 
-        // تجميع غياب المواد
-        if (!subjectsMap.has(subjName)) {
-          subjectsMap.set(subjName, { name: subjName, present: 0, absent: 0, late: 0, excused: 0 });
-        }
-        const sStats = subjectsMap.get(subjName);
-        if (r.status === 'present') sStats.present++;
-        else if (r.status === 'absent') sStats.absent++;
-        else if (r.status === 'late') sStats.late++;
-        else if (r.status === 'excused') sStats.excused++;
+      // 3. جلب سجلات الغياب المجردة (التي تحتوي فقط على الأساسيات)
+      const { data: rawRecords, error: recErr } = await supabase
+        .from('attendance_records')
+        .select('id, created_at, status, student_id')
+        .eq('student_id', studentData.id)
+        .order('created_at', { ascending: false });
 
-        enrichedRecords.push({
-          ...r,
-          displayClassName: fullClassName,
-          subjectName: subjName,
-          displayDate: targetDate || new Date().toISOString(),
-          displayPeriod: recordPeriod
+      if (recErr) throw new Error("خطأ في قاعدة بيانات السجلات: " + recErr.message);
+
+      if (rawRecords) {
+        // 4. فلترة التكرارات اليومية (Deduplication) - نأخذ أحدث سجل لكل يوم
+        const uniqueDailyRecords = new Map();
+        rawRecords.forEach((r: any) => {
+           const dateString = new Date(r.created_at || new Date()).toISOString().split('T')[0];
+           if (!uniqueDailyRecords.has(dateString)) {
+               uniqueDailyRecords.set(dateString, r);
+           }
         });
-      });
+        const dailyRecords = Array.from(uniqueDailyRecords.values());
 
-      // 🚀 تطبيق معادلتك الذهبية: كل 5 حصص = 1 يوم غياب كامل
-      calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
+        const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 };
+        const subjectsMap = new Map<string, any>();
+        const enrichedRecords: any[] = [];
 
-      setStudentStats(calculatedStats);
-      setSubjectStats(Array.from(subjectsMap.values()).sort((a, b) => b.absent - a.absent)); // ترتيب تنازلي بالغياب الأكبر
-      
-      // ترتيب السجلات تنازلياً حسب التاريخ
-      enrichedRecords.sort((a, b) => new Date(b.displayDate).getTime() - new Date(a.displayDate).getTime());
-      setStudentAttendance(enrichedRecords);
-      
+        // 5. خوارزمية الإسقاط الجدولي (Projecting Daily Records onto Schedule Slots)
+        dailyRecords.forEach((r: any) => {
+          const dateObj = new Date(r.created_at || new Date());
+          const dayOfWeek = dateObj.getDay() + 1; // الأحد = 1 في نظامنا
+
+          // استخراج حصص الطالب في هذا اليوم
+          const daySched = sectionSchedule.filter(s => s.day_of_week === dayOfWeek);
+
+          if (daySched.length > 0) {
+              // إسقاط حالة الغياب اليومي على كل حصص ومواد هذا اليوم
+              daySched.forEach(slot => {
+                  const subjName = slot.subject_name;
+
+                  if (!subjectsMap.has(subjName)) {
+                    subjectsMap.set(subjName, { name: subjName, present: 0, absent: 0, late: 0, excused: 0 });
+                  }
+                  
+                  const sStats = subjectsMap.get(subjName);
+                  if (r.status === 'present') { sStats.present++; calculatedStats.present++; }
+                  else if (r.status === 'absent') { sStats.absent++; calculatedStats.absent++; }
+                  else if (r.status === 'late') { sStats.late++; calculatedStats.late++; }
+                  else if (r.status === 'excused') { sStats.excused++; calculatedStats.excused++; }
+
+                  enrichedRecords.push({
+                    ...r,
+                    displayClassName: fullClassName,
+                    subjectName: subjName,
+                    displayPeriod: slot.period,
+                    uniqueKey: `${r.id}-${slot.period}`
+                  });
+              });
+          } else {
+              // إذا لم يكن هناك جدول مبرمج لهذا اليوم، نعتبره تسجيلاً عاماً
+              if (r.status === 'present') calculatedStats.present++;
+              else if (r.status === 'absent') calculatedStats.absent++;
+              else if (r.status === 'late') calculatedStats.late++;
+              else if (r.status === 'excused') calculatedStats.excused++;
+
+              enrichedRecords.push({
+                ...r,
+                displayClassName: fullClassName,
+                subjectName: 'سجل عام (غير مجدول)',
+                displayPeriod: '-',
+                uniqueKey: `${r.id}-general`
+              });
+          }
+        });
+
+        // 🚀 تطبيق معادلتك الذهبية: كل 5 حصص = 1 يوم غياب كامل
+        calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
+
+        setStudentStats(calculatedStats);
+        setSubjectStats(Array.from(subjectsMap.values()).sort((a, b) => b.absent - a.absent)); // ترتيب تنازلي بالغياب الأكبر
+        setStudentAttendance(enrichedRecords);
+      }
     } catch (error: any) {
       console.error("Smart Fetch Error:", error);
       setStudentDbError(error.message);
@@ -443,12 +446,12 @@ export default function AttendancePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {studentAttendance.map((record, idx) => {
+                {studentAttendance.map((record) => {
                   return (
-                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4 group">
+                  <div key={record.uniqueKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4 group">
                     <div>
                       <span className="text-sm font-black text-slate-800 block mb-2" dir="ltr">
-                        {new Date(record.displayDate).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+                        {new Date(record.created_at || new Date()).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-flex items-center gap-1">
