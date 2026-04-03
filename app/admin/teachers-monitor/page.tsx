@@ -7,6 +7,7 @@ import {
   CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase"; // 🚀 نحتاج Supabase لجلب أوقات الحصص
 
 interface TeacherMonitor {
   id: string;
@@ -32,6 +33,9 @@ const MONTH_MAP: Record<number, string> = {
   4: "مايو", 5: "يونيو", 6: "يوليو", 7: "أغسطس",
   8: "سبتمبر", 9: "أكتوبر", 10: "نوفمبر", 11: "ديسمبر"
 };
+
+// 🚀 تاريخ بدء النظام الإلزامي
+const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
 export default function TeachersMonitorPage() {
   const { loading: hookLoading, fetchTeachersMonitorData, sendTeacherWarning } = useTeachersSystem();
@@ -60,42 +64,78 @@ export default function TeachersMonitorPage() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!todayStr) return;
+    if (!todayStr || !schoolTime) return;
     setLoading(true);
     try {
-      const weekAgo = new Date(schoolTime!);
+      const weekAgo = new Date(schoolTime);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
-      const jsDay = schoolTime!.getDay();
+      const jsDay = schoolTime.getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
       const data = await fetchTeachersMonitorData(todayStr, dbDay, weekAgoStr);
       const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
-      // 🚀 خوارزمية التدقيق المتقدمة مع إسكات TypeScript بـ (any) وتصحيح حقل التاريخ
+      // 🚀 جلب أوقات الحصص المعتمدة من الإدارة لحساب التأخير الفعلي
+      const { data: dbPeriods } = await supabase.from('periods').select('period_num, end_time');
+      const periodsMap: Record<number, string> = {};
+      dbPeriods?.forEach(p => { periodsMap[p.period_num] = p.end_time; });
+
+      const isSystemActive = schoolTime >= SYSTEM_START_DATE;
+
+      // 🚀 خوارزمية التدقيق المتقدمة والمربوطة بالوقت
       const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
         const teacherSchedules = allSchedules?.filter((s: any) => s.teacher_id === teacher.id && s.day_of_week === dbDay) || [];
         const total = teacherSchedules.length;
 
         const teacherAttendance = allAttendance?.filter((a: any) => a.teacher_id === teacher.id && a.date === todayStr) || [];
         
-        const uniqueRecordedSlots = new Set(teacherAttendance.map((a: any) => `${a.section_id}-${a.period}`)).size;
-        
-        const recorded = Math.min(uniqueRecordedSlots, total);
-        const missed = total - recorded;
+        // نستخدم رقم الحصة (period) للتأكد من تسجيلها
+        const recordedSet = new Set(teacherAttendance.map((a: any) => a.period));
+        const recorded = recordedSet.size;
+
+        let missed = 0;
+
+        // 🚀 حساب الحصص المتأخرة الحقيقية بناءً على الوقت
+        if (isSystemActive) {
+          teacherSchedules.forEach((schedule: any) => {
+            const periodNum = schedule.period;
+            // إذا لم يسجل هذه الحصة
+            if (!recordedSet.has(periodNum)) {
+              const endTimeStr = periodsMap[periodNum];
+              if (endTimeStr) {
+                const [h, m] = endTimeStr.split(':').map(Number);
+                const periodEndTime = new Date(schoolTime);
+                periodEndTime.setHours(h, m, 0, 0);
+
+                // إذا انتهى وقت الحصة ولم تُسجل
+                if (schoolTime > periodEndTime) {
+                  missed++;
+                }
+              }
+            }
+          });
+        }
+
         const percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
 
-        // 🚀 تم تصحيح created_at إلى date
         const lastRecorded = teacherAttendance.length > 0
           ? [...teacherAttendance].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
           : null;
 
         let status: TeacherMonitor["status"] = "ممتاز";
-        if (percent < 60 || missed > 0) status = "حرج";
-        else if (percent < 85) status = "تحذير";
-        else if (percent < 95) status = "جيد";
+        
+        // 🚀 تحديد الحالة
+        if (!isSystemActive || total === 0) {
+          status = "ممتاز";
+        } else {
+          // إذا كان لديه حصص متأخرة، نضعه في الحالة الحرجة فوراً
+          if (percent < 60 || missed > 0) status = "حرج";
+          else if (percent < 85) status = "تحذير";
+          else if (percent < 95) status = "جيد";
+        }
 
         const assignmentsCount = allAssignments?.filter((a: any) => a.teacher_id === teacher.id).length || 0;
         const examsCount = allExams?.filter((e: any) => e.teacher_id === teacher.id).length || 0;
@@ -115,6 +155,7 @@ export default function TeachersMonitorPage() {
         };
       });
 
+      // ترتيب المعلمين: من لديه أخطاء وتأخيرات يظهر أولاً
       results.sort((a, b) => {
         const statusOrder = { "حرج": 1, "تحذير": 2, "جيد": 3, "ممتاز": 4 };
         return statusOrder[a.status] - statusOrder[b.status];
@@ -216,7 +257,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على جدول المعلم اليومي</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على جدول المعلم اليومي والتوقيت الإداري</p>
             </div>
           </div>
           
@@ -248,14 +289,14 @@ export default function TeachersMonitorPage() {
               {loading ? (
                 <tr><td colSpan={6} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-4">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto" />
                     <p className="text-slate-400 font-bold text-sm sm:text-base">جاري معالجة البيانات...</p>
                   </div>
                 </td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-4">
-                    <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                    <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 mx-auto">
                       <Search className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
                     </div>
                     <p className="text-slate-400 font-bold text-sm sm:text-lg">لا توجد نتائج مطابقة</p>
@@ -291,7 +332,7 @@ export default function TeachersMonitorPage() {
                           <span className="text-slate-700">{teacher.total}</span>
                         </div>
                         {teacher.missed > 0 && (
-                          <span className="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-0.5 bg-rose-50 px-1.5 py-0.5 rounded">
+                          <span className="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-0.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
                             متأخر عن {teacher.missed} حصة
                           </span>
                         )}
@@ -314,16 +355,16 @@ export default function TeachersMonitorPage() {
                     </span>
                     {teacher.lastRecorded && (
                       <div className="text-[8px] sm:text-[9px] font-bold text-slate-400 mt-1 flex items-center justify-center gap-1">
-                        <Clock className="w-2.5 h-2.5" /> آخر تحديث: {new Date(teacher.lastRecorded).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}
+                        <Clock className="w-2.5 h-2.5" /> آخر رصد: {new Date(teacher.lastRecorded).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     )}
                   </td>
                   <td className="px-6 py-3 sm:py-4 text-center">
                     <button
                       onClick={() => sendWarning(teacher.id)}
-                      disabled={sendingWarning === teacher.id || teacher.status === "ممتاز" || teacher.total === 0}
+                      disabled={sendingWarning === teacher.id || teacher.status === "ممتاز" || teacher.total === 0 || teacher.status === "جيد"}
                       className={`inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 ${
-                        teacher.status === "ممتاز" || teacher.total === 0
+                        teacher.status === "ممتاز" || teacher.total === 0 || teacher.status === "جيد"
                           ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed"
                           : "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white border border-rose-200 shadow-sm"
                       }`}
