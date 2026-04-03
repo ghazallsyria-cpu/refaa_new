@@ -92,10 +92,11 @@ export default function AttendancePage() {
     setIsStudentLoading(true);
     setStudentDbError(null);
     try {
+      // 🚀 تم تصحيح 'user_id' إلى 'id' فعلياً في الكود!
       const { data: studentData, error: stuErr } = await supabase
         .from('students')
         .select('id, sections(name, classes(name))')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (stuErr) throw new Error("خطأ في جلب بيانات الطالب: " + stuErr.message);
