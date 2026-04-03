@@ -42,6 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [platformClosed, setPlatformClosed] = useState(false);
   const [closeMessage, setCloseMessage] = useState('');
   
+  // 🚀 إضافة حفظ الإعدادات الخام للمحرك الزمني
+  const [rawSettings, setRawSettings] = useState<any>(null); 
+  
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
@@ -49,46 +52,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isPublicPage = isLoginPage || isResetPasswordPage;
 
   const signIn = async (civilId: string, password: string) => {
-    let authEmail = civilId;
-    
-    if (!civilId.includes('@')) {
-      // 🚀 1. البحث عن الطالب
-      const { data: studentData } = await supabase.from('students').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-      let extractedEmail = extractEmail(studentData);
-      
-      // 🚀 2. البحث عن المعلم
-      if (!extractedEmail) {
-        const { data: teacherData } = await supabase.from('teachers').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-        extractedEmail = extractEmail(teacherData);
-      }
-      
-      // 🚀 3. البحث عن ولي الأمر
-      if (!extractedEmail) {
-        const { data: parentData } = await supabase.from('parents').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-        extractedEmail = extractEmail(parentData);
-      }
+    let authResult = null;
+    let lastError = null;
 
-      // 🚀 4. الاعتماد النهائي
-      if (extractedEmail) {
-        authEmail = extractedEmail;
-      } else {
-        // إذا لم نجد إيميل مسجل إطلاقاً، نستخدم المعيار الموحد
-        authEmail = `${civilId}@alrefaa.edu`;
+    if (civilId.includes('@')) {
+      // الدخول المباشر بالإيميل
+      const { data, error } = await supabase.auth.signInWithPassword({ email: civilId, password });
+      authResult = data;
+      lastError = error;
+    } else {
+      // 🚀 الحل الفولاذي: تجربة كل النطاقات الممكنة لتخطي حماية RLS
+      let extractedEmail = null;
+      try {
+        const { data: studentData } = await supabase.from('students').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
+        extractedEmail = extractEmail(studentData);
+        if (!extractedEmail) {
+          const { data: teacherData } = await supabase.from('teachers').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
+          extractedEmail = extractEmail(teacherData);
+        }
+        if (!extractedEmail) {
+          const { data: parentData } = await supabase.from('parents').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
+          extractedEmail = extractEmail(parentData);
+        }
+      } catch (e) { /* صمت: حماية RLS منعت القراءة وهذا طبيعي قبل الدخول */ }
+
+      // تجهيز قائمة الإيميلات المحتملة
+      const possibleEmails = [];
+      if (extractedEmail) possibleEmails.push(extractedEmail);
+      possibleEmails.push(`${civilId}@alrefaa.edu`); // النطاق e
+      possibleEmails.push(`${civilId}@alrifaa.edu`); // النطاق i
+
+      // إزالة المكرر
+      const uniqueEmails = [...new Set(possibleEmails)];
+
+      // تجربة الإيميلات بالتسلسل حتى ينجح الدخول
+      for (const emailToTry of uniqueEmails) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: emailToTry,
+          password: password,
+        });
+
+        if (!error && data.user) {
+          authResult = data;
+          lastError = null;
+          break; 
+        } else {
+          lastError = error; 
+        }
       }
     }
 
-    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-      email: authEmail,
-      password,
-    });
-
-    if (signInError) throw signInError;
+    if (lastError || !authResult?.user) {
+      throw lastError || new Error("بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.");
+    }
     
-    if (authData.user) {
+    if (authResult.user) {
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role, must_reset_password')
-        .eq('id', authData.user.id)
+        .eq('id', authResult.user.id)
         .maybeSingle();
 
       if (userError) throw userError;
@@ -257,29 +279,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!isPublicPage) {
           try {
             if (!settingsError && settings) {
-              let isOpen = settings.is_open;
-              const now = new Date();
-              
-              if (settings.open_date) {
-                const openDate = new Date(settings.open_date);
-                if (!isNaN(openDate.getTime()) && openDate > now) {
-                  isOpen = false;
-                }
-              }
-              if (settings.close_date) {
-                const closeDate = new Date(settings.close_date);
-                if (!isNaN(closeDate.getTime()) && closeDate < now) {
-                  isOpen = false;
-                }
-              }
-
-              // 🚀 السحر الأول: إضافة إرجاع الحالة إلى false هنا لتُفتح المنصة فوراً
-              if (!isOpen && role !== 'admin' && role !== 'management') {
-                setPlatformClosed(true);
-                setCloseMessage(settings.message || 'المنصة مغلقة حاليا للصيانة');
-              } else {
-                setPlatformClosed(false);
-              }
+              // 🚀 حفظ الإعدادات الخام للمحرك الزمني
+              setRawSettings(settings);
             }
           } catch (settingsErr) {
             console.warn('Platform settings error:', settingsErr);
@@ -296,33 +297,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, isPublicPage, isLoginPage, authRole, userName]);
 
   // ==========================================
+  // 🚀 السحر الأول: المحرك الزمني (إلغاء تأثير التواريخ القديمة)
+  // ==========================================
+  useEffect(() => {
+    if (!rawSettings) return;
+
+    const evaluatePlatformStatus = () => {
+      // الاعتماد المطلق على زر التفعيل (is_open) وتجاهل التاريخ القديم
+      let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
+
+      if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
+        setPlatformClosed(true);
+        setCloseMessage(rawSettings.message || 'المنصة مغلقة حاليا للصيانة');
+      } else {
+        setPlatformClosed(false);
+      }
+    };
+
+    evaluatePlatformStatus(); 
+    const interval = setInterval(evaluatePlatformStatus, 5000); 
+
+    return () => clearInterval(interval);
+  }, [rawSettings, authRole]);
+
+  // ==========================================
   // 🚀 السحر الثاني: المحرك اللحظي لمراقبة حالة المنصة
   // ==========================================
   useEffect(() => {
-    // لا داعي للمراقبة إذا لم يسجل دخول أو كان في صفحة عامة أو كان مديراً
     if (!user || isPublicPage || authRole === 'admin' || authRole === 'management') return;
 
-    // الاشتراك في التحديثات الحية لجدول إعدادات المنصة
     const channel = supabase
       .channel('platform_settings_listener')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'platform_settings' },
         (payload) => {
-          const newSettings = payload.new;
-          let isOpen = newSettings.is_open;
-          const now = new Date();
-
-          if (newSettings.open_date && new Date(newSettings.open_date) > now) isOpen = false;
-          if (newSettings.close_date && new Date(newSettings.close_date) < now) isOpen = false;
-
-          // تطبيق الحالة الجديدة فوراً وبدون تحديث الصفحة!
-          if (!isOpen) {
-             setPlatformClosed(true);
-             setCloseMessage(newSettings.message || 'المنصة مغلقة حاليا للصيانة');
-          } else {
-             setPlatformClosed(false);
-          }
+          // تحديث الإعدادات الخام للمحرك الزمني
+          setRawSettings(payload.new); 
         }
       )
       .subscribe();
