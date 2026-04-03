@@ -18,7 +18,7 @@ import {
   Clock,
   Video,
   BookOpen,
-  Settings // 🚀 تم إضافة استيراد الأيقونة هنا لحل الخطأ
+  Settings 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
@@ -26,7 +26,6 @@ import Image from 'next/image';
 
 type Tab = 'school' | 'profile' | 'notifications' | 'security' | 'platform';
 
-// توسيع النوع المحلي ليدعم الصورة الشخصية
 interface ExtendedProfileSettings extends ProfileSettings {
   avatar_url?: string;
 }
@@ -65,7 +64,8 @@ export default function SettingsPage() {
     semester: 'الفصل الدراسي الأول',
     address: 'شارع الملك فهد، حي الياسمين، الرياض',
     phone: '0112345678',
-    email: 'info@alrifaa.edu'
+    email: 'info@alrifaa.edu',
+    logo_url: '' // 🚀 إضافة حالة الشعار هنا
   });
 
   const [profileSettings, setProfileSettings] = useState<ExtendedProfileSettings>({
@@ -100,12 +100,13 @@ export default function SettingsPage() {
         message: platform.message
       });
       setSchoolSettings({
-        name: platform.school_name,
-        academic_year: platform.academic_year,
-        semester: platform.semester,
-        address: platform.address,
-        phone: platform.phone,
-        email: platform.email
+        name: platform.school_name || 'مدرسة الرفعة النموذجية',
+        academic_year: platform.academic_year || '2025 - 2026',
+        semester: platform.semester || 'الفصل الدراسي الأول',
+        address: platform.address || '',
+        phone: platform.phone || '',
+        email: platform.email || '',
+        logo_url: (platform as any).logo_url || '' // 🚀 استرجاع الشعار من القاعدة
       });
     }
 
@@ -157,7 +158,8 @@ export default function SettingsPage() {
             address: schoolSettings.address,
             phone: schoolSettings.phone,
             email: schoolSettings.email,
-          };
+            logo_url: schoolSettings.logo_url, // 🚀 حفظ الشعار في القاعدة
+          } as any;
         }
 
         await updatePlatformSettings(updateData);
@@ -188,7 +190,6 @@ export default function SettingsPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-24 p-4 sm:p-6 lg:p-8" dir="rtl">
       
-      {/* Toast Notification */}
       <AnimatePresence>
         {message.text && (
           <motion.div 
@@ -209,7 +210,6 @@ export default function SettingsPage() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div className="flex items-center gap-5">
           <div className="h-16 w-16 rounded-3xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
@@ -242,7 +242,6 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* Sidebar Navigation */}
         <aside className="lg:col-span-3">
           <nav className="flex flex-col gap-2 sticky top-8">
             {tabs.map((tab) => {
@@ -273,7 +272,6 @@ export default function SettingsPage() {
           </nav>
         </aside>
 
-        {/* Content Area */}
         <div className="lg:col-span-9">
           <AnimatePresence mode="wait">
             <motion.div
@@ -284,7 +282,7 @@ export default function SettingsPage() {
               transition={{ duration: 0.2 }}
               className="bg-white shadow-sm ring-1 ring-slate-100 rounded-[2.5rem] p-8 sm:p-10 relative overflow-hidden"
             >
-              {/* Profile Settings 🚀 (تحديث الصورة هنا) */}
+              {/* Profile Settings */}
               {activeTab === 'profile' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
@@ -300,7 +298,7 @@ export default function SettingsPage() {
                       <div className="shrink-0 relative group">
                         <div className="h-32 w-32 rounded-[2rem] overflow-hidden border-4 border-white shadow-xl bg-gradient-to-br from-indigo-100 to-violet-100 flex items-center justify-center relative z-10">
                           {profileSettings.avatar_url ? (
-                            <Image src={profileSettings.avatar_url} alt="Profile" width={128} height={128} className="object-cover w-full h-full" />
+                            <Image src={profileSettings.avatar_url} alt="Profile" fill className="object-cover" />
                           ) : (
                             <span className="text-5xl font-black text-indigo-400 opacity-50">{profileSettings.full_name?.charAt(0) || 'م'}</span>
                           )}
@@ -396,6 +394,34 @@ export default function SettingsPage() {
                     <div>
                       <h3 className="text-2xl font-black text-slate-900 tracking-tight">المعلومات الأساسية للمدرسة</h3>
                       <p className="text-sm text-slate-500 font-bold mt-1">تحديث اسم المدرسة، الشعار، وبيانات التواصل التي تظهر في التقارير والشهادات.</p>
+                    </div>
+                  </div>
+
+                  {/* 🚀 قسم رفع شعار المدرسة */}
+                  <div className="flex flex-col sm:flex-row items-center gap-8 bg-blue-50/30 p-8 rounded-3xl border border-blue-100 mb-6">
+                    <div className="shrink-0 relative group">
+                      <div className="h-32 w-32 rounded-[2rem] overflow-hidden border-4 border-white shadow-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center relative z-10">
+                        {schoolSettings.logo_url ? (
+                          <Image src={schoolSettings.logo_url} alt="School Logo" fill className="object-contain p-3 bg-white" />
+                        ) : (
+                          <Building2 className="h-12 w-12 text-blue-400 opacity-50" />
+                        )}
+                      </div>
+                      <div className="absolute inset-0 bg-blue-500 rounded-[2rem] blur-xl opacity-20 -z-10 group-hover:opacity-40 transition-opacity"></div>
+                    </div>
+                    
+                    <div className="flex-1 w-full text-center sm:text-right space-y-4">
+                      <div>
+                        <h4 className="text-lg font-black text-slate-900">شعار المدرسة الرسمي</h4>
+                        <p className="text-xs font-bold text-slate-500 mt-1">سيتم عرض هذا الشعار في صفحة تسجيل الدخول والواجهات الرئيسية للنظام.</p>
+                      </div>
+                      <div className="max-w-md mx-auto sm:mx-0">
+                        <ImageUpload
+                          initialImageUrl={schoolSettings.logo_url}
+                          onUploadSuccess={(url) => setSchoolSettings({...schoolSettings, logo_url: url})}
+                          label="رفع شعار جديد للمدرسة"
+                        />
+                      </div>
                     </div>
                   </div>
 
