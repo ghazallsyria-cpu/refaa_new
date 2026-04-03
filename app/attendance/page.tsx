@@ -9,7 +9,9 @@ import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSyst
 import { useAuth } from '@/context/auth-context';
 
 export default function AttendancePage() {
-  const { user, authRole } = useAuth(); 
+  const { user, authRole, userRole } = useAuth() as any; 
+  const currentRole = authRole || userRole;
+
   const { 
     sections, 
     daySchedule, 
@@ -41,7 +43,7 @@ export default function AttendancePage() {
   }, []);
 
   useEffect(() => {
-    if (date && authRole === 'teacher') {
+    if (date && currentRole !== 'student') {
       fetchDaySchedule(date).then((schedule) => {
         if (schedule && schedule.length > 0) {
           const isCurrentPeriodScheduled = schedule.some(s => s.period === period);
@@ -51,15 +53,17 @@ export default function AttendancePage() {
         }
       });
     }
-  }, [date, authRole, fetchDaySchedule, period]);
+  }, [date, currentRole, fetchDaySchedule, period]);
 
   useEffect(() => {
-    if (date && period && authRole !== 'student') {
+    if (date && period && currentRole !== 'student') {
       fetchSections(date, period).then(sectionsData => {
         if (sectionsData && sectionsData.length > 0) {
           setSelectedSection(sectionsData[0].id);
           if (sectionsData[0].subject_id) {
             setSelectedSubject(sectionsData[0].subject_id);
+          } else {
+            setSelectedSubject('');
           }
         } else {
           setSelectedSection('');
@@ -68,17 +72,17 @@ export default function AttendancePage() {
         }
       });
     }
-  }, [date, period, fetchSections, authRole]);
+  }, [date, period, fetchSections, currentRole]);
 
   const loadStudentsAndAttendance = useCallback(async () => {
-    if (selectedSection && date && authRole !== 'student') {
+    if (selectedSection && date && currentRole !== 'student') {
       const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
       if (res) {
-        // 🚀 التعديل هنا: ترتيب الطلاب أبجدياً لدعم المعلمين
+        // 🚀 ترتيب الطلاب أبجدياً لدعم المعلمين
         const sortedStudents = [...res.students].sort((a, b) => {
           const nameA = a.users?.full_name || '';
           const nameB = b.users?.full_name || '';
-          return nameA.localeCompare(nameB, 'ar'); // ترتيب يعتمد على الأبجدية العربية الصحيحة
+          return nameA.localeCompare(nameB, 'ar'); 
         });
 
         setStudents(sortedStudents);
@@ -86,14 +90,14 @@ export default function AttendancePage() {
         setStats(res.stats);
       }
     }
-  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, authRole]);
+  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole]);
 
   useEffect(() => {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
   const fetchStudentDataDirectly = useCallback(async () => {
-    if (authRole !== 'student' || !user) return;
+    if (currentRole !== 'student' || !user) return;
     setIsStudentLoading(true);
     setStudentDbError(null);
     
@@ -173,7 +177,7 @@ export default function AttendancePage() {
     } finally {
       setIsStudentLoading(false);
     }
-  }, [authRole, user]);
+  }, [currentRole, user]);
 
   useEffect(() => {
     fetchStudentDataDirectly();
@@ -184,23 +188,19 @@ export default function AttendancePage() {
   };
 
   const handleSave = async () => {
-    if (!selectedSubject) {
-      setMessage({ text: 'يرجى اختيار المادة/الفصل أولاً', type: 'error' });
-      setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-      return;
-    }
-
     setSaving(true);
     setMessage({ text: '', type: '' });
     try {
+      // 🚀 إرسال السجلات للمحرك الفولاذي
       await saveAttendance(selectedSection, selectedSubject, date, period, attendance, students);
       setMessage({ text: 'تم حفظ سجل الحضور والغياب بنجاح!', type: 'success' });
       loadStudentsAndAttendance(); 
       setTimeout(() => setMessage({ text: '', type: '' }), 4000);
     } catch (error: any) {
       console.error('Error saving attendance:', error);
-      setMessage({ text: `حدث خطأ أثناء الحفظ: ${error.message || 'تأكد من اختيار بيانات صحيحة'}`, type: 'error' });
-      setTimeout(() => setMessage({ text: '', type: '' }), 4000);
+      // 🚀 عرض رسالة الخطأ الدقيقة لتسهيل معرفة السبب
+      setMessage({ text: error.message || 'حدث خطأ مجهول', type: 'error' });
+      setTimeout(() => setMessage({ text: '', type: '' }), 8000);
     } finally {
       setSaving(false);
     }
@@ -226,7 +226,7 @@ export default function AttendancePage() {
   // ==========================================
   // 🚀 STUDENT VIEW
   // ==========================================
-  if (authRole === 'student') {
+  if (currentRole === 'student') {
     if (studentDbError) {
       return (
         <div className="flex h-[80vh] items-center justify-center p-6" dir="rtl">
@@ -525,7 +525,7 @@ export default function AttendancePage() {
                 onChange={(e) => setPeriod(parseInt(e.target.value))}
                 className="block w-full rounded-xl sm:rounded-2xl border-0 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-white/10 ring-1 ring-inset ring-white/20 focus:ring-2 focus:ring-indigo-400 text-xs sm:text-sm transition-all font-bold backdrop-blur-md outline-none appearance-none cursor-pointer"
               >
-                {authRole === 'teacher' ? (
+                {currentRole === 'teacher' ? (
                   daySchedule.length > 0 ? (
                     daySchedule.map(s => (
                       <option key={s.period} value={s.period} className="text-slate-900 font-bold">
