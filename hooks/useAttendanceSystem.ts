@@ -4,14 +4,12 @@ import { useAuth } from '@/context/auth-context';
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 
-// 🚀 دالة خارقة لحساب يوم الأسبوع بدقة متناهية وتخطي مشاكل خطوط التوقيت (Timezones)
+// 🚀 دالة حساب اليوم بدقة لضمان عدم تأثره بفروق التوقيت
 const getDayOfWeek = (dateString: string) => {
   if (!dateString) return 1;
-  // فصل التاريخ يدوياً لضمان عدم تأثره بتوقيت جرينتش
   const [year, month, day] = dateString.split('-').map(Number);
   const dateObj = new Date(year, month - 1, day);
-  const jsDay = dateObj.getDay(); // 0 = الأحد، 1 = الإثنين، ...
-  return jsDay + 1; // 1 = الأحد، 5 = الخميس (يتطابق مع قاعدة البيانات)
+  return dateObj.getDay() + 1; // 1 = الأحد، 5 = الخميس
 };
 
 export function useAttendanceSystem() {
@@ -20,25 +18,22 @@ export function useAttendanceSystem() {
   const [daySchedule, setDaySchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 1. جلب حصص المعلم في هذا اليوم (الالتزام الصارم بالجدول المبرمج)
+  // 1. جلب حصص المعلم في هذا اليوم بصرامة تامة
   const fetchDaySchedule = useCallback(async (date: string) => {
     if (!user || !date) return [];
     setLoading(true);
     try {
-      const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-      if (!teacherData) return [];
-
       const dayOfWeek = getDayOfWeek(date);
 
+      // 🚀 الإصلاح الجوهري: استخدام user.id مباشرة لمعرفة المعلم
       const { data } = await supabase
         .from('schedules')
         .select('period')
-        .eq('teacher_id', teacherData.id)
+        .eq('teacher_id', user.id)
         .eq('day_of_week', dayOfWeek)
         .order('period', { ascending: true });
 
       if (data && data.length > 0) {
-        // استخراج الحصص الفريدة فقط
         const uniquePeriods = Array.from(new Set(data.map(s => s.period))).map(p => ({ period: p }));
         setDaySchedule(uniquePeriods);
         return uniquePeriods;
@@ -55,25 +50,21 @@ export function useAttendanceSystem() {
     }
   }, [user]);
 
-  // 2. جلب الفصول المتاحة لمعلم في حصة معينة (الالتزام الصارم بالجدول المبرمج)
+  // 2. جلب الفصول المتاحة لمعلم في حصة معينة
   const fetchSections = useCallback(async (date: string, period: number) => {
     if (!user || !date) return [];
     setLoading(true);
     try {
-      const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-      if (!teacherData) return [];
-
       const dayOfWeek = getDayOfWeek(date);
 
       const { data: schedules } = await supabase
         .from('schedules')
         .select('section_id, subject_id, sections(id, name, classes(name)), subjects(name)')
-        .eq('teacher_id', teacherData.id)
+        .eq('teacher_id', user.id) // 🚀 الإصلاح الجوهري
         .eq('day_of_week', dayOfWeek)
         .eq('period', period);
 
       if (schedules && schedules.length > 0) {
-        // 🚀 معالجة آمنة (Type-Safe) وتخطي تكرار الفصول
         const uniqueSections = Array.from(new Set(schedules.map((s: any) => s.section_id)))
           .map(id => {
             const sched: any = schedules.find((s: any) => s.section_id === id);
@@ -103,7 +94,7 @@ export function useAttendanceSystem() {
     }
   }, [user]);
 
-  // 3. جلب الطلاب وحالة غيابهم لهذه الحصة تحديداً
+  // 3. جلب الطلاب وحالة غيابهم
   const fetchStudentsAndAttendance = useCallback(async (sectionId: string, subjectId: string, date: string, period: number) => {
     setLoading(true);
     try {
@@ -142,7 +133,7 @@ export function useAttendanceSystem() {
     }
   }, []);
 
-  // 4. حفظ الغياب (نظام الحذف ثم الإضافة الآمن 100%)
+  // 4. حفظ الغياب بأمان تام
   const saveAttendance = useCallback(async (
     sectionId: string, 
     subjectId: string, 
@@ -151,19 +142,16 @@ export function useAttendanceSystem() {
     attendanceData: Record<string, AttendanceStatus>, 
     studentsList: any[]
   ) => {
-    if (!user) throw new Error("جلسة المستخدم غير صالحة، يرجى تسجيل الدخول مجدداً");
+    if (!user) throw new Error("جلسة المستخدم غير صالحة");
     
     try {
-      const { data: teacherData, error: tErr } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-      if (tErr || !teacherData) throw new Error("تعذر الوصول لبيانات المعلم في قاعدة البيانات");
-
       const recordsToInsert = studentsList.map(student => {
         const status = attendanceData[student.id];
         if (!status) return null;
 
         return {
           student_id: student.id,
-          teacher_id: teacherData.id,
+          teacher_id: user.id, // 🚀 الإصلاح الجوهري
           section_id: sectionId,
           subject_id: subjectId || null,
           date: date,
@@ -174,7 +162,7 @@ export function useAttendanceSystem() {
 
       if (recordsToInsert.length === 0) return true;
 
-      // 1. تنظيف الساحة أولاً لمنع التضارب
+      // تنظيف ثم إضافة لضمان عدم التضارب
       const { error: deleteError } = await supabase
         .from('attendance_records')
         .delete()
@@ -182,23 +170,18 @@ export function useAttendanceSystem() {
         .eq('date', date)
         .eq('period', period);
 
-      if (deleteError) {
-          throw new Error(deleteError.message || deleteError.details || "حدث خطأ أثناء تنظيف السجلات القديمة");
-      }
+      if (deleteError) throw new Error("خطأ أثناء تنظيف السجلات القديمة");
 
-      // 2. إدخال السجلات الجديدة بأمان
       const { error: insertError } = await supabase
         .from('attendance_records')
         .insert(recordsToInsert);
 
-      if (insertError) {
-          throw new Error(insertError.message || insertError.details || "حدث خطأ أثناء حفظ السجلات في القاعدة");
-      }
+      if (insertError) throw new Error("خطأ أثناء حفظ السجلات الجديدة");
       
       return true;
     } catch (error: any) {
       console.error('Error saving attendance:', error);
-      throw new Error(error.message || error.details || 'حدث خطأ مجهول في الشبكة');
+      throw new Error(error.message || 'حدث خطأ مجهول');
     }
   }, [user]);
 
