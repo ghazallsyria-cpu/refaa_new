@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   Users,
@@ -25,7 +28,7 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
-  Scale // 🚀 تمت إضافة أيقونة الميزان لصفحة الخصومات
+  Scale
 } from 'lucide-react';
 
 const navigation = [
@@ -36,7 +39,7 @@ const navigation = [
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
-  { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale }, // 🚀 الزر الإداري الجديد
+  { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
   { name: 'أولياء الأمور', href: '/parents', icon: Users },
   { name: 'الفصول', href: '/classes', icon: School },
   { name: 'المواد الدراسية', href: '/subjects', icon: BookOpen },
@@ -67,23 +70,32 @@ export function Sidebar({
   onToggleCollapse?: () => void
 }) {
   const pathname = usePathname();
+  
+  // 🚀 جلب بيانات وشعار المدرسة من القاعدة
+  const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
 
-  // فلترة الروابط بناءً على الصلاحيات
+  useEffect(() => {
+    const fetchSchoolData = async () => {
+      try {
+        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
+        if (data) {
+          setSchoolData({
+            name: data.school_name?.split(' ')[0] || 'الرفعة', // نأخذ الكلمة الأولى فقط لجمالية السايدبار
+            logo_url: data.logo_url || ''
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching school data:', err);
+      }
+    };
+    fetchSchoolData();
+  }, []);
+
   const filteredNavigation = navigation.filter(item => {
     if (authRole === 'admin' || authRole === 'management') return true;
-    
-    if (authRole === 'teacher') {
-      return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
-    }
-    
-    if (authRole === 'student') {
-      return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
-    }
-    
-    if (authRole === 'parent') {
-      return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
-    }
-    
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
+    if (authRole === 'student') return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
+    if (authRole === 'parent') return ['لوحة التحكم', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     return false;
   });
 
@@ -102,7 +114,6 @@ export function Sidebar({
       isCollapsed ? "w-20" : "w-72",
       "group/sidebar"
     )}>
-      {/* 🚀 تأثيرات الإضاءة المعمارية (Glow Effects) */}
       <div className="absolute inset-y-0 right-0 w-1 bg-indigo-500/0 group-hover/sidebar:bg-indigo-500/30 transition-all duration-700" />
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full -translate-y-1/2 translate-x-1/2 animate-pulse" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/2 animate-pulse" />
@@ -117,11 +128,15 @@ export function Sidebar({
           animate={{ opacity: isCollapsed ? 0 : 1, scale: isCollapsed ? 0.8 : 1, x: isCollapsed ? 20 : 0 }}
           className={cn("flex items-center gap-3 transition-all duration-300", isCollapsed ? "pointer-events-none absolute" : "relative")}
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-[0_0_20px_rgba(99,102,241,0.4)] ring-1 ring-white/20 group-hover/sidebar:rotate-3 transition-transform duration-300">
-            <School className="h-6 w-6 text-white" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-white shadow-[0_0_20px_rgba(255,255,255,0.1)] ring-2 ring-indigo-500/30 group-hover/sidebar:rotate-3 transition-transform duration-300 overflow-hidden relative">
+            {schoolData.logo_url ? (
+              <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-1.5" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center"><School className="h-6 w-6 text-white" /></div>
+            )}
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-black text-white tracking-tight leading-none">الرفعة النموذجية</span>
+            <span className="text-lg font-black text-white tracking-tight leading-none">{schoolData.name}</span>
             <span className="text-[9px] text-indigo-400 font-bold uppercase tracking-[0.2em] mt-1.5">المنصة الرقمية</span>
           </div>
         </motion.div>
@@ -130,9 +145,13 @@ export function Sidebar({
           <motion.div 
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-[0_0_20px_rgba(99,102,241,0.4)] ring-1 ring-white/20 relative z-20"
+            className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-white shadow-[0_0_20px_rgba(255,255,255,0.1)] ring-2 ring-indigo-500/30 relative z-20 overflow-hidden"
           >
-            <School className="h-6 w-6 text-white" />
+            {schoolData.logo_url ? (
+              <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-1.5" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center"><School className="h-6 w-6 text-white" /></div>
+            )}
           </motion.div>
         )}
 
@@ -169,8 +188,6 @@ export function Sidebar({
             }
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
-            
-            // 🚀 تمييز زر "قرارات الخصم" بلون مختلف قليلاً للإدارة
             const isSpecialBtn = item.name === 'قرارات الخصم';
 
             return (
