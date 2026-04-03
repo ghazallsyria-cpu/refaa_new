@@ -5,7 +5,8 @@ import {
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, LayoutDashboard, 
   TrendingUp, AlertCircle, Bell, ChevronLeft,
-  Award, Target, BarChart2, Lock, Star, ChevronRight, Play
+  Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
+  AlertTriangle, ShieldAlert, Calculator
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -46,8 +47,10 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // 🚀 حالات للخط الزمني السحري
+  // 🚀 حالات للخط الزمني وحسابات الغياب الجديدة
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [absentPeriods, setAbsentPeriods] = useState<number>(0);
+  const [fullDaysAbsent, setFullDaysAbsent] = useState<number>(0);
 
   useEffect(() => {
     setMounted(true);
@@ -74,6 +77,7 @@ export default function StudentDashboard() {
         try {
             const studentId = data.student?.id;
             if (studentId) {
+                // 1. جلب العلامات
                 const { data: dbGrades } = await supabase
                   .from('exam_attempts')
                   .select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))')
@@ -90,6 +94,19 @@ export default function StudentDashboard() {
                 } else {
                     setRecentGrades(data.grades || []);
                 }
+
+                // 2. 🚀 جلب وحساب حصص الغياب لتفعيل الإنذار الإداري
+                const { count: absentCount, error: absErr } = await supabase
+                  .from('attendance_records')
+                  .select('id', { count: 'exact' })
+                  .eq('student_id', studentId)
+                  .eq('status', 'absent');
+
+                if (!absErr && absentCount !== null) {
+                  setAbsentPeriods(absentCount);
+                  setFullDaysAbsent(Math.floor(absentCount / 5)); // المعادلة: 5 حصص = 1 يوم
+                }
+
             } else {
                 setRecentGrades(data.grades || []);
             }
@@ -118,7 +135,7 @@ export default function StudentDashboard() {
     fetchData();
   }, [fetchData]);
 
-  // 🚀 دوال التحقق من الحصة الحالية والقادمة
+  // دوال التحقق من الحصة
   const isCurrentClass = (period: number) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
@@ -192,7 +209,7 @@ export default function StudentDashboard() {
       className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden"
       dir="rtl"
     >
-      {/* 🚀 Hero Section (التحفة المعمارية الفنية) */}
+      {/* 🚀 Hero Section */}
       <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
           
@@ -238,9 +255,56 @@ export default function StudentDashboard() {
 
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl mix-blend-overlay animate-pulse pointer-events-none"></div>
         <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay pointer-events-none"></div>
-        <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay pointer-events-none"></div>
       </div>
 
+      {/* 🚀 إنذار الغياب المتقدم (يظهر فقط عند اكتمال 5 حصص / يوم غياب) */}
+      <AnimatePresence>
+        {fullDaysAbsent > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 p-6 sm:p-8 text-white shadow-2xl shadow-rose-500/30 border-2 border-rose-400/50"
+          >
+            <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/20 blur-2xl animate-pulse pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              <div className="flex items-center gap-4 sm:gap-6 w-full lg:w-auto">
+                <div className="flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20 bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/20 shadow-inner shrink-0">
+                  <AlertTriangle className="w-8 h-8 sm:w-12 sm:h-12 text-yellow-300 animate-bounce" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-white/10">
+                    <ShieldAlert className="w-3.5 h-3.5 text-yellow-400" />
+                    <span>إنذار إداري مسجل</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-1 text-white leading-tight">
+                    تنبيه: تجاوزت الحد المسموح للغياب!
+                  </h2>
+                  <p className="text-rose-100 text-xs sm:text-sm font-bold leading-relaxed max-w-xl">
+                    حسب لائحة السلوك والمواظبة، تم احتساب وتجميع الحصص التي تغيبت عنها لتعادل <span className="bg-white/20 px-1.5 py-0.5 rounded text-white mx-1">{fullDaysAbsent} أيام</span> فعلية. يرجى الالتزام بالدوام لتجنب الخصم من درجات السلوك.
+                  </p>
+                </div>
+              </div>
+
+              {/* Visual Math Engine */}
+              <div className="flex items-center justify-center gap-3 sm:gap-4 bg-black/20 p-4 sm:p-5 rounded-2xl backdrop-blur-md border border-white/10 shrink-0 w-full lg:w-auto">
+                <div className="text-center">
+                  <span className="block text-2xl sm:text-4xl font-black text-white">{absentPeriods}</span>
+                  <span className="text-[9px] sm:text-[10px] text-rose-200 font-bold uppercase tracking-widest">حصص غياب</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-rose-200 opacity-60">÷ 5 =</div>
+                <div className="text-center bg-rose-500/50 p-2 sm:p-3 rounded-xl border border-rose-400/50 shadow-inner">
+                  <span className="block text-2xl sm:text-4xl font-black text-yellow-300 drop-shadow-md">{fullDaysAbsent}</span>
+                  <span className="text-[9px] sm:text-[10px] text-rose-100 font-bold uppercase tracking-widest">أيام مسجلة</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Track Selection (For 10th Grade) */}
       {isTenthGrade && !hasSelectedTrack && (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 p-6 sm:p-10 shadow-xl shadow-amber-100/50">
           <div className="flex flex-col md:flex-row items-center gap-6 sm:gap-8">
@@ -296,13 +360,13 @@ export default function StudentDashboard() {
         ))}
       </div>
 
-      {/* 🚀 Main Grid System (Fixed Layout for responsiveness) */}
+      {/* 🚀 Main Grid System */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
         
-        {/* 🌟 Column 1: Wide Area (Takes 2/3 on Desktop) - Contains Timeline & Chart */}
+        {/* 🌟 Column 1: Wide Area (Takes 2/3 on Desktop) */}
         <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
           
-          {/* 🚀 Today's Schedule Timeline (Magic Setup with plenty of horizontal space) */}
+          {/* 🚀 Today's Schedule Timeline */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] lg:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-sky-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
             <div className="p-5 sm:p-6 lg:p-8 border-b border-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white/50 relative z-10 gap-4">
