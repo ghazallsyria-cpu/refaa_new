@@ -29,7 +29,11 @@ export default function ClassesPage() {
   const [expandedClass, setExpandedClass] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🚀 فلتر المرحلة (سحر التنظيم الذكي)
+  const [stageFilter, setStageFilter] = useState<'all' | 'middle' | 'high'>('all');
 
+  // Modal State
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     type: 'addClass' | 'editClass' | 'deleteClass' | 'addSection' | 'editSection' | 'deleteSection' | null;
@@ -46,14 +50,27 @@ export default function ClassesPage() {
     fetchClassesData();
   }, [fetchClassesData]);
 
+  // 🚀 عند تغيير التبويب، نغلق الفصل المفتوح ليفتح أول فصل في المرحلة الجديدة تلقائياً
+  useEffect(() => {
+    setExpandedClass(null);
+  }, [stageFilter]);
+
   useEffect(() => {
     if (classes.length > 0 && !expandedClass) {
-      setExpandedClass(classes[0].id);
-      if (classes[0].sections.length > 0) {
-        setExpandedSection(classes[0].sections[0].id);
+      const filteredForFirst = classes.filter(cls => {
+        if (stageFilter === 'middle') return cls.level >= 6 && cls.level <= 9;
+        if (stageFilter === 'high') return cls.level >= 10 && cls.level <= 12;
+        return true;
+      });
+      
+      if (filteredForFirst.length > 0) {
+        setExpandedClass(filteredForFirst[0].id);
+        if (filteredForFirst[0].sections.length > 0) {
+          setExpandedSection(filteredForFirst[0].sections[0].id);
+        }
       }
     }
-  }, [classes, expandedClass]);
+  }, [classes, expandedClass, stageFilter]);
 
   const toggleClass = (classId: string) => {
     if (expandedClass === classId) {
@@ -115,7 +132,12 @@ export default function ClassesPage() {
     }
   };
 
-  const filteredClasses = classes.map(cls => {
+  // 🚀 الفلترة الديناميكية المزدوجة (للمراحل + البحث النصي)
+  const filteredClasses = classes.filter(cls => {
+    if (stageFilter === 'middle') return cls.level >= 6 && cls.level <= 9;
+    if (stageFilter === 'high') return cls.level >= 10 && cls.level <= 12;
+    return true;
+  }).map(cls => {
     if (!searchTerm) return cls;
     
     const filteredSections = cls.sections.map((sec: OrganizedSection) => {
@@ -149,6 +171,7 @@ export default function ClassesPage() {
       className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
       dir="rtl"
     >
+      {/* 🚀 Hero Header */}
       <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
           <div className="space-y-4">
@@ -186,14 +209,38 @@ export default function ClassesPage() {
         <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center gap-4 sticky top-24 z-30">
+      {/* 🚀 Smart Search Bar & Filters */}
+      <div className="bg-white/80 backdrop-blur-xl p-4 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col gap-4 sticky top-24 z-30">
+        
+        {/* المرحلة Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto w-full pb-2 scrollbar-hide">
+          <button 
+            onClick={() => setStageFilter('all')} 
+            className={`px-5 py-2.5 rounded-xl font-black text-sm shrink-0 transition-all ${stageFilter === 'all' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+          >
+            جميع المراحل
+          </button>
+          <button 
+            onClick={() => setStageFilter('middle')} 
+            className={`px-5 py-2.5 rounded-xl font-black text-sm shrink-0 transition-all ${stageFilter === 'middle' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+          >
+            المرحلة المتوسطة (6 - 9)
+          </button>
+          <button 
+            onClick={() => setStageFilter('high')} 
+            className={`px-5 py-2.5 rounded-xl font-black text-sm shrink-0 transition-all ${stageFilter === 'high' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+          >
+            المرحلة الثانوية (10 - 12)
+          </button>
+        </div>
+
         <div className="relative w-full group">
           <div className="absolute inset-y-0 right-0 pr-5 flex items-center pointer-events-none">
             <Search className="h-6 w-6 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
           </div>
           <input
             type="text"
-            placeholder="ابحث عن طالب بالاسم..."
+            placeholder="ابحث عن طالب بالاسم أو الرقم المدني، أو ابحث عن شعبة..."
             className="block w-full rounded-2xl border-0 py-4 pr-14 pl-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-base font-bold transition-all shadow-inner"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -201,6 +248,7 @@ export default function ClassesPage() {
         </div>
       </div>
 
+      {/* 🚀 Classes Content */}
       <div className="space-y-6">
         {filteredClasses.length === 0 ? (
           <motion.div 
@@ -212,7 +260,7 @@ export default function ClassesPage() {
               <Search className="h-10 w-10 text-slate-400" />
             </div>
             <h3 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">لا توجد نتائج</h3>
-            <p className="text-slate-500 font-bold text-lg">لم يتم العثور على فصول أو طلاب مطابقين لبحثك.</p>
+            <p className="text-slate-500 font-bold text-lg">لم يتم العثور على فصول أو طلاب مطابقين لبحثك في هذه المرحلة.</p>
           </motion.div>
         ) : (
           filteredClasses.map((cls, idx) => (
@@ -224,6 +272,7 @@ export default function ClassesPage() {
               transition={{ delay: idx * 0.05 }}
               className={`bg-white rounded-[2.5rem] border-2 shadow-sm overflow-hidden transition-all ${expandedClass === cls.id ? 'border-indigo-200 shadow-xl shadow-indigo-100/50' : 'border-slate-100 hover:border-indigo-100 hover:shadow-md'}`}
             >
+              {/* 🎯 Class Header Folder */}
               <div className="w-full flex flex-col md:flex-row md:items-center justify-between p-6 sm:p-8 bg-gradient-to-l from-slate-50 to-white transition-colors relative group">
                 <button
                   onClick={() => toggleClass(cls.id)}
@@ -269,6 +318,7 @@ export default function ClassesPage() {
                 </div>
               </div>
 
+              {/* 🎯 Sections & Students Area */}
               <AnimatePresence>
                 {expandedClass === cls.id && (
                   <motion.div 
@@ -287,6 +337,7 @@ export default function ClassesPage() {
                         cls.sections.map((section) => (
                           <div key={section.id} className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden transition-all hover:border-indigo-200 hover:shadow-md">
                             
+                            {/* Section Header */}
                             <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white group">
                               <button
                                 onClick={() => toggleSection(section.id)}
@@ -323,6 +374,7 @@ export default function ClassesPage() {
                               )}
                             </div>
 
+                            {/* 🚀 Students Grid */}
                             <AnimatePresence>
                               {expandedSection === section.id && (
                                 <motion.div 
@@ -387,6 +439,7 @@ export default function ClassesPage() {
         )}
       </div>
 
+      {/* 🚀 Modals (Secured & Styled) */}
       <AnimatePresence>
         {modalConfig.isOpen && isAdmin && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
