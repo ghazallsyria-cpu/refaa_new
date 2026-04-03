@@ -169,26 +169,28 @@ export function useAttendanceSystem() {
          if (sched && sched.teacher_id) actualTeacherId = sched.teacher_id;
       }
 
-      const recordsToInsert = studentsList.map(student => {
+      // 🚀 استخدام reduce لتجنب خطأ TypeScript المتعلق بـ filter(Boolean) وإمكانية وجود null
+      const recordsToInsert = studentsList.reduce((acc: any[], student) => {
         const status = attendanceData[student.id];
-        if (!status) return null;
-
-        return {
-          student_id: student.id,
-          teacher_id: actualTeacherId,
-          section_id: sectionId,
-          subject_id: subjectId || null,
-          date: date,
-          period: period,
-          status: status
-        };
-      }).filter(Boolean);
+        if (status) {
+          acc.push({
+            student_id: student.id,
+            teacher_id: actualTeacherId,
+            section_id: sectionId,
+            subject_id: subjectId || null,
+            date: date,
+            period: period,
+            status: status
+          });
+        }
+        return acc;
+      }, []);
 
       if (recordsToInsert.length === 0) throw new Error("لم تقم بتحديد حالة الحضور لأي طالب!");
 
       // 🚀 تنظيف آمن: نمسح فقط الطلاب الذين نقوم بتحديثهم الآن، ولا نمسح باقي الشعبة!
-      const studentIds = recordsToInsert.map(r => r.student_id);
-      
+      const studentIds = recordsToInsert.map((r: any) => r.student_id);
+
       const { error: deleteError } = await supabase
         .from('attendance_records')
         .delete()
