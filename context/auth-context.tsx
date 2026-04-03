@@ -26,6 +26,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// 🚀 دالة ذكية لاستخراج البريد الإلكتروني بأمان وتخطي فخ الـ Array
+const extractEmail = (data: any) => {
+  if (!data || !data.users) return null;
+  return Array.isArray(data.users) ? data.users[0]?.email : data.users?.email;
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [authRole, setAuthRole] = useState<UserRole | null>(null);
@@ -46,40 +52,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let authEmail = civilId;
     
     if (!civilId.includes('@')) {
-      // Try to find student
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('id, users!inner(email)')
-        .eq('national_id', civilId)
-        .maybeSingle();
-        
-      if (studentData && Array.isArray(studentData.users) && studentData.users.length > 0) {
-        authEmail = studentData.users[0].email;
+      // 🚀 1. البحث عن الطالب
+      const { data: studentData } = await supabase.from('students').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
+      let extractedEmail = extractEmail(studentData);
+      
+      // 🚀 2. البحث عن المعلم
+      if (!extractedEmail) {
+        const { data: teacherData } = await supabase.from('teachers').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
+        extractedEmail = extractEmail(teacherData);
+      }
+      
+      // 🚀 3. البحث عن ولي الأمر
+      if (!extractedEmail) {
+        const { data: parentData } = await supabase.from('parents').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
+        extractedEmail = extractEmail(parentData);
+      }
+
+      // 🚀 4. الاعتماد النهائي
+      if (extractedEmail) {
+        authEmail = extractedEmail;
       } else {
-        // Try to find teacher
-        const { data: teacherData } = await supabase
-          .from('teachers')
-          .select('id, users!inner(email)')
-          .eq('national_id', civilId)
-          .maybeSingle();
-          
-        if (teacherData && Array.isArray(teacherData.users) && teacherData.users.length > 0) {
-          authEmail = teacherData.users[0].email;
-        } else {
-          // Try to find parent
-          const { data: parentData } = await supabase
-            .from('parents')
-            .select('id, users!inner(email)')
-            .eq('national_id', civilId)
-            .maybeSingle();
-            
-          if (parentData && Array.isArray(parentData.users) && parentData.users.length > 0) {
-            authEmail = parentData.users[0].email;
-          } else {
-            // Default fallback
-            authEmail = `${civilId}@alrefaa.edu`;
-          }
-        }
+        // إذا لم نجد إيميل مسجل إطلاقاً، نستخدم المعيار الموحد
+        authEmail = `${civilId}@alrifaa.edu`;
       }
     }
 
@@ -115,37 +109,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const requestPasswordReset = async (civilId: string) => {
     let authEmail = '';
     
-    // Check students
-    const { data: studentData } = await supabase
-      .from('students')
-      .select('users!inner(email)')
-      .eq('national_id', civilId)
-      .maybeSingle();
+    const { data: studentData } = await supabase.from('students').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
+    authEmail = extractEmail(studentData);
       
-    if (studentData && Array.isArray(studentData.users) && studentData.users.length > 0) {
-      authEmail = studentData.users[0].email;
-    } else {
-      // Check teachers
-      const { data: teacherData } = await supabase
-        .from('teachers')
-        .select('users!inner(email)')
-        .eq('national_id', civilId)
-        .maybeSingle();
-        
-      if (teacherData && Array.isArray(teacherData.users) && teacherData.users.length > 0) {
-        authEmail = teacherData.users[0].email;
-      } else {
-        // Check parents
-        const { data: parentData } = await supabase
-          .from('parents')
-          .select('users!inner(email)')
-          .eq('national_id', civilId)
-          .maybeSingle();
-          
-        if (parentData && Array.isArray(parentData.users) && parentData.users.length > 0) {
-          authEmail = parentData.users[0].email;
-        }
-      }
+    if (!authEmail) {
+      const { data: teacherData } = await supabase.from('teachers').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
+      authEmail = extractEmail(teacherData);
+    }
+    
+    if (!authEmail) {
+      const { data: parentData } = await supabase.from('parents').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
+      authEmail = extractEmail(parentData);
     }
 
     if (!authEmail) {
