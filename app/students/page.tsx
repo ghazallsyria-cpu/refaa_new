@@ -52,11 +52,6 @@ export default function StudentsPage() {
     fetchParents();
   }, [fetchStudents, fetchSections, fetchParents]);
 
-  // 🚀 إعادة تعيين الصفحة عند البحث لتجنب الأخطاء
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedSection, selectedTrack]);
-
   // 🧠 معالجة البيانات بسرعة عالية (Memoization)
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -248,19 +243,30 @@ export default function StudentsPage() {
               className="w-full rounded-xl border-0 py-3.5 pr-12 pl-5 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold transition-all"
               placeholder="البحث بالاسم، الرقم المدني..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // 🚀 تصفير الصفحة عند التغيير بدون useEffect
+              }}
             />
           </div>
           <div className="flex gap-2 w-full md:w-auto">
             <select 
-              value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}
+              value={selectedSection} 
+              onChange={(e) => {
+                setSelectedSection(e.target.value);
+                setCurrentPage(1); // 🚀 تصفير الصفحة
+              }}
               className="flex-1 md:w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               <option value="all">جميع الفصول</option>
               {sections.map(s => <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>)}
             </select>
             <select 
-              value={selectedTrack} onChange={(e) => setSelectedTrack(e.target.value)}
+              value={selectedTrack} 
+              onChange={(e) => {
+                setSelectedTrack(e.target.value);
+                setCurrentPage(1); // 🚀 تصفير الصفحة
+              }}
               className="flex-1 md:w-40 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               <option value="all">جميع المسارات</option>
@@ -396,7 +402,7 @@ export default function StudentsPage() {
                  <h3 className="text-2xl font-black text-slate-900">إضافة طالب جديد</h3>
                  <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1">
                    <AlertCircle className="w-3 h-3 text-indigo-500"/>
-                   تلميح: لإضافة مجموعة طلاب، انتظر ميزة "الاستيراد عبر Excel" قريباً.
+                   تلميح: لإضافة مجموعة طلاب، انتظر ميزة &quot;الاستيراد عبر Excel&quot; قريباً.
                  </p>
               </div>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-white rounded-xl shadow-sm text-slate-400 hover:text-rose-500 transition-colors"><X className="w-5 h-5"/></button>
