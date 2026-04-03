@@ -52,32 +52,48 @@ export default function StudentsPage() {
     fetchParents();
   }, [fetchStudents, fetchSections, fetchParents]);
 
-  // 🧠 معالجة البيانات بسرعة عالية (Memoization)
+  // 🧠 معالجة البيانات بسرعة عالية مع الفلترة الدقيقة (Deep Extraction)
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
-      const matchesSection = selectedSection === 'all' || s.section_id === selectedSection;
+      // استخراج آمن للبيانات لتفادي مشاكل الـ Arrays من Supabase
+      const userData = Array.isArray(s.users) ? s.users[0] : s.users;
+      const fullName = userData?.full_name || '';
+      const email = userData?.email || '';
+
+      const matchesSection = selectedSection === 'all' || String(s.section_id) === String(selectedSection);
+      
       const matchesTrack = selectedTrack === 'all' || 
         (selectedTrack === 'none' ? !s.next_year_track : s.next_year_track === selectedTrack);
+      
       const matchesSearch = 
-        s.users?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.users?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.national_id?.includes(searchTerm);
+        fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (s.national_id || '').includes(searchTerm);
       
       return matchesSection && matchesTrack && matchesSearch;
     });
   }, [students, searchTerm, selectedSection, selectedTrack]);
 
   // حساب التصفح
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage) || 1;
   const currentStudents = filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // إحصائيات سريعة للوحة
-  const stats = useMemo(() => ({
-    total: students.length,
-    scientific: students.filter(s => s.next_year_track === 'scientific').length,
-    literary: students.filter(s => s.next_year_track === 'literary').length,
-    unassigned: students.filter(s => !s.section_id).length,
-  }), [students]);
+  // 🚀 إحصائيات سريعة للوحة (ذكية: تحسب المسارات لطلاب العاشر فقط!)
+  const stats = useMemo(() => {
+    // فلترة طلاب الصف العاشر فقط لحساب إحصائيات المسارات بدقة
+    const tenthGradeStudents = students.filter(s => {
+      const secData = Array.isArray(s.sections) ? s.sections[0] : s.sections;
+      const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+      return classData?.name?.includes('العاشر') || classData?.level === 10;
+    });
+
+    return {
+      total: students.length,
+      scientific: tenthGradeStudents.filter(s => s.next_year_track === 'scientific').length,
+      literary: tenthGradeStudents.filter(s => s.next_year_track === 'literary').length,
+      unassigned: students.filter(s => !s.section_id).length,
+    };
+  }, [students]);
 
   // ================= الدوال التنفيذية =================
   const handleAddSubmit = async () => {
@@ -97,11 +113,13 @@ export default function StudentsPage() {
 
   const handleEditClick = (student: any) => {
     setEditingStudent(student);
+    const userData = Array.isArray(student.users) ? student.users[0] : student.users;
+    
     setEditForm({
-      full_name: student.users?.full_name || '',
+      full_name: userData?.full_name || '',
       national_id: student.national_id || '',
-      email: student.users?.email || '',
-      phone: student.users?.phone || '',
+      email: userData?.email || '',
+      phone: userData?.phone || '',
       parent_id: student.parent_id || '',
       next_year_track: student.next_year_track || ''
     });
@@ -155,16 +173,27 @@ export default function StudentsPage() {
   };
 
   const exportToExcel = () => {
-    const data = filteredStudents.map(student => ({
-      'الاسم الرباعي': student.users?.full_name,
-      'الرقم المدني': student.national_id,
-      'البريد الإلكتروني': student.users?.email,
-      'رقم الهاتف': student.users?.phone,
-      'الصف': student.sections?.classes?.name,
-      'الشعبة': student.sections?.name,
-      'المسار': student.next_year_track === 'scientific' ? 'علمي' : student.next_year_track === 'literary' ? 'أدبي' : 'غير محدد',
-      'ولي الأمر': student.parents?.users?.full_name || 'غير مسجل'
-    }));
+    const data = filteredStudents.map(student => {
+      const userData = Array.isArray(student.users) ? student.users[0] : student.users;
+      const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
+      const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+      const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
+      const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
+
+      return {
+        'الاسم الرباعي': userData?.full_name || 'غير معروف',
+        'الرقم المدني': student.national_id,
+        'البريد الإلكتروني': userData?.email,
+        'رقم الهاتف': userData?.phone,
+        'الصف': classData?.name || 'غير محدد',
+        'الشعبة': secData?.name || 'غير محدد',
+        'المسار': student.next_year_track === 'scientific' ? 'علمي' : student.next_year_track === 'literary' ? 'أدبي' : 'غير محدد',
+        'ولي الأمر': parentUserData?.full_name || 'غير مسجل'
+      };
+    });
+    
+    if (data.length === 0) return alert('لا يوجد بيانات للتصدير');
+    
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب");
@@ -197,7 +226,6 @@ export default function StudentsPage() {
               <Download className="h-5 w-5 text-slate-400" /> تصدير Excel
             </button>
             
-            {/* 🚀 تجهيز زر الرفع الجماعي */}
             <button 
               onClick={() => alert('ميزة الاستيراد الجماعي للطلاب قيد التطوير وستتوفر قريباً!')}
               className="inline-flex items-center gap-2 rounded-2xl bg-indigo-50 px-5 py-3 text-sm font-black text-indigo-700 shadow-sm border border-indigo-100 hover:bg-indigo-100 transition-all active:scale-95"
@@ -214,19 +242,21 @@ export default function StudentsPage() {
           </div>
         </div>
 
-        {/* 📊 مؤشرات سريعة */}
+        {/* 📊 مؤشرات سريعة (ذكية) */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600"><Users className="h-6 w-6"/></div>
             <div><p className="text-2xl font-black text-slate-900">{stats.total}</p><p className="text-[10px] font-bold text-slate-400 uppercase">إجمالي الطلاب</p></div>
           </div>
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+          <div className="bg-white p-6 rounded-[2rem] border border-emerald-50 shadow-sm flex items-center gap-4 relative overflow-hidden group">
+            <div className="absolute right-0 top-0 w-2 h-full bg-emerald-500"></div>
             <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600"><BookOpen className="h-6 w-6"/></div>
-            <div><p className="text-2xl font-black text-slate-900">{stats.scientific}</p><p className="text-[10px] font-bold text-slate-400 uppercase">مسار علمي</p></div>
+            <div><p className="text-2xl font-black text-slate-900">{stats.scientific}</p><p className="text-[10px] font-bold text-slate-400 uppercase">علمي (العاشر)</p></div>
           </div>
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
+          <div className="bg-white p-6 rounded-[2rem] border border-purple-50 shadow-sm flex items-center gap-4 relative overflow-hidden group">
+            <div className="absolute right-0 top-0 w-2 h-full bg-purple-500"></div>
             <div className="h-12 w-12 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600"><BookOpen className="h-6 w-6"/></div>
-            <div><p className="text-2xl font-black text-slate-900">{stats.literary}</p><p className="text-[10px] font-bold text-slate-400 uppercase">مسار أدبي</p></div>
+            <div><p className="text-2xl font-black text-slate-900">{stats.literary}</p><p className="text-[10px] font-bold text-slate-400 uppercase">أدبي (العاشر)</p></div>
           </div>
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600"><AlertCircle className="h-6 w-6"/></div>
@@ -245,7 +275,7 @@ export default function StudentsPage() {
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setCurrentPage(1); // 🚀 تصفير الصفحة عند التغيير بدون useEffect
+                setCurrentPage(1); 
               }}
             />
           </div>
@@ -254,18 +284,21 @@ export default function StudentsPage() {
               value={selectedSection} 
               onChange={(e) => {
                 setSelectedSection(e.target.value);
-                setCurrentPage(1); // 🚀 تصفير الصفحة
+                setCurrentPage(1); 
               }}
               className="flex-1 md:w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
               <option value="all">جميع الفصول</option>
-              {sections.map(s => <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>)}
+              {sections.map(s => {
+                const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+                return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option>;
+              })}
             </select>
             <select 
               value={selectedTrack} 
               onChange={(e) => {
                 setSelectedTrack(e.target.value);
-                setCurrentPage(1); // 🚀 تصفير الصفحة
+                setCurrentPage(1);
               }}
               className="flex-1 md:w-40 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
@@ -295,30 +328,38 @@ export default function StudentsPage() {
                 {loading ? (
                   <tr><td colSpan={6} className="py-32 text-center"><div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" /><p className="font-bold text-slate-400">جاري التحميل...</p></td></tr>
                 ) : currentStudents.length === 0 ? (
-                  <tr><td colSpan={6} className="py-32 text-center"><div className="bg-slate-50 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4"><Search className="h-8 w-8 text-slate-300"/></div><p className="font-bold text-slate-500">لا يوجد نتائج</p></td></tr>
+                  <tr><td colSpan={6} className="py-32 text-center"><div className="bg-slate-50 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4"><Search className="h-8 w-8 text-slate-300"/></div><p className="font-bold text-slate-500">لا يوجد نتائج تطابق الفلاتر</p></td></tr>
                 ) : (
-                  currentStudents.map((student) => (
+                  currentStudents.map((student) => {
+                    // استخراج آمن للبيانات
+                    const userData = Array.isArray(student.users) ? student.users[0] : student.users;
+                    const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
+                    const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+                    const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
+                    const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
+
+                    return (
                     <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="whitespace-nowrap py-4 pr-8 pl-4">
                         <div className="flex items-center gap-4">
                           <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm border border-indigo-100 group-hover:scale-110 transition-transform">
-                            {student.users?.full_name?.charAt(0)}
+                            {userData?.full_name?.charAt(0) || 'ط'}
                           </div>
                           <div>
-                            <p className="font-black text-slate-900">{student.users?.full_name}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{student.users?.email || 'لا يوجد بريد'}</p>
+                            <p className="font-black text-slate-900">{userData?.full_name || 'غير معروف'}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{userData?.email || 'لا يوجد بريد'}</p>
                           </div>
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-sm font-bold text-slate-600 font-mono">{student.national_id}</td>
                       <td className="whitespace-nowrap px-4 py-4">
                         <div className="flex flex-col">
-                          <span className="text-sm font-black text-slate-900">{student.sections?.classes?.name}</span>
-                          <span className="text-[10px] font-bold text-indigo-500">{student.sections?.name}</span>
+                          <span className="text-sm font-black text-slate-900">{classData?.name || 'بدون صف'}</span>
+                          <span className="text-[10px] font-bold text-indigo-500">{secData?.name || 'بدون شعبة'}</span>
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-4">
-                        {student.sections?.classes?.level === 10 ? (
+                        {classData?.level === 10 || classData?.name?.includes('العاشر') ? (
                           student.next_year_track ? (
                             <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${student.next_year_track === 'scientific' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
                               {student.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}
@@ -327,7 +368,7 @@ export default function StudentsPage() {
                         ) : <span className="text-slate-300">-</span>}
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-sm font-bold text-slate-600">
-                        {student.parents?.users?.full_name || 'غير مسجل'}
+                        {parentUserData?.full_name || 'غير مسجل'}
                       </td>
                       <td className="whitespace-nowrap py-4 pl-8 pr-4 text-left">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -337,7 +378,7 @@ export default function StudentsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  )})}
                 )}
               </tbody>
             </table>
@@ -346,12 +387,19 @@ export default function StudentsPage() {
           {/* العرض للموبايل (Cards) */}
           <div className="lg:hidden p-4 grid gap-4 bg-slate-50/50">
              {loading ? <div className="py-10 text-center text-slate-400 font-bold">جاري التحميل...</div> : currentStudents.length === 0 ? <div className="py-10 text-center text-slate-400 font-bold">لا يوجد نتائج</div> : 
-               currentStudents.map((student) => (
+               currentStudents.map((student) => {
+                 const userData = Array.isArray(student.users) ? student.users[0] : student.users;
+                 const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
+                 const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+                 const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
+                 const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
+
+                 return (
                  <div key={student.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                     <div className="flex items-start justify-between">
                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 bg-indigo-50 text-indigo-600 font-black rounded-xl flex items-center justify-center">{student.users?.full_name?.charAt(0)}</div>
-                          <div><p className="font-black text-slate-900">{student.users?.full_name}</p><p className="text-xs font-bold text-slate-500 font-mono">{student.national_id}</p></div>
+                          <div className="h-10 w-10 bg-indigo-50 text-indigo-600 font-black rounded-xl flex items-center justify-center">{userData?.full_name?.charAt(0) || 'ط'}</div>
+                          <div><p className="font-black text-slate-900">{userData?.full_name || 'غير معروف'}</p><p className="text-xs font-bold text-slate-500 font-mono">{student.national_id}</p></div>
                        </div>
                        <div className="flex gap-1">
                           <button onClick={() => handleResetPasswordClick(student)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Key className="w-4 h-4" /></button>
@@ -360,12 +408,12 @@ export default function StudentsPage() {
                        </div>
                     </div>
                     <div className="flex justify-between text-xs font-bold bg-slate-50 p-3 rounded-xl border border-slate-100">
-                       <span className="text-slate-600">{student.sections?.classes?.name} - {student.sections?.name}</span>
-                       <span className="text-slate-500 max-w-[120px] truncate">{student.parents?.users?.full_name || 'بدون ولي أمر'}</span>
+                       <span className="text-slate-600">{classData?.name || ''} - {secData?.name || ''}</span>
+                       <span className="text-slate-500 max-w-[120px] truncate">{parentUserData?.full_name || 'بدون ولي أمر'}</span>
                     </div>
                  </div>
-               ))
-             }
+               )})}
+             
           </div>
 
           {/* 🚀 نظام التصفح (Pagination UI) */}
@@ -413,8 +461,18 @@ export default function StudentsPage() {
                  <div><label className="text-xs font-black text-slate-700 block mb-2">الرقم المدني <span className="text-rose-500">*</span></label><input type="text" value={addForm.national_id} onChange={e => setAddForm({...addForm, national_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
                  <div><label className="text-xs font-black text-slate-700 block mb-2">البريد الإلكتروني</label><input type="email" value={addForm.email} onChange={e => setAddForm({...addForm, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" /></div>
                  <div><label className="text-xs font-black text-slate-700 block mb-2">رقم الهاتف</label><input type="text" value={addForm.phone} onChange={e => setAddForm({...addForm, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
-                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">الشعبة والفصل</label><select value={addForm.section_id} onChange={e => setAddForm({...addForm, section_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون شعبة</option>{sections.map(s => <option key={s.id} value={s.id}>{s.classes?.name} - {s.name}</option>)}</select></div>
-                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">حساب ولي الأمر (اختياري)</label><select value={addForm.parent_id} onChange={e => setAddForm({...addForm, parent_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون ولي أمر</option>{parents.map(p => <option key={p.id} value={p.id}>{p.users?.full_name}</option>)}</select></div>
+                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">الشعبة والفصل</label><select value={addForm.section_id} onChange={e => setAddForm({...addForm, section_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون شعبة</option>
+                 {sections.map(s => {
+                   const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+                   return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option>;
+                 })}
+                 </select></div>
+                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">حساب ولي الأمر (اختياري)</label><select value={addForm.parent_id} onChange={e => setAddForm({...addForm, parent_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون ولي أمر</option>
+                 {parents.map(p => {
+                    const pUserData = Array.isArray(p.users) ? p.users[0] : p.users;
+                    return <option key={p.id} value={p.id}>{pUserData?.full_name}</option>;
+                 })}
+                 </select></div>
               </div>
               <div className="flex gap-3 pt-6 border-t border-slate-100">
                 <button onClick={handleAddSubmit} className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">إضافة الطالب</button>
@@ -439,10 +497,24 @@ export default function StudentsPage() {
                  <div><label className="text-xs font-black text-slate-700 block mb-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
                  <div><label className="text-xs font-black text-slate-700 block mb-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" /></div>
                  <div><label className="text-xs font-black text-slate-700 block mb-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
-                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">ولي الأمر</label><select value={editForm.parent_id} onChange={e => setEditForm({...editForm, parent_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون ولي أمر</option>{parents.map(p => <option key={p.id} value={p.id}>{p.users?.full_name}</option>)}</select></div>
-                 {editingStudent?.sections?.classes?.level === 10 && (
-                   <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">المسار الأكاديمي (للعاشر)</label><select value={editForm.next_year_track || ''} onChange={e => setEditForm({...editForm, next_year_track: e.target.value as any})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">لم يحدد</option><option value="scientific">علمي</option><option value="literary">أدبي</option></select></div>
-                 )}
+                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">ولي الأمر</label><select value={editForm.parent_id} onChange={e => setEditForm({...editForm, parent_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون ولي أمر</option>
+                 {parents.map(p => {
+                    const pUserData = Array.isArray(p.users) ? p.users[0] : p.users;
+                    return <option key={p.id} value={p.id}>{pUserData?.full_name}</option>;
+                 })}
+                 </select></div>
+                 
+                 {/* شرط ظهور التخصص: فقط للعاشر! */}
+                 {(() => {
+                   const secData = Array.isArray(editingStudent?.sections) ? editingStudent?.sections[0] : editingStudent?.sections;
+                   const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+                   if (classData?.level === 10 || classData?.name?.includes('العاشر')) {
+                     return (
+                       <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">المسار الأكاديمي (للعاشر)</label><select value={editForm.next_year_track || ''} onChange={e => setEditForm({...editForm, next_year_track: e.target.value as any})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">لم يحدد</option><option value="scientific">علمي</option><option value="literary">أدبي</option></select></div>
+                     );
+                   }
+                   return null;
+                 })()}
               </div>
               <div className="flex gap-3 pt-6 border-t border-slate-100">
                 <button onClick={handleEditSubmit} className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">حفظ التعديلات</button>
