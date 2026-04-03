@@ -53,15 +53,23 @@ export function useAttendanceSystem() {
         .eq('period', period);
 
       if (schedules && schedules.length > 0) {
-        const uniqueSections = Array.from(new Set(schedules.map(s => s.section_id)))
+        // 🚀 إضافة 'any' هنا لإسكات المدقق الصارم لـ TypeScript
+        const uniqueSections = Array.from(new Set(schedules.map((s: any) => s.section_id)))
           .map(id => {
-            const sched = schedules.find(s => s.section_id === id);
+            const sched: any = schedules.find((s: any) => s.section_id === id);
+            
+            // التأكد من شكل البيانات سواء كانت مصفوفة أو كائن
+            const sec: any = sched?.sections;
+            const subj: any = sched?.subjects;
+            const secObj = Array.isArray(sec) ? sec[0] : sec;
+            const subjObj = Array.isArray(subj) ? subj[0] : subj;
+
             return {
               id,
-              name: sched?.sections?.name,
-              classes: sched?.sections?.classes,
+              name: secObj?.name,
+              classes: secObj?.classes,
               subject_id: sched?.subject_id,
-              subject_name: sched?.subjects?.name
+              subject_name: subjObj?.name
             };
           });
         setSections(uniqueSections);
@@ -99,7 +107,7 @@ export function useAttendanceSystem() {
       const stats = { present: 0, absent: 0, late: 0, excused: 0 };
 
       if (attendanceData) {
-        attendanceData.forEach(record => {
+        attendanceData.forEach((record: any) => {
           attendanceRecord[record.student_id] = record.status as AttendanceStatus;
           stats[record.status as keyof typeof stats]++;
         });
