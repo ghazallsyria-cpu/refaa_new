@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { 
-  Radio, Users, Clock, TrendingUp, Activity, 
+  Radio, Clock, TrendingUp, Activity, 
   GraduationCap, UserCheck, MonitorPlay, 
   Search, Zap
 } from 'lucide-react';
@@ -18,8 +18,9 @@ interface OnlineUser {
   user_id: string;
   name: string;
   role: string;
-  metadata: string; // يحمل اسم الفصل للطالب، أو المادة للمعلم
+  metadata: string; 
   joined_at: string;
+  presence_ref?: string; // أضفنا هذه لحل مشكلة TypeScript في Netlify
 }
 
 export default function LiveMonitorPage() {
@@ -27,43 +28,35 @@ export default function LiveMonitorPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'teachers' | 'students'>('all');
   
-  // 🚀 حالة المتواجدين الحقيقية
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [peakUsers, setPeakUsers] = useState(0);
   const [chartData, setChartData] = useState<{ time: string, users: number }[]>([]);
 
   useEffect(() => {
-    // 🚀 الاتصال بقناة التواجد (Presence Channel)
     const room = supabase.channel('global_online_users');
 
     room.on('presence', { event: 'sync' }, () => {
       const newState = room.presenceState();
       const usersArray: OnlineUser[] = [];
       
-      // تجميع كل المتصلين في مصفوفة واحدة
       for (const id in newState) {
-        // نأخذ أول اتصال لكل مستخدم (لتجنب التكرار إذا فتح أكثر من تبويب)
-        const user = newState[id][0] as OnlineUser;
+        // 🚀 الحل لخطأ Netlify هنا: استخدام unknown أولاً
+        const user = newState[id][0] as unknown as OnlineUser;
         usersArray.push(user);
       }
       
       setOnlineUsers(usersArray);
-      
-      // تحديث رقم الذروة
       setPeakUsers(prev => Math.max(prev, usersArray.length));
 
-      // تحديث الرسم البياني اللحظي (كلما تغير العدد نضيف نقطة للرسم البياني)
       const now = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
       setChartData(prev => {
         const newData = [...prev, { time: now, users: usersArray.length }];
-        // نحتفظ بآخر 15 نقطة فقط للرسم البياني
         return newData.slice(-15);
       });
       
       setLoading(false);
     }).subscribe();
 
-    // تأمين ظهور الشاشة في حال لم يكن أحد متصلاً
     const timeout = setTimeout(() => setLoading(false), 2000);
 
     return () => {
@@ -72,19 +65,16 @@ export default function LiveMonitorPage() {
     };
   }, []);
 
-  // 🧠 ذكاء اصطناعي لتحليل البيانات الحية
   const analytics = useMemo(() => {
     const teachers = onlineUsers.filter(u => u.role === 'teacher');
     const students = onlineUsers.filter(u => u.role === 'student');
 
-    // حساب الفصل الأكثر نشاطاً
     const classCounts: Record<string, number> = {};
     students.forEach(s => {
       if (s.metadata) classCounts[s.metadata] = (classCounts[s.metadata] || 0) + 1;
     });
     const topClass = Object.keys(classCounts).sort((a, b) => classCounts[b] - classCounts[a])[0] || 'لا يوجد بيانات';
 
-    // حساب المعلم الأطول تواجداً (أقدم joined_at)
     const longestTeacher = teachers.sort((a, b) => new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime())[0];
 
     return {
@@ -96,7 +86,6 @@ export default function LiveMonitorPage() {
     };
   }, [onlineUsers]);
 
-  // الفلاتر للبحث
   const filteredUsers = onlineUsers.filter(u => 
     (activeTab === 'all' || 
     (activeTab === 'teachers' && u.role === 'teacher') || 
