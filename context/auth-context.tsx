@@ -73,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authEmail = extractedEmail;
       } else {
         // إذا لم نجد إيميل مسجل إطلاقاً، نستخدم المعيار الموحد
-        authEmail = `${civilId}@alrifaa.edu`;
+        authEmail = `${civilId}@alrefaa.edu`;
       }
     }
 
