@@ -15,10 +15,13 @@ export async function POST(request: Request) {
   });
 
   try {
+    // 🚀 نقرأ الطلب الأصلي قبل فلترته لكي لا نفقد كلمة المرور المرسلة
+    const clonedReq = request.clone();
+    const rawBody = await clonedReq.json();
+    
     const validatedData = await validateRequest(request, CreateUserRequestSchema);
     const { 
       email, 
-      password, 
       full_name, 
       national_id, 
       phone, 
@@ -46,8 +49,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden: Only admins can create users' }, { status: 403 });
     }
 
-    // Generate a default password based on national_id
-    const generatedPassword = password || `${national_id}123`;
+    // 🚀 الحل الجذري: نعتمد كلمة المرور المرسلة، أو نفرض 123456 كافتراضي 
+    const generatedPassword = rawBody.password || validatedData.password || '123456';
     const generatedEmail = email || `${national_id}@alrefaa.edu`;
 
     // Check if national_id already exists in specific tables
