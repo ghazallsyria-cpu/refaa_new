@@ -15,6 +15,13 @@ export interface StudentProfile {
   recentGrades: any[];
 }
 
+// 🚀 دالة مساعدة لفك التغليف الآمن واستخراج الاسم للترتيب
+const extractName = (item: any): string => {
+  if (!item || !item.users) return '';
+  const userObj = Array.isArray(item.users) ? item.users[0] : item.users;
+  return userObj?.full_name || '';
+};
+
 export function useUsersSystem() {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -28,7 +35,6 @@ export function useUsersSystem() {
     setLoading(true);
     setError(null);
     try {
-      // 🚀 تم إضافة section_id و next_year_track للحقول المطلوبة لتعمل الفلاتر
       const { data, error } = await supabase
         .from('students')
         .select(`
@@ -45,7 +51,13 @@ export function useUsersSystem() {
         `);
 
       if (error) throw error;
-      setStudents((data as unknown) as Student[] || []);
+      
+      // 🚀 السحر هنا: الفرز الأبجدي العربي لجميع الطلاب في الموقع
+      const sortedData = (data as any[] || []).sort((a, b) => {
+        return extractName(a).localeCompare(extractName(b), 'ar');
+      });
+
+      setStudents((sortedData as unknown) as Student[]);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب الطلاب';
       console.error('Error fetching students:', err);
@@ -75,7 +87,13 @@ export function useUsersSystem() {
         `);
 
       if (error) throw error;
-      setTeachers((data as unknown) as Teacher[] || []);
+
+      // 🚀 فرز المعلمين أبجدياً
+      const sortedData = (data as any[] || []).sort((a, b) => {
+        return extractName(a).localeCompare(extractName(b), 'ar');
+      });
+
+      setTeachers((sortedData as unknown) as Teacher[]);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب المعلمين';
       console.error('Error fetching teachers:', err);
@@ -101,7 +119,13 @@ export function useUsersSystem() {
         `);
 
       if (error) throw error;
-      setParents((data as unknown) as Parent[] || []);
+
+      // 🚀 فرز أولياء الأمور أبجدياً
+      const sortedData = (data as any[] || []).sort((a, b) => {
+        return extractName(a).localeCompare(extractName(b), 'ar');
+      });
+
+      setParents((sortedData as unknown) as Parent[]);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء جلب أولياء الأمور';
       console.error('Error fetching parents:', err);
@@ -116,8 +140,19 @@ export function useUsersSystem() {
       const { data, error } = await supabase
         .from('sections')
         .select('id, name, classes(name, level)');
+      
       if (error) throw error;
-      setSections((data as unknown) as Section[] || []);
+
+      // 🚀 فرز الفصول أبجدياً (ورقمياً)
+      const sortedData = (data as any[] || []).sort((a, b) => {
+        const classA = Array.isArray(a.classes) ? a.classes[0]?.name : a.classes?.name;
+        const classB = Array.isArray(b.classes) ? b.classes[0]?.name : b.classes?.name;
+        const nameA = `${classA || ''} ${a.name || ''}`;
+        const nameB = `${classB || ''} ${b.name || ''}`;
+        return nameA.localeCompare(nameB, 'ar', { numeric: true });
+      });
+
+      setSections((sortedData as unknown) as Section[]);
     } catch (err: unknown) {
       console.error('Error fetching sections:', err);
     }
@@ -128,8 +163,15 @@ export function useUsersSystem() {
       const { data, error } = await supabase
         .from('subjects')
         .select('id, name');
+      
       if (error) throw error;
-      setSubjects((data as unknown) as Subject[] || []);
+
+      // 🚀 فرز المواد أبجدياً
+      const sortedData = (data as any[] || []).sort((a, b) => {
+        return (a.name || '').localeCompare(b.name || '', 'ar');
+      });
+
+      setSubjects((sortedData as unknown) as Subject[]);
     } catch (err: unknown) {
       console.error('Error fetching subjects:', err);
     }
@@ -140,6 +182,9 @@ export function useUsersSystem() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
+      // الضمان الأمني: فرض الإيميل القياسي إذا لم يتم تقديم إيميل
+      const safeEmail = studentData.email || `${studentData.national_id}@alrefaa.edu`;
+
       const response = await fetch('/api/users/create', {
         method: 'POST',
         headers: {
@@ -147,7 +192,8 @@ export function useUsersSystem() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          email: studentData.email || null,
+          email: safeEmail,
+          password: '123456', // ضمان أن كلمة المرور هي 123456 دائماً
           full_name: studentData.full_name,
           national_id: studentData.national_id,
           phone: studentData.phone,
@@ -224,6 +270,8 @@ export function useUsersSystem() {
         throw new Error('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
       }
 
+      const safeEmail = teacherData.email || `${teacherData.national_id}@alrefaa.edu`;
+
       const response = await fetch('/api/users/create', {
         method: 'POST',
         headers: {
@@ -231,7 +279,8 @@ export function useUsersSystem() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          email: teacherData.email || null,
+          email: safeEmail,
+          password: '123456', 
           full_name: teacherData.full_name,
           national_id: teacherData.national_id,
           phone: teacherData.phone,
@@ -308,6 +357,8 @@ export function useUsersSystem() {
         throw new Error('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
       }
 
+      const safeEmail = parentData.email || `${parentData.national_id}@alrefaa.edu`;
+
       const response = await fetch('/api/users/create', {
         method: 'POST',
         headers: {
@@ -315,7 +366,8 @@ export function useUsersSystem() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          email: parentData.email || null,
+          email: safeEmail,
+          password: '123456', 
           full_name: parentData.full_name,
           national_id: parentData.national_id,
           phone: parentData.phone,
