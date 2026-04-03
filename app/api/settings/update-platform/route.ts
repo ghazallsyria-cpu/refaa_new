@@ -19,10 +19,10 @@ export async function POST(req: Request) {
       updated_at: new Date().toISOString()
     };
 
-    // Only include fields that are present in settings
+    // 🚀🚀 هنا كان الفخ! أضفنا logo_url للقائمة المسموحة
     const fields = [
       'is_open', 'message', 'school_name', 'academic_year', 
-      'semester', 'address', 'phone', 'email'
+      'semester', 'address', 'phone', 'email', 'logo_url' 
     ];
 
     fields.forEach(field => {
