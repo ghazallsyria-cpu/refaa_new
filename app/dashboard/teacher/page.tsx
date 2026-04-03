@@ -5,16 +5,17 @@ import {
   Users, BookOpen, Calendar, CheckCircle2, 
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
-  Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight
+  Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
+  AlertTriangle, ShieldAlert
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
-import Image from 'next/image';
+import { supabase } from '@/lib/supabase';
 
 export default function TeacherDashboard() {
   const [teacherData, setTeacherData] = useState<any>(null);
@@ -24,6 +25,7 @@ export default function TeacherDashboard() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]); // 🚀 حالة الطلاب المنذرين
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalExams: 0,
@@ -96,9 +98,44 @@ export default function TeacherDashboard() {
           ...data.stats
         }));
         
-        // 🚀 استخدام الإحصائيات الحقيقية بدلاً من الوهمية!
         if (data.assignmentStats) {
             setAssignmentStats(data.assignmentStats);
+        }
+
+        // 🚀 جلب الطلاب المنذرين (تجاوزوا 5 حصص غياب مع هذا المعلم)
+        if (data.teacher?.id) {
+            const { data: absences } = await supabase
+              .from('attendance_records')
+              .select('student_id, students(users(full_name)), sections(name, classes(name))')
+              .eq('teacher_id', data.teacher.id)
+              .eq('status', 'absent');
+
+            if (absences) {
+              const studentAbsences = new Map();
+              absences.forEach((a: any) => {
+                const sid = a.student_id;
+                if (!studentAbsences.has(sid)) {
+                  const stuObj = Array.isArray(a.students) ? a.students[0] : a.students;
+                  const userObj = Array.isArray(stuObj?.users) ? stuObj.users[0] : stuObj?.users;
+                  const secObj = Array.isArray(a.sections) ? a.sections[0] : a.sections;
+                  const classObj = Array.isArray(secObj?.classes) ? secObj.classes[0] : secObj?.classes;
+                  
+                  studentAbsences.set(sid, {
+                    id: sid,
+                    name: userObj?.full_name || 'طالب غير معروف',
+                    className: `${classObj?.name || ''} - ${secObj?.name || ''}`,
+                    count: 0
+                  });
+                }
+                studentAbsences.get(sid).count++;
+              });
+
+              // تصفية الطلاب الذين تجاوزوا 5 حصص غياب فأكثر
+              const atRisk = Array.from(studentAbsences.values())
+                                  .filter((s: any) => s.count >= 5)
+                                  .sort((a: any, b: any) => b.count - a.count);
+              setAtRiskStudents(atRisk);
+            }
         }
       }
     } catch (error) {
@@ -127,7 +164,7 @@ export default function TeacherDashboard() {
   const todaysSchedule = schedule.filter(s => s.day_of_week === today);
   const avatarUrl = teacherData?.users?.avatar_url;
   
-  // 🚀 حساب عدد الرسائل غير المقروءة
+  // حساب عدد الرسائل غير المقروءة
   const unreadMessagesCount = messages.filter(m => !m.is_read).length;
 
   return (
@@ -191,6 +228,61 @@ export default function TeacherDashboard() {
         <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay"></div>
         <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay"></div>
       </div>
+
+      {/* 🚀 نظام الإنذار المبكر للمعلم (The Danger Zone) */}
+      <AnimatePresence>
+        {atRiskStudents.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 p-6 sm:p-8 text-white shadow-2xl shadow-rose-500/30 border-2 border-rose-400/50"
+          >
+            <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/20 blur-2xl animate-pulse pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-6 sm:mb-8">
+              <div className="flex items-center gap-4 sm:gap-6 w-full lg:w-auto">
+                <div className="flex items-center justify-center w-14 h-14 sm:w-20 sm:h-20 bg-white/10 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/20 shadow-inner shrink-0">
+                  <AlertTriangle className="w-8 h-8 sm:w-12 sm:h-12 text-yellow-300 animate-bounce" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-white/10">
+                    <ShieldAlert className="w-3.5 h-3.5 text-yellow-400" />
+                    <span>إنذار إداري مسجل</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-1 text-white leading-tight">
+                    تنبيه: {atRiskStudents.length} طلاب تجاوزوا حد الغياب لديك!
+                  </h2>
+                  <p className="text-rose-100 text-xs sm:text-sm font-bold leading-relaxed max-w-xl">
+                    حسب لائحة السلوك والمواظبة، هؤلاء الطلاب تجاوزوا (5 حصص غياب) في حصصك، مما يعادل غياب يوم دراسي كامل. يرجى الانتباه وتنبيههم أو رفع أسمائهم للإدارة.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* شبكة عرض الطلاب المنذرين */}
+            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+               {atRiskStudents.map((student, idx) => (
+                  <div key={idx} className="bg-black/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-center justify-between group hover:bg-black/30 transition-colors">
+                     <div className="flex items-center gap-3 min-w-0">
+                       <div className="h-10 w-10 rounded-xl bg-rose-500/50 flex items-center justify-center text-white font-black text-sm border border-rose-400/50 shrink-0">
+                          {student.name.charAt(0)}
+                       </div>
+                       <div className="min-w-0 pr-1">
+                          <p className="font-black text-white text-sm truncate">{student.name}</p>
+                          <p className="text-[10px] font-bold text-rose-200 truncate mt-0.5">{student.className}</p>
+                       </div>
+                     </div>
+                     <div className="text-center shrink-0 ml-2 bg-white/10 px-3 py-2 rounded-xl border border-white/20">
+                        <span className="block text-xl font-black text-yellow-300 leading-none">{student.count}</span>
+                        <span className="text-[8px] font-bold text-white uppercase tracking-widest mt-1 block">حصص غياب</span>
+                     </div>
+                  </div>
+               ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 🚀 Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-5">
@@ -395,7 +487,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* 🚀 Assignment Statistics by Class (Real Data) */}
+          {/* 🚀 Assignment Statistics by Class */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -546,7 +638,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* 🚀 Recent Messages (Unread Highlights) */}
+          {/* 🚀 Recent Messages */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -567,7 +659,6 @@ export default function TeacherDashboard() {
                   const isUnread = !msg.is_read;
                   return (
                     <Link href={`/messages?id=${msg.id}`} key={i} className={`flex gap-4 p-6 transition-all group relative ${isUnread ? 'bg-indigo-50/60 hover:bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-white border-l-4 border-l-transparent'}`}>
-                      {/* 🚀 نقطة التنبيه للرسالة غير المقروءة */}
                       {isUnread && (
                         <div className="absolute top-1/2 right-3 w-2.5 h-2.5 rounded-full bg-indigo-500 transform -translate-y-1/2 shadow-sm animate-pulse"></div>
                       )}
