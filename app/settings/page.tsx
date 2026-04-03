@@ -9,7 +9,6 @@ import {
   Bell, 
   Shield, 
   Save, 
-  Camera,
   CheckCircle2,
   AlertCircle,
   Smartphone,
@@ -18,14 +17,20 @@ import {
   Clock,
   Video,
   BookOpen,
-  Settings 
+  Settings,
+  Power,
+  Lock,
+  Unlock,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 type Tab = 'school' | 'profile' | 'notifications' | 'security' | 'platform';
 
+// توسيع النوع المحلي ليدعم الصورة الشخصية
 interface ExtendedProfileSettings extends ProfileSettings {
   avatar_url?: string;
 }
@@ -65,7 +70,7 @@ export default function SettingsPage() {
     address: 'شارع الملك فهد، حي الياسمين، الرياض',
     phone: '0112345678',
     email: 'info@alrifaa.edu',
-    logo_url: '' // 🚀 إضافة حالة الشعار هنا
+    logo_url: '' 
   });
 
   const [profileSettings, setProfileSettings] = useState<ExtendedProfileSettings>({
@@ -106,7 +111,7 @@ export default function SettingsPage() {
         address: platform.address || '',
         phone: platform.phone || '',
         email: platform.email || '',
-        logo_url: (platform as any).logo_url || '' // 🚀 استرجاع الشعار من القاعدة
+        logo_url: (platform as any).logo_url || '' 
       });
     }
 
@@ -158,7 +163,7 @@ export default function SettingsPage() {
             address: schoolSettings.address,
             phone: schoolSettings.phone,
             email: schoolSettings.email,
-            logo_url: schoolSettings.logo_url, // 🚀 حفظ الشعار في القاعدة
+            logo_url: schoolSettings.logo_url, 
           } as any;
         }
 
@@ -184,7 +189,7 @@ export default function SettingsPage() {
     ...(!isStudent ? [{ id: 'profile', label: 'الملف الشخصي', icon: User, desc: 'معلوماتك الشخصية والصورة' }] : []),
     { id: 'notifications', label: 'الإشعارات', icon: Bell, desc: 'تفضيلات التنبيهات' },
     { id: 'security', label: 'الأمان', icon: Shield, desc: 'كلمة المرور والحماية' },
-    ...(isAdmin ? [{ id: 'platform', label: 'حالة المنصة', icon: Clock, desc: 'أوقات العمل والصيانة' }] : []),
+    ...(isAdmin ? [{ id: 'platform', label: 'حالة المنصة', icon: Power, desc: 'غرفة التحكم المركزية' }] : []),
   ];
 
   return (
@@ -213,7 +218,7 @@ export default function SettingsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div className="flex items-center gap-5">
           <div className="h-16 w-16 rounded-3xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
-            <Settings className="h-8 w-8 text-indigo-600" />
+            <Settings className="h-8 w-8 text-indigo-600 animate-[spin_10s_linear_infinite]" />
           </div>
           <div>
             <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">إعدادات النظام</h1>
@@ -246,25 +251,28 @@ export default function SettingsPage() {
           <nav className="flex flex-col gap-2 sticky top-8">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
+              // تلوين خاص لزر المنصة إذا كانت مغلقة
+              const isPlatformClosed = tab.id === 'platform' && !platformSettings.is_open;
+
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as Tab)}
                   className={`flex items-center gap-4 px-5 py-4 rounded-[2rem] transition-all text-right group relative overflow-hidden ${
                     isActive 
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' 
-                      : 'bg-white text-slate-600 border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-700'
+                      ? isPlatformClosed ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' 
+                      : isPlatformClosed ? 'bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-100 animate-pulse' : 'bg-white text-slate-600 border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-700'
                   }`}
                 >
-                  {isActive && <motion.div layoutId="activeTab" className="absolute inset-0 bg-indigo-600 -z-10" />}
+                  {isActive && <motion.div layoutId="activeTab" className={`absolute inset-0 -z-10 ${isPlatformClosed ? 'bg-rose-600' : 'bg-indigo-600'}`} />}
                   <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors z-10 ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-white group-hover:text-indigo-600'
+                    isActive ? 'bg-white/20 text-white' : isPlatformClosed ? 'bg-rose-100 text-rose-600' : 'bg-slate-50 text-slate-400 group-hover:bg-white group-hover:text-indigo-600'
                   }`}>
                     <tab.icon className="h-5 w-5" />
                   </div>
                   <div className="z-10">
                     <p className="text-sm font-black tracking-tight">{tab.label}</p>
-                    <p className={`text-[10px] font-bold mt-0.5 ${isActive ? 'text-indigo-100' : 'text-slate-400'}`}>{tab.desc}</p>
+                    <p className={`text-[10px] font-bold mt-0.5 ${isActive ? 'text-white/80' : isPlatformClosed ? 'text-rose-400' : 'text-slate-400'}`}>{tab.desc}</p>
                   </div>
                 </button>
               );
@@ -397,7 +405,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* 🚀 قسم رفع شعار المدرسة */}
                   <div className="flex flex-col sm:flex-row items-center gap-8 bg-blue-50/30 p-8 rounded-3xl border border-blue-100 mb-6">
                     <div className="shrink-0 relative group">
                       <div className="h-32 w-32 rounded-[2rem] overflow-hidden border-4 border-white shadow-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center relative z-10">
@@ -585,71 +592,119 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Platform Settings */}
+              {/* 🚀 Platform Status (Master Control Room) */}
               {activeTab === 'platform' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
-                    <div className="p-3 bg-rose-50 rounded-2xl"><Clock className="h-6 w-6 text-rose-600" /></div>
+                    <div className="p-3 bg-slate-900 rounded-2xl shadow-md"><Power className="h-6 w-6 text-white" /></div>
                     <div>
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tight">إدارة حالة المنصة</h3>
-                      <p className="text-sm text-slate-500 font-bold mt-1">التحكم المركزي في فتح وإغلاق المنصة أمام الطلاب والمعلمين.</p>
+                      <h3 className="text-2xl font-black text-slate-900 tracking-tight">غرفة التحكم المركزية</h3>
+                      <p className="text-sm text-slate-500 font-bold mt-1">السيطرة الكاملة على صلاحيات الدخول وإغلاق المنصة للطوارئ أو الصيانة.</p>
                     </div>
                   </div>
 
-                  <div className={`p-8 rounded-[2rem] border-2 transition-colors flex flex-col sm:flex-row items-center justify-between gap-6 ${platformSettings.is_open ? 'bg-emerald-50/50 border-emerald-200' : 'bg-rose-50/50 border-rose-200'}`}>
-                    <div>
-                      <h4 className={`text-xl font-black mb-1 ${platformSettings.is_open ? 'text-emerald-800' : 'text-rose-800'}`}>
-                        {platformSettings.is_open ? 'المنصة نشطة وتعمل بكامل طاقتها' : 'المنصة مغلقة في وضع الصيانة'}
-                      </h4>
-                      <p className={`text-sm font-bold ${platformSettings.is_open ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {platformSettings.is_open ? 'يمكن للجميع الدخول والتفاعل مع النظام.' : 'لا يمكن لأحد الدخول باستثناء المديرين.'}
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        checked={platformSettings.is_open}
-                        onChange={() => setPlatformSettings({...platformSettings, is_open: !platformSettings.is_open})}
-                      />
-                      <div className="w-20 h-10 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-10 peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:right-[4px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-8 after:w-8 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
-                    </label>
-                  </div>
+                  {/* 🚀 Master Switch Card */}
+                  <motion.div 
+                    animate={{ 
+                      background: platformSettings.is_open 
+                        ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)' 
+                        : 'linear-gradient(135deg, #fff1f2 0%, #ffffff 100%)',
+                      borderColor: platformSettings.is_open ? '#bbf7d0' : '#fecdd3'
+                    }}
+                    className="relative overflow-hidden rounded-[2.5rem] border-2 p-8 sm:p-12 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] flex flex-col lg:flex-row items-center justify-between gap-8 transition-colors duration-500"
+                  >
+                    {/* Background glowing orbs */}
+                    <div className={cn(
+                      "absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-50 pointer-events-none transition-colors duration-1000",
+                      platformSettings.is_open ? "bg-emerald-400" : "bg-rose-500 animate-pulse"
+                    )} />
 
-                  <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-6">
+                    <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-right gap-6 w-full lg:w-auto">
+                      <div className={cn(
+                        "h-20 w-20 sm:h-24 sm:w-24 rounded-full flex items-center justify-center shadow-inner border-4 transition-all duration-500 shrink-0",
+                        platformSettings.is_open ? "bg-emerald-500 border-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.5)]" : "bg-rose-600 border-rose-100 shadow-[0_0_30px_rgba(225,29,72,0.6)]"
+                      )}>
+                         {platformSettings.is_open ? <Unlock className="h-8 w-8 sm:h-10 sm:w-10 text-white" /> : <Lock className="h-8 w-8 sm:h-10 sm:w-10 text-white" />}
+                      </div>
+                      <div className="pt-2">
+                        <motion.h4 
+                          key={platformSettings.is_open ? 'open' : 'closed'}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={cn("text-2xl sm:text-3xl font-black tracking-tight mb-2 drop-shadow-sm", platformSettings.is_open ? 'text-emerald-900' : 'text-rose-900')}
+                        >
+                          {platformSettings.is_open ? 'المنصة نشطة وتعمل بالكامل' : 'المنصة مغلقة (وضع الصيانة)'}
+                        </motion.h4>
+                        <p className={cn("text-sm font-bold bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl inline-block border", platformSettings.is_open ? 'text-emerald-700 border-emerald-100' : 'text-rose-700 border-rose-100')}>
+                          {platformSettings.is_open 
+                            ? 'جميع المعلمين والطلاب يمكنهم الدخول والتفاعل بحرية.' 
+                            : 'لا يمكن لأي مستخدم الدخول باستثناء فريق الإدارة العليا.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 shrink-0 mt-4 lg:mt-0 bg-white/50 p-4 rounded-3xl border shadow-sm backdrop-blur-md">
+                       {/* 🚀 Huge Toggle */}
+                       <label className="relative inline-flex items-center cursor-pointer group">
+                         <input 
+                           type="checkbox" 
+                           className="sr-only peer" 
+                           checked={platformSettings.is_open}
+                           onChange={() => setPlatformSettings({...platformSettings, is_open: !platformSettings.is_open})}
+                         />
+                         <div className="w-36 h-16 bg-rose-200 peer-focus:outline-none rounded-full peer peer-checked:after:-translate-x-20 peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:right-[4px] after:bg-white after:border-slate-200 after:border after:rounded-full after:h-14 after:w-14 after:transition-all after:duration-500 after:shadow-md peer-checked:bg-emerald-500 shadow-inner flex items-center justify-between px-5">
+                            <span className={cn("text-sm font-black z-0 transition-opacity duration-300", platformSettings.is_open ? "opacity-100 text-emerald-50 drop-shadow-md" : "opacity-0")}>ON</span>
+                            <span className={cn("text-sm font-black z-0 transition-opacity duration-300", !platformSettings.is_open ? "opacity-100 text-rose-700" : "opacity-0")}>OFF</span>
+                         </div>
+                       </label>
+                    </div>
+                  </motion.div>
+
+                  {/* 🚀 Scheduling Area */}
+                  <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-8 bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
+                    
+                    <div className="sm:col-span-2 border-b border-slate-200 pb-4 mb-2">
+                       <h4 className="text-lg font-black text-slate-800 flex items-center gap-2"><Clock className="w-5 h-5 text-indigo-500"/> الجدولة التلقائية</h4>
+                       <p className="text-xs font-bold text-slate-500">سيقوم النظام بتغيير حالة المنصة آلياً عند وصول هذا التوقيت.</p>
+                    </div>
+
                     <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">جدولة الفتح التلقائي</label>
+                      <label className="text-xs font-black text-emerald-600 uppercase tracking-widest block bg-emerald-50 w-fit px-2 py-1 rounded-md border border-emerald-100">موعد الفتح التلقائي</label>
                       <input 
                         type="datetime-local" 
                         value={platformSettings.open_date}
                         onChange={(e) => setPlatformSettings({...platformSettings, open_date: e.target.value})}
-                        className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-900 transition-all text-left" 
+                        className="w-full px-5 py-4 rounded-2xl bg-white border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none font-bold text-slate-900 shadow-sm transition-all text-left hover:border-emerald-300" 
                         dir="ltr"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">جدولة الإغلاق التلقائي</label>
+                      <label className="text-xs font-black text-rose-600 uppercase tracking-widest block bg-rose-50 w-fit px-2 py-1 rounded-md border border-rose-100">موعد الإغلاق التلقائي</label>
                       <input 
                         type="datetime-local" 
                         value={platformSettings.close_date}
                         onChange={(e) => setPlatformSettings({...platformSettings, close_date: e.target.value})}
-                        className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-900 transition-all text-left" 
+                        className="w-full px-5 py-4 rounded-2xl bg-white border border-slate-200 focus:border-rose-500 focus:ring-2 focus:ring-rose-200 outline-none font-bold text-slate-900 shadow-sm transition-all text-left hover:border-rose-300" 
                         dir="ltr"
                       />
                     </div>
 
-                    <div className="sm:col-span-2 space-y-2 pt-4">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">الرسالة المعروضة أثناء الإغلاق</label>
+                    <div className="sm:col-span-2 space-y-2 pt-6">
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-500"/> رسالة الإغلاق المخصصة
+                      </label>
                       <textarea 
                         rows={3} 
                         value={platformSettings.message}
                         onChange={(e) => setPlatformSettings({...platformSettings, message: e.target.value})}
-                        className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none font-bold text-slate-900 transition-all resize-none leading-relaxed" 
+                        className="w-full px-5 py-4 rounded-2xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none font-bold text-slate-900 shadow-sm transition-all resize-none leading-relaxed text-lg" 
                         placeholder="نعتذر، المنصة مغلقة حالياً..."
                       />
+                      <p className="text-[10px] font-bold text-slate-400">هذه الرسالة ستظهر في منتصف شاشة المستخدمين أثناء إغلاق المنصة.</p>
                     </div>
                   </div>
+
                 </div>
               )}
             </motion.div>
