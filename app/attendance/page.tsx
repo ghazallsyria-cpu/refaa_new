@@ -30,7 +30,6 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 🚀 حالات الطالب الشاملة
   const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 });
   const [subjectStats, setSubjectStats] = useState<any[]>([]);
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
@@ -86,7 +85,6 @@ export default function AttendancePage() {
     loadStudentsAndAttendance();
   }, [loadStudentsAndAttendance]);
 
-  // 🚀 المحرك الجديد للطالب (يعتمد على الهيكلة المعمارية الجديدة للقاعدة)
   const fetchStudentDataDirectly = useCallback(async () => {
     if (authRole !== 'student' || !user) return;
     setIsStudentLoading(true);
@@ -96,7 +94,7 @@ export default function AttendancePage() {
       const { data: studentData, error: stuErr } = await supabase
         .from('students')
         .select('id, sections(name, classes(name))')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
       if (stuErr) throw new Error("خطأ في جلب بيانات الطالب: " + stuErr.message);
@@ -107,9 +105,8 @@ export default function AttendancePage() {
       const secName = secObj?.name || '';
       const classData: any = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
       const className = classData?.name || '';
-      const fullClassName = className ? `${className} - ${secName}` : 'حصة مسجلة';
+      const fullClassName = className ? `${className} - ${secName}` : 'فصل الطالب';
 
-      // 🚀 الآن الاستعلام أصبح مباشراً ودقيقاً 100% لأن القاعدة تسجل (التاريخ، الحصة، والمادة)
       const { data: records, error: recErr } = await supabase
         .from('attendance_records')
         .select(`
@@ -129,20 +126,17 @@ export default function AttendancePage() {
         const enrichedRecords: any[] = [];
 
         records.forEach((r: any) => {
-          // حساب الإجمالي
           if (r.status === 'present') calculatedStats.present++;
           else if (r.status === 'absent') calculatedStats.absent++;
           else if (r.status === 'late') calculatedStats.late++;
           else if (r.status === 'excused') calculatedStats.excused++;
 
-          // استخراج المادة بسلاسة
           const subjData: any = r.subjects;
           const subjName = (Array.isArray(subjData) ? subjData[0]?.name : subjData?.name) || 'مادة غير محددة';
           
           const teacherData: any = r.teachers;
           const teacherName = (Array.isArray(teacherData) ? teacherData[0]?.users?.full_name : teacherData?.users?.full_name) || 'معلم';
 
-          // تجميع الإحصائيات المادية
           if (!subjectsMap.has(subjName)) {
             subjectsMap.set(subjName, { name: subjName, present: 0, absent: 0, late: 0, excused: 0 });
           }
@@ -160,7 +154,6 @@ export default function AttendancePage() {
           });
         });
 
-        // 🚀 كل 5 حصص غياب = يوم كامل
         calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
 
         setStudentStats(calculatedStats);
@@ -199,7 +192,7 @@ export default function AttendancePage() {
       setTimeout(() => setMessage({ text: '', type: '' }), 4000);
     } catch (error: any) {
       console.error('Error saving attendance:', error);
-      setMessage({ text: `حدث خطأ أثناء الحفظ: ${error.message || 'خطأ غير معروف'}`, type: 'error' });
+      setMessage({ text: `حدث خطأ أثناء الحفظ: ${error.message || 'تأكد من اختيار بيانات صحيحة'}`, type: 'error' });
       setTimeout(() => setMessage({ text: '', type: '' }), 4000);
     } finally {
       setSaving(false);
@@ -234,13 +227,12 @@ export default function AttendancePage() {
             <div className="h-20 w-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
                <Bug className="h-10 w-10 text-rose-500 animate-bounce" />
             </div>
-            <h2 className="text-xl font-black text-slate-900 mb-3">تحديث قاعدة البيانات مطلوب</h2>
+            <h2 className="text-xl font-black text-slate-900 mb-3">عذراً، حدث خطأ في النظام</h2>
             <div className="bg-rose-50 p-4 rounded-xl text-right mb-6 overflow-auto max-h-32 border border-rose-100">
                <p className="text-rose-600 font-mono text-xs" dir="ltr">{studentDbError}</p>
             </div>
-            <p className="text-sm font-bold text-slate-500 mb-4">يرجى التأكد من تشغيل كود SQL في Supabase أولاً لتحديث هيكلة الجداول.</p>
             <button onClick={fetchStudentDataDirectly} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
-               <RefreshCw className="w-5 h-5" /> إعادة المحاولة
+               <RefreshCw className="w-5 h-5" /> تحديث البيانات
             </button>
           </div>
         </div>
@@ -252,7 +244,7 @@ export default function AttendancePage() {
         <div className="flex h-[80vh] items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-            <p className="text-slate-500 font-bold animate-pulse tracking-widest text-lg">جاري تجميع وتحليل السجلات...</p>
+            <p className="text-slate-500 font-bold animate-pulse tracking-widest text-lg">جاري تجميع إحصائياتك الذكية...</p>
           </div>
         </div>
       );
