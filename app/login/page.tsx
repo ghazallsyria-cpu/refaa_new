@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { School, Lock, User, ShieldCheck, X, Sparkles, MailQuestion } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
   const [civilId, setCivilId] = useState('');
@@ -16,8 +17,25 @@ export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuth();
 
-  // مكان مخصص لشعار المدرسة
-  const schoolLogoUrl: string | null = null; 
+  // 🚀 جلب بيانات وشعار المدرسة من القاعدة
+  const [schoolData, setSchoolData] = useState({ name: 'مدرسة الرفعة النموذجية', logo_url: '' });
+
+  useEffect(() => {
+    const fetchSchoolData = async () => {
+      try {
+        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
+        if (data) {
+          setSchoolData({
+            name: data.school_name || 'مدرسة الرفعة النموذجية',
+            logo_url: data.logo_url || ''
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching school data:', err);
+      }
+    };
+    fetchSchoolData();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +45,7 @@ export default function LoginPage() {
     try {
       await signIn(civilId, password);
     } catch (err: any) {
-      // 🚀 مترجم الأخطاء الذكي: تحويل رسائل Supabase الإنجليزية إلى عربية
       let errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
-      
       if (err.message?.includes('Invalid login credentials')) {
         errorMessage = 'بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.';
       } else if (err.message?.includes('Email not confirmed')) {
@@ -37,7 +53,6 @@ export default function LoginPage() {
       } else if (err.message?.includes('FetchError') || err.message?.includes('Failed to fetch')) {
         errorMessage = 'يبدو أن هناك مشكلة في الاتصال بالإنترنت.';
       }
-
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -47,7 +62,6 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#020817] selection:bg-indigo-500/30 font-cairo" dir="rtl">
       
-      {/* 🚀 Background - Optimized (Removed heavy continuous animations) */}
       <div className="absolute inset-0 z-0">
         <Image 
           src="https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&q=80"
@@ -60,13 +74,11 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#020817]/95 via-[#020817]/70 to-[#020817]/95" />
       </div>
 
-      {/* Static Glow Effects (Lightweight) */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px]" />
         <div className="absolute -bottom-32 -right-32 w-[600px] h-[600px] bg-violet-600/15 rounded-full blur-[100px]" />
       </div>
 
-      {/* 🚀 Main Login Card - Optimized Glassmorphism */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -76,19 +88,19 @@ export default function LoginPage() {
         <div className="relative bg-slate-900/60 backdrop-blur-xl p-8 sm:p-10 rounded-[2rem] border border-white/10 shadow-2xl">
           
           <div className="text-center mb-8">
-            <div className="relative mx-auto mb-5 w-20 h-20 sm:w-24 sm:h-24">
+            <div className="relative mx-auto mb-5 w-24 h-24 sm:w-28 sm:h-28">
                <div className="absolute inset-0 bg-indigo-500/30 rounded-2xl blur-lg"></div>
-               <div className="relative h-full w-full rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl border border-white/10 flex items-center justify-center overflow-hidden z-10">
-                 {schoolLogoUrl ? (
-                   <Image src={schoolLogoUrl} alt="Logo" fill className="object-contain p-2" />
+               <div className="relative h-full w-full rounded-[1.5rem] bg-white shadow-xl border-4 border-slate-900/50 flex items-center justify-center overflow-hidden z-10 p-2">
+                 {schoolData.logo_url ? (
+                   <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-2" />
                  ) : (
-                   <School className="h-10 w-10 sm:h-12 sm:w-12 text-white" />
+                   <School className="h-12 w-12 text-indigo-600" />
                  )}
                </div>
             </div>
             
-            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">
-              مدرسة الرفعة النموذجية
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2 truncate">
+              {schoolData.name}
             </h2>
             <div className="inline-flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -121,7 +133,6 @@ export default function LoginPage() {
                 <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
                   <User className="h-5 w-5 text-slate-400" />
                 </div>
-                {/* Optimized Input (Removed heavy shadows and focus-within transitions) */}
                 <input
                   id="civilId"
                   type="text"
@@ -185,7 +196,6 @@ export default function LoginPage() {
         </div>
       </motion.div>
 
-      {/* 🚀 Modal - Optimized */}
       <AnimatePresence>
         {showForgotModal && (
           <>
