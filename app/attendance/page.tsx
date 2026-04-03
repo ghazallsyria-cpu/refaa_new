@@ -74,7 +74,14 @@ export default function AttendancePage() {
     if (selectedSection && date && authRole !== 'student') {
       const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
       if (res) {
-        setStudents(res.students);
+        // 🚀 التعديل هنا: ترتيب الطلاب أبجدياً لدعم المعلمين
+        const sortedStudents = [...res.students].sort((a, b) => {
+          const nameA = a.users?.full_name || '';
+          const nameB = b.users?.full_name || '';
+          return nameA.localeCompare(nameB, 'ar'); // ترتيب يعتمد على الأبجدية العربية الصحيحة
+        });
+
+        setStudents(sortedStudents);
         setAttendance(res.attendance);
         setStats(res.stats);
       }
