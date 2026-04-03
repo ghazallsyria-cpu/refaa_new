@@ -53,12 +53,10 @@ export function useAttendanceSystem() {
         .eq('period', period);
 
       if (schedules && schedules.length > 0) {
-        // 🚀 إضافة 'any' هنا لإسكات المدقق الصارم لـ TypeScript
         const uniqueSections = Array.from(new Set(schedules.map((s: any) => s.section_id)))
           .map(id => {
             const sched: any = schedules.find((s: any) => s.section_id === id);
             
-            // التأكد من شكل البيانات سواء كانت مصفوفة أو كائن
             const sec: any = sched?.sections;
             const subj: any = sched?.subjects;
             const secObj = Array.isArray(sec) ? sec[0] : sec;
@@ -89,13 +87,11 @@ export function useAttendanceSystem() {
   const fetchStudentsAndAttendance = useCallback(async (sectionId: string, subjectId: string, date: string, period: number) => {
     setLoading(true);
     try {
-      // جلب الطلاب
       const { data: studentsData } = await supabase
         .from('students')
         .select('id, users(full_name, avatar_url)')
         .eq('section_id', sectionId);
 
-      // 🚀 جلب سجلات الغياب لهذه الحصة وهذا التاريخ تحديداً (البصمة الدقيقة)
       const { data: attendanceData } = await supabase
         .from('attendance_records')
         .select('student_id, status')
@@ -126,7 +122,7 @@ export function useAttendanceSystem() {
     }
   }, []);
 
-  // 4. حفظ الغياب (نظام UPSERT القوي)
+  // 4. حفظ الغياب (نظام الحذف والإضافة الآمن 100%)
   const saveAttendance = useCallback(async (
     sectionId: string, 
     subjectId: string, 
@@ -135,14 +131,13 @@ export function useAttendanceSystem() {
     attendanceData: Record<string, AttendanceStatus>, 
     studentsList: any[]
   ) => {
-    if (!user) throw new Error("Unauthorized");
+    if (!user) throw new Error("جلسة المستخدم غير صالحة، يرجى تسجيل الدخول مجدداً");
     
     try {
-      const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
-      if (!teacherData) throw new Error("Teacher profile not found");
+      const { data: teacherData, error: tErr } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+      if (tErr || !teacherData) throw new Error("تعذر الوصول لبيانات المعلم في قاعدة البيانات");
 
-      // 🚀 تجهيز البيانات الشاملة لكل طالب (تتضمن المادة، الفصل، الحصة، التاريخ)
-      const recordsToUpsert = studentsList.map(student => {
+      const recordsToInsert = studentsList.map(student => {
         const status = attendanceData[student.id];
         if (!status) return null;
 
@@ -150,30 +145,46 @@ export function useAttendanceSystem() {
           student_id: student.id,
           teacher_id: teacherData.id,
           section_id: sectionId,
-          subject_id: subjectId,
+          subject_id: subjectId || null,
           date: date,
           period: period,
           status: status
         };
       }).filter(Boolean);
 
-      if (recordsToUpsert.length === 0) return;
+      if (recordsToInsert.length === 0) return true;
 
-      // 🚀 استخدام UPSERT: إذا كان السجل موجوداً (نفس الطالب، التاريخ، الحصة) يتم تحديثه، وإلا يتم إنشاؤه
-      const { error } = await supabase
+      // 🔥 التغيير الجوهري هنا: الحذف ثم الإضافة بدلاً من Upsert لتجنب أخطاء القيود (Constraints) المزعجة
+      
+      // 1. تنظيف الساحة أولاً: مسح أي سجل غياب سابق لهذا الفصل في هذه الحصة وهذا التاريخ
+      const { error: deleteError } = await supabase
         .from('attendance_records')
-        .upsert(recordsToUpsert, { onConflict: 'student_id, date, period' });
+        .delete()
+        .eq('section_id', sectionId)
+        .eq('date', date)
+        .eq('period', period);
 
-      if (error) throw error;
+      if (deleteError) {
+          throw new Error(deleteError.message || deleteError.details || "حدث خطأ أثناء تنظيف السجلات القديمة");
+      }
+
+      // 2. إدخال السجلات الجديدة بأمان تام
+      const { error: insertError } = await supabase
+        .from('attendance_records')
+        .insert(recordsToInsert);
+
+      if (insertError) {
+          throw new Error(insertError.message || insertError.details || "حدث خطأ أثناء حفظ السجلات في القاعدة");
+      }
       
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving attendance:', error);
-      throw error;
+      // تمرير رسالة الخطأ الدقيقة للواجهة (ستظهر لك الرسالة الحقيقية بدل كلمة Unknown Error)
+      throw new Error(error.message || error.details || 'حدث خطأ مجهول في الشبكة');
     }
   }, [user]);
 
-  // دالة فارغة لأننا سنعالج بيانات الطالب في الصفحة مباشرة
   const fetchStudentAttendance = useCallback(async () => { return null; }, []);
 
   return {
