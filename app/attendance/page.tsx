@@ -78,10 +78,12 @@ export default function AttendancePage() {
     if (selectedSection && date && currentRole !== 'student') {
       const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
       if (res) {
-        // 🚀 ترتيب الطلاب أبجدياً لدعم المعلمين
+        // 🚀 ترتيب الطلاب أبجدياً لدعم المعلمين مع الفك الآمن لتجنب تعارض TypeScript
         const sortedStudents = [...res.students].sort((a, b) => {
-          const nameA = a.users?.full_name || '';
-          const nameB = b.users?.full_name || '';
+          const userA = Array.isArray(a.users) ? a.users[0] : a.users;
+          const userB = Array.isArray(b.users) ? b.users[0] : b.users;
+          const nameA = userA?.full_name || '';
+          const nameB = userB?.full_name || '';
           return nameA.localeCompare(nameB, 'ar'); 
         });
 
