@@ -28,7 +28,8 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
-  Scale
+  Scale,
+  Activity // 🚀 تم استيراد أيقونة الرادار هنا
 } from 'lucide-react';
 
 const navigation = [
@@ -37,6 +38,7 @@ const navigation = [
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
+  { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity }, // 🚀 تم إضافة رابط الرادار
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
   { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
@@ -80,7 +82,7 @@ export function Sidebar({
         const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
         if (data) {
           setSchoolData({
-            name: data.school_name?.split(' ')[0] || 'الرفعة', // نأخذ الكلمة الأولى فقط لجمالية السايدبار
+            name: data.school_name?.split(' ')[0] || 'الرفعة',
             logo_url: data.logo_url || ''
           });
         }
@@ -188,7 +190,10 @@ export function Sidebar({
             }
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
+            
+            // تمييز ألوان الأزرار الخاصة
             const isSpecialBtn = item.name === 'قرارات الخصم';
+            const isRadarBtn = item.name === 'الرادار الرقمي';
 
             return (
               <motion.div
@@ -205,7 +210,9 @@ export function Sidebar({
                     "flex items-center rounded-xl text-sm font-bold transition-all duration-300 group relative overflow-hidden",
                     isCollapsed ? "justify-center p-3" : "px-4 py-3.5",
                     isActive 
-                      ? isSpecialBtn ? "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30" : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30" 
+                      ? isSpecialBtn ? "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30" 
+                        : isRadarBtn ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30"
+                        : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30" 
                       : "hover:bg-white/5 hover:text-white text-slate-400"
                   )}
                 >
@@ -213,7 +220,7 @@ export function Sidebar({
                     className={cn(
                       "h-5 w-5 shrink-0 transition-all duration-300",
                       !isCollapsed && "ml-3.5",
-                      isActive ? "text-white scale-110" : isSpecialBtn ? "group-hover:text-rose-400" : "group-hover:text-indigo-400 group-hover:scale-110"
+                      isActive ? "text-white scale-110" : isSpecialBtn ? "group-hover:text-rose-400" : isRadarBtn ? "group-hover:text-emerald-400" : "group-hover:text-indigo-400 group-hover:scale-110"
                     )}
                   />
                   <span className={cn(
