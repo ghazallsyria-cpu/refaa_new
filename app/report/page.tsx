@@ -3,16 +3,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Activity, Database, ShieldAlert, Cpu, Wifi, 
-  Terminal, Bug, Layers, CheckCircle2, 
-  XCircle, RefreshCw, BarChart, Globe, Lock,
-  ChevronRight, AlertCircle, Zap
+  Activity, Terminal, CheckCircle2, 
+  RefreshCw, ShieldCheck, AlertCircle, Zap, Cpu
 } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { systemLogger } from '@/lib/logger';
 
 /**
- * 🛠️ مستشعر نبض النظام والسيرفر (حقيقي + زر اختبار)
+ * 🛠️ مستشعر نبض النظام والسيرفر (نسخة محسنة لـ Netlify Build)
  * المسار: app/report/page.tsx
  */
 export default function SystemReportPage() {
@@ -21,21 +19,26 @@ export default function SystemReportPage() {
   const [dbPulse, setDbPulse] = useState(0);
   const [testing, setTesting] = useState(false);
 
-  // قياس سرعة استجابة قاعدة البيانات
-  const measurePulse = async () => {
-    const start = performance.now();
-    await supabase.from('platform_settings').select('id').limit(1);
-    setDbPulse(Math.round(performance.now() - start));
-  };
-
   const fetchLogs = useCallback(async () => {
     const { data } = await supabase.from('error_logs').select('*').order('created_at', { ascending: false }).limit(40);
     if (data) setLogs(data);
   }, []);
 
+  const measurePulse = useCallback(async () => {
+    const start = performance.now();
+    await supabase.from('platform_settings').select('id').limit(1);
+    setDbPulse(Math.round(performance.now() - start));
+  }, []);
+
   useEffect(() => {
-    fetchLogs();
-    measurePulse();
+    // 🚀 الحل لخطأ Netlify (تغليف الدوال داخل Async Init)
+    const initializeSystem = async () => {
+      await fetchLogs();
+      await measurePulse();
+      setLoading(false);
+    };
+    
+    initializeSystem();
 
     // 🚀 الاتصال اللحظي بقاعدة البيانات
     const channel = supabase.channel('system_errors')
@@ -45,18 +48,19 @@ export default function SystemReportPage() {
       })
       .subscribe();
 
-    const interval = setInterval(measurePulse, 10000);
+    const interval = setInterval(() => {
+      measurePulse();
+    }, 10000);
     
     return () => { 
       supabase.removeChannel(channel); 
       clearInterval(interval); 
     };
-  }, [fetchLogs]);
+  }, [fetchLogs, measurePulse]);
 
   // 🚀 دالة لاختبار النظام برمجياً (افتعال خطأ)
   const fireTestSensor = async () => {
     setTesting(true);
-    // نرسل خطأ وهمي للمحرك لنجرب الاستجابة
     await systemLogger.log(
       new Error("تم تفعيل مستشعر الاختبار بنجاح من قبل الإدارة."), 
       "info", 
@@ -93,7 +97,6 @@ export default function SystemReportPage() {
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
             DB_LATENCY: {dbPulse}ms
           </div>
-          {/* زر الاختبار */}
           <button 
             onClick={fireTestSensor} 
             disabled={testing}
