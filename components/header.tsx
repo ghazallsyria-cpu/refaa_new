@@ -1,8 +1,8 @@
 'use client';
 
 import { Search, User, LogOut, Menu, School } from 'lucide-react';
-import { motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { NotificationsBell } from '@/components/notifications-bell';
@@ -43,104 +43,112 @@ export function Header({
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
 
   return (
-    <header className="flex h-24 shrink-0 items-center justify-between bg-white/70 backdrop-blur-xl border-b border-slate-200/50 px-8 sticky top-0 z-30">
-      <div className="flex flex-1 items-center gap-8">
+    <header className="flex h-24 shrink-0 items-center justify-between bg-white/70 backdrop-blur-2xl border-b border-slate-200/60 px-4 sm:px-8 sticky top-0 z-40 transition-all">
+      <div className="flex flex-1 items-center gap-4 sm:gap-8">
+        
+        {/* زر فتح القائمة للموبايل */}
         {onMenuClick && showMenuButton && (
           <button
             type="button"
-            className="p-3 text-slate-500 hover:text-indigo-600 rounded-2xl hover:bg-indigo-50 transition-all flex items-center justify-center"
+            className="p-2.5 sm:p-3 text-slate-500 hover:text-indigo-600 rounded-xl sm:rounded-2xl hover:bg-indigo-50/80 transition-all flex items-center justify-center active:scale-95 border border-transparent hover:border-indigo-100"
             onClick={onMenuClick}
-            title={isSidebarCollapsed ? "توسيع القائمة" : "طي القائمة"}
+            title="القائمة"
           >
-            <span className="sr-only">فتح القائمة</span>
-            <Menu className="h-6 w-6" aria-hidden="true" />
+            <Menu className="h-6 w-6" />
           </button>
         )}
         
+        {/* اللوجو (يظهر فقط إذا القائمة مخفية) */}
         {!showMenuButton && (
           <Link href="/" className="flex items-center gap-4 group transition-transform hover:scale-105">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 ring-1 ring-slate-200/50">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-[0_8px_16px_rgba(99,102,241,0.2)] ring-2 ring-white">
               <School className="h-7 w-7 text-white" />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="text-lg font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">مدرسة الرفعة</span>
-              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-[0.2em] mt-1">المنصة الرقمية</span>
+              <span className="text-lg font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">الرفعة النموذجية</span>
+              <span className="text-[9px] text-indigo-500 font-bold uppercase tracking-[0.2em] mt-1.5">المنصة الرقمية</span>
             </div>
           </Link>
         )}
 
-        <div className="w-full max-w-xl relative hidden md:block group">
+        {/* 🚀 شريط البحث الذكي الزجاجي */}
+        <div className="w-full max-w-xl relative hidden lg:block group">
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-5">
-            <Search className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" aria-hidden="true" />
+            <Search className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors duration-300" />
           </div>
           <input
             type="search"
-            name="search"
-            id="search"
-            className="block w-full rounded-2xl border-0 py-3.5 pr-12 text-slate-900 bg-slate-100/50 ring-1 ring-inset ring-slate-200/60 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all hover:bg-slate-100"
+            className="block w-full rounded-[1.2rem] border-0 py-3.5 pr-12 pl-16 text-slate-900 bg-slate-100/50 backdrop-blur-sm ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm font-bold transition-all duration-300 hover:bg-slate-100 focus:bg-white shadow-inner"
             placeholder="ابحث عن طالب، معلم، أو مادة..."
           />
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 bg-white rounded-lg border border-slate-200 text-[10px] font-bold text-slate-400">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 py-1.5 bg-white rounded-lg border border-slate-200 text-[10px] font-black text-slate-400 shadow-sm">
             <span>⌘</span>
             <span>K</span>
           </div>
         </div>
       </div>
-        <div className="flex items-center gap-4 sm:gap-8">
-          <div className="hidden sm:flex items-center gap-4">
-            <PushNotificationToggle />
-            <NotificationsBell />
-          </div>
 
-        {/* Profile dropdown */}
+      <div className="flex items-center gap-3 sm:gap-6">
+        <div className="hidden sm:flex items-center gap-3">
+          <PushNotificationToggle />
+          <NotificationsBell />
+        </div>
+
+        {/* 🚀 الملف الشخصي المتطور */}
         <div className="relative">
           <button
-            type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-4 p-1.5 pr-4 rounded-2xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-200/60 group"
+            className="flex items-center gap-3 sm:gap-4 p-1.5 sm:pr-4 rounded-2xl hover:bg-white transition-all border border-transparent hover:border-slate-200/80 hover:shadow-sm group active:scale-95"
           >
-            <div className="hidden sm:flex flex-col items-end">
+            <div className="hidden md:flex flex-col items-end">
               <span className="text-sm font-black text-slate-900 truncate max-w-[150px] group-hover:text-indigo-600 transition-colors">
-                {userName || (user ? user.email.split('@')[0] : 'تسجيل الدخول')}
+                {userName || (user ? user.email.split('@')[0] : 'المستخدم')}
               </span>
-              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest">{displayRole || 'مستخدم'}</span>
+              <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-widest mt-0.5">{displayRole}</span>
             </div>
             <div className="relative">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center overflow-hidden shadow-lg shadow-indigo-500/20 ring-2 ring-white">
-                <User className="h-7 w-7 text-white" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-[1rem] bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center overflow-hidden shadow-md ring-2 ring-white group-hover:ring-indigo-100 transition-all">
+                <User className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
               </div>
-              <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
+              <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm" />
             </div>
           </button>
           
-          {isDropdownOpen && user && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="absolute left-0 z-10 mt-4 w-64 origin-top-left rounded-3xl bg-white p-3 shadow-2xl ring-1 ring-slate-200 focus:outline-none"
-            >
-              <div className="px-4 py-4 border-b border-slate-100 mb-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">تم تسجيل الدخول كـ</p>
-                <p className="text-sm font-black text-slate-900 truncate">{user.email}</p>
-              </div>
-              <div className="space-y-1">
-                <button
-                  onClick={() => router.push('/settings')}
-                  className="flex w-full items-center px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 rounded-2xl transition-colors font-bold"
+          <AnimatePresence>
+            {isDropdownOpen && user && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)}></div>
+                <motion.div 
+                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  className="absolute left-0 z-50 mt-3 w-64 origin-top-left rounded-[1.5rem] bg-white/90 backdrop-blur-xl p-3 shadow-[0_20px_40px_rgba(0,0,0,0.1)] ring-1 ring-slate-200/60"
                 >
-                  <User className="ml-3 h-4 w-4 text-slate-400" />
-                  الملف الشخصي
-                </button>
-                <button
-                  onClick={handleSignOut}
-                  className="flex w-full items-center px-4 py-3 text-sm text-red-600 hover:bg-red-50 rounded-2xl transition-colors font-bold"
-                >
-                  <LogOut className="ml-3 h-4 w-4" />
-                  تسجيل الخروج
-                </button>
-              </div>
-            </motion.div>
-          )}
+                  <div className="px-4 py-4 border-b border-slate-100 mb-2 bg-slate-50/50 rounded-xl">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">حسابك الحالي</p>
+                    <p className="text-sm font-black text-indigo-900 truncate">{user.email}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => { setIsDropdownOpen(false); router.push('/settings'); }}
+                      className="flex w-full items-center px-4 py-3.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 rounded-xl transition-colors font-black group"
+                    >
+                      <User className="ml-3 h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                      إعدادات الحساب
+                    </button>
+                    <button
+                      onClick={handleSignOut}
+                      className="flex w-full items-center px-4 py-3.5 text-sm text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-black group"
+                    >
+                      <LogOut className="ml-3 h-4 w-4 text-rose-400 group-hover:text-rose-600 transition-colors" />
+                      تسجيل الخروج الآمن
+                    </button>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </header>
