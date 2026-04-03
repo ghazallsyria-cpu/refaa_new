@@ -7,6 +7,8 @@ import { School, Lock, User, ShieldCheck, X, Sparkles, MailQuestion } from 'luci
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
+// 🚀 1. استيراد محرك الرادار
+import { systemLogger } from '@/lib/logger';
 
 export default function LoginPage() {
   const [civilId, setCivilId] = useState('');
@@ -17,7 +19,6 @@ export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuth();
 
-  // 🚀 جلب بيانات وشعار المدرسة من القاعدة
   const [schoolData, setSchoolData] = useState({ name: 'مدرسة الرفعة النموذجية', logo_url: '' });
 
   useEffect(() => {
@@ -46,14 +47,29 @@ export default function LoginPage() {
       await signIn(civilId, password);
     } catch (err: any) {
       let errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
+      let errorType = 'AUTH_UNKNOWN_ERROR'; // نوع الخطأ للرادار
+
       if (err.message?.includes('Invalid login credentials')) {
         errorMessage = 'بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.';
+        errorType = 'AUTH_INVALID_CREDENTIALS';
       } else if (err.message?.includes('Email not confirmed')) {
         errorMessage = 'يرجى تأكيد بريدك الإلكتروني أولاً.';
+        errorType = 'AUTH_EMAIL_UNCONFIRMED';
       } else if (err.message?.includes('FetchError') || err.message?.includes('Failed to fetch')) {
         errorMessage = 'يبدو أن هناك مشكلة في الاتصال بالإنترنت.';
+        errorType = 'AUTH_NETWORK_ERROR';
       }
+
       setError(errorMessage);
+
+      // 🚀 2. إرسال الإشارة للرادار فوراً!
+      // نرسل رقم الهوية (civilId) ضمن الرسالة ليعرف المدير من يحاول الدخول
+      systemLogger.log(
+        `محاولة دخول فاشلة للرقم المدني: ${civilId} - السبب: ${errorMessage}`, 
+        'warning', 
+        errorType
+      );
+
     } finally {
       setLoading(false);
     }
