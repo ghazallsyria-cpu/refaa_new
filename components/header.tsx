@@ -2,12 +2,13 @@
 
 import { Search, User, LogOut, Menu, School } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { NotificationsBell } from '@/components/notifications-bell';
 import { PushNotificationToggle } from '@/components/push-notification-toggle';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export function Header({ 
   onMenuClick, 
@@ -26,6 +27,26 @@ export function Header({
 }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const router = useRouter();
+
+  // 🚀 جلب بيانات وشعار المدرسة من القاعدة
+  const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
+
+  useEffect(() => {
+    const fetchSchoolData = async () => {
+      try {
+        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
+        if (data) {
+          setSchoolData({
+            name: data.school_name || 'الرفعة النموذجية',
+            logo_url: data.logo_url || ''
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching school data:', err);
+      }
+    };
+    fetchSchoolData();
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -46,7 +67,6 @@ export function Header({
     <header className="flex h-24 shrink-0 items-center justify-between bg-white/70 backdrop-blur-2xl border-b border-slate-200/60 px-4 sm:px-8 sticky top-0 z-40 transition-all">
       <div className="flex flex-1 items-center gap-4 sm:gap-8">
         
-        {/* زر فتح القائمة للموبايل */}
         {onMenuClick && showMenuButton && (
           <button
             type="button"
@@ -58,20 +78,22 @@ export function Header({
           </button>
         )}
         
-        {/* اللوجو (يظهر فقط إذا القائمة مخفية) */}
         {!showMenuButton && (
           <Link href="/" className="flex items-center gap-4 group transition-transform hover:scale-105">
-            <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-[0_8px_16px_rgba(99,102,241,0.2)] ring-2 ring-white">
-              <School className="h-7 w-7 text-white" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-white shadow-[0_8px_16px_rgba(99,102,241,0.2)] ring-2 ring-indigo-100 relative overflow-hidden">
+              {schoolData.logo_url ? (
+                <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-1.5" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center"><School className="h-7 w-7 text-white" /></div>
+              )}
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="text-lg font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">الرفعة النموذجية</span>
+              <span className="text-lg font-black text-slate-900 tracking-tight leading-none group-hover:text-indigo-600 transition-colors">{schoolData.name}</span>
               <span className="text-[9px] text-indigo-500 font-bold uppercase tracking-[0.2em] mt-1.5">المنصة الرقمية</span>
             </div>
           </Link>
         )}
 
-        {/* 🚀 شريط البحث الذكي الزجاجي */}
         <div className="w-full max-w-xl relative hidden lg:block group">
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-5">
             <Search className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors duration-300" />
@@ -94,7 +116,6 @@ export function Header({
           <NotificationsBell />
         </div>
 
-        {/* 🚀 الملف الشخصي المتطور */}
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
