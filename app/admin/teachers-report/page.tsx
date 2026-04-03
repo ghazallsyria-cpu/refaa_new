@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck
+  CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck, Zap
 } from "lucide-react";
+import { supabase } from "@/lib/supabase"; // 🚀 نحتاج هذا لجلب أوقات الحصص
 import Link from "next/link";
 
 interface TeacherReport {
@@ -32,6 +33,9 @@ const MONTH_MAP: Record<number, string> = {
   4: "مايو", 5: "يونيو", 6: "يوليو", 7: "أغسطس",
   8: "سبتمبر", 9: "أكتوبر", 10: "نوفمبر", 11: "ديسمبر"
 };
+
+// 🚀 تاريخ بدء النظام الإلزامي
+const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
 export default function TeachersReportPage() {
   const { loading: hookLoading, fetchTeachersReportData } = useTeachersSystem();
@@ -67,33 +71,63 @@ export default function TeachersReportPage() {
       const weekAgoStr = `${wYear}-${wMonth}-${wDay}`;
       
       const jsDay = now.getDay();
+      // تحويل رقم اليوم ليتوافق مع قاعدة البيانات (الأحد = 1)
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
+      // جلب بيانات الحضور والجدول من الهوك
       const data = await fetchTeachersReportData(reportType, todayStr, dbDay, weekAgoStr);
 
-      // 🚀 خوارزمية التدقيق لتقرير الطباعة مع إسكات TypeScript وتصحيح حقل التاريخ
+      // 🚀 جلب أوقات الحصص المعتمدة من الإدارة لحساب التأخير الفعلي
+      const { data: dbPeriods } = await supabase.from('periods').select('period_num, end_time');
+      const periodsMap: Record<number, string> = {};
+      dbPeriods?.forEach(p => { periodsMap[p.period_num] = p.end_time; });
+
+      const isSystemActive = now >= SYSTEM_START_DATE;
+
+      // 🚀 خوارزمية التدقيق الذكية
       const results: TeacherReport[] = data.map((item: any) => {
         const { teacher, scheduleData, attendanceData } = item;
         
         let total = 0;
-        if (reportType === "day") {
-            total = scheduleData?.filter((s: any) => s.day_of_week === dbDay).length || 0;
-        } else {
-            total = scheduleData?.length || 0;
-        }
-
         let recorded = 0;
-        if (attendanceData && attendanceData.length > 0) {
-            const uniqueSlots = new Set(attendanceData.map((a: any) => `${a.date}-${a.section_id}-${a.period}`));
-            recorded = uniqueSlots.size;
-        }
-        
-        recorded = Math.min(recorded, total);
-        const missed = total - recorded;
-        let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
+        let missed = 0;
 
-        // 🚀 تم تصحيح created_at إلى date
+        if (reportType === "day") {
+            const todaySchedule = scheduleData?.filter((s: any) => s.day_of_week === dbDay) || [];
+            total = todaySchedule.length;
+            
+            const todayAttendance = attendanceData?.filter((a: any) => a.date === todayStr) || [];
+            const recordedSet = new Set(todayAttendance.map((a: any) => a.period));
+            recorded = recordedSet.size;
+
+            if (isSystemActive) {
+              todaySchedule.forEach((s: any) => {
+                if (!recordedSet.has(s.period)) {
+                  const endTimeStr = periodsMap[s.period];
+                  if (endTimeStr) {
+                    const [h, m] = endTimeStr.split(':').map(Number);
+                    const periodEndTime = new Date(now);
+                    periodEndTime.setHours(h, m, 0, 0);
+                    // إذا انتهى وقت الحصة ولم يسجلها -> تعتبر متأخرة
+                    if (now > periodEndTime) missed++;
+                  }
+                }
+              });
+            }
+        } else {
+            // حساب أسبوعي تقريبي (إجمالي المجدول في الأسبوع مقابل الإجمالي المسجل)
+            total = scheduleData?.length || 0;
+            const uniqueSlots = new Set(attendanceData?.map((a: any) => `${a.date}-${a.period}`));
+            recorded = uniqueSlots.size;
+            recorded = Math.min(recorded, total);
+            // في التقرير الأسبوعي، الحصص المتأخرة هي ببساطة الفرق
+            missed = isSystemActive ? Math.max(0, total - recorded) : 0;
+        }
+
+        let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
+        percent = Math.min(100, percent); // لا تتجاوز 100%
+
         const lastRecorded = attendanceData && attendanceData.length > 0
           ? [...attendanceData].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
           : null;
@@ -101,7 +135,12 @@ export default function TeachersReportPage() {
         let status: TeacherReport["status"] = "ممتاز";
         let notes = "";
 
-        if (total === 0) {
+        if (!isSystemActive) {
+          status = "ممتاز";
+          percent = 100;
+          missed = 0;
+          notes = "النظام في وضع الترقب";
+        } else if (total === 0) {
           notes = "لا توجد حصص مجدولة";
           status = "ممتاز";
           percent = 100;
@@ -125,7 +164,8 @@ export default function TeachersReportPage() {
         };
       });
 
-      results.sort((a, b) => a.name.localeCompare(b.name));
+      // الفرز الأبجدي أو حسب التقييم
+      results.sort((a, b) => a.status === "حرج" ? -1 : 1);
 
       setTeachers(results);
     } catch (e) {
@@ -186,7 +226,7 @@ export default function TeachersReportPage() {
       `}</style>
 
       {/* 🚀 واجهة المستخدم الويب */}
-      <div className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:hidden" dir="rtl">
+      <div className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:hidden font-cairo" dir="rtl">
         
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-700 via-indigo-600 to-violet-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-500/20">
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
@@ -199,7 +239,7 @@ export default function TeachersReportPage() {
                 تقرير متابعة المعلمين
               </h1>
               <p className="text-indigo-100 text-xs sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
-                حدد نطاق التقرير، اختر المعلمين المعنيين، واستخرج تقرير PDF رسمي جاهز للعرض على الإدارة.
+                حدد نطاق التقرير، اختر المعلمين المعنيين، واستخرج تقرير PDF رسمي جاهز للعرض على الإدارة، معتمد على التوقيت الزمني الدقيق.
               </p>
             </div>
             
@@ -358,7 +398,7 @@ export default function TeachersReportPage() {
                             <span className="text-slate-300 mx-1">/</span>
                             <span className="text-slate-700">{teacher.total}</span>
                           </div>
-                          {teacher.missed > 0 && <span className="text-[9px] font-bold text-rose-500 mt-1">تأخر ({teacher.missed})</span>}
+                          {teacher.missed > 0 && <span className="text-[9px] font-bold text-rose-500 mt-1 flex items-center gap-1"><Zap className="w-3 h-3"/> تأخر ({teacher.missed})</span>}
                         </div>
                       )}
                     </td>
@@ -462,7 +502,7 @@ export default function TeachersReportPage() {
 
         <div className="mt-16 flex justify-between items-end border-t border-slate-300 pt-8">
           <div className="text-xs font-bold text-slate-500 text-right w-1/3">
-            * ملاحظة: هذا التقرير تم توليده آلياً من نظام الرفعة للرصد الأكاديمي، ويعتبر وثيقة رسمية لتقييم الأداء.
+            * ملاحظة: هذا التقرير تم توليده آلياً من نظام الرفعة للرصد الأكاديمي، ويعتبر وثيقة رسمية لتقييم الأداء والمحاسبة.
           </div>
           <div className="text-center w-1/3">
             <div className="w-48 border-b-2 border-slate-800 mb-2 mx-auto"></div>
