@@ -34,7 +34,7 @@ export default function StudentsPage() {
   // 🚀 حالات نظام الاستيراد الجماعي الذكي
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSectionId, setImportSectionId] = useState('');
-  const [importMethod, setImportMethod] = useState<'excel' | 'pdf'>('pdf'); // PDF هو الافتراضي الآن
+  const [importMethod, setImportMethod] = useState<'excel' | 'pdf'>('pdf'); // PDF هو الافتراضي
   const [rawPdfText, setRawPdfText] = useState('');
   const [importData, setImportData] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState(false);
@@ -96,7 +96,6 @@ export default function StudentsPage() {
 
   // ================= دوال الاستيراد الجماعي والمحلل الذكي =================
   
-  // 1. محلل الإكسل
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -134,14 +133,11 @@ export default function StudentsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // 2. 🚀 المحلل الذكي للنصوص المنسوخة من الـ PDF
+  // 🚀 تم إصلاح المحلل الذكي لمنع حذف حرف الميم!
   const handlePdfTextParse = () => {
-    if (!rawPdfText.trim()) return alert('يرجى لصق النص المنسوخ من الـ PDF أولاً');
+    if (!rawPdfText.trim()) return alert('يرجى لصق النص المنسوخ أولاً');
 
-    // 12 رقم للرقم المدني (يبدأ بـ 2 أو 3 للكويت غالباً)
-    const civilIdRegex = /\b[23]\d{11}\b/g;
     const lines = rawPdfText.split('\n').map(l => l.trim()).filter(Boolean);
-    
     let processed: any[] = [];
     const existingIdsInBatch = new Set();
 
@@ -154,19 +150,29 @@ export default function StudentsPage() {
         let full_name = "";
         let phone = "";
 
-        // البحث عن رقم هاتف كويتي (8 أرقام تبدأ ب 5, 6, 9)
         const phoneMatch = line.match(/\b[569]\d{7}\b/);
         if (phoneMatch) phone = phoneMatch[0];
 
-        // تنظيف السطر من الأرقام وكلمة ذكر/أنثى للوصول للاسم
-        let cleanedLine = line.replace(national_id, '').replace(phone, '').replace(/ذكر|انثى|أنثى|ملاحظات|م/g, '').replace(/[0-9]/g, '').replace(/["',-]/g, '').trim();
+        // 🚀 تم إزالة |م من الفلترة لكي لا نأكل حرف الميم من الأسماء
+        let cleanedLine = line
+          .replace(national_id, '')
+          .replace(phone, '')
+          .replace(/ذكر|انثى|أنثى|ملاحظات/g, '')
+          .replace(/[0-9]/g, '')
+          .replace(/["',-]/g, '')
+          .replace(/\s+/g, ' ') // إزالة المسافات الزائدة
+          .trim();
 
         if (cleanedLine.length > 8 && /[\u0600-\u06FF]/.test(cleanedLine)) {
           full_name = cleanedLine;
         } else {
-          // إذا لم نجد الاسم في نفس السطر، نبحث في السطور السابقة (لأن الـ PDF يكسر السطور)
           for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
-             let prevLine = lines[j].replace(/ذكر|انثى|أنثى/g, '').replace(/[0-9]/g, '').replace(/["',-]/g, '').trim();
+             let prevLine = lines[j]
+               .replace(/ذكر|انثى|أنثى|ملاحظات/g, '')
+               .replace(/[0-9]/g, '')
+               .replace(/["',-]/g, '')
+               .replace(/\s+/g, ' ')
+               .trim();
              if (prevLine.length > 8 && /[\u0600-\u06FF]/.test(prevLine)) {
                 full_name = prevLine;
                 break;
@@ -174,7 +180,6 @@ export default function StudentsPage() {
           }
         }
 
-        // إذا لم نجد الهاتف في نفس السطر، نبحث قبله وبعده بقليل
         if (!phone) {
            for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 2); j++) {
                const pMatch = lines[j].match(/\b[569]\d{7}\b/);
@@ -194,7 +199,7 @@ export default function StudentsPage() {
     }
 
     if (processed.length === 0) {
-      alert('لم يتم العثور على أرقام مدنية صحيحة في النص. تأكد من نسخ الجدول بالكامل من الـ PDF.');
+      alert('لم يتم العثور على أرقام مدنية صحيحة في النص.');
     } else {
       setImportData(processed);
     }
