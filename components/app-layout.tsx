@@ -5,12 +5,17 @@ import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Footer } from '@/components/footer';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { School, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
+// 🚀 استيراد محرك تسجيل الأخطاء
+import { systemLogger } from '@/lib/logger';
 
+/**
+ * 🛠️ الإطار الرئيسي للمنصة (نسخة كاملة مع الحماية والمستشعرات)
+ * المسار: components/app-layout.tsx
+ */
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -34,6 +39,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
+  // 🚀 تفعيل مستشعرات الأخطاء العالمية (Global Sensors)
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      systemLogger.log(event.error, 'critical', 'RUNTIME_EXCEPTION');
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      systemLogger.log(event.reason, 'critical', 'API_COMM_FAILURE');
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
+  // 🛡️ دالة فحص الصلاحيات
   const getAuthorization = () => {
     if (isChecking || isPublicPage || !user || !authRole) return true;
     if (mustResetPassword && !isResetPasswordPage) return false;
@@ -57,12 +82,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAuthorized = getAuthorization();
 
+  // 🛡️ نظام التوجيه التلقائي
   useEffect(() => {
     if (isChecking || isPublicPage || !user) return;
+    
     if (mustResetPassword && !isResetPasswordPage) {
       router.push('/reset-password');
       return;
     }
+    
     if (!authRole) return;
 
     const isRoot = pathname === '/';
@@ -81,6 +109,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, authRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
+  // 🌀 شاشة التحميل
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50/80 backdrop-blur-sm">
@@ -92,6 +121,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // 🛑 شاشة المنصة مغلقة
   if (platformClosed && !isPublicPage) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4 text-center relative overflow-hidden" dir="rtl">
@@ -120,6 +150,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // 🌍 الصفحات العامة (مثل تسجيل الدخول)
   if (isPublicPage) {
     return (
       <main className="flex-1 h-full flex flex-col overflow-y-auto">
@@ -133,10 +164,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const showSidebar = !isPublicPage;
 
+  // 🏛️ الإطار الرئيسي للمنصة
   return (
     <div className="flex h-full overflow-hidden bg-slate-50 selection:bg-indigo-100 selection:text-indigo-900" dir="rtl">
       
-      {/* 🚀 Mobile Blur Backdrop */}
       <AnimatePresence>
         {isSidebarOpen && showSidebar && (
           <motion.div 
