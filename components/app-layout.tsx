@@ -9,11 +9,12 @@ import { School, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
 // 🚀 استيراد محرك تسجيل الأخطاء
 import { systemLogger } from '@/lib/logger';
 
 /**
- * 🛠️ الإطار الرئيسي للمنصة (نسخة كاملة مع الحماية والمستشعرات)
+ * 🛠️ الإطار الرئيسي للمنصة (النسخة النهائية الكاملة)
  * المسار: components/app-layout.tsx
  */
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
-  // 🚀 تفعيل مستشعرات الأخطاء العالمية (Global Sensors)
+  // 1️⃣ تفعيل مستشعرات الأخطاء العالمية (Global Error Sensors)
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => {
       systemLogger.log(event.error, 'critical', 'RUNTIME_EXCEPTION');
@@ -58,7 +59,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // 🛡️ دالة فحص الصلاحيات
+  // 2️⃣ تفعيل جهاز البث للرادار (Realtime Presence Broadcaster)
+  useEffect(() => {
+    // لا نرسل إشارة إذا كان المستخدم في صفحة عامة أو لم يسجل دخوله
+    if (!user || !authRole || isPublicPage) return;
+
+    // الانضمام لغرفة البث المباشر الخاصة بالرادار
+    const room = supabase.channel('global_online_users');
+
+    room.on('presence', { event: 'sync' }, () => {
+      // تم التزامن
+    }).subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        // إرسال بيانات المستخدم للرادار
+        await room.track({
+          user_id: user.id,
+          name: userName || user.email?.split('@')[0] || 'مستخدم',
+          role: authRole,
+          metadata: authRole === 'teacher' ? 'قسم المعلمين' : authRole === 'student' ? 'طالب مسجل' : 'الإدارة العليا',
+          joined_at: new Date().toISOString(),
+        });
+      }
+    });
+
+    // إيقاف البث عند الخروج من الموقع
+    return () => {
+      supabase.removeChannel(room);
+    };
+  }, [user, authRole, userName, isPublicPage]);
+
+  // 3️⃣ دالة فحص الصلاحيات
   const getAuthorization = () => {
     if (isChecking || isPublicPage || !user || !authRole) return true;
     if (mustResetPassword && !isResetPasswordPage) return false;
@@ -82,7 +112,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isAuthorized = getAuthorization();
 
-  // 🛡️ نظام التوجيه التلقائي
+  // 4️⃣ نظام التوجيه التلقائي (Route Guard)
   useEffect(() => {
     if (isChecking || isPublicPage || !user) return;
     
@@ -164,7 +194,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const showSidebar = !isPublicPage;
 
-  // 🏛️ الإطار الرئيسي للمنصة
+  // 🏛️ الإطار الرئيسي للمنصة وبناء الواجهة
   return (
     <div className="flex h-full overflow-hidden bg-slate-50 selection:bg-indigo-100 selection:text-indigo-900" dir="rtl">
       
