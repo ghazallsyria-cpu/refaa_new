@@ -1,6 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
-/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -265,9 +262,6 @@ export default function AttendancePage() {
   const unmarkedCount = totalStudents - markedCount;
   const attendanceRate = totalStudents > 0 ? Math.round(((presentCount + lateCount) / totalStudents) * 100) : 0;
 
-  // ==========================================
-  // 🚀 STUDENT VIEW
-  // ==========================================
   if (currentRole === 'student') {
     if (studentDbError) {
       return (
@@ -301,7 +295,6 @@ export default function AttendancePage() {
 
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
-        
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
           <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-right">
             <div>
@@ -735,7 +728,7 @@ export default function AttendancePage() {
                   </td>
                 </tr>
               ) : (
-                students.map((student) => (
+                students.map((student: any) => (
                   <tr key={student.id} className="group hover:bg-slate-50/50 transition-all duration-300">
                     <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
                       <div className="flex items-center gap-3 sm:gap-4">
@@ -747,18 +740,11 @@ export default function AttendancePage() {
                         </div>
                       </div>
                     </td>
-                    
-                    {ATTENDANCE_OPTIONS.map((opt) => (
+                    {[ { status: 'present', color: 'emerald', icon: CheckCircle2, label: 'حاضر' }, { status: 'absent', color: 'rose', icon: XCircle, label: 'غائب' }, { status: 'late', color: 'amber', icon: Clock, label: 'متأخر' }, { status: 'excused', color: 'blue', icon: AlertCircle, label: 'مستأذن' } ].map((opt) => (
                       <td key={opt.status} className="whitespace-nowrap px-1.5 sm:px-2 py-3 sm:py-4 text-center">
                         <label className="relative inline-flex cursor-pointer group/radio w-full justify-center">
-                          <input
-                            type="radio"
-                            name={`status-${student.id}`}
-                            checked={attendance[student.id] === opt.status}
-                            onChange={() => handleStatusChange(student.id, opt.status as AttendanceStatus)}
-                            className="peer sr-only"
-                          />
-                          <div className={`px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border-2 transition-all flex items-center justify-center gap-1.5 sm:gap-2 font-bold text-[10px] sm:text-xs shadow-sm active:scale-95 border-slate-200 bg-white text-slate-400 ${opt.peerClasses}`}>
+                          <input type="radio" name={`status-${student.id}`} checked={attendance[student.id] === opt.status} onChange={() => handleStatusChange(student.id, opt.status as any)} className="peer sr-only" />
+                          <div className={`px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border-2 transition-all flex items-center justify-center gap-1.5 sm:gap-2 font-bold text-[10px] sm:text-xs shadow-sm active:scale-95 border-slate-200 bg-white text-slate-400 group-hover/radio:border-${opt.color}-200 group-hover/radio:bg-${opt.color}-50 peer-checked:border-${opt.color}-500 peer-checked:bg-${opt.color}-50 peer-checked:text-${opt.color}-700 peer-checked:shadow-${opt.color}-100 peer-checked:shadow-md`}>
                             <opt.icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 peer-checked:animate-in peer-checked:zoom-in-50`} />
                             <span className="hidden lg:inline">{opt.label}</span>
                           </div>
@@ -774,37 +760,21 @@ export default function AttendancePage() {
 
         <div className="md:hidden divide-y divide-slate-100 bg-slate-50/30">
           {systemLoading ? (
-            <div className="py-16 text-center">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto" />
-                <p className="text-slate-400 font-bold text-xs">جاري التحميل...</p>
-              </div>
-            </div>
+            <div className="py-16 text-center"><div className="flex flex-col items-center gap-3"><div className="h-8 w-8 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto" /><p className="text-slate-400 font-bold text-xs">جاري التحميل...</p></div></div>
           ) : students.length === 0 ? (
-            <div className="py-16 text-center px-4">
-              <p className="text-slate-400 font-bold text-xs">الرجاء اختيار الحصة والفصل أعلاه لعرض الطلاب وبدء رصد الغياب.</p>
-            </div>
+            <div className="py-16 text-center px-4"><p className="text-slate-400 font-bold text-xs">الرجاء اختيار الحصة والفصل أعلاه لعرض الطلاب وبدء رصد الغياب.</p></div>
           ) : (
-            students.map((student) => (
+            students.map((student: any) => (
               <div key={student.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/50 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-base shrink-0">
-                    {student.users?.full_name?.charAt(0)}
-                  </div>
+                  <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-base shrink-0">{student.users?.full_name?.charAt(0)}</div>
                   <div className="font-black text-slate-900 text-sm tracking-tight truncate">{student.users?.full_name}</div>
                 </div>
-                
                 <div className="grid grid-cols-4 gap-2">
-                  {ATTENDANCE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.status}
-                      onClick={() => handleStatusChange(student.id, opt.status as AttendanceStatus)}
-                      className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border-2 transition-all active:scale-95 ${
-                        attendance[student.id] === opt.status ? opt.activeClasses : opt.inactiveClasses
-                      }`}
-                    >
+                  {[ { status: 'present', color: 'emerald', icon: CheckCircle2, label: 'حاضر' }, { status: 'absent', color: 'rose', icon: XCircle, label: 'غائب' }, { status: 'late', color: 'amber', icon: Clock, label: 'تأخر' }, { status: 'excused', color: 'blue', icon: AlertCircle, label: 'عذر' } ].map((opt) => (
+                    <button key={opt.status} onClick={() => handleStatusChange(student.id, opt.status as any)} className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border-2 transition-all active:scale-95 ${attendance[student.id] === opt.status ? `bg-${opt.color}-50 border-${opt.color}-500 text-${opt.color}-700 shadow-md shadow-${opt.color}-100` : `bg-white border-slate-100 text-slate-400 hover:border-${opt.color}-200`}`}>
                       <opt.icon className={`w-4 h-4 ${attendance[student.id] === opt.status ? 'animate-in zoom-in-50' : ''}`} />
-                      <span className="font-black text-[9px]">{opt.mobileLabel}</span>
+                      <span className="font-black text-[9px]">{opt.label}</span>
                     </button>
                   ))}
                 </div>
