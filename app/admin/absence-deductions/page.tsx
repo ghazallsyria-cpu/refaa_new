@@ -4,13 +4,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { 
   Calculator, ShieldAlert, FileSignature, Printer, 
   Search, Filter, Users, Clock, AlertTriangle, 
-  FileText, ArrowLeft, RefreshCw, Scale
+  FileText, ArrowLeft, RefreshCw, Scale, CheckCircle2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 
 interface DeductionStudent {
   id: string;
