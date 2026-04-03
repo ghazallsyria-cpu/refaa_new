@@ -1,8 +1,12 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
-import { PlatformSettings } from '@/types';
-export type { PlatformSettings };
+// 🚀 نراوغ TypeScript: نستورد النوع القديم ونضيف عليه الشعار
+import { PlatformSettings as OriginalPlatformSettings } from '@/types'; 
+
+export interface PlatformSettings extends OriginalPlatformSettings {
+  logo_url?: string; // 🚀 أضفنا الشعار هنا ليتعرف عليه النظام
+}
 
 export interface ProfileSettings {
   full_name: string;
@@ -10,7 +14,7 @@ export interface ProfileSettings {
   phone: string;
   role: string;
   zoom_link: string;
-  avatar_url?: string; // 🚀 إضافة دعم الصورة الشخصية
+  avatar_url?: string;
 }
 
 export function useSettingsSystem() {
@@ -21,7 +25,6 @@ export function useSettingsSystem() {
   const fetchProfile = useCallback(async (): Promise<ProfileSettings | null> => {
     if (!user) return null;
     try {
-      // 🚀 جلب حقل الصورة (avatar_url) من جدول المستخدمين
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('full_name, email, phone, role, avatar_url')
@@ -32,7 +35,6 @@ export function useSettingsSystem() {
 
       let zoomLink = '';
       if (userData.role === 'teacher') {
-        // 🚀 بحث أكثر دقة عن المعلم
         let teacherData = null;
         const { data: t1 } = await supabase.from('teachers').select('zoom_link').eq('user_id', user.id).maybeSingle();
         if (t1) teacherData = t1;
@@ -52,7 +54,7 @@ export function useSettingsSystem() {
         phone: userData.phone || '',
         role: userData.role || '',
         zoom_link: zoomLink,
-        avatar_url: userData.avatar_url || '' // 🚀 إرجاع الصورة للواجهة
+        avatar_url: userData.avatar_url || '' 
       } as ProfileSettings;
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error fetching profile';
@@ -84,7 +86,8 @@ export function useSettingsSystem() {
           semester: data.semester || 'الفصل الدراسي الأول',
           address: data.address || 'شارع الملك فهد، حي الياسمين، الرياض',
           phone: data.phone || '0112345678',
-          email: data.email || 'info@alrifaa.edu'
+          email: data.email || 'info@alrifaa.edu',
+          logo_url: data.logo_url || '' // 🚀 هنا ساعي البريد يستلم الشعار من القاعدة ليعرضه لك
         } as PlatformSettings;
       }
       return null;
@@ -124,6 +127,7 @@ export function useSettingsSystem() {
     if (!user) throw new Error('User not authenticated');
     setLoading(true);
     try {
+      // 🚀 هنا ساعي البريد يأخذ الإعدادات (وبداخلها الشعار) ويرسلها للـ API الذي أصلحناه
       const response = await fetch('/api/settings/update-platform', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
