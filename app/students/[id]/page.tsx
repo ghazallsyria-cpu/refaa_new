@@ -628,7 +628,13 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
               <Trash2 className="h-10 w-10" />
             </div>
             <Dialog.Title className="text-2xl font-black text-slate-900 mb-3">سحب وإلغاء الوسام؟</Dialog.Title>
-            <p className="text-slate-500 mb-8 font-medium">هل أنت متأكد من سحب وسام "<strong className="text-slate-800">{badgeToRevoke?.name}</strong>" من هذا الطالب؟ سيختفي هذا الوسام من ملفه ولن يظهر بعد الآن.</p>
+<p className="text-slate-500 mb-8 font-medium">
+  هل أنت متأكد من سحب وسام{" "}
+  <strong className="text-slate-800">
+    &quot;{badgeToRevoke?.name}&quot;
+  </strong>{" "}
+  من هذا الطالب؟ سيختفي هذا الوسام من ملفه ولن يظهر بعد الآن.
+</p>
             <div className="flex flex-col gap-3">
               <button onClick={confirmRevokeBadge} className="w-full py-4 rounded-2xl bg-rose-500 text-white font-black hover:bg-rose-600 shadow-lg shadow-rose-500/20">نعم، اسحب الوسام</button>
               <Dialog.Close asChild>
