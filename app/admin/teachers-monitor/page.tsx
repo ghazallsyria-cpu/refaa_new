@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -70,7 +69,7 @@ export default function TeachersMonitorPage() {
     setTodayName(DAY_MAP[st.getDay()]);
     setDateLabel(`${st.getDate()} ${MONTH_MAP[st.getMonth()]} ${st.getFullYear()}`);
     setIsWeekend(st.getDay() === 5 || st.getDay() === 6);
-  }, []);
+  }, [fetchTeachers]);
 
   const fetchData = useCallback(async () => {
     if (!todayStr || allTeachers.length === 0) return;
@@ -144,9 +143,12 @@ export default function TeachersMonitorPage() {
         if (!isSystemActive) percent = 100;
 
         let status: "ممتاز" | "جيد" | "تحذير" | "حرج" = "ممتاز";
-        
-        if (!isSystemActive || scheduledTotal === 0) {
-          status = "ممتاز";
+        let notes = "";
+
+        if (!isSystemActive) {
+          notes = "النظام في وضع الترقب";
+        } else if (scheduledTotal === 0) {
+          notes = "لا حصص مجدولة";
         } else {
           if (percent < 60 || actualMissed > 0) status = "حرج";
           else if (percent < 85) status = "تحذير";
@@ -171,6 +173,7 @@ export default function TeachersMonitorPage() {
           percent,
           lastRecorded,
           status,
+          notes,
           assignmentsCount,
           examsCount,
         };
@@ -213,7 +216,7 @@ export default function TeachersMonitorPage() {
     return "bg-rose-50 text-rose-700 border-rose-100 shadow-rose-100 animate-pulse";
   };
 
-  const filtered = localTeachers.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.specialization.toLowerCase().includes(search.toLowerCase()));
+  const filtered = localTeachers.filter(t => t.name.includes(search) || t.specialization.includes(search));
 
   const isDataLoading = loading || usersLoading;
 
@@ -249,7 +252,7 @@ export default function TeachersMonitorPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
           <Info className="w-5 h-5 shrink-0" />
           <p className="text-sm font-bold">
-            هذه الصفحة مخصصة لمراقبة "اليوم الحالي" لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
+            هذه الصفحة مخصصة لمراقبة &quot;اليوم الحالي&quot; لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
           </p>
         </motion.div>
       )}
@@ -281,7 +284,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت الآن في الحرم المدرسي</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت &quot;الآن&quot; في الحرم المدرسي</p>
             </div>
           </div>
           <div className="relative w-full lg:w-72 shrink-0">
@@ -338,7 +341,7 @@ export default function TeachersMonitorPage() {
                           <div className="flex flex-col items-center justify-center">
                             <div className="flex items-center gap-1 text-sm sm:text-base font-black">
                               <span className={teacher.recorded === teacher.expected ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span>
-                              <span className="text-slate-300">/</span>
+                              <span className="text-slate-300 mx-1">/</span>
                               <span className="text-slate-700">{teacher.expected}</span>
                             </div>
                             {teacher.missed > 0 && (
