@@ -73,29 +73,20 @@ export default function TeachersMonitorPage() {
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
       const currentDbDay = now.getDay() + 1; // 1=الأحد
 
-      const [
-        { data: teachersDB },
-        { data: schedulesDB },
-        { data: dbPeriods },
-        { data: attendanceDB },
-        { data: assignmentsDB },
-        { data: examsDB }
-      ] = await Promise.all([
-        supabase.from('teachers').select('id, user_id, specialization, national_id, users(full_name)'),
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
-        supabase.from('class_periods').select('period_number, end_time'),
-        supabase.from('attendance_records').select('teacher_id, section_id, date, period, created_at').eq('date', todayStr),
-        supabase.from('assignments').select('teacher_id').gte('created_at', weekAgoStr),
-        supabase.from('exams').select('teacher_id').gte('created_at', weekAgoStr)
-      ]);
+      // 1. استخدام الهوك لضمان استرجاع الأسماء والتكليفات (assignments) والاختبارات (exams)
+      const data = await fetchTeachersMonitorData(todayStr, currentDbDay, weekAgoStr);
+      const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
+      // 2. جلب الحصص للحصول على الأوقات الفعلية
+      const { data: dbPeriods } = await supabase.from('class_periods').select('period_number, end_time');
       const periodsMap: Record<string, string> = {};
       dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
 
       const isSystemActive = now >= SYSTEM_START_DATE;
 
-      const results: TeacherMonitor[] = (teachersDB || []).map((teacher: any) => {
-        const daySchedules = schedulesDB?.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay)) || [];
+      const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
+        // نربط الجدول برقم المعلم
+        const daySchedules = allSchedules?.filter((s: any) => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay)) || [];
         const total = daySchedules.length;
 
         let actualRecorded = 0;
@@ -114,7 +105,8 @@ export default function TeachersMonitorPage() {
           }
 
           if (isSystemActive) {
-            const hasRecord = attendanceDB?.find((a: any) => 
+            // 🚀 التحقق من الحضور باستخدام رقم الفصل (section_id) ورقم الحصة وليس رقم المعلم فقط
+            const hasRecord = allAttendance?.find((a: any) => 
               String(a.section_id) === String(sch.section_id) && 
               String(a.period) === String(sch.period)
             );
@@ -141,9 +133,10 @@ export default function TeachersMonitorPage() {
           else if (percent < 95) status = "جيد";
         }
 
-        const assignmentsCount = assignmentsDB?.filter(a => String(a.teacher_id) === String(teacher.id)).length || 0;
-        const examsCount = examsDB?.filter(e => String(e.teacher_id) === String(teacher.id)).length || 0;
+        const assignmentsCount = allAssignments?.filter((a: any) => String(a.teacher_id) === String(teacher.id)).length || 0;
+        const examsCount = allExams?.filter((e: any) => String(e.teacher_id) === String(teacher.id)).length || 0;
 
+        // 🚀 استخراج الاسم المحمي عبر الهوك
         const teacherName = teacher.users 
           ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
           : "غير محدد";
@@ -174,7 +167,7 @@ export default function TeachersMonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, [todayStr]);
+  }, [todayStr, fetchTeachersMonitorData]);
 
   useEffect(() => {
     if (todayStr) fetchData();
