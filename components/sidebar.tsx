@@ -25,7 +25,7 @@ import {
   X,
   Scale,
   Activity,
-  Medal // 🚀 تم استيراد أيقونة الميدالية هنا للأوسمة
+  Medal // 🚀 أيقونة إدارة الأوسمة
 } from 'lucide-react';
 
 // --- Mocks to ensure the component compiles in the preview environment ---
@@ -40,6 +40,7 @@ const Image = ({ src, alt, fill, className }: any) => (
 );
 const usePathname = () => '/';
 const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+// Mock supabase for the preview environment
 const supabase = {
   from: (table: string) => ({
     select: (cols: string) => ({
@@ -69,7 +70,7 @@ const navigation = [
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
-  { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal }, // 🚀 تم إضافة رابط إدارة الأوسمة هنا
+  { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal }, // 🚀 رابط إدارة الأوسمة
   { name: 'الرسائل', href: '/messages', icon: MessageSquare },
   { name: 'الإعلانات', href: '/announcements', icon: Bell },
   { name: 'المستندات', href: '/documents', icon: FolderOpen },
@@ -91,7 +92,6 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   
-  // جلب بيانات وشعار المدرسة من القاعدة
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
 
   useEffect(() => {
@@ -209,10 +209,9 @@ export function Sidebar({
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
             
-            // تمييز ألوان الأزرار الخاصة
             const isSpecialBtn = item.name === 'قرارات الخصم';
             const isRadarBtn = item.name === 'الرادار الرقمي';
-            const isBadgeBtn = item.name === 'إدارة الأوسمة'; // 🚀 زر إدارة الأوسمة
+            const isBadgeBtn = item.name === 'إدارة الأوسمة';
 
             return (
               <motion.div
@@ -231,7 +230,7 @@ export function Sidebar({
                     isActive 
                       ? isSpecialBtn ? "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30" 
                         : isRadarBtn ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30"
-                        : isBadgeBtn ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30" // لون الأوسمة
+                        : isBadgeBtn ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
                         : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30" 
                       : "hover:bg-white/5 hover:text-white text-slate-400"
                   )}
@@ -243,7 +242,7 @@ export function Sidebar({
                       isActive ? "text-white scale-110" 
                         : isSpecialBtn ? "group-hover:text-rose-400" 
                         : isRadarBtn ? "group-hover:text-emerald-400" 
-                        : isBadgeBtn ? "group-hover:text-amber-400 group-hover:scale-110" // تأثير أيقونة الأوسمة
+                        : isBadgeBtn ? "group-hover:text-amber-400 group-hover:scale-110" 
                         : "group-hover:text-indigo-400 group-hover:scale-110"
                     )}
                   />
