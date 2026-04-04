@@ -1,6 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw, Zap, Info
@@ -41,11 +43,8 @@ const getSchoolTime = () => {
   return new Date(utc + (3 * 3600000));
 };
 
-const getDbDay = (jsDay: number) => {
-  return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
-};
-
 export default function TeachersMonitorPage() {
+  const { loading: hookLoading, fetchTeachersMonitorData, sendTeacherWarning } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherMonitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -72,9 +71,8 @@ export default function TeachersMonitorPage() {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = getDbDay(now.getDay());
+      const currentDbDay = now.getDay() + 1; // 1=الأحد
 
-      // 🚀 استدعاء صلب للبيانات من المصدر مباشرة لتجنب أي فقدان
       const [
         { data: teachersDB },
         { data: schedulesDB },
@@ -83,10 +81,10 @@ export default function TeachersMonitorPage() {
         { data: assignmentsDB },
         { data: examsDB }
       ] = await Promise.all([
-        supabase.from('teachers').select('id, specialization, national_id, users(full_name)'),
-        supabase.from('schedules').select('teacher_id, day_of_week, period'),
+        supabase.from('teachers').select('id, user_id, specialization, national_id, users(full_name)'),
+        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
         supabase.from('class_periods').select('period_number, end_time'),
-        supabase.from('attendance_records').select('teacher_id, date, period, created_at').eq('date', todayStr),
+        supabase.from('attendance_records').select('teacher_id, section_id, date, period, created_at').eq('date', todayStr),
         supabase.from('assignments').select('teacher_id').gte('created_at', weekAgoStr),
         supabase.from('exams').select('teacher_id').gte('created_at', weekAgoStr)
       ]);
@@ -100,7 +98,6 @@ export default function TeachersMonitorPage() {
         const daySchedules = schedulesDB?.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay)) || [];
         const total = daySchedules.length;
 
-        let expectedTotal = 0;
         let actualRecorded = 0;
         let actualMissed = 0;
         let lastRecorded: string | null = null;
@@ -116,23 +113,22 @@ export default function TeachersMonitorPage() {
             if (now > pTime) isPassed = true;
           }
 
-          if (isPassed && isSystemActive) {
-            expectedTotal++;
-            const hasRecord = attendanceDB?.find(a => 
-              String(a.teacher_id) === String(teacher.id) && 
+          if (isSystemActive) {
+            const hasRecord = attendanceDB?.find((a: any) => 
+              String(a.section_id) === String(sch.section_id) && 
               String(a.period) === String(sch.period)
             );
             
             if (hasRecord) {
               actualRecorded++;
               if (!lastRecorded || hasRecord.created_at > lastRecorded) lastRecorded = hasRecord.created_at;
-            } else {
+            } else if (isPassed) {
               actualMissed++;
             }
           }
         });
 
-        let percent = expectedTotal > 0 ? Math.round((actualRecorded / expectedTotal) * 100) : 100;
+        let percent = total > 0 ? Math.round((actualRecorded / total) * 100) : 100;
         if (!isSystemActive) percent = 100;
 
         let status: "ممتاز" | "جيد" | "تحذير" | "حرج" = "ممتاز";
@@ -187,15 +183,10 @@ export default function TeachersMonitorPage() {
   const sendWarning = async (teacherId: string) => {
     setSendingWarning(teacherId);
     try {
-      // إرسال رسالة تحذير للمعلم (بما أن الهوك غير متوفر في النطاق الحالي سنحاكيه إذا لزم أو نستدعيه عبر Supabase)
-      await supabase.from('messages').insert({
-         sender_id: (await supabase.auth.getSession()).data.session?.user.id,
-         receiver_id: teacherId,
-         subject: 'تنبيه إداري: تأخير في رصد الغياب',
-         content: 'يرجى سرعة رصد الغياب للحصص المنتهية في جدولك اليومي وتلافي هذا التأخير مستقبلاً.',
-      });
+      await sendTeacherWarning(teacherId);
       alert("تم إرسال التنبيه بنجاح عبر النظام");
     } catch (e) {
+      console.error(e);
       alert("حدث خطأ أثناء إرسال التنبيه");
     } finally {
       setSendingWarning(null);
@@ -243,7 +234,7 @@ export default function TeachersMonitorPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
           <Info className="w-5 h-5 shrink-0" />
           <p className="text-sm font-bold">
-            هذه الصفحة مخصصة لمراقبة "اليوم الحالي" لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
+            هذه الصفحة مخصصة لمراقبة &quot;اليوم الحالي&quot; لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
           </p>
         </motion.div>
       )}
@@ -275,7 +266,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت الآن في الحرم المدرسي</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت &quot;الآن&quot; في الحرم المدرسي</p>
             </div>
           </div>
           <div className="relative w-full lg:w-72 shrink-0">
@@ -298,52 +289,103 @@ export default function TeachersMonitorPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={6} className="py-20 text-center"><div className="h-10 w-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4" /><p className="text-slate-400 font-bold text-sm">جاري معالجة البيانات السحابية...</p></td></tr>
+                <tr><td colSpan={6} className="py-20 text-center"><div className="flex flex-col items-center gap-4"><div className="h-10 w-10 sm:h-12 sm:w-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto" /><p className="text-slate-400 font-bold text-sm sm:text-base">جاري معالجة البيانات السحابية...</p></div></td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="py-20 text-center"><p className="text-slate-400 font-bold text-sm">لا توجد نتائج مطابقة</p></td></tr>
-              ) : filtered.map((teacher, idx) => {
-                const hasAlert = teacher.status === "حرج" || teacher.status === "تحذير";
-                return (
-                  <motion.tr key={teacher.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.02 }} className={`group transition-all hover:bg-slate-50/50 ${teacher.status === "حرج" ? "bg-rose-50/10" : ""}`}>
-                    <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
-                      <div className="flex items-center gap-3 sm:gap-4">
-                        <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-base sm:text-lg shadow-sm shrink-0">{teacher.name.charAt(0)}</div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-black text-slate-900 tracking-tight text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{teacher.name}</span>
-                          <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate">{teacher.specialization}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 sm:py-4 text-center">
-                      {teacher.total === 0 ? (
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">لا حصص اليوم</span>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="flex items-center gap-1 text-sm sm:text-base font-black">
-                            <span className={teacher.recorded === teacher.total ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span><span className="text-slate-300">/</span><span className="text-slate-700">{teacher.total}</span>
+                <tr><td colSpan={6} className="py-20 text-center"><div className="flex flex-col items-center gap-4"><div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 mx-auto text-slate-300"><SearchX className="h-6 w-6 sm:h-8 sm:w-8" /></div><p className="text-slate-400 font-bold text-sm sm:text-lg">لا توجد نتائج مطابقة</p></div></td></tr>
+              ) : (
+                filtered.map((teacher, idx) => {
+                  const hasAlert = teacher.status === "حرج" || teacher.status === "تحذير";
+                  return (
+                    <motion.tr
+                      key={teacher.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.02 }}
+                      className={`group transition-all hover:bg-slate-50/50 ${teacher.status === "حرج" ? "bg-rose-50/10" : ""}`}
+                    >
+                      <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-base sm:text-lg shadow-sm shrink-0">
+                            {teacher.name.charAt(0)}
                           </div>
-                          {teacher.missed > 0 && <span className="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-0.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 flex items-center gap-1"><Zap className="w-2.5 h-2.5" /> تأخر عن {teacher.missed}</span>}
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-black text-slate-900 tracking-tight text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{teacher.name}</span>
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate">{teacher.specialization}</span>
+                          </div>
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 sm:py-4 text-center hidden sm:table-cell"><span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">{teacher.assignmentsCount}</span></td>
-                    <td className="px-4 py-3 sm:py-4 text-center hidden md:table-cell"><span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">{teacher.examsCount}</span></td>
-                    <td className="px-4 py-3 sm:py-4 text-center">
-                      <span className={`inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black border shadow-sm ${statusColor(teacher.status)}`}>{teacher.status} {teacher.total > 0 ? `(${teacher.percent}%)` : ''}</span>
-                      {teacher.lastRecorded && <div className="text-[8px] sm:text-[9px] font-bold text-slate-400 mt-1 flex items-center justify-center gap-1"><Clock className="w-2.5 h-2.5" /> آخر رصد: {new Date(teacher.lastRecorded).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}</div>}
-                    </td>
-                    <td className="px-6 py-3 sm:py-4 text-center">
-                      <button onClick={() => sendWarning(teacher.id)} disabled={sendingWarning === teacher.id || !hasAlert || teacher.total === 0} className={`inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 ${!hasAlert || teacher.total === 0 ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed" : "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white border border-rose-200 shadow-sm"}`}>
-                        {sendingWarning === teacher.id ? <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Send className="h-3.5 w-3.5" />} تنبيه آلي
-                      </button>
-                    </td>
-                  </motion.tr>
-                )
-              })}
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center">
+                        {teacher.total === 0 ? (
+                          <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">لا حصص اليوم</span>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center">
+                            <div className="flex items-center gap-1 text-sm sm:text-base font-black">
+                              <span className={teacher.recorded === teacher.total ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span>
+                              <span className="text-slate-300">/</span>
+                              <span className="text-slate-700">{teacher.total}</span>
+                            </div>
+                            {teacher.missed > 0 && (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-0.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 flex items-center gap-1">
+                                <Zap className="w-2.5 h-2.5" /> تأخر عن {teacher.missed}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center hidden sm:table-cell">
+                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">
+                          {teacher.assignmentsCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center hidden md:table-cell">
+                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">
+                          {teacher.examsCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center">
+                        <span className={`inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black border shadow-sm ${statusColor(teacher.status)}`}>
+                          {teacher.status} {teacher.total > 0 ? `(${teacher.percent}%)` : ''}
+                        </span>
+                        {teacher.lastRecorded && (
+                          <div className="text-[8px] sm:text-[9px] font-bold text-slate-400 mt-1 flex items-center justify-center gap-1">
+                            <Clock className="w-2.5 h-2.5" /> آخر رصد: {new Date(teacher.lastRecorded).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 sm:py-4 text-center">
+                        <button
+                          onClick={() => sendWarning(teacher.id)}
+                          disabled={sendingWarning === teacher.id || !hasAlert || teacher.total === 0}
+                          className={`inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 ${
+                            !hasAlert || teacher.total === 0
+                              ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed"
+                              : "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white border border-rose-200 shadow-sm"
+                          }`}
+                        >
+                          {sendingWarning === teacher.id ? (
+                            <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          تنبيه آلي
+                        </button>
+                      </td>
+                    </motion.tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function SearchX({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+    </svg>
   );
 }
