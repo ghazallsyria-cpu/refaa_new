@@ -261,7 +261,9 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت "الآن" في الحرم المدرسي</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">
+  يتم تحديث البيانات بناءً على توقيت &quot;الآن&quot; في الحرم المدرسي
+</p>
             </div>
           </div>
           
