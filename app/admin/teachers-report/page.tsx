@@ -34,10 +34,8 @@ const MONTH_MAP: Record<number, string> = {
   8: "سبتمبر", 9: "أكتوبر", 10: "نوفمبر", 11: "ديسمبر"
 };
 
-// 🚀 تاريخ بدء النظام الإلزامي
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
-// 🚀 إضافة التوقيت الموحد (لتفادي تعارض توقيت أجهزة المستخدمين)
 const getSchoolTime = () => {
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
@@ -79,22 +77,20 @@ export default function TeachersReportPage() {
       const weekAgoStr = `${wYear}-${wMonth}-${wDay}`;
       
       const jsDay = now.getDay();
-      // تحويل رقم اليوم ليتوافق مع قاعدة البيانات (الأحد = 1)
-      const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
-                    jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+      // 🚀 الإصلاح 1: تحويل الأيام لتتوافق تماماً (1=الأحد ... 7=السبت) لضمان القراءة في العطل
+      const dbDay = jsDay + 1; 
       
-      setIsWeekend(dbDay === 0);
+      setIsWeekend(dbDay === 6 || dbDay === 7);
 
       const data = await fetchTeachersReportData(reportType, todayStr, dbDay, weekAgoStr);
 
-      // 🚀 جلب أوقات الحصص المعتمدة من الإدارة
-      const { data: dbPeriods } = await supabase.from('periods').select('period_num, end_time');
+      // 🚀 الإصلاح 2: استهداف الجدول الصحيح (class_periods) وليس (periods)
+      const { data: dbPeriods } = await supabase.from('class_periods').select('period_number, end_time');
       const periodsMap: Record<string, string> = {};
-      dbPeriods?.forEach(p => { periodsMap[String(p.period_num)] = p.end_time; });
+      dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
 
       const isSystemActive = now >= SYSTEM_START_DATE;
 
-      // 🚀 خوارزمية التدقيق الذكية (تم تحصينها بـ String لضمان عدم تعطلها بسبب نوع المتغيرات)
       const results: TeacherReport[] = data.map((item: any) => {
         const { teacher, scheduleData, attendanceData } = item;
         
@@ -103,7 +99,6 @@ export default function TeachersReportPage() {
         let missed = 0;
 
         if (reportType === "day") {
-            // 🚀 الفلترة الآمنة 100% باستخدام String()
             const todaySchedule = scheduleData?.filter((s: any) => String(s.day_of_week) === String(dbDay)) || [];
             total = todaySchedule.length;
             
@@ -123,7 +118,6 @@ export default function TeachersReportPage() {
                     const [h, m] = endTimeStr.split(':').map(Number);
                     const periodEndTime = new Date(now);
                     periodEndTime.setHours(h, m, 0, 0);
-                    // إذا انتهى وقت الحصة ولم يسجلها -> تعتبر متأخرة
                     if (now > periodEndTime) missed++;
                   }
                 }
@@ -131,7 +125,6 @@ export default function TeachersReportPage() {
             }
         } else {
             total = scheduleData?.length || 0;
-            // 🚀 توحيد استخراج التواريخ للأسبوع لعدم ضياع الإحصائيات
             const uniqueSlots = new Set(attendanceData?.map((a: any) => {
                const recDate = a.date ? String(a.date).split('T')[0] : '';
                return `${recDate}-${String(a.period)}`;
@@ -271,7 +264,6 @@ export default function TeachersReportPage() {
           <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
         </div>
 
-        {/* 🚀 تنبيه عطلة نهاية الأسبوع */}
         {isWeekend && reportType === "day" && !loading && (
            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
              <Info className="w-5 h-5 shrink-0" />
