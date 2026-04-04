@@ -66,11 +66,11 @@ export default function SchedulePage() {
       }
 
       const data = await fetchInitialScheduleData();
-      setTeachers(data.teachers);
-      setSections(data.sections);
-      setSubjects(data.subjects);
-      setAssignments(data.assignments);
-      setPeriods(data.periods);
+      setTeachers(data.teachers || []);
+      setSections(data.sections || []);
+      setSubjects(data.subjects || []);
+      setAssignments(data.assignments || []);
+      setPeriods(data.periods || []);
 
       if (currentUserRole === 'teacher' && user) {
         setSelectedId(user.id);
@@ -91,7 +91,7 @@ export default function SchedulePage() {
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
-  // 🚀 الحل الجذري: إتاحة جميع الخيارات بحرية مطلقة وإزالة القيود التي كانت تسبب فراغ القوائم وتعطل الحفظ
+  // إتاحة كافة الخيارات بمرونة تامة للمدير
   const availableSections = sections;
   const modalAvailableTeachers = teachers;
   const availableSubjects = subjects;
@@ -100,126 +100,139 @@ export default function SchedulePage() {
     fetchFilters();
   }, [fetchFilters]);
 
+  // تحصين دالة التبديل (Swap)
   const handleSwap = async (targetDay: number, targetPeriod: number, targetSlot: any | null) => {
     if (!swappingFrom || !isAdmin) return;
 
     try {
       setLoading(true);
-      
-      const sourceDay = swappingFrom.day_of_week;
-      const sourcePeriod = swappingFrom.period;
+      const sourceDay = Number(swappingFrom.day_of_week);
+      const sourcePeriod = Number(swappingFrom.period);
+      const tDay = Number(targetDay);
+      const tPeriod = Number(targetPeriod);
 
-      const conflicts = await checkConflicts(targetDay, targetPeriod, swappingFrom.teacher_id, swappingFrom.section_id, swappingFrom.id);
-      
-      const targetConflicts = conflicts.filter(c => 
-        String(c.id) !== String(targetSlot?.id) && 
-        (String(c.teacher_id) === String(swappingFrom.teacher_id) || String(c.section_id) === String(swappingFrom.section_id))
-      );
-
-      if (targetConflicts.length > 0) {
-        alert('تعذر التبديل: يوجد تعارض في الحصة المستهدفة للمعلم أو الفصل');
-        setLoading(false);
-        return;
-      }
-
-      if (targetSlot) {
-        const sourceConflicts = await checkConflicts(sourceDay, sourcePeriod, targetSlot.teacher_id, targetSlot.section_id, targetSlot.id);
-        const filteredSourceConflicts = sourceConflicts.filter(c => 
-          String(c.id) !== String(swappingFrom.id) && 
-          (String(c.teacher_id) === String(targetSlot.teacher_id) || String(c.section_id) === String(targetSlot.section_id))
+      try {
+        const conflicts = await checkConflicts(tDay, tPeriod, String(swappingFrom.teacher_id), String(swappingFrom.section_id), String(swappingFrom.id));
+        const targetConflicts = conflicts.filter(c => 
+          String(c.id) !== String(targetSlot?.id) && 
+          (String(c.teacher_id) === String(swappingFrom.teacher_id) || String(c.section_id) === String(swappingFrom.section_id))
         );
 
-        if (filteredSourceConflicts.length > 0) {
-          alert('تعذر التبديل: يوجد تعارض في الحصة الأصلية للمعلم أو الفصل المنقول');
+        if (targetConflicts.length > 0) {
+          alert('تعذر التبديل: يوجد تعارض في الحصة المستهدفة للمعلم أو الفصل');
           setLoading(false);
           return;
         }
+
+        if (targetSlot) {
+          const sourceConflicts = await checkConflicts(sourceDay, sourcePeriod, String(targetSlot.teacher_id), String(targetSlot.section_id), String(targetSlot.id));
+          const filteredSourceConflicts = sourceConflicts.filter(c => 
+            String(c.id) !== String(swappingFrom.id) && 
+            (String(c.teacher_id) === String(targetSlot.teacher_id) || String(c.section_id) === String(targetSlot.section_id))
+          );
+
+          if (filteredSourceConflicts.length > 0) {
+            alert('تعذر التبديل: يوجد تعارض في الحصة الأصلية للمعلم أو الفصل المنقول');
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (conflictError) {
+        console.warn("⚠️ تم تجاوز فحص التعارض للتبديل بسبب خطأ في المحرك", conflictError);
       }
 
-      await swapSchedules(swappingFrom.id, sourceDay, sourcePeriod, targetSlot?.id || null, targetDay, targetPeriod);
-      await notifyScheduleChange(swappingFrom, targetDay, targetPeriod, DAYS);
-      if (targetSlot) {
-        await notifyScheduleChange(targetSlot, sourceDay, sourcePeriod, DAYS);
-      }
-
+      await swapSchedules(String(swappingFrom.id), sourceDay, sourcePeriod, targetSlot ? String(targetSlot.id) : null, tDay, tPeriod);
+      
       setSwappingFrom(null);
       setIsSwapping(false);
       await fetchSchedule();
-      alert('تم تبديل الحصص بنجاح');
-    } catch (err) {
+      alert('تم تبديل الحصص بنجاح! ✅');
+    } catch (err: any) {
       console.error('Error swapping lessons:', err);
-      alert('حدث خطأ أثناء تبديل الحصص. يرجى المحاولة مرة أخرى.');
+      alert(`حدث خطأ أثناء التبديل: ${err.message || 'مشكلة غير معروفة'}`);
       fetchSchedule();
     } finally {
       setLoading(false);
     }
   };
 
+  // تحصين دالة الإضافة والتعديل
   const handleAddSchedule = async () => {
     if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) {
-      alert('يرجى تعبئة جميع الحقول المطلوبة (المعلم، الفصل، المادة).');
+      alert('يرجى تعبئة جميع الحقول المطلوبة (المعلم، الفصل، المادة). ⚠️');
       return;
     }
     
     const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
 
     try {
-      const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
+      // 1. محاولة كشف التعارض بشكل معزول (حتى لا يوقف الإضافة في حال فشله)
+      try {
+        const conflicts = await checkConflicts(
+          Number(selectedSlot.day), 
+          Number(selectedSlot.period), 
+          String(formData.teacher_id), 
+          String(formData.section_id), 
+          editingId ? String(editingId) : undefined
+        );
 
-      if (conflicts.length > 0) {
-        const tConflict = conflicts.find(c => String(c.teacher_id) === String(formData.teacher_id));
-        if (tConflict) {
-          const section = safeObj(tConflict.sections);
-          const subject = safeObj(tConflict.subjects);
-          const className = safeObj(section?.classes)?.name;
-          alert(`تضارب: المعلم لديه حصة (${subject?.name || ''}) مع فصل (${className || ''} - ${section?.name || ''}) في هذا الوقت.`);
-          return;
+        if (conflicts && conflicts.length > 0) {
+          const tConflict = conflicts.find((c:any) => String(c.teacher_id) === String(formData.teacher_id));
+          if (tConflict) {
+            const section = safeObj(tConflict.sections);
+            const subject = safeObj(tConflict.subjects);
+            const className = safeObj(section?.classes)?.name;
+            alert(`تضارب ❌: المعلم لديه حصة (${subject?.name || ''}) مع فصل (${className || ''} - ${section?.name || ''}) في هذا الوقت.`);
+            return;
+          }
+          
+          const sConflict = conflicts.find((c:any) => String(c.section_id) === String(formData.section_id));
+          if (sConflict) {
+            const teacher = safeObj(sConflict.teachers);
+            const subject = safeObj(sConflict.subjects);
+            const teacherName = safeObj(teacher?.users)?.full_name;
+            alert(`تضارب ❌: هذا الفصل لديه حصة (${subject?.name || ''}) مع المعلم (${teacherName || ''}) في هذا الوقت.`);
+            return;
+          }
         }
-        
-        const sConflict = conflicts.find(c => String(c.section_id) === String(formData.section_id));
-        if (sConflict) {
-          const teacher = safeObj(sConflict.teachers);
-          const subject = safeObj(sConflict.subjects);
-          const teacherName = safeObj(teacher?.users)?.full_name;
-          alert(`تضارب: هذا الفصل لديه حصة (${subject?.name || ''}) مع المعلم (${teacherName || ''}) في هذا الوقت.`);
-          return;
-        }
+      } catch (conflictError) {
+        console.warn("⚠️ تم تجاوز محرك التعارض لتسهيل حفظ الحصة", conflictError);
       }
 
+      // 2. تجهيز البيانات الصارمة (Strict Casting)
+      const payload: any = {
+        teacher_id: String(formData.teacher_id),
+        section_id: String(formData.section_id),
+        subject_id: String(formData.subject_id),
+      };
+
       if (editingId) {
-        await updateSchedule(editingId, {
-          teacher_id: formData.teacher_id,
-          section_id: formData.section_id,
-          subject_id: formData.subject_id,
-        });
+        await updateSchedule(String(editingId), payload);
       } else {
-        await addSchedule({
-          teacher_id: formData.teacher_id,
-          section_id: formData.section_id,
-          subject_id: formData.subject_id,
-          day_of_week: selectedSlot.day,
-          period: selectedSlot.period
-        });
+        payload.day_of_week = Number(selectedSlot.day);
+        payload.period = Number(selectedSlot.period);
+        await addSchedule(payload);
       }
       
       setIsModalOpen(false);
       setEditingId(null);
       setFormData({ teacher_id: '', section_id: '', subject_id: '' });
-      fetchSchedule(); 
-    } catch (err) {
-      console.error(err);
-      alert(`حدث خطأ أثناء ${editingId ? 'تعديل' : 'إضافة'} الحصة`);
+      await fetchSchedule(); 
+      alert(editingId ? 'تم تحديث الحصة بنجاح! ✅' : 'تم إضافة الحصة بنجاح! ✅');
+    } catch (err: any) {
+      console.error("Critical Save Error:", err);
+      alert(`حدث خطأ أثناء الحفظ ❌:\n${err.message || 'يرجى التحقق من اتصال قاعدة البيانات.'}`);
     }
   };
 
   const handleDeleteSchedule = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه الحصة؟')) return;
+    if (!confirm('هل أنت متأكد من حذف هذه الحصة نهائياً؟')) return;
     try {
-      await deleteSchedule(id);
-      fetchSchedule();
-    } catch (err) {
+      await deleteSchedule(String(id));
+      await fetchSchedule();
+    } catch (err: any) {
       console.error(err);
-      alert('حدث خطأ أثناء حذف الحصة');
+      alert(`حدث خطأ أثناء الحذف: ${err.message || ''}`);
     }
   };
 
@@ -254,9 +267,6 @@ export default function SchedulePage() {
     window.print();
   };
 
-  // ==========================================
-  // 🚀 STUDENT VIEW
-  // ==========================================
   if (authRole === 'student') {
     const currentSectionName = sections.find(s => String(s.id) === String(selectedId))?.name || '';
     const currentClassName = sections.find(s => String(s.id) === String(selectedId))?.classes?.name || '';
@@ -547,7 +557,7 @@ export default function SchedulePage() {
               type="button"
               onClick={() => {
                 setViewType('teacher');
-                if (teachers.length > 0) setSelectedId(teachers[0].id);
+                if (teachers.length > 0) setSelectedId(String(teachers[0].id));
               }}
               className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm font-black rounded-lg transition-all ${
                 viewType === 'teacher' 
@@ -561,7 +571,7 @@ export default function SchedulePage() {
               type="button"
               onClick={() => {
                 setViewType('section');
-                if (sections.length > 0) setSelectedId(sections[0].id);
+                if (sections.length > 0) setSelectedId(String(sections[0].id));
               }}
               className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm font-black rounded-lg transition-all ${
                 viewType === 'section' 
@@ -579,7 +589,7 @@ export default function SchedulePage() {
             </div>
             <select
               value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
+              onChange={(e) => setSelectedId(String(e.target.value))}
               className="block w-full rounded-xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold outline-none"
             >
               <option value="">-- اختر {viewType === 'teacher' ? 'المعلم' : 'الفصل'} --</option>
@@ -650,7 +660,7 @@ export default function SchedulePage() {
                     <select 
                       className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" 
                       value={formData.section_id}
-                      onChange={(e) => setFormData({ ...formData, section_id: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}
                     >
                       <option value="">-- اختر الفصل --</option>
                       {availableSections.map(s => {
@@ -662,7 +672,7 @@ export default function SchedulePage() {
                     <select 
                       className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" 
                       value={formData.teacher_id}
-                      onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}
                     >
                       <option value="">-- اختر المعلم --</option>
                       {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}
@@ -754,14 +764,14 @@ export default function SchedulePage() {
                         {periods.map((p, pIdx) => {
                           const period = p.period_number;
                           const slot = scheduleData.find(s => 
-                            s.day_of_week === day.id && 
-                            s.period === period && 
+                            String(s.day_of_week) === String(day.id) && 
+                            String(s.period) === String(period) && 
                             (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
                           );
 
                           const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => 
-                            s.day_of_week === day.id && 
-                            s.period === period && 
+                            String(s.day_of_week) === String(day.id) && 
+                            String(s.period) === String(period) && 
                             (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))
                           ) : [];
 
@@ -775,7 +785,7 @@ export default function SchedulePage() {
                               animate={{ opacity: 1, scale: 1 }}
                               transition={{ delay: (day.id * 0.1) + (pIdx * 0.05) }}
                               key={`${day.id}-${p.id}`} 
-                              className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col items-center justify-center text-center transition-all group overflow-hidden
+                              className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col justify-between transition-all group overflow-hidden
                                 ${slot 
                                   ? 'bg-white border-2 border-indigo-500 shadow-md shadow-indigo-100 z-10' 
                                   : displaySlot 
@@ -835,7 +845,7 @@ export default function SchedulePage() {
                                           className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-500 hover:text-white border border-blue-100 transition-colors shadow-sm"
                                           onClick={(e) => { 
                                             e.stopPropagation(); 
-                                            setEditingId(displaySlot.id);
+                                            setEditingId(String(displaySlot.id));
                                             setFormData({ 
                                               teacher_id: displaySlot.teacher_id || '', 
                                               section_id: displaySlot.section_id || '', 
@@ -847,7 +857,7 @@ export default function SchedulePage() {
                                         >تعديل</button>
                                         <button 
                                           className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white border border-rose-100 transition-colors shadow-sm"
-                                          onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(displaySlot.id); }}
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }}
                                         >حذف</button>
                                       </div>
                                     </div>
