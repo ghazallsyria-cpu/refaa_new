@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck, Zap
+  CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck, Zap, Info
 } from "lucide-react";
-import { supabase } from "@/lib/supabase"; // 🚀 نحتاج هذا لجلب أوقات الحصص
+import { supabase } from "@/lib/supabase"; 
 import Link from "next/link";
 
 interface TeacherReport {
@@ -37,6 +37,13 @@ const MONTH_MAP: Record<number, string> = {
 // 🚀 تاريخ بدء النظام الإلزامي
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
+// 🚀 إضافة التوقيت الموحد (لتفادي تعارض توقيت أجهزة المستخدمين)
+const getSchoolTime = () => {
+  const d = new Date();
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  return new Date(utc + (3 * 3600000));
+};
+
 export default function TeachersReportPage() {
   const { loading: hookLoading, fetchTeachersReportData } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherReport[]>([]);
@@ -47,9 +54,10 @@ export default function TeachersReportPage() {
   const [todayStr, setTodayStr] = useState("");
   const [todayName, setTodayName] = useState("");
   const [dateLabel, setDateLabel] = useState("");
+  const [isWeekend, setIsWeekend] = useState(false);
 
   useEffect(() => {
-    const now = new Date();
+    const now = getSchoolTime();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
@@ -62,7 +70,7 @@ export default function TeachersReportPage() {
     if (!todayStr) return;
     setLoading(true);
     try {
-      const now = new Date();
+      const now = getSchoolTime();
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const wYear = weekAgo.getFullYear();
@@ -74,18 +82,19 @@ export default function TeachersReportPage() {
       // تحويل رقم اليوم ليتوافق مع قاعدة البيانات (الأحد = 1)
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+      
+      setIsWeekend(dbDay === 0);
 
-      // جلب بيانات الحضور والجدول من الهوك
       const data = await fetchTeachersReportData(reportType, todayStr, dbDay, weekAgoStr);
 
-      // 🚀 جلب أوقات الحصص المعتمدة من الإدارة لحساب التأخير الفعلي
+      // 🚀 جلب أوقات الحصص المعتمدة من الإدارة
       const { data: dbPeriods } = await supabase.from('periods').select('period_num, end_time');
-      const periodsMap: Record<number, string> = {};
-      dbPeriods?.forEach(p => { periodsMap[p.period_num] = p.end_time; });
+      const periodsMap: Record<string, string> = {};
+      dbPeriods?.forEach(p => { periodsMap[String(p.period_num)] = p.end_time; });
 
       const isSystemActive = now >= SYSTEM_START_DATE;
 
-      // 🚀 خوارزمية التدقيق الذكية
+      // 🚀 خوارزمية التدقيق الذكية (تم تحصينها بـ String لضمان عدم تعطلها بسبب نوع المتغيرات)
       const results: TeacherReport[] = data.map((item: any) => {
         const { teacher, scheduleData, attendanceData } = item;
         
@@ -94,17 +103,22 @@ export default function TeachersReportPage() {
         let missed = 0;
 
         if (reportType === "day") {
-            const todaySchedule = scheduleData?.filter((s: any) => s.day_of_week === dbDay) || [];
+            // 🚀 الفلترة الآمنة 100% باستخدام String()
+            const todaySchedule = scheduleData?.filter((s: any) => String(s.day_of_week) === String(dbDay)) || [];
             total = todaySchedule.length;
             
-            const todayAttendance = attendanceData?.filter((a: any) => a.date === todayStr) || [];
-            const recordedSet = new Set(todayAttendance.map((a: any) => a.period));
+            const todayAttendance = attendanceData?.filter((a: any) => {
+               const recDate = a.date ? String(a.date).split('T')[0] : '';
+               return recDate === todayStr;
+            }) || [];
+            
+            const recordedSet = new Set(todayAttendance.map((a: any) => String(a.period)));
             recorded = recordedSet.size;
 
             if (isSystemActive) {
               todaySchedule.forEach((s: any) => {
-                if (!recordedSet.has(s.period)) {
-                  const endTimeStr = periodsMap[s.period];
+                if (!recordedSet.has(String(s.period))) {
+                  const endTimeStr = periodsMap[String(s.period)];
                   if (endTimeStr) {
                     const [h, m] = endTimeStr.split(':').map(Number);
                     const periodEndTime = new Date(now);
@@ -116,17 +130,19 @@ export default function TeachersReportPage() {
               });
             }
         } else {
-            // حساب أسبوعي تقريبي (إجمالي المجدول في الأسبوع مقابل الإجمالي المسجل)
             total = scheduleData?.length || 0;
-            const uniqueSlots = new Set(attendanceData?.map((a: any) => `${a.date}-${a.period}`));
+            // 🚀 توحيد استخراج التواريخ للأسبوع لعدم ضياع الإحصائيات
+            const uniqueSlots = new Set(attendanceData?.map((a: any) => {
+               const recDate = a.date ? String(a.date).split('T')[0] : '';
+               return `${recDate}-${String(a.period)}`;
+            }));
             recorded = uniqueSlots.size;
             recorded = Math.min(recorded, total);
-            // في التقرير الأسبوعي، الحصص المتأخرة هي ببساطة الفرق
             missed = isSystemActive ? Math.max(0, total - recorded) : 0;
         }
 
         let percent = total > 0 ? Math.round((recorded / total) * 100) : 100;
-        percent = Math.min(100, percent); // لا تتجاوز 100%
+        percent = Math.min(100, percent); 
 
         const lastRecorded = attendanceData && attendanceData.length > 0
           ? [...attendanceData].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
@@ -164,7 +180,6 @@ export default function TeachersReportPage() {
         };
       });
 
-      // الفرز الأبجدي أو حسب التقييم
       results.sort((a, b) => a.status === "حرج" ? -1 : 1);
 
       setTeachers(results);
@@ -225,7 +240,6 @@ export default function TeachersReportPage() {
         }
       `}</style>
 
-      {/* 🚀 واجهة المستخدم الويب */}
       <div className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:hidden font-cairo" dir="rtl">
         
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-700 via-indigo-600 to-violet-700 p-6 sm:p-12 text-white shadow-2xl shadow-indigo-500/20">
@@ -257,8 +271,17 @@ export default function TeachersReportPage() {
           <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
         </div>
 
+        {/* 🚀 تنبيه عطلة نهاية الأسبوع */}
+        {isWeekend && reportType === "day" && !loading && (
+           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
+             <Info className="w-5 h-5 shrink-0" />
+             <p className="text-sm font-bold">
+               اليوم هو عطلة نهاية الأسبوع، لذلك تظهر إحصائيات المعلمين اليومية بقيم صفرية لعدم وجود جداول مدرسية. يمكنك التبديل للتقرير <strong>(الأسبوعي)</strong> للاطلاع على أدائهم.
+             </p>
+           </motion.div>
+        )}
+
         <div className="bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30 flex flex-col xl:flex-row gap-6 justify-between items-start xl:items-center">
-          
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full xl:w-auto">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar className="w-5 h-5" /></div>
@@ -437,7 +460,6 @@ export default function TeachersReportPage() {
         </div>
       </div>
 
-      {/* 🚀 PRINTABLE PDF VIEW */}
       <div className="hidden print:block w-full bg-white text-black p-8 font-cairo" dir="rtl">
         <div className="text-center mb-8 border-b-[3px] border-slate-900 pb-6 relative">
           <div className="absolute top-0 right-0 text-right">
