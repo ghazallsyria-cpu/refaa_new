@@ -5,14 +5,17 @@ import {
   Plus, Search, Edit, Trash2, X, Key, Download, 
   UserPlus, Users, AlertCircle, FileSpreadsheet, 
   GraduationCap, ChevronRight, ChevronLeft, BookOpen,
-  UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileText, ClipboardPaste
+  UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileText, ClipboardPaste, Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/auth-context';
+import GrantBadgeModal from '@/components/GrantBadgeModal';
 
 export default function StudentsPage() {
+  const { user } = useAuth();
   const {
     students, sections, parents, loading,
     fetchStudents, fetchSections, fetchParents,
@@ -45,6 +48,10 @@ export default function StudentsPage() {
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   
+  // 🚀 حالات نافذة الأوسمة
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [studentForBadge, setStudentForBadge] = useState<{id: string, name: string} | null>(null);
+
   const [addForm, setAddForm] = useState({
     full_name: '', national_id: '', email: '', phone: '', section_id: '', parent_id: ''
   });
@@ -245,6 +252,16 @@ export default function StudentsPage() {
     setImportProgress(prev => ({ ...prev, successful: successCount, failed: failCount, errors: currentErrors }));
     setIsImporting(false);
     fetchStudents();
+  };
+
+  // 🚀 دالة فتح مودال الأوسمة
+  const handleGrantBadgeClick = (student: any) => {
+    const userData = Array.isArray(student.users) ? student.users[0] : student.users;
+    setStudentForBadge({
+      id: student.id,
+      name: userData?.full_name || 'غير معروف'
+    });
+    setIsBadgeModalOpen(true);
   };
 
   // ================= باقي الدوال التنفيذية =================
@@ -476,6 +493,8 @@ export default function StudentsPage() {
                       </td>
                       <td className="whitespace-nowrap py-4 pl-8 pr-4 text-left">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {/* 🚀 زر منح الوسام مضاف هنا */}
+                          <button onClick={() => handleGrantBadgeClick(student)} className="p-2 text-slate-400 hover:text-amber-600 bg-white hover:bg-amber-50 rounded-lg shadow-sm border border-slate-200 transition-all" title="منح وسام تقديري"><Award className="w-4 h-4" /></button>
                           <button onClick={() => handleResetPasswordClick(student)} className="p-2 text-slate-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-slate-200 transition-all"><Key className="w-4 h-4" /></button>
                           <button onClick={() => handleEditClick(student)} className="p-2 text-slate-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-slate-200 transition-all"><Edit className="w-4 h-4" /></button>
                           <button onClick={() => handleDeleteClick(student.id)} className="p-2 text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 rounded-lg shadow-sm border border-slate-200 transition-all"><Trash2 className="w-4 h-4" /></button>
@@ -509,7 +528,9 @@ export default function StudentsPage() {
                           <div className="h-10 w-10 bg-indigo-50 text-indigo-600 font-black rounded-xl flex items-center justify-center">{userData?.full_name?.charAt(0) || 'ط'}</div>
                           <div><p className="font-black text-slate-900">{userData?.full_name || 'غير معروف'}</p><p className="text-xs font-bold text-slate-500 font-mono">{student.national_id}</p></div>
                        </div>
-                       <div className="flex gap-1">
+                       <div className="flex gap-1 flex-wrap justify-end max-w-[120px]">
+                          {/* 🚀 زر منح الوسام مضاف هنا */}
+                          <button onClick={() => handleGrantBadgeClick(student)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-50 rounded-lg"><Award className="w-4 h-4" /></button>
                           <button onClick={() => handleResetPasswordClick(student)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Key className="w-4 h-4" /></button>
                           <button onClick={() => handleEditClick(student)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Edit className="w-4 h-4" /></button>
                           <button onClick={() => handleDeleteClick(student.id)} className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
@@ -678,7 +699,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* باقي النوافذ (Add/Edit/Delete/Password) - لم يتم تغييرها للتبسيط */}
       {showAddModal && !showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden my-8">
@@ -714,7 +734,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Edit Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden my-8">
@@ -755,7 +774,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Password Reset Modal */}
       {showPasswordResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden my-8 p-8 text-center">
@@ -771,7 +789,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Delete Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden my-8 p-8 text-center">
@@ -784,6 +801,20 @@ export default function StudentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 🚀 استدعاء مكون نافذة منح الأوسمة الجديد أسفل الصفحة */}
+      {studentForBadge && (
+        <GrantBadgeModal
+          isOpen={isBadgeModalOpen}
+          onClose={() => {
+            setIsBadgeModalOpen(false);
+            setStudentForBadge(null);
+          }}
+          recipientId={studentForBadge.id}
+          recipientName={studentForBadge.name}
+          granterId={user?.id || 'admin'} 
+        />
       )}
       
     </div>
