@@ -48,6 +48,7 @@ const supabase = {
     })
   })
 };
+const createClientComponentClient = () => supabase;
 // ------------------------------------------------------------------------
 
 const navigation = [
@@ -91,13 +92,14 @@ export function Sidebar({
   onToggleCollapse?: () => void
 }) {
   const pathname = usePathname();
+  const supabaseClient = createClientComponentClient();
   
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
 
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {
-        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
+        const { data } = await supabaseClient.from('platform_settings').select('school_name, logo_url').single();
         if (data) {
           setSchoolData({
             name: data.school_name?.split(' ')[0] || 'الرفعة',
@@ -109,7 +111,7 @@ export function Sidebar({
       }
     };
     fetchSchoolData();
-  }, []);
+  }, [supabaseClient]);
 
   const filteredNavigation = navigation.filter(item => {
     if (authRole === 'admin' || authRole === 'management') return true;
