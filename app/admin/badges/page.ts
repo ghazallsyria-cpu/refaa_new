@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useBadgesSystem, Badge } from '@/hooks/useBadgesSystem';
-import { Plus, Edit2, Trash2, Award, Medal, X, AlertCircle, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, Award, Medal, X, AlertCircle, CheckCircle2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import ImageUpload from '@/components/ImageUpload';
@@ -61,15 +61,13 @@ export default function AdminBadgesPage() {
     setIsSubmitting(true);
     try {
       if (currentBadge.id) {
-        // تحديث وسام موجود
         const originalBadge = availableBadges.find(b => b.id === currentBadge.id);
         if (originalBadge?.image_url && originalBadge.image_url !== currentBadge.image_url) {
-          await deleteFromCloudinary(originalBadge.image_url); // حذف الصورة القديمة إذا تم تغييرها
+          await deleteFromCloudinary(originalBadge.image_url);
         }
         await updateBadge(currentBadge.id, currentBadge);
         showNotification('success', 'تم تحديث الوسام بنجاح');
       } else {
-        // إنشاء وسام جديد
         await createBadge(currentBadge);
         showNotification('success', 'تم إنشاء الوسام الجديد بنجاح');
       }
@@ -86,7 +84,7 @@ export default function AdminBadgesPage() {
     
     try {
       if (badgeToDelete.image_url) {
-        await deleteFromCloudinary(badgeToDelete.image_url); // حذف الصورة من الكلاود
+        await deleteFromCloudinary(badgeToDelete.image_url);
       }
       await deleteAdminBadge(badgeToDelete.id);
       showNotification('success', 'تم حذف الوسام نهائياً');
