@@ -36,12 +36,6 @@ export default function GrantBadgeModal({
     if (isOpen && availableBadges.length === 0) {
       fetchAvailableBadges();
     }
-    // تصفير الحقول عند الفتح
-    if (isOpen) {
-      setSelectedBadge(null);
-      setReason('');
-      setNotification(null);
-    }
   }, [isOpen, fetchAvailableBadges, availableBadges.length]);
 
   const handleGrant = async () => {
