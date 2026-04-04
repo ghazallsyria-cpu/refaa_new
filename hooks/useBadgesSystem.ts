@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'; 
+import { supabase } from '@/lib/supabase';
 
 // تعريف أنواع البيانات (Types)
 export interface Badge {
@@ -26,8 +26,6 @@ export interface StudentBadge {
 }
 
 export function useBadgesSystem() {
-  const supabase = createClientComponentClient();
-  
   const [availableBadges, setAvailableBadges] = useState<Badge[]>([]);
   const [studentBadges, setStudentBadges] = useState<StudentBadge[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,7 +53,7 @@ export function useBadgesSystem() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   // 2. جلب الأوسمة الخاصة بطالب معين (يستخدمها الطالب في لوحته، أو المعلم في ملف الطالب)
   const fetchStudentBadges = useCallback(async (studentId: string) => {
@@ -82,7 +80,7 @@ export function useBadgesSystem() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   // ==========================================
   // --- دوال المعلم (منح وسحب الأوسمة) ---
