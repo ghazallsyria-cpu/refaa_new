@@ -362,6 +362,7 @@ export default function TeacherDashboard() {
         </div>
 
         {/* 🚀 قسم عرض الأوسمة الذكي (لا يفسد التصميم مهما زاد عدد الأوسمة) */}
+{/* 🚀 قسم عرض الأوسمة الذكي */}
         {myBadges.length > 0 && (
           <div className="relative z-10 mt-10 pt-6 border-t border-white/20 w-full">
             <h3 className="text-sm font-bold text-indigo-100 mb-4 flex items-center gap-2">
@@ -372,9 +373,10 @@ export default function TeacherDashboard() {
               {myBadges.map((badgeEntry, index) => (
                 <div 
                   key={badgeEntry.id || index} 
-                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex items-center gap-3 w-64 hover:bg-white/20 transition-colors group cursor-default"
+                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex items-center gap-4 w-72 hover:bg-white/20 transition-colors group cursor-default"
                 >
-                  <div className="relative w-12 h-12 shrink-0 group-hover:scale-110 transition-transform duration-300">
+                  {/* 🚀 تكبير الحاوية إلى w-16 h-16 */}
+                  <div className="relative w-16 h-16 shrink-0 group-hover:scale-110 transition-transform duration-300 bg-white/5 rounded-2xl p-1 border border-white/10">
                     {badgeEntry.badge?.image_url ? (
                       <Image 
                         src={badgeEntry.badge.image_url} 
@@ -382,15 +384,15 @@ export default function TeacherDashboard() {
                         fill 
                         unoptimized 
                         referrerPolicy="no-referrer" 
-                        className="object-contain drop-shadow-md" 
+                        className="object-contain drop-shadow-xl" 
                       />
                     ) : (
                       <Award className="w-full h-full text-yellow-300" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black text-white truncate">{badgeEntry.badge?.name}</p>
-                    <p className="text-[10px] font-bold text-indigo-200 truncate mt-0.5" title={badgeEntry.reason}>
+                    <p className="text-base font-black text-white truncate">{badgeEntry.badge?.name}</p>
+                    <p className="text-xs font-bold text-indigo-200 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>
                       {badgeEntry.reason || 'تقديراً للجهود والتميز'}
                     </p>
                   </div>
