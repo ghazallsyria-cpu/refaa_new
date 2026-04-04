@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image'; // 🚀 استيراد الصور للأوسمة
 
 // 🚀 دالة التحقق من القفل الزمني
 const checkIsLocked = (examData: any) => {
@@ -42,6 +43,7 @@ export default function StudentPerformancePage() {
   const [studentData, setStudentData] = useState<any>(null);
   const [examAttempts, setExamAttempts] = useState<any[]>([]);
   const [assignmentSubmissions, setAssignmentSubmissions] = useState<any[]>([]);
+  const [studentBadges, setStudentBadges] = useState<any[]>([]); // 🚀 حالة لتخزين الأوسمة
   const [selectedSubject, setSelectedSubject] = useState<string>('all'); 
   
   const [stats, setStats] = useState({
@@ -69,8 +71,8 @@ export default function StudentPerformancePage() {
         return;
       }
 
-      // 🚀 تم إضافة جلب بيانات أسئلة الواجب (assignment_questions) لمعرفة المجموع الحقيقي
-      const [examsRes, assignmentsRes] = await Promise.all([
+      // 🚀 تم دمج جلب الأوسمة مع جلب الدرجات لضمان السرعة القصوى (Parallel Fetching)
+      const [examsRes, assignmentsRes, badgesRes] = await Promise.all([
         supabase.from('exam_attempts')
           .select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))')
           .eq('student_id', student.id)
@@ -79,11 +81,21 @@ export default function StudentPerformancePage() {
         supabase.from('assignment_submissions')
           .select('*, assignments(id, title, total_marks, subjects(name), assignment_questions(points))')
           .eq('student_id', student.id)
-          .order('submitted_at', { ascending: false })
+          .order('submitted_at', { ascending: false }),
+
+        supabase.from('student_badges')
+          .select('*, badge:badges(*)')
+          .eq('student_id', student.id)
+          .order('granted_at', { ascending: false })
       ]);
 
       const eAttempts = examsRes.data || [];
       const aSubmissions = assignmentsRes.data || [];
+      
+      // 🚀 حفظ الأوسمة
+      if (badgesRes.data) {
+        setStudentBadges(badgesRes.data);
+      }
 
       // 🚀 استبعاد الاختبارات المحجوبة (التي لم ينته وقتها) من حساب المتوسط لكي لا يخمن الطالب النتيجة!
       const gradedExams = eAttempts.filter((a: any) => a.status === 'graded' && !checkIsLocked(a.exams));
@@ -196,6 +208,54 @@ export default function StudentPerformancePage() {
           </div>
         </div>
       </div>
+
+      {/* 🚀 قسم عرض الأوسمة للطالب (يظهر فقط إذا كان لديه أوسمة) */}
+      {studentBadges.length > 0 && (
+        <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 p-8 sm:p-12 text-white shadow-2xl shadow-slate-900/20">
+          <div className="relative z-10 w-full">
+            <h3 className="text-lg sm:text-xl font-black text-amber-400 mb-6 flex items-center gap-3">
+              <Award className="w-6 h-6 sm:w-7 sm:h-7" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
+            </h3>
+            {/* Horizontal Scroll Container */}
+            <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
+              {studentBadges.map((badgeEntry, index) => (
+                <div 
+                  key={badgeEntry.id || index} 
+                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[22rem] sm:w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 group cursor-default"
+                >
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
+                    <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
+                    {badgeEntry.badge?.image_url ? (
+                      <Image 
+                        src={badgeEntry.badge.image_url} 
+                        alt={badgeEntry.badge.name} 
+                        fill 
+                        unoptimized 
+                        referrerPolicy="no-referrer" 
+                        className="object-contain drop-shadow-2xl relative z-10" 
+                      />
+                    ) : (
+                      <Award className="w-full h-full text-yellow-300 relative z-10 drop-shadow-lg p-2" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 text-right">
+                    <p className="text-base sm:text-lg font-black text-white truncate">{badgeEntry.badge?.name}</p>
+                    <p className="text-xs sm:text-sm font-bold text-indigo-200 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>
+                      {badgeEntry.reason || 'تقديراً للجهود والتميز'}
+                    </p>
+                    <p className="text-[10px] sm:text-xs font-bold text-white/50 mt-2 bg-black/20 w-fit px-2.5 py-1 rounded-lg border border-white/5">
+                      بتاريخ: {format(new Date(badgeEntry.granted_at), 'd MMMM yyyy', { locale: ar })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl pointer-events-none"></div>
+          <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/30 blur-3xl pointer-events-none"></div>
+        </div>
+      )}
 
       {/* Stats Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
