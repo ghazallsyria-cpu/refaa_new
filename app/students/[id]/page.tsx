@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react';
 import { 
   User, GraduationCap, Calendar, Clock, BookOpen, 
   FileText, CheckCircle2, XCircle, AlertCircle, 
-  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft, SearchX
+  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft, SearchX, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -13,6 +13,11 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+import Image from 'next/image';
+import GrantBadgeModal from '@/components/GrantBadgeModal';
+import { cn } from '@/lib/utils';
+import { useBadgesSystem } from '@/hooks/useBadgesSystem'; // 🚀 استيراد نظام الأوسمة
+import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد نافذة الحوار للتأكيد
 
 export default function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -20,16 +25,21 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   
   const router = useRouter();
   const { user, userRole } = useAuth();
+  const { revokeBadge } = useBadgesSystem(); // 🚀 جلب دالة سحب الوسام
   
   const [student, setStudent] = useState<any>(null);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [exams, setExams] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [stats, setStats] = useState({ attendanceRate: 0, examsAvg: 0, assignmentsAvg: 0 });
+  const [studentBadges, setStudentBadges] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'exams' | 'assignments'>('overview');
+  
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [badgeToRevoke, setBadgeToRevoke] = useState<{ id: string, name: string } | null>(null); // 🚀 حالة الوسام المراد حذفه
 
   const fetchStudentData = useCallback(async () => {
     if (!user || !userRole) return;
@@ -37,7 +47,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
     setFetchError(null);
 
     try {
-      // 1. جلب بيانات الطالب بمرونة (استخدام maybeSingle لتفادي الأخطاء الصارمة)
       const { data: studentData, error: studentErr } = await supabase
         .from('students')
         .select('*, users(full_name, avatar_url, email), sections(name, classes(name))')
@@ -51,14 +60,22 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       }
       setStudent(studentData);
 
-      // 2. تحديد المعلم الحالي (لعزل البيانات)
+      const { data: badgesData } = await supabase
+        .from('student_badges')
+        .select('*, badge:badges(*)')
+        .eq('student_id', studentId)
+        .order('granted_at', { ascending: false });
+
+      if (badgesData) {
+        setStudentBadges(badgesData);
+      }
+
       let currentTeacherId = null;
       if (userRole === 'teacher') {
         const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // 3. جلب سجل الغياب بذكاء
       let attendanceQuery = supabase
         .from('attendance_records')
         .select('*, subjects(name)')
@@ -71,7 +88,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       const { data: attendanceData } = await attendanceQuery;
       setAttendance(attendanceData || []);
 
-      // 4. جلب الاختبارات (بشكل ناعم لتجنب أعطال PostgREST)
       const { data: examsData } = await supabase
         .from('exam_attempts')
         .select('id, score, status, completed_at, exams(id, title, max_score, total_marks, teacher_id, subjects(name))')
@@ -79,14 +95,12 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         .eq('status', 'graded')
         .order('completed_at', { ascending: false });
 
-      // فلترة برمجية لبيانات المعلم فقط
       let finalExams = examsData || [];
       if (currentTeacherId) {
         finalExams = finalExams.filter((e: any) => e.exams?.teacher_id === currentTeacherId);
       }
       setExams(finalExams);
 
-      // 5. جلب الواجبات بذكاء
       const { data: assignmentsData } = await supabase
         .from('assignment_submissions')
         .select('id, grade, status, submitted_at, feedback, assignments(id, title, total_marks, teacher_id, subjects(name), assignment_questions(points))')
@@ -100,7 +114,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       }
       setAssignments(finalAssignments);
 
-      // 6. حساب الإحصائيات المنعزلة
       let attRate = 0;
       if (attendanceData && attendanceData.length > 0) {
         const presents = attendanceData.filter(a => a.status === 'present' || a.status === 'late').length;
@@ -143,6 +156,35 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
     fetchStudentData();
   }, [fetchStudentData]);
 
+  // 🚀 دالة تأكيد سحب الوسام
+  const confirmRevokeBadge = async () => {
+    if (!badgeToRevoke) return;
+    try {
+      const result = await revokeBadge(badgeToRevoke.id);
+      if (result.success) {
+        // تحديث القائمة محلياً لتجربة أسرع
+        setStudentBadges(prev => prev.filter(b => b.id !== badgeToRevoke.id));
+      } else {
+        alert(result.error || 'حدث خطأ أثناء سحب الوسام');
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setBadgeToRevoke(null); // إغلاق المودال
+    }
+  };
+
+  const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
+    if (!dateStr) return fallback;
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return fallback;
+      return format(date, formatStr, { locale: arSA });
+    } catch (e) {
+      return fallback;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -154,7 +196,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
     );
   }
 
-  // 🚀 واجهة الخطأ الذكية بدلاً من الطرد التلقائي
   if (fetchError || !student) {
     return (
       <div className="flex h-screen items-center justify-center p-6" dir="rtl">
@@ -181,14 +222,12 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-20 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8" dir="rtl">
       
-      {/* 🚀 Navigation Back */}
       <div className="pt-6">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للقائمة
         </button>
       </div>
 
-      {/* 🚀 Hero Section */}
       <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 p-8 sm:p-12 text-white shadow-2xl shadow-slate-900/20">
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-8 text-center md:text-right">
           
@@ -213,21 +252,87 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
               <span className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl text-sm font-bold backdrop-blur-md border border-white/10 shadow-inner">
                 <GraduationCap className="w-4 h-4 text-indigo-300" /> {className} - شعبة {sectionName}
               </span>
-              {/* Privacy Logic: Show National ID only to Admins */}
               {(userRole === 'admin' || userRole === 'management') && student.national_id && (
                 <span className="flex items-center gap-2 bg-rose-500/20 text-rose-100 px-4 py-2 rounded-xl text-sm font-bold backdrop-blur-md border border-rose-500/30 font-mono shadow-inner">
                   رقم مدني: {student.national_id}
                 </span>
               )}
             </div>
-          </div>
 
+            {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setIsBadgeModalOpen(true)}
+                className="mt-6 flex items-center justify-center sm:justify-start gap-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-6 py-3.5 rounded-2xl text-sm font-black shadow-xl shadow-amber-500/20 transition-all border border-amber-400/50 w-full sm:w-auto"
+              >
+                <Award className="w-5 h-5" />
+                تتويج الطالب بوسام تميز
+              </motion.button>
+            )}
+          </div>
         </div>
+
+        {/* عرض الأوسمة مع خيار الحذف */}
+        {studentBadges.length > 0 && (
+          <div className="relative z-10 mt-10 pt-6 border-t border-white/10 w-full">
+            <h3 className="text-sm sm:text-base font-bold text-indigo-200 mb-4 flex items-center gap-2 justify-center md:justify-start">
+              <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف: أوسمة التميز الحاصل عليها
+            </h3>
+            <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
+              {studentBadges.map((badgeEntry, index) => (
+                <div 
+                  key={badgeEntry.id || index} 
+                  className="flex-shrink-0 bg-white/5 backdrop-blur-md rounded-[2rem] p-5 border border-white/10 flex items-center gap-5 w-[22rem] sm:w-[24rem] hover:bg-white/10 transition-all duration-300 hover:shadow-2xl hover:shadow-white/5 group cursor-default relative overflow-hidden"
+                >
+                  {/* 🚀 زر الحذف المخفي يظهر عند المرور بالماوس لأصحاب الصلاحية */}
+                  {(userRole === 'admin' || userRole === 'management' || userRole === 'teacher') && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBadgeToRevoke({ id: badgeEntry.id, name: badgeEntry.badge?.name });
+                      }}
+                      className="absolute top-3 left-3 p-2 bg-rose-500/80 hover:bg-rose-600 text-white rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-md"
+                      title="سحب الوسام"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
+                    <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
+                    {badgeEntry.badge?.image_url ? (
+                      <Image 
+                        src={badgeEntry.badge.image_url} 
+                        alt={badgeEntry.badge.name} 
+                        fill 
+                        unoptimized 
+                        referrerPolicy="no-referrer" 
+                        className="object-contain drop-shadow-2xl relative z-10" 
+                      />
+                    ) : (
+                      <Award className="w-full h-full text-yellow-300 relative z-10 drop-shadow-lg p-2" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 text-right">
+                    <p className="text-base sm:text-lg font-black text-white truncate">{badgeEntry.badge?.name}</p>
+                    <p className="text-xs sm:text-sm font-bold text-indigo-200 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>
+                      {badgeEntry.reason || 'تقديراً للجهود والتميز'}
+                    </p>
+                    <p className="text-[10px] sm:text-xs font-bold text-white/50 mt-2 bg-black/20 w-fit px-2.5 py-1 rounded-lg border border-white/5">
+                      {format(new Date(badgeEntry.granted_at), 'd MMMM yyyy', { locale: arSA })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"></div>
       </div>
 
-      {/* 🚀 Stats Row (Contextual to Teacher or Admin) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-lg hover:border-emerald-200 transition-all group">
           <div className="h-14 w-14 shrink-0 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm border border-emerald-100">
@@ -260,7 +365,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
       
-      {/* Disclaimer for Teachers */}
       {userRole === 'teacher' && (
         <div className="flex items-center gap-3 bg-sky-50 text-sky-700 px-5 py-4 rounded-2xl text-xs sm:text-sm font-bold border border-sky-100 shadow-sm">
           <Activity className="w-6 h-6 shrink-0 animate-pulse" />
@@ -268,7 +372,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         </div>
       )}
 
-      {/* 🚀 Tabs Navigation */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide bg-white p-2 rounded-[2rem] shadow-sm border border-slate-100">
         {[
           { id: 'overview', label: 'نظرة عامة', icon: Activity },
@@ -296,11 +399,9 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         ))}
       </div>
 
-      {/* 🚀 Content Area */}
       <div className="bg-white/50 backdrop-blur-md rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
         <AnimatePresence mode="wait">
           
-          {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <motion.div key="overview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8 space-y-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -361,7 +462,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             </motion.div>
           )}
 
-          {/* TAB 2: ATTENDANCE */}
           {activeTab === 'attendance' && (
             <motion.div key="attendance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
               {attendance.length === 0 ? (
@@ -405,7 +505,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             </motion.div>
           )}
 
-          {/* TAB 3: EXAMS */}
           {activeTab === 'exams' && (
             <motion.div key="exams" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
               {exams.length === 0 ? (
@@ -448,7 +547,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             </motion.div>
           )}
 
-          {/* TAB 4: ASSIGNMENTS */}
           {activeTab === 'assignments' && (
             <motion.div key="assignments" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
               {assignments.length === 0 ? (
@@ -507,6 +605,40 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
         </AnimatePresence>
       </div>
+
+      {/* 🚀 استدعاء مكون نافذة منح الأوسمة */}
+      {student && (
+        <GrantBadgeModal
+          isOpen={isBadgeModalOpen}
+          onClose={() => setIsBadgeModalOpen(false)}
+          recipientId={student.id}
+          recipientName={student.users?.full_name || 'الطالب'}
+          granterId={user?.id || ''}
+          onSuccess={() => fetchStudentData()}
+        />
+      )}
+
+      {/* 🚀 نافذة تأكيد سحب الوسام */}
+      <Dialog.Root open={!!badgeToRevoke} onOpenChange={(open) => !open && setBadgeToRevoke(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100]" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-[101] w-[95vw] max-w-sm translate-x-[-50%] translate-y-[-50%] rounded-[3rem] bg-white p-8 text-center shadow-2xl" dir="rtl">
+            <Dialog.Description className="sr-only">تأكيد سحب الوسام</Dialog.Description>
+            <div className="mx-auto h-20 w-20 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6">
+              <Trash2 className="h-10 w-10" />
+            </div>
+            <Dialog.Title className="text-2xl font-black text-slate-900 mb-3">سحب وإلغاء الوسام؟</Dialog.Title>
+            <p className="text-slate-500 mb-8 font-medium">هل أنت متأكد من سحب وسام "<strong className="text-slate-800">{badgeToRevoke?.name}</strong>" من هذا الطالب؟ سيختفي هذا الوسام من ملفه ولن يظهر بعد الآن.</p>
+            <div className="flex flex-col gap-3">
+              <button onClick={confirmRevokeBadge} className="w-full py-4 rounded-2xl bg-rose-500 text-white font-black hover:bg-rose-600 shadow-lg shadow-rose-500/20">نعم، اسحب الوسام</button>
+              <Dialog.Close asChild>
+                <button className="w-full py-4 rounded-2xl bg-slate-50 text-slate-600 font-black hover:bg-slate-100">تراجع وإلغاء</button>
+              </Dialog.Close>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      
     </motion.div>
   );
 }
