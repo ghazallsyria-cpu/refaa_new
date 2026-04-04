@@ -371,13 +371,17 @@ export default function TeacherDashboard() {
             {/* Horizontal Scroll Container */}
             <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
               {myBadges.map((badgeEntry, index) => (
-                <div 
+           <div 
                   key={badgeEntry.id || index} 
-                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex items-center gap-4 w-72 hover:bg-white/20 transition-colors group cursor-default"
+                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 group cursor-default"
                 >
                   {/* 🚀 تكبير الحاوية إلى w-16 h-16 */}
                   {/* 🚀 تكبير الحاوية، جعلها دائرية، واستخدام object-cover لاقتصاص الحواف الزائدة برمجياً */}
-                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-300 bg-black/20 rounded-full border-2 border-indigo-300/50 shadow-inner overflow-hidden">
+               {/* 🚀 إعادة التنسيق الأصلي الجميل مع مضاعفة الحجم (w-24 h-24 للموبايل و w-28 h-28 للكمبيوتر) */}
+                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
+                    {/* تأثير التوهج الخلفي للوسام */}
+                    <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
+                    
                     {badgeEntry.badge?.image_url ? (
                       <Image 
                         src={badgeEntry.badge.image_url} 
@@ -385,10 +389,11 @@ export default function TeacherDashboard() {
                         fill 
                         unoptimized 
                         referrerPolicy="no-referrer" 
-                        className="object-cover scale-150 drop-shadow-xl" 
+                        // 🚀 عدنا لـ object-contain ليظهر الوسام كاملاً بدون اقتصاص مع إضافة ظل خفيف
+                        className="object-contain drop-shadow-2xl relative z-10" 
                       />
                     ) : (
-                      <Award className="w-full h-full text-yellow-300 p-3" />
+                      <Award className="w-full h-full text-yellow-300 relative z-10 drop-shadow-lg p-2" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
