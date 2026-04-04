@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, MapPin, Sparkles, ChevronLeft, Bug, LayoutGrid, Save } from 'lucide-react';
+import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
@@ -37,8 +37,7 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // للطالب: تحديد اليوم الافتراضي بناءً على يوم الأسبوع الحقيقي
-  const currentDayOfWeek = new Date().getDay() + 1; // الأحد = 1 في نظامنا
+  const currentDayOfWeek = new Date().getDay() + 1;
   const defaultTab = (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) ? currentDayOfWeek : 1;
   const [activeDayTab, setActiveDayTab] = useState<number>(defaultTab);
 
@@ -92,23 +91,10 @@ export default function SchedulePage() {
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
-  const availableSections = (viewType === 'teacher' && selectedId)
-    ? sections.filter(s => assignments.some(a => a.teacher_id === selectedId && a.section_id === s.id))
-    : sections;
-
-  const modalAvailableTeachers = (viewType === 'section' && selectedId)
-    ? teachers.filter(t => assignments.some(a => a.section_id === selectedId && a.teacher_id === t.id))
-    : (formData.section_id 
-        ? teachers.filter(t => assignments.some(a => a.section_id === formData.section_id && a.teacher_id === t.id))
-        : teachers);
-
-  const availableSubjects = (formData.section_id && formData.teacher_id)
-    ? subjects.filter(sub => assignments.some(a => 
-        a.section_id === formData.section_id && 
-        a.teacher_id === formData.teacher_id && 
-        a.subject_id === sub.id
-      ))
-    : [];
+  // 🚀 الحل الجذري: إتاحة جميع الخيارات بحرية مطلقة وإزالة القيود التي كانت تسبب فراغ القوائم وتعطل الحفظ
+  const availableSections = sections;
+  const modalAvailableTeachers = teachers;
+  const availableSubjects = subjects;
 
   useEffect(() => {
     fetchFilters();
@@ -126,8 +112,8 @@ export default function SchedulePage() {
       const conflicts = await checkConflicts(targetDay, targetPeriod, swappingFrom.teacher_id, swappingFrom.section_id, swappingFrom.id);
       
       const targetConflicts = conflicts.filter(c => 
-        c.id !== targetSlot?.id && 
-        (c.teacher_id === swappingFrom.teacher_id || c.section_id === swappingFrom.section_id)
+        String(c.id) !== String(targetSlot?.id) && 
+        (String(c.teacher_id) === String(swappingFrom.teacher_id) || String(c.section_id) === String(swappingFrom.section_id))
       );
 
       if (targetConflicts.length > 0) {
@@ -139,8 +125,8 @@ export default function SchedulePage() {
       if (targetSlot) {
         const sourceConflicts = await checkConflicts(sourceDay, sourcePeriod, targetSlot.teacher_id, targetSlot.section_id, targetSlot.id);
         const filteredSourceConflicts = sourceConflicts.filter(c => 
-          c.id !== swappingFrom.id && 
-          (c.teacher_id === targetSlot.teacher_id || c.section_id === targetSlot.section_id)
+          String(c.id) !== String(swappingFrom.id) && 
+          (String(c.teacher_id) === String(targetSlot.teacher_id) || String(c.section_id) === String(targetSlot.section_id))
         );
 
         if (filteredSourceConflicts.length > 0) {
@@ -171,7 +157,7 @@ export default function SchedulePage() {
 
   const handleAddSchedule = async () => {
     if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) {
-      alert('يرجى تعبئة جميع الحقول');
+      alert('يرجى تعبئة جميع الحقول المطلوبة (المعلم، الفصل، المادة).');
       return;
     }
     
@@ -181,21 +167,21 @@ export default function SchedulePage() {
       const conflicts = await checkConflicts(selectedSlot.day, selectedSlot.period, formData.teacher_id, formData.section_id, editingId || undefined);
 
       if (conflicts.length > 0) {
-        const tConflict = conflicts.find(c => c.teacher_id === formData.teacher_id);
+        const tConflict = conflicts.find(c => String(c.teacher_id) === String(formData.teacher_id));
         if (tConflict) {
           const section = safeObj(tConflict.sections);
           const subject = safeObj(tConflict.subjects);
           const className = safeObj(section?.classes)?.name;
-          alert(`تضارب: المعلم لديه حصة (${subject?.name}) مع فصل (${className} - ${section?.name}) في هذا الوقت.`);
+          alert(`تضارب: المعلم لديه حصة (${subject?.name || ''}) مع فصل (${className || ''} - ${section?.name || ''}) في هذا الوقت.`);
           return;
         }
         
-        const sConflict = conflicts.find(c => c.section_id === formData.section_id);
+        const sConflict = conflicts.find(c => String(c.section_id) === String(formData.section_id));
         if (sConflict) {
           const teacher = safeObj(sConflict.teachers);
           const subject = safeObj(sConflict.subjects);
           const teacherName = safeObj(teacher?.users)?.full_name;
-          alert(`تضارب: هذا الفصل لديه حصة (${subject?.name}) مع المعلم (${teacherName}) في هذا الوقت.`);
+          alert(`تضارب: هذا الفصل لديه حصة (${subject?.name || ''}) مع المعلم (${teacherName || ''}) في هذا الوقت.`);
           return;
         }
       }
@@ -269,15 +255,14 @@ export default function SchedulePage() {
   };
 
   // ==========================================
-  // 🚀 THE MASTERPIECE: STUDENT VIEW
+  // 🚀 STUDENT VIEW
   // ==========================================
   if (authRole === 'student') {
-    const currentSectionName = sections.find(s => s.id === selectedId)?.name || '';
-    const currentClassName = sections.find(s => s.id === selectedId)?.classes?.name || '';
+    const currentSectionName = sections.find(s => String(s.id) === String(selectedId))?.name || '';
+    const currentClassName = sections.find(s => String(s.id) === String(selectedId))?.classes?.name || '';
 
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
-        {/* 🚀 Hero Banner */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
             <div className="space-y-3">
@@ -294,7 +279,6 @@ export default function SchedulePage() {
               <Calendar className="h-12 w-12 sm:h-16 sm:w-16 text-white drop-shadow-md" />
             </div>
           </div>
-          {/* Decorative Background Elements */}
           <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
           <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl pointer-events-none"></div>
         </motion.div>
@@ -308,7 +292,6 @@ export default function SchedulePage() {
           </div>
         ) : (
           <>
-            {/* 🚀 Mobile View: Smart Tabs */}
             <div className="lg:hidden">
               <div className="flex overflow-x-auto gap-2 pb-4 scrollbar-hide snap-x">
                 {DAYS.map((day) => (
@@ -337,7 +320,7 @@ export default function SchedulePage() {
                     className="space-y-4"
                   >
                     {periods.map(p => {
-                      const slot = scheduleData.find(s => s.day_of_week === activeDayTab && s.period === p.period_number);
+                      const slot = scheduleData.find(s => String(s.day_of_week) === String(activeDayTab) && String(s.period) === String(p.period_number));
                       if (!slot) return null;
 
                       return (
@@ -373,7 +356,7 @@ export default function SchedulePage() {
                         </div>
                       );
                     })}
-                    {periods.every(p => !scheduleData.find(s => s.day_of_week === activeDayTab && s.period === p.period_number)) && (
+                    {periods.every(p => !scheduleData.find(s => String(s.day_of_week) === String(activeDayTab) && String(s.period) === String(p.period_number))) && (
                       <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-[2rem] border border-dashed border-slate-300">
                          <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                          <p className="font-bold text-slate-500 text-lg">يوم إجازة أو لا توجد حصص مجدولة!</p>
@@ -385,10 +368,8 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            {/* 🚀 Desktop View: The Majestic Grid */}
             <div className="hidden lg:block bg-white/80 backdrop-blur-xl rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 p-8 overflow-hidden">
               <div className="grid gap-4" style={{ gridTemplateColumns: `100px repeat(${periods.length}, minmax(0, 1fr))` }}>
-                {/* Header Row */}
                 <div className="h-16 flex items-center justify-center bg-slate-900 rounded-2xl shadow-inner">
                   <span className="text-xs font-black text-white uppercase tracking-widest">اليوم</span>
                 </div>
@@ -401,17 +382,19 @@ export default function SchedulePage() {
                   </div>
                 ))}
 
-                {/* Body Rows */}
                 {DAYS.map((day, idx) => (
                   <React.Fragment key={day.id}>
-                    {/* Day Pill */}
                     <div className={`font-black text-sm flex items-center justify-center rounded-2xl shadow-sm border ${day.id === currentDayOfWeek ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-100' : 'bg-white text-slate-700 border-slate-200'}`}>
                       {day.name}
                     </div>
                     
-                    {/* Slots */}
                     {periods.map((p, pIdx) => {
-                      const slot = scheduleData.find(s => s.day_of_week === day.id && s.period === p.period_number);
+                      const period = p.period_number;
+                      const slot = scheduleData.find(s => 
+                        String(s.day_of_week) === String(day.id) && 
+                        String(s.period) === String(period) && 
+                        (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
+                      );
                       
                       return (
                         <motion.div 
@@ -484,12 +467,11 @@ export default function SchedulePage() {
         }
       `}</style>
       
-      {/* Debug Info */}
       {isAdmin && authRole !== 'teacher' && (
         <div className="bg-amber-50 p-4 rounded-2xl text-sm text-amber-800 font-bold border border-amber-200 no-print flex items-center gap-3">
           <Bug className="w-5 h-5 shrink-0" />
           <div>
-            <p>وضع الإدارة مفعل. يمكنك تعديل ونسخ وتبديل الحصص بالسحب والنقر.</p>
+            <p>وضع الإدارة مفعل. يمكنك تعديل ونسخ وتبديل الحصص بالسحب والنقر بحرية تامة.</p>
           </div>
         </div>
       )}
@@ -512,7 +494,6 @@ export default function SchedulePage() {
         </button>
       </div>
 
-      {/* Swapping Indicator */}
       {isAdmin && authRole !== 'teacher' && swappingFrom && (
         <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between animate-pulse sticky top-4 z-40 no-print gap-4">
           <div className="flex items-center gap-4">
@@ -536,7 +517,6 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Copied Lesson Indicator */}
       {isAdmin && authRole !== 'teacher' && copiedLesson && (
         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between sticky top-4 z-40 no-print gap-4 mt-4">
           <div className="flex items-center gap-4">
@@ -560,7 +540,6 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Admin Controls */}
       {isAdmin && authRole !== 'teacher' && (
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 print:hidden flex flex-col lg:flex-row gap-6 items-center">
           <div className="flex rounded-xl shadow-sm bg-slate-100 p-1 w-full lg:w-auto shrink-0">
@@ -630,7 +609,6 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {/* Modal Add/Edit */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
@@ -651,7 +629,7 @@ export default function SchedulePage() {
                     <label className="block text-sm font-bold text-slate-700 mb-2">المعلم المحدد</label>
                     <div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-bold flex items-center gap-2">
                       <User className="w-4 h-4 text-slate-400" />
-                      {teachers.find(t => t.id === selectedId)?.users?.full_name}
+                      {teachers.find(t => String(t.id) === String(selectedId))?.users?.full_name}
                     </div>
                   </div>
                 ) : (
@@ -659,7 +637,7 @@ export default function SchedulePage() {
                     <label className="block text-sm font-bold text-slate-700 mb-2">الفصل المحدد</label>
                     <div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-bold flex items-center gap-2">
                       <Users className="w-4 h-4 text-slate-400" />
-                      {sections.find(s => s.id === selectedId)?.classes?.name} - {sections.find(s => s.id === selectedId)?.name}
+                      {sections.find(s => String(s.id) === String(selectedId))?.classes?.name} - {sections.find(s => String(s.id) === String(selectedId))?.name}
                     </div>
                   </div>
                 )}
@@ -672,7 +650,7 @@ export default function SchedulePage() {
                     <select 
                       className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" 
                       value={formData.section_id}
-                      onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}
+                      onChange={(e) => setFormData({ ...formData, section_id: e.target.value })}
                     >
                       <option value="">-- اختر الفصل --</option>
                       {availableSections.map(s => {
@@ -684,7 +662,7 @@ export default function SchedulePage() {
                     <select 
                       className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" 
                       value={formData.teacher_id}
-                      onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}
+                      onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}
                     >
                       <option value="">-- اختر المعلم --</option>
                       {modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}
@@ -704,7 +682,6 @@ export default function SchedulePage() {
                     {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                   {(!formData.section_id || !formData.teacher_id) && <p className="text-[10px] font-bold text-slate-400 mt-2 flex items-center gap-1"><Info className="w-3 h-3"/> يرجى اختيار {viewType === 'teacher' ? 'الفصل' : 'المعلم'} أولاً لفتح المواد</p>}
-                  {formData.section_id && formData.teacher_id && availableSubjects.length === 0 && <p className="text-[10px] font-bold text-amber-600 mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3"/> لا توجد مواد مسندة لهذا المعلم في هذا الفصل ضمن صفحة (تعيينات المعلمين)</p>}
                 </div>
               </div>
 
@@ -719,7 +696,6 @@ export default function SchedulePage() {
         )}
       </AnimatePresence>
 
-      {/* Admin/Teacher Table View Content */}
       {!selectedId && !showAllSchedules ? (
         <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-16 text-center print:hidden">
           <div className="mx-auto h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100">
@@ -754,7 +730,6 @@ export default function SchedulePage() {
             <div className="overflow-x-auto p-6 sm:p-8">
               <div className="min-w-[800px]">
                 <div className="grid gap-3" style={{ gridTemplateColumns: `100px repeat(${periods.length}, minmax(0, 1fr))` }}>
-                  {/* Header Row */}
                   <div className="h-16 flex items-center justify-center bg-slate-900 rounded-2xl shadow-inner">
                     <span className="text-xs font-black text-white uppercase tracking-widest">اليوم</span>
                   </div>
@@ -765,7 +740,6 @@ export default function SchedulePage() {
                     </div>
                   ))}
 
-                  {/* Body Rows */}
                   {loading ? (
                     <div className="col-span-full py-32 text-center flex flex-col items-center justify-center">
                       <div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -777,7 +751,7 @@ export default function SchedulePage() {
                         <div className="font-black text-sm flex items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-sm">
                           {day.name}
                         </div>
-                        {periods.map(p => {
+                        {periods.map((p, pIdx) => {
                           const period = p.period_number;
                           const slot = scheduleData.find(s => 
                             s.day_of_week === day.id && 
@@ -791,25 +765,30 @@ export default function SchedulePage() {
                             (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))
                           ) : [];
 
-                          const isSwappingFromThisSlot = swappingFrom && others.find(o => o.id === swappingFrom.id);
-                          const isCopiedFromThisSlot = copiedLesson && others.find(o => o.id === copiedLesson.id);
+                          const isSwappingFromThisSlot = swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id));
+                          const isCopiedFromThisSlot = copiedLesson && others.find(o => String(o.id) === String(copiedLesson.id));
                           const displaySlot = slot || (isSwappingFromThisSlot ? swappingFrom : (isCopiedFromThisSlot ? copiedLesson : others[0]));
 
                           return (
-                            <div key={`${day.id}-${period}`} className={`group p-3 sm:p-4 rounded-2xl min-h-[120px] flex flex-col items-center justify-center text-center transition-all relative overflow-hidden
-                              ${slot 
-                                ? 'bg-white border-2 border-indigo-500 shadow-md shadow-indigo-100 z-10' 
-                                : displaySlot 
-                                  ? 'bg-slate-50 border border-slate-200 text-slate-400' 
-                                  : 'bg-slate-50/30 border border-dashed border-slate-200 text-slate-300 hover:bg-slate-50'
-                              }
-                              ${isAdmin ? 'cursor-pointer hover:border-indigo-400 hover:shadow-lg' : ''} 
-                              ${swappingFrom?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-amber-400 bg-amber-50 z-20 scale-105 shadow-xl border-transparent' : ''} 
-                              ${copiedLesson?.id === displaySlot?.id && displaySlot ? 'ring-4 ring-emerald-400 bg-emerald-50 z-20 border-transparent' : ''}`}
+                            <motion.div 
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: (day.id * 0.1) + (pIdx * 0.05) }}
+                              key={`${day.id}-${p.id}`} 
+                              className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col items-center justify-center text-center transition-all group overflow-hidden
+                                ${slot 
+                                  ? 'bg-white border-2 border-indigo-500 shadow-md shadow-indigo-100 z-10' 
+                                  : displaySlot 
+                                    ? 'bg-slate-50 border border-slate-200 text-slate-400' 
+                                    : 'bg-slate-50/30 border border-dashed border-slate-200 text-slate-300 hover:bg-slate-50'
+                                }
+                                ${isAdmin ? 'cursor-pointer hover:border-indigo-400 hover:shadow-lg' : ''} 
+                                ${String(swappingFrom?.id) === String(displaySlot?.id) && displaySlot ? 'ring-4 ring-amber-400 bg-amber-50 z-20 scale-105 shadow-xl border-transparent' : ''} 
+                                ${String(copiedLesson?.id) === String(displaySlot?.id) && displaySlot ? 'ring-4 ring-emerald-400 bg-emerald-50 z-20 border-transparent' : ''}`}
                               onClick={() => {
                                 if (isAdmin) {
                                   if (swappingFrom) {
-                                    if (swappingFrom.id === displaySlot?.id) {
+                                    if (String(swappingFrom.id) === String(displaySlot?.id)) {
                                       setSwappingFrom(null);
                                     } else {
                                       handleSwap(day.id, period, displaySlot);
@@ -834,11 +813,9 @@ export default function SchedulePage() {
                                     {displaySlot.subjects?.name}
                                   </span>
                                   <div className={`text-[10px] font-bold px-2 py-1 rounded bg-slate-100 inline-block truncate max-w-full ${slot ? 'text-indigo-700 bg-indigo-50 border border-indigo-100' : 'text-slate-400'}`}>
-                                    {viewType === 'teacher' ? (
-                                      `${Array.isArray(displaySlot.sections?.classes) ? displaySlot.sections?.classes[0]?.name : displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}`
-                                    ) : (
-                                      displaySlot.teachers?.users?.full_name
-                                    )}
+                                    {viewType === 'teacher' 
+                                      ? `${Array.isArray(displaySlot.sections?.classes) ? displaySlot.sections?.classes[0]?.name : displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}`
+                                      : displaySlot.teachers?.users?.full_name}
                                   </div>
                                   
                                   {isAdmin && slot && (
@@ -885,7 +862,7 @@ export default function SchedulePage() {
                                   <span className="text-slate-300 text-[10px] font-bold tracking-widest uppercase group-hover:opacity-0 transition-opacity">فراغ</span>
                                 </div>
                               )}
-                            </div>
+                            </motion.div>
                           );
                         })}
                       </React.Fragment>
@@ -895,7 +872,6 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            {/* 🚀 Printable Minimal View */}
             <div className="hidden print:block p-4 font-cairo">
               <table className="print-table table-fixed w-full">
                 <thead>
@@ -911,8 +887,8 @@ export default function SchedulePage() {
                       {periods.map(p => {
                         const period = p.period_number;
                         const slot = scheduleData.find(s => 
-                          s.day_of_week === day.id && 
-                          s.period === period && 
+                          String(s.day_of_week) === String(day.id) && 
+                          String(s.period) === String(period) && 
                           (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
                         );
 
