@@ -61,19 +61,27 @@ export default function AdminBadgesPage() {
     setIsSubmitting(true);
     try {
       if (currentBadge.id) {
+        // === حالة التعديل ===
         const originalBadge = availableBadges.find(b => b.id === currentBadge.id);
         if (originalBadge?.image_url && originalBadge.image_url !== currentBadge.image_url) {
           await deleteFromCloudinary(originalBadge.image_url);
         }
-        await updateBadge(currentBadge.id, currentBadge);
+        
+        const result = await updateBadge(currentBadge.id, currentBadge);
+        if (!result.success) throw new Error(result.error); // 🚀 التقاط خطأ التعديل
+        
         showNotification('success', 'تم تحديث الوسام بنجاح');
       } else {
-        await createBadge(currentBadge);
+        // === حالة الإضافة الجديدة ===
+        const result = await createBadge(currentBadge);
+        if (!result.success) throw new Error(result.error); // 🚀 التقاط خطأ الإضافة
+        
         showNotification('success', 'تم إنشاء الوسام الجديد بنجاح');
       }
       setIsModalOpen(false);
     } catch (error: any) {
-      showNotification('error', error.message || 'حدث خطأ أثناء حفظ الوسام');
+      console.error("Database Error:", error);
+      showNotification('error', error.message || 'حدث خطأ أثناء حفظ الوسام في قاعدة البيانات');
     } finally {
       setIsSubmitting(false);
     }
@@ -86,10 +94,12 @@ export default function AdminBadgesPage() {
       if (badgeToDelete.image_url) {
         await deleteFromCloudinary(badgeToDelete.image_url);
       }
-      await deleteAdminBadge(badgeToDelete.id);
+      const result = await deleteAdminBadge(badgeToDelete.id);
+      if (!result.success) throw new Error(result.error);
+
       showNotification('success', 'تم حذف الوسام نهائياً');
-    } catch (error) {
-      showNotification('error', 'حدث خطأ أثناء الحذف');
+    } catch (error: any) {
+      showNotification('error', error.message || 'حدث خطأ أثناء الحذف');
     } finally {
       setBadgeToDelete(null);
     }
@@ -126,7 +136,7 @@ export default function AdminBadgesPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.9 }}
               className={`fixed top-10 left-1/2 z-[150] -translate-x-1/2 px-6 py-4 rounded-3xl shadow-2xl flex items-center gap-4 backdrop-blur-xl border ${
-                notification.type === 'success' ? 'bg-emerald-500/95 border-emerald-400 text-white' : 'bg-red-500/95 border-red-400 text-white'
+                notification.type === 'success' ? 'bg-emerald-500/95 border-emerald-400 text-white shadow-emerald-500/30' : 'bg-red-500/95 border-red-400 text-white shadow-red-500/30'
               }`}
             >
               <div className="h-10 w-10 rounded-2xl bg-white/20 flex items-center justify-center">
@@ -201,7 +211,6 @@ export default function AdminBadgesPage() {
                       
                       {badge.image_url ? (
                         <div className="relative h-32 w-32 z-10 group-hover:scale-110 transition-transform duration-500">
-                          {/* 🚀 السر هنا: إضافة unoptimized و referrerPolicy */}
                           <Image 
                             src={badge.image_url} 
                             alt={badge.name} 
