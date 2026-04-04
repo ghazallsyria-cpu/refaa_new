@@ -1,13 +1,14 @@
-"use client";
+/* eslint-disable react-hooks/exhaustive-deps */
+'use client';
 
 import { useState, useEffect, useCallback } from "react";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw
+  CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw, Zap
 } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase"; // 🚀 نحتاج Supabase لجلب أوقات الحصص
+import { supabase } from "@/lib/supabase"; 
 
 interface TeacherMonitor {
   id: string;
@@ -37,6 +38,13 @@ const MONTH_MAP: Record<number, string> = {
 // 🚀 تاريخ بدء النظام الإلزامي
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
+// 🚀 توحيد توقيت المدرسة لكسر فروق أجهزة المستخدمين
+const getSchoolTime = () => {
+  const d = new Date();
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  return new Date(utc + (3 * 3600000));
+};
+
 export default function TeachersMonitorPage() {
   const { loading: hookLoading, fetchTeachersMonitorData, sendTeacherWarning } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherMonitor[]>([]);
@@ -44,34 +52,27 @@ export default function TeachersMonitorPage() {
   const [search, setSearch] = useState("");
   const [sendingWarning, setSendingWarning] = useState<string | null>(null);
 
-  const [schoolTime, setSchoolTime] = useState<Date | null>(null);
   const [todayStr, setTodayStr] = useState("");
   const [todayName, setTodayName] = useState("");
   const [dateLabel, setDateLabel] = useState("");
 
-  const getSchoolTime = () => {
-    const d = new Date();
-    const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
-    return new Date(utc + (3 * 3600000));
-  };
-
   useEffect(() => {
     const st = getSchoolTime();
-    setSchoolTime(st);
     setTodayStr(st.toISOString().split("T")[0]);
     setTodayName(DAY_MAP[st.getDay()]);
     setDateLabel(`${st.getDate()} ${MONTH_MAP[st.getMonth()]} ${st.getFullYear()}`);
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!todayStr || !schoolTime) return;
+    if (!todayStr) return;
     setLoading(true);
     try {
-      const weekAgo = new Date(schoolTime);
+      const now = getSchoolTime();
+      const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
-      const jsDay = schoolTime.getDay();
+      const jsDay = now.getDay();
       const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
                     jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
@@ -80,38 +81,43 @@ export default function TeachersMonitorPage() {
 
       // 🚀 جلب أوقات الحصص المعتمدة من الإدارة لحساب التأخير الفعلي
       const { data: dbPeriods } = await supabase.from('periods').select('period_num, end_time');
-      const periodsMap: Record<number, string> = {};
-      dbPeriods?.forEach(p => { periodsMap[p.period_num] = p.end_time; });
+      const periodsMap: Record<string, string> = {};
+      dbPeriods?.forEach(p => { periodsMap[String(p.period_num)] = p.end_time; });
 
-      const isSystemActive = schoolTime >= SYSTEM_START_DATE;
+      const isSystemActive = now >= SYSTEM_START_DATE;
 
-      // 🚀 خوارزمية التدقيق المتقدمة والمربوطة بالوقت
+      // 🚀 خوارزمية التدقيق المتقدمة (تم تحصينها بـ String)
       const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
-        const teacherSchedules = allSchedules?.filter((s: any) => s.teacher_id === teacher.id && s.day_of_week === dbDay) || [];
+        // مطابقة الجدول باستخدام نصوص String لكسر تعارض الأنواع
+        const teacherSchedules = allSchedules?.filter((s: any) => 
+          String(s.teacher_id) === String(teacher.id) && 
+          String(s.day_of_week) === String(dbDay)
+        ) || [];
         const total = teacherSchedules.length;
 
-        const teacherAttendance = allAttendance?.filter((a: any) => a.teacher_id === teacher.id && a.date === todayStr) || [];
+        // مطابقة الحضور اليومي
+        const teacherAttendance = allAttendance?.filter((a: any) => {
+          const recDate = a.date ? String(a.date).split('T')[0] : '';
+          return String(a.teacher_id) === String(teacher.id) && recDate === todayStr;
+        }) || [];
         
-        // نستخدم رقم الحصة (period) للتأكد من تسجيلها
-        const recordedSet = new Set(teacherAttendance.map((a: any) => a.period));
+        const recordedSet = new Set(teacherAttendance.map((a: any) => String(a.period)));
         const recorded = recordedSet.size;
 
         let missed = 0;
 
-        // 🚀 حساب الحصص المتأخرة الحقيقية بناءً على الوقت
-        if (isSystemActive) {
+        // 🚀 حساب الحصص المتأخرة الحقيقية بناءً على توقيت "الآن"
+        if (isSystemActive && total > 0) {
           teacherSchedules.forEach((schedule: any) => {
-            const periodNum = schedule.period;
-            // إذا لم يسجل هذه الحصة
+            const periodNum = String(schedule.period);
             if (!recordedSet.has(periodNum)) {
               const endTimeStr = periodsMap[periodNum];
               if (endTimeStr) {
                 const [h, m] = endTimeStr.split(':').map(Number);
-                const periodEndTime = new Date(schoolTime);
+                const periodEndTime = new Date(now);
                 periodEndTime.setHours(h, m, 0, 0);
 
-                // إذا انتهى وقت الحصة ولم تُسجل
-                if (schoolTime > periodEndTime) {
+                if (now > periodEndTime) {
                   missed++;
                 }
               }
@@ -127,18 +133,16 @@ export default function TeachersMonitorPage() {
 
         let status: TeacherMonitor["status"] = "ممتاز";
         
-        // 🚀 تحديد الحالة
         if (!isSystemActive || total === 0) {
           status = "ممتاز";
         } else {
-          // إذا كان لديه حصص متأخرة، نضعه في الحالة الحرجة فوراً
           if (percent < 60 || missed > 0) status = "حرج";
           else if (percent < 85) status = "تحذير";
           else if (percent < 95) status = "جيد";
         }
 
-        const assignmentsCount = allAssignments?.filter((a: any) => a.teacher_id === teacher.id).length || 0;
-        const examsCount = allExams?.filter((e: any) => e.teacher_id === teacher.id).length || 0;
+        const assignmentsCount = allAssignments?.filter((a: any) => String(a.teacher_id) === String(teacher.id)).length || 0;
+        const examsCount = allExams?.filter((e: any) => String(e.teacher_id) === String(teacher.id)).length || 0;
 
         const teacherName = teacher.users 
           ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
@@ -155,7 +159,6 @@ export default function TeachersMonitorPage() {
         };
       });
 
-      // ترتيب المعلمين: من لديه أخطاء وتأخيرات يظهر أولاً
       results.sort((a, b) => {
         const statusOrder = { "حرج": 1, "تحذير": 2, "جيد": 3, "ممتاز": 4 };
         return statusOrder[a.status] - statusOrder[b.status];
@@ -167,7 +170,7 @@ export default function TeachersMonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, [schoolTime, todayStr, fetchTeachersMonitorData]);
+  }, [todayStr, fetchTeachersMonitorData]);
 
   useEffect(() => {
     if (todayStr) {
@@ -189,14 +192,15 @@ export default function TeachersMonitorPage() {
   };
 
   const statusColor = (status: string) => {
-    if (status === "ممتاز") return "bg-emerald-50 text-emerald-700 border-emerald-100 shadow-emerald-100";
-    if (status === "جيد") return "bg-blue-50 text-blue-700 border-blue-100 shadow-blue-100";
-    if (status === "تحذير") return "bg-amber-50 text-amber-700 border-amber-100 shadow-amber-100";
+    if (status === "ممتاز") return "bg-emerald-50 text-emerald-700 border-emerald-100 shadow-emerald-50";
+    if (status === "جيد") return "bg-blue-50 text-blue-700 border-blue-100 shadow-blue-50";
+    if (status === "تحذير") return "bg-amber-50 text-amber-700 border-amber-100 shadow-amber-50";
     return "bg-rose-50 text-rose-700 border-rose-100 shadow-rose-100 animate-pulse";
   };
 
   const filtered = teachers.filter(t =>
-    t.name.includes(search) || t.specialization.includes(search)
+    t.name.toLowerCase().includes(search.toLowerCase()) || 
+    t.specialization.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -257,7 +261,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على جدول المعلم اليومي والتوقيت الإداري</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت "الآن" في الحرم المدرسي</p>
             </div>
           </div>
           
@@ -290,99 +294,113 @@ export default function TeachersMonitorPage() {
                 <tr><td colSpan={6} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-4">
                     <div className="h-10 w-10 sm:h-12 sm:w-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto" />
-                    <p className="text-slate-400 font-bold text-sm sm:text-base">جاري معالجة البيانات...</p>
+                    <p className="text-slate-400 font-bold text-sm sm:text-base">جاري معالجة البيانات السحابية...</p>
                   </div>
                 </td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-4">
-                    <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 mx-auto">
-                      <Search className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
+                    <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 mx-auto text-slate-300">
+                      <SearchX className="h-6 w-6 sm:h-8 sm:w-8" />
                     </div>
                     <p className="text-slate-400 font-bold text-sm sm:text-lg">لا توجد نتائج مطابقة</p>
                   </div>
                 </td></tr>
-              ) : filtered.map((teacher, idx) => (
-                <motion.tr
-                  key={teacher.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.02 }}
-                  className={`group transition-all hover:bg-slate-50/50 ${teacher.status === "حرج" ? "bg-rose-50/20" : ""}`}
-                >
-                  <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
-                    <div className="flex items-center gap-3 sm:gap-4">
-                      <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-base sm:text-lg shadow-sm shrink-0">
-                        {teacher.name.charAt(0)}
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-black text-slate-900 tracking-tight text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{teacher.name}</span>
-                        <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate">{teacher.specialization}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 sm:py-4 text-center">
-                    {teacher.total === 0 ? (
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">لا حصص اليوم</span>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="flex items-center gap-1 text-sm sm:text-base font-black">
-                          <span className={teacher.recorded === teacher.total ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span>
-                          <span className="text-slate-300">/</span>
-                          <span className="text-slate-700">{teacher.total}</span>
-                        </div>
-                        {teacher.missed > 0 && (
-                          <span className="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-0.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                            متأخر عن {teacher.missed} حصة
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 sm:py-4 text-center hidden sm:table-cell">
-                    <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">
-                      {teacher.assignmentsCount}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 sm:py-4 text-center hidden md:table-cell">
-                    <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">
-                      {teacher.examsCount}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 sm:py-4 text-center">
-                    <span className={`inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black border shadow-sm ${statusColor(teacher.status)}`}>
-                      {teacher.status} {teacher.total > 0 ? `(${teacher.percent}%)` : ''}
-                    </span>
-                    {teacher.lastRecorded && (
-                      <div className="text-[8px] sm:text-[9px] font-bold text-slate-400 mt-1 flex items-center justify-center gap-1">
-                        <Clock className="w-2.5 h-2.5" /> آخر رصد: {new Date(teacher.lastRecorded).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-3 sm:py-4 text-center">
-                    <button
-                      onClick={() => sendWarning(teacher.id)}
-                      disabled={sendingWarning === teacher.id || teacher.status === "ممتاز" || teacher.total === 0 || teacher.status === "جيد"}
-                      className={`inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 ${
-                        teacher.status === "ممتاز" || teacher.total === 0 || teacher.status === "جيد"
-                          ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed"
-                          : "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white border border-rose-200 shadow-sm"
-                      }`}
+              ) : (
+                filtered.map((teacher, idx) => {
+                  const hasAlert = teacher.status === "حرج" || teacher.status === "تحذير";
+                  return (
+                    <motion.tr
+                      key={teacher.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.02 }}
+                      className={`group transition-all hover:bg-slate-50/50 ${teacher.status === "حرج" ? "bg-rose-50/10" : ""}`}
                     >
-                      {sendingWarning === teacher.id ? (
-                        <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <Send className="h-3.5 w-3.5" />
-                      )}
-                      تنبيه آلي
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
+                      <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-black text-base sm:text-lg shadow-sm shrink-0">
+                            {teacher.name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-black text-slate-900 tracking-tight text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{teacher.name}</span>
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate">{teacher.specialization}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center">
+                        {teacher.total === 0 ? (
+                          <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">لا حصص اليوم</span>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center">
+                            <div className="flex items-center gap-1 text-sm sm:text-base font-black">
+                              <span className={teacher.recorded === teacher.total ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span>
+                              <span className="text-slate-300">/</span>
+                              <span className="text-slate-700">{teacher.total}</span>
+                            </div>
+                            {teacher.missed > 0 && (
+                              <span className="text-[8px] sm:text-[9px] font-bold text-rose-500 mt-0.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 flex items-center gap-1">
+                                <Zap className="w-2.5 h-2.5" /> تأخر عن {teacher.missed}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center hidden sm:table-cell">
+                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">
+                          {teacher.assignmentsCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center hidden md:table-cell">
+                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-slate-50 text-slate-600 font-black text-xs sm:text-sm border border-slate-200">
+                          {teacher.examsCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 sm:py-4 text-center">
+                        <span className={`inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black border shadow-sm ${statusColor(teacher.status)}`}>
+                          {teacher.status} {teacher.total > 0 ? `(${teacher.percent}%)` : ''}
+                        </span>
+                        {teacher.lastRecorded && (
+                          <div className="text-[8px] sm:text-[9px] font-bold text-slate-400 mt-1 flex items-center justify-center gap-1">
+                            <Clock className="w-2.5 h-2.5" /> آخر رصد: {new Date(teacher.lastRecorded).toLocaleTimeString("ar-EG", { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 sm:py-4 text-center">
+                        <button
+                          onClick={() => sendWarning(teacher.id)}
+                          disabled={sendingWarning === teacher.id || !hasAlert || teacher.total === 0}
+                          className={`inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black transition-all active:scale-95 ${
+                            !hasAlert || teacher.total === 0
+                              ? "bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed"
+                              : "bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white border border-rose-200 shadow-sm"
+                          }`}
+                        >
+                          {sendingWarning === teacher.id ? (
+                            <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5" />
+                          )}
+                          تنبيه آلي
+                        </button>
+                      </td>
+                    </motion.tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// أيقونة مفقودة من المكون
+function SearchX({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+    </svg>
   );
 }
