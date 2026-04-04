@@ -6,10 +6,11 @@ import {
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
-  AlertTriangle, ShieldAlert, HeartHandshake // 🚀 أضفنا HeartHandshake لشكر المعلم
+  AlertTriangle, ShieldAlert, HeartHandshake, Award // 🚀 تمت إضافة Award هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image'; // 🚀 تمت إضافة استيراد الصور
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -29,7 +30,8 @@ export default function TeacherDashboard() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]); // حالة الطلاب المنذرين
-  
+  const [myBadges, setMyBadges] = useState<any[]>([]); // 🚀 حالة أوسمة المعلم
+
   // 🚀 حالات المراقب الذكي للمعلم
   const [attendanceStatus, setAttendanceStatus] = useState<{
     isActive: boolean;
@@ -115,6 +117,19 @@ export default function TeacherDashboard() {
         }
 
         if (data.teacher?.id) {
+            // ==========================================
+            // 0️⃣ جلب الأوسمة الخاصة بالمعلم بذكاء
+            // ==========================================
+            const { data: badgesData } = await supabase
+              .from('student_badges')
+              .select('*, badge:badges(*)')
+              .eq('student_id', data.teacher.id) // نستخدم id المعلم هنا
+              .order('granted_at', { ascending: false });
+            
+            if (badgesData) {
+              setMyBadges(badgesData);
+            }
+
             // ==========================================
             // 1️⃣ جلب الطلاب المنذرين (تجاوزوا 5 حصص)
             // ==========================================
@@ -346,9 +361,48 @@ export default function TeacherDashboard() {
           </div>
         </div>
 
-        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl mix-blend-overlay animate-pulse"></div>
-        <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay"></div>
-        <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay"></div>
+        {/* 🚀 قسم عرض الأوسمة الذكي (لا يفسد التصميم مهما زاد عدد الأوسمة) */}
+        {myBadges.length > 0 && (
+          <div className="relative z-10 mt-10 pt-6 border-t border-white/20 w-full">
+            <h3 className="text-sm font-bold text-indigo-100 mb-4 flex items-center gap-2">
+              <Award className="w-5 h-5 text-yellow-300" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
+            </h3>
+            {/* Horizontal Scroll Container */}
+            <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+              {myBadges.map((badgeEntry, index) => (
+                <div 
+                  key={badgeEntry.id || index} 
+                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-3 border border-white/20 flex items-center gap-3 w-64 hover:bg-white/20 transition-colors group cursor-default"
+                >
+                  <div className="relative w-12 h-12 shrink-0 group-hover:scale-110 transition-transform duration-300">
+                    {badgeEntry.badge?.image_url ? (
+                      <Image 
+                        src={badgeEntry.badge.image_url} 
+                        alt={badgeEntry.badge.name} 
+                        fill 
+                        unoptimized 
+                        referrerPolicy="no-referrer" 
+                        className="object-contain drop-shadow-md" 
+                      />
+                    ) : (
+                      <Award className="w-full h-full text-yellow-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-white truncate">{badgeEntry.badge?.name}</p>
+                    <p className="text-[10px] font-bold text-indigo-200 truncate mt-0.5" title={badgeEntry.reason}>
+                      {badgeEntry.reason || 'تقديراً للجهود والتميز'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl mix-blend-overlay animate-pulse pointer-events-none"></div>
+        <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay pointer-events-none"></div>
+        <div className="absolute right-1/3 top-1/4 h-32 w-32 rounded-full bg-yellow-300/10 blur-2xl mix-blend-overlay pointer-events-none"></div>
       </div>
 
       {/* 🚀 نظام الإنذار المبكر للمعلم (The Danger Zone) للطلاب */}
