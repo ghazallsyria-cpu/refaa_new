@@ -376,7 +376,8 @@ export default function TeacherDashboard() {
                   className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex items-center gap-4 w-72 hover:bg-white/20 transition-colors group cursor-default"
                 >
                   {/* 🚀 تكبير الحاوية إلى w-16 h-16 */}
-                  <div className="relative w-16 h-16 shrink-0 group-hover:scale-110 transition-transform duration-300 bg-white/5 rounded-2xl p-1 border border-white/10">
+                  {/* 🚀 تكبير الحاوية، جعلها دائرية، واستخدام object-cover لاقتصاص الحواف الزائدة برمجياً */}
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-300 bg-black/20 rounded-full border-2 border-indigo-300/50 shadow-inner overflow-hidden">
                     {badgeEntry.badge?.image_url ? (
                       <Image 
                         src={badgeEntry.badge.image_url} 
@@ -384,10 +385,10 @@ export default function TeacherDashboard() {
                         fill 
                         unoptimized 
                         referrerPolicy="no-referrer" 
-                        className="object-contain drop-shadow-xl" 
+                        className="object-cover scale-150 drop-shadow-xl" 
                       />
                     ) : (
-                      <Award className="w-full h-full text-yellow-300" />
+                      <Award className="w-full h-full text-yellow-300 p-3" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
