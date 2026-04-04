@@ -3,13 +3,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Plus, Search, Filter, Edit, Trash2, X, Key, BookOpen, AlertCircle, 
-  Users, GraduationCap, Briefcase, Save, Folder, ChevronLeft, School, Layers, Zap
+  Users, GraduationCap, Briefcase, Save, Folder, ChevronLeft, School, Layers, Zap, Award
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
 import { useTeacherAssignmentsSystem } from '@/hooks/useTeacherAssignmentsSystem';
+import { useAuth } from '@/context/auth-context';
+import GrantBadgeModal from '@/components/GrantBadgeModal';
 
-// 🚀 الخوارزمية الذكية لتحديد مرحلة المعلم بناءً على الفصول التي يدرسها
+// الخوارزمية الذكية لتحديد مرحلة المعلم بناءً على الفصول التي يدرسها
 const getTeacherStageInfo = (teacher: any) => {
   if (!teacher.teacher_sections || teacher.teacher_sections.length === 0) {
     return { type: 'unassigned', label: 'غير معين', color: 'slate', icon: AlertCircle };
@@ -36,6 +38,7 @@ const getTeacherStageInfo = (teacher: any) => {
 };
 
 export default function TeachersPage() {
+  const { user } = useAuth(); // 🚀 جلب هوية المدير
   const {
     teachers,
     sections,
@@ -62,12 +65,17 @@ export default function TeachersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('الكل');
   
-  // 🚀 فلتر المرحلة الجديد
+  // فلتر المرحلة الجديد
   const [stageFilter, setStageFilter] = useState<'all' | 'middle' | 'high' | 'both' | 'unassigned'>('all');
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<any>(null);
+  
+  // 🚀 حالات نافذة الأوسمة
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+  const [teacherForBadge, setTeacherForBadge] = useState<{id: string, name: string} | null>(null);
+
   const [addForm, setAddForm] = useState({
     full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: ''
   });
@@ -133,6 +141,15 @@ export default function TeachersPage() {
       zoom_link: teacher.zoom_link || ''
     });
     setShowEditModal(true);
+  };
+
+  // 🚀 دالة فتح نافذة الأوسمة
+  const handleGrantBadgeClick = (teacher: any) => {
+    setTeacherForBadge({
+      id: teacher.id,
+      name: teacher.users?.full_name || 'معلم غير معروف'
+    });
+    setIsBadgeModalOpen(true);
   };
 
   const [submittingEdit, setSubmittingEdit] = useState(false);
@@ -258,7 +275,7 @@ export default function TeachersPage() {
     'الكل', ...defaultSpecializations, ...teachers.map(t => t.specialization).filter(Boolean)
   ])) as string[];
 
-  // 🚀 تطبيق الفلترة المركبة (بحث + تخصص + مرحلة)
+  // تطبيق الفلترة المركبة (بحث + تخصص + مرحلة)
   const filteredTeachers = useMemo(() => {
     return teachers.filter(teacher => {
       const stageInfo = getTeacherStageInfo(teacher);
@@ -332,7 +349,6 @@ export default function TeachersPage() {
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white/80 backdrop-blur-xl p-4 sm:p-6 lg:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 sticky top-24 z-30 space-y-6">
         
-        {/* 🚀 المرحلة Tabs (Smart Stage Filters) */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {[
             { id: 'all', label: 'جميع المراحل', icon: Users },
@@ -393,7 +409,6 @@ export default function TeachersPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {allSpecializations.map((spec, idx) => {
             const count = filteredTeachers.filter(t => (t.specialization || 'غير محدد') === spec).length;
-            // إخفاء المجلد إذا كان فارغاً بعد الفلترة (اختياري، يفضل إظهاره كفارغ)
             return (
               <motion.div
                 key={spec}
@@ -422,7 +437,6 @@ export default function TeachersPage() {
         </div>
       ) : (
         <div className="bg-white border border-slate-200 overflow-hidden rounded-[3rem] shadow-sm">
-          {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/80">
@@ -509,6 +523,8 @@ export default function TeachersPage() {
                       </td>
                       <td className="relative whitespace-nowrap py-6 pl-10 pr-4 text-left">
                         <div className="flex items-center justify-end gap-2 transition-all opacity-0 group-hover:opacity-100">
+                          {/* 🚀 زر منح الوسام للمعلم مضاف هنا */}
+                          <button onClick={(e) => { e.stopPropagation(); handleGrantBadgeClick(teacher); }} className="p-2.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all shadow-sm bg-white border border-slate-200" title="منح وسام"><Award className="h-4 w-4" /></button>
                           <button onClick={(e) => { e.stopPropagation(); handleAssignmentClick(teacher); }} className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm bg-white border border-slate-200" title="تعيين الفصول والمواد"><BookOpen className="h-4 w-4" /></button>
                           <button onClick={(e) => { e.stopPropagation(); handleResetPasswordClick(teacher); }} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-200" title="إعادة تعيين كلمة المرور"><Key className="h-4 w-4" /></button>
                           <button onClick={(e) => { e.stopPropagation(); handleEditClick(teacher); }} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-200" title="تعديل"><Edit className="h-4 w-4" /></button>
@@ -523,7 +539,6 @@ export default function TeachersPage() {
             </table>
           </div>
 
-          {/* Mobile Card View */}
           <div className="md:hidden p-4 sm:p-6 grid gap-4 sm:gap-6 bg-slate-50/50">
             {isDataLoading ? (
               <div className="py-20 text-center"><div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><span className="text-sm font-bold text-slate-400">جاري التحميل...</span></div>
@@ -562,6 +577,8 @@ export default function TeachersPage() {
                   </div>
 
                   <div className="flex gap-2 relative z-10 pt-4 border-t border-slate-100">
+                    {/* 🚀 زر منح الوسام للموبايل مضاف هنا */}
+                    <button onClick={() => handleGrantBadgeClick(teacher)} className="p-3 rounded-xl bg-amber-50 text-amber-700 text-xs font-black hover:bg-amber-500 hover:text-white border border-amber-200 transition-all flex items-center justify-center gap-1.5" title="منح وسام"><Award className="h-4 w-4" /></button>
                     <button onClick={() => handleAssignmentClick(teacher)} className="flex-1 py-3 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-black hover:bg-emerald-500 hover:text-white border border-emerald-200 transition-all flex items-center justify-center gap-1.5"><BookOpen className="h-4 w-4" /> تعيين</button>
                     <button onClick={() => handleEditClick(teacher)} className="p-3 text-slate-500 hover:text-indigo-600 bg-slate-50 rounded-xl transition-all border border-slate-200"><Edit className="h-4 w-4" /></button>
                     <button onClick={() => handleResetPasswordClick(teacher)} className="p-3 text-slate-500 hover:text-indigo-600 bg-slate-50 rounded-xl transition-all border border-slate-200"><Key className="h-4 w-4" /></button>
@@ -575,7 +592,6 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* 🚀 النوافذ المنبثقة (Modals) احتفظت بها كما هي لضمان عدم تعطل الوظائف السابقة */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -777,37 +793,36 @@ export default function TeachersPage() {
           </div>
         </div>
       )}
+
       {showPasswordResetModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setShowPasswordResetModal(false)}></div>
-            <div className="relative transform overflow-hidden rounded-[2.5rem] bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-slate-100">
-              <div className="bg-white px-6 sm:px-10 pb-8 pt-8 sm:pt-10">
-                <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center"><Key className="h-6 w-6"/></div>
-                    <div>
-                      <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">إعادة تعيين كلمة المرور</h3>
-                      <p className="text-xs font-bold text-slate-500 mt-1">إجبار المعلم على تسجيل دخول جديد</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setShowPasswordResetModal(false)} className="p-2 text-slate-400 hover:text-rose-500 rounded-xl hover:bg-rose-50 transition-all"><X className="h-6 w-6" /></button>
-                </div>
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest pl-2">كلمة المرور الجديدة</label>
-                    <input type="text" value={resetPasswordForm.newPassword} onChange={(e) => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-amber-500 sm:text-sm transition-all font-black text-center tracking-[0.3em] outline-none" placeholder="أدخل كلمة المرور..." />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-slate-50/80 px-6 sm:px-10 py-6 border-t border-slate-100 flex flex-col sm:flex-row-reverse gap-3">
-                <button type="button" onClick={handleResetPasswordSubmit} className="inline-flex w-full justify-center items-center rounded-2xl bg-amber-500 px-8 py-4 text-sm font-black text-white shadow-lg shadow-amber-200 hover:bg-amber-600 transition-all active:scale-95 sm:w-auto">تأكيد وتغيير</button>
-                <button type="button" onClick={() => setShowPasswordResetModal(false)} className="inline-flex w-full justify-center items-center rounded-2xl bg-white px-8 py-4 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 sm:w-auto transition-all">إلغاء</button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden my-8 p-8 text-center">
+            <div className="mx-auto w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Key className="w-8 h-8"/></div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2">تغيير كلمة المرور</h3>
+            <p className="text-sm font-bold text-slate-500 mb-6">أدخل كلمة المرور الجديدة للطالب في المربع أدناه.</p>
+            <input type="text" placeholder="كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none mb-6 text-center tracking-widest" />
+            <div className="flex gap-3">
+              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl hover:bg-indigo-700 transition-colors">حفظ</button>
+              <button onClick={() => setShowPasswordResetModal(false)} className="flex-1 bg-slate-100 text-slate-700 font-black py-3 rounded-xl hover:bg-slate-200 transition-colors">إلغاء</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* 🚀 استدعاء مكون نافذة منح الأوسمة الجديد أسفل الصفحة */}
+      {teacherForBadge && (
+        <GrantBadgeModal
+          isOpen={isBadgeModalOpen}
+          onClose={() => {
+            setIsBadgeModalOpen(false);
+            setTeacherForBadge(null);
+          }}
+          recipientId={teacherForBadge.id}
+          recipientName={teacherForBadge.name}
+          granterId={user?.id || 'admin'} 
+        />
+      )}
+
     </div>
   );
 }
