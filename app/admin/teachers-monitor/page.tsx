@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-'use client';
+"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
@@ -35,10 +34,8 @@ const MONTH_MAP: Record<number, string> = {
   8: "سبتمبر", 9: "أكتوبر", 10: "نوفمبر", 11: "ديسمبر"
 };
 
-// 🚀 تاريخ بدء النظام الإلزامي
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
-// 🚀 توحيد توقيت المدرسة لكسر فروق أجهزة المستخدمين
 const getSchoolTime = () => {
   const d = new Date();
   const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
@@ -73,32 +70,31 @@ export default function TeachersMonitorPage() {
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
       const jsDay = now.getDay();
-      const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
-                    jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+      // 🚀 الإصلاح 1: التوافق مع العطلة والتجربة المفتوحة
+      const dbDay = jsDay + 1;
 
       const data = await fetchTeachersMonitorData(todayStr, dbDay, weekAgoStr);
       const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
-      // 🚀 جلب أوقات الحصص المعتمدة من الإدارة لحساب التأخير الفعلي
-      const { data: dbPeriods } = await supabase.from('periods').select('period_num, end_time');
+      // 🚀 الإصلاح 2: استهداف الجدول (class_periods)
+      const { data: dbPeriods } = await supabase.from('class_periods').select('period_number, end_time');
       const periodsMap: Record<string, string> = {};
-      dbPeriods?.forEach(p => { periodsMap[String(p.period_num)] = p.end_time; });
+      dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
 
       const isSystemActive = now >= SYSTEM_START_DATE;
 
-      // 🚀 خوارزمية التدقيق المتقدمة (تم تحصينها بـ String)
       const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
-        // مطابقة الجدول باستخدام نصوص String لكسر تعارض الأنواع
         const teacherSchedules = allSchedules?.filter((s: any) => 
           String(s.teacher_id) === String(teacher.id) && 
           String(s.day_of_week) === String(dbDay)
         ) || [];
         const total = teacherSchedules.length;
 
-        // مطابقة الحضور اليومي
+        // 🚀 الإصلاح 3: التأكد من سحب الحضور للمعلم الصحيح بطريقة آمنة
         const teacherAttendance = allAttendance?.filter((a: any) => {
           const recDate = a.date ? String(a.date).split('T')[0] : '';
-          return String(a.teacher_id) === String(teacher.id) && recDate === todayStr;
+          const tId = a.teacher_id || a.teachers?.id || a.teacher?.id;
+          return String(tId) === String(teacher.id) && recDate === todayStr;
         }) || [];
         
         const recordedSet = new Set(teacherAttendance.map((a: any) => String(a.period)));
@@ -106,7 +102,6 @@ export default function TeachersMonitorPage() {
 
         let missed = 0;
 
-        // 🚀 حساب الحصص المتأخرة الحقيقية بناءً على توقيت "الآن"
         if (isSystemActive && total > 0) {
           teacherSchedules.forEach((schedule: any) => {
             const periodNum = String(schedule.period);
@@ -261,9 +256,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">
-  يتم تحديث البيانات بناءً على توقيت &quot;الآن&quot; في الحرم المدرسي
-</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت "الآن" في الحرم المدرسي</p>
             </div>
           </div>
           
@@ -398,7 +391,6 @@ export default function TeachersMonitorPage() {
   );
 }
 
-// أيقونة مفقودة من المكون
 function SearchX({ className }: { className?: string }) {
   return (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
