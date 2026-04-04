@@ -1,11 +1,14 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck, Zap, Info
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
+import Link from "next/link";
 
 interface TeacherReport {
   id: string;
@@ -40,11 +43,8 @@ const getSchoolTime = () => {
   return new Date(utc + (3 * 3600000));
 };
 
-const getDbDay = (jsDay: number) => {
-  return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
-};
-
 export default function TeachersReportPage() {
+  const { loading: hookLoading, fetchTeachersReportData } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState<"day" | "week">("day");
@@ -74,21 +74,21 @@ export default function TeachersReportPage() {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = getDbDay(now.getDay());
+      const currentDbDay = now.getDay() + 1; // 1=الأحد، 7=السبت
 
-      // 🚀 تجاوز كل الـ Hooks وجلب البيانات مباشرة بشكل فولاذي لمنع أي أخطاء من وسائط أخرى
+      // 🚀 سحب البيانات بشكل قاطع ومباشر لضمان الموثوقية
       const [
         { data: teachersDB },
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('teachers').select('id, specialization, national_id, users(full_name)'),
-        supabase.from('schedules').select('teacher_id, day_of_week, period'),
+        supabase.from('teachers').select('id, user_id, specialization, national_id, users(full_name)'),
+        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
         supabase.from('class_periods').select('period_number, end_time'),
         reportType === "day" 
-          ? supabase.from('attendance_records').select('teacher_id, date, period, created_at').eq('date', todayStr)
-          : supabase.from('attendance_records').select('teacher_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr)
+          ? supabase.from('attendance_records').select('teacher_id, section_id, date, period, created_at').eq('date', todayStr)
+          : supabase.from('attendance_records').select('teacher_id, section_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr)
       ]);
 
       const periodsMap: Record<string, string> = {};
@@ -96,7 +96,7 @@ export default function TeachersReportPage() {
 
       const isSystemActive = now >= SYSTEM_START_DATE;
 
-      // 🚀 خوارزمية الرصد الزمني المتقدمة (Rolling Time Algorithm)
+      // 🚀 خوارزمية الرصد المنيعة بالاعتماد على الفصول
       const results: TeacherReport[] = (teachersDB || []).map((teacher: any) => {
         const daysToLookBack = reportType === "day" ? 1 : 7;
         let expectedTotal = 0;
@@ -104,22 +104,20 @@ export default function TeachersReportPage() {
         let actualMissed = 0;
         let lastRecorded: string | null = null;
 
-        // المرور على الأيام السابقة لحساب ما تم وما لم يتم
         for (let i = 0; i < daysToLookBack; i++) {
           const d = new Date(now);
           d.setDate(d.getDate() - i);
           const dStr = d.toISOString().split('T')[0];
-          const dDay = getDbDay(d.getDay());
+          const dDay = d.getDay() + 1;
 
-          // إذا كان يوم عمل
-          if (dDay >= 1 && dDay <= 5) {
+          if (dDay >= 1 && dDay <= 5) { // أيام العمل فقط
             const daySchedules = schedulesDB?.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay)) || [];
             
             daySchedules.forEach(sch => {
+              expectedTotal++;
               let isPassed = false;
               
               if (dStr === todayStr) {
-                // حصة اليوم: نحسبها فقط إذا تجاوزنا وقت انتهائها
                 const endTimeStr = periodsMap[String(sch.period)];
                 if (endTimeStr) {
                   const [h, m] = endTimeStr.split(':').map(Number);
@@ -128,15 +126,13 @@ export default function TeachersReportPage() {
                   if (now > pTime) isPassed = true;
                 }
               } else {
-                // حصة سابقة (أمس وما قبله): بالتأكيد انتهت
                 isPassed = true;
               }
 
-              if (isPassed && isSystemActive) {
-                expectedTotal++;
-                // نبحث إذا قام المدرس بالرصد في هذه الحصة
-                const hasRecord = attendanceDB?.find(a => 
-                  String(a.teacher_id) === String(teacher.id) && 
+              if (isSystemActive) {
+                // 🚀 التحقق برقم الفصل والحصة لتخطي تعارض الـ ID
+                const hasRecord = attendanceDB?.find((a: any) => 
+                  String(a.section_id) === String(sch.section_id) && 
                   String(a.date).split('T')[0] === dStr && 
                   String(a.period) === String(sch.period)
                 );
@@ -144,7 +140,7 @@ export default function TeachersReportPage() {
                 if (hasRecord) {
                   actualRecorded++;
                   if (!lastRecorded || hasRecord.created_at > lastRecorded) lastRecorded = hasRecord.created_at;
-                } else {
+                } else if (isPassed) {
                   actualMissed++;
                 }
               }
@@ -152,18 +148,15 @@ export default function TeachersReportPage() {
           }
         }
 
-        // الإجمالي المعروض للمدير (إما حصص اليوم الكاملة أو حصص الأسبوع الكاملة)
-        const standardTotal = reportType === 'day' 
-          ? (schedulesDB?.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay)).length || 0)
-          : (schedulesDB?.filter(s => String(s.teacher_id) === String(teacher.id)).length || 0);
-
         let percent = expectedTotal > 0 ? Math.round((actualRecorded / expectedTotal) * 100) : 100;
         if (!isSystemActive) percent = 100;
 
         let status: "ممتاز" | "جيد" | "تحذير" | "حرج" = "ممتاز";
-        
-        if (!isSystemActive || standardTotal === 0) {
+        let notes = "";
+
+        if (!isSystemActive || expectedTotal === 0) {
           status = "ممتاز";
+          if (expectedTotal === 0) notes = "لا حصص مجدولة";
         } else {
           if (percent < 60 || (actualMissed > 0 && reportType === "day")) status = "حرج";
           else if (percent < 85) status = "تحذير";
@@ -180,10 +173,11 @@ export default function TeachersReportPage() {
           specialization: teacher.specialization || "عام",
           recorded: actualRecorded,
           missed: actualMissed,
-          total: standardTotal,
+          total: expectedTotal,
           percent,
           lastRecorded,
           status,
+          notes,
           selected: true,
         };
       });
