@@ -81,6 +81,8 @@ export default function TeachersMonitorPage() {
 
       const isSystemActive = now >= SYSTEM_START_DATE;
 
+      const safeAttendance = (allAttendance || []) as any[];
+
       const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
         const daySchedules = allSchedules?.filter((s: any) => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay)) || [];
         const total = daySchedules.length;
@@ -101,14 +103,14 @@ export default function TeachersMonitorPage() {
           }
 
           if (isSystemActive) {
-            const hasRecord = allAttendance?.find((a: any) => 
+            const hasRecord = safeAttendance.find((a: any) => 
               String(a.section_id) === String(sch.section_id) && 
               String(a.period) === String(sch.period)
             );
             
             if (hasRecord) {
               actualRecorded++;
-              const recTime = (hasRecord as any).created_at || (hasRecord as any).date;
+              const recTime = hasRecord.created_at || hasRecord.date;
               if (!lastRecorded || recTime > lastRecorded) lastRecorded = recTime;
             } else if (isPassed) {
               actualMissed++;
@@ -222,7 +224,7 @@ export default function TeachersMonitorPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
           <Info className="w-5 h-5 shrink-0" />
           <p className="text-sm font-bold">
-            هذه الصفحة مخصصة لمراقبة "اليوم الحالي" لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
+            هذه الصفحة مخصصة لمراقبة اليوم الحالي لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
           </p>
         </motion.div>
       )}
