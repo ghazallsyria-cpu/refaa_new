@@ -1,13 +1,13 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useTeachersSystem } from "@/hooks/useTeachersSystem";
+import { useUsersSystem } from "@/hooks/useUsersSystem";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck, Zap, Info
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
-import Link from "next/link";
 
 interface TeacherReport {
   id: string;
@@ -15,7 +15,8 @@ interface TeacherReport {
   specialization: string;
   recorded: number;
   missed: number;
-  total: number;
+  expected: number; // الحصص التي انتهى وقتها ومطالب برصدها
+  scheduled: number; // إجمالي جدوله
   percent: number;
   lastRecorded: string | null;
   status: "ممتاز" | "جيد" | "تحذير" | "حرج";
@@ -42,9 +43,13 @@ const getSchoolTime = () => {
   return new Date(utc + (3 * 3600000));
 };
 
+const getDbDay = (jsDay: number) => {
+  return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+};
+
 export default function TeachersReportPage() {
-  const { loading: hookLoading, fetchTeachersReportData } = useTeachersSystem();
-  const [teachers, setTeachers] = useState<TeacherReport[]>([]);
+  const { teachers: allTeachers, fetchTeachers, loading: usersLoading } = useUsersSystem();
+  const [localTeachers, setLocalTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState<"day" | "week">("day");
   const [search, setSearch] = useState("");
@@ -55,6 +60,7 @@ export default function TeachersReportPage() {
   const [isWeekend, setIsWeekend] = useState(false);
 
   useEffect(() => {
+    fetchTeachers(); // ضمان جلب جميع المعلمين بأسمائهم الحقيقية
     const now = getSchoolTime();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -66,40 +72,37 @@ export default function TeachersReportPage() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!todayStr) return;
+    if (!todayStr || allTeachers.length === 0) return;
     setLoading(true);
     try {
       const now = getSchoolTime();
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = now.getDay() + 1; 
 
       const [
-        { data: teachersDB },
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('teachers').select('id, user_id, specialization, national_id, users(full_name)'),
         supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
         supabase.from('class_periods').select('period_number, end_time'),
         reportType === "day" 
-          ? supabase.from('attendance_records').select('teacher_id, section_id, date, period, created_at').eq('date', todayStr)
-          : supabase.from('attendance_records').select('teacher_id, section_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr)
+          ? supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr)
+          : supabase.from('attendance_records').select('section_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr)
       ]);
 
       const periodsMap: Record<string, string> = {};
       dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
 
       const isSystemActive = now >= SYSTEM_START_DATE;
+      const safeAttendance = (attendanceDB || []) as any[];
+      const safeSchedules = (schedulesDB || []) as any[];
 
-      // 🚀 تحصين نوع البيانات كـ any[] لمنع اعتراض TypeScript
-      const safeAttendanceDB = (attendanceDB || []) as any[];
-
-      const results: TeacherReport[] = (teachersDB || []).map((teacher: any) => {
+      const results: TeacherReport[] = allTeachers.map((teacher: any) => {
         const daysToLookBack = reportType === "day" ? 1 : 7;
         let expectedTotal = 0;
+        let scheduledTotal = 0;
         let actualRecorded = 0;
         let actualMissed = 0;
         let lastRecorded: string | null = null;
@@ -108,13 +111,13 @@ export default function TeachersReportPage() {
           const d = new Date(now);
           d.setDate(d.getDate() - i);
           const dStr = d.toISOString().split('T')[0];
-          const dDay = d.getDay() + 1;
+          const dDay = getDbDay(d.getDay());
 
-          if (dDay >= 1 && dDay <= 5) {
-            const daySchedules = schedulesDB?.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay)) || [];
+          if (dDay >= 1 && dDay <= 5) { // أيام العمل فقط
+            const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay));
             
             daySchedules.forEach(sch => {
-              expectedTotal++;
+              scheduledTotal++;
               let isPassed = false;
               
               if (dStr === todayStr) {
@@ -129,8 +132,10 @@ export default function TeachersReportPage() {
                 isPassed = true;
               }
 
-              if (isSystemActive) {
-                const hasRecord = safeAttendanceDB.find((a: any) => 
+              if (isPassed && isSystemActive) {
+                expectedTotal++;
+                // 🚀 السحر هنا: نعتمد على رقم الفصل والحصة والتاريخ (بدون اسم المعلم) لضمان أن الحصة تم رصدها!
+                const hasRecord = safeAttendance.find(a => 
                   String(a.section_id) === String(sch.section_id) && 
                   String(a.date).split('T')[0] === dStr && 
                   String(a.period) === String(sch.period)
@@ -138,10 +143,9 @@ export default function TeachersReportPage() {
                 
                 if (hasRecord) {
                   actualRecorded++;
-                  // استخراج التوقيت بأمان
                   const recTime = hasRecord.created_at || hasRecord.date;
                   if (!lastRecorded || recTime > lastRecorded) lastRecorded = recTime;
-                } else if (isPassed) {
+                } else {
                   actualMissed++;
                 }
               }
@@ -155,9 +159,10 @@ export default function TeachersReportPage() {
         let status: "ممتاز" | "جيد" | "تحذير" | "حرج" = "ممتاز";
         let notes = "";
 
-        if (!isSystemActive || expectedTotal === 0) {
-          status = "ممتاز";
-          if (expectedTotal === 0) notes = "لا حصص مجدولة";
+        if (!isSystemActive) {
+          notes = "النظام في وضع الترقب";
+        } else if (scheduledTotal === 0) {
+          notes = "لا حصص مجدولة";
         } else {
           if (percent < 60 || (actualMissed > 0 && reportType === "day")) status = "حرج";
           else if (percent < 85) status = "تحذير";
@@ -166,15 +171,16 @@ export default function TeachersReportPage() {
 
         const teacherName = teacher.users 
           ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
-          : "غير محدد";
+          : teacher.full_name || "غير محدد";
 
         return {
           id: teacher.id,
-          name: teacherName || "غير محدد",
+          name: teacherName,
           specialization: teacher.specialization || "عام",
           recorded: actualRecorded,
           missed: actualMissed,
-          total: expectedTotal,
+          expected: expectedTotal,
+          scheduled: scheduledTotal,
           percent,
           lastRecorded,
           status,
@@ -184,23 +190,23 @@ export default function TeachersReportPage() {
       });
 
       results.sort((a, b) => a.status === "حرج" ? -1 : 1);
-      setTeachers(results);
+      setLocalTeachers(results);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [reportType, todayStr]);
+  }, [reportType, todayStr, allTeachers]);
 
   useEffect(() => {
-    if (todayStr) fetchData();
-  }, [fetchData, todayStr]);
+    if (todayStr && allTeachers.length > 0) fetchData();
+  }, [fetchData, todayStr, allTeachers]);
 
-  const toggleSelect = (id: string) => setTeachers(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
-  const selectAll = () => setTeachers(prev => prev.map(t => ({ ...t, selected: true })));
-  const deselectAll = () => setTeachers(prev => prev.map(t => ({ ...t, selected: false })));
+  const toggleSelect = (id: string) => setLocalTeachers(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
+  const selectAll = () => setLocalTeachers(prev => prev.map(t => ({ ...t, selected: true })));
+  const deselectAll = () => setLocalTeachers(prev => prev.map(t => ({ ...t, selected: false })));
 
-  const selectedTeachers = teachers.filter(t => t.selected);
+  const selectedTeachers = localTeachers.filter(t => t.selected);
   const generatePDF = () => window.print();
 
   const statusColor = (status: string) => {
@@ -210,7 +216,9 @@ export default function TeachersReportPage() {
     return "bg-rose-50 text-rose-700 border-rose-100 shadow-rose-100";
   };
 
-  const filtered = teachers.filter(t => t.name.includes(search) || t.specialization.includes(search));
+  const filtered = localTeachers.filter(t => t.name.includes(search) || t.specialization.includes(search));
+
+  const isDataLoading = loading || usersLoading;
 
   return (
     <>
@@ -256,7 +264,7 @@ export default function TeachersReportPage() {
           <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
         </div>
 
-        {isWeekend && reportType === "day" && !loading && (
+        {isWeekend && reportType === "day" && !isDataLoading && (
            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
              <Info className="w-5 h-5 shrink-0" />
              <p className="text-sm font-bold">
@@ -281,9 +289,9 @@ export default function TeachersReportPage() {
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-4 flex-wrap bg-slate-50 p-3 sm:p-4 rounded-2xl border border-slate-100 w-full xl:w-auto justify-center">
-            <div className="flex items-center gap-1.5 px-3 border-l border-slate-200 last:border-0"><span className="w-2 h-2 rounded-full bg-emerald-500"></span><span className="text-xs font-bold text-slate-600">ممتاز: <span className="font-black text-emerald-700">{teachers.filter(t => t.status === "ممتاز" && t.selected).length}</span></span></div>
-            <div className="flex items-center gap-1.5 px-3 border-l border-slate-200 last:border-0"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="text-xs font-bold text-slate-600">تحذير: <span className="font-black text-amber-700">{teachers.filter(t => t.status === "تحذير" && t.selected).length}</span></span></div>
-            <div className="flex items-center gap-1.5 px-3"><span className="w-2 h-2 rounded-full bg-rose-500"></span><span className="text-xs font-bold text-slate-600">حرج: <span className="font-black text-rose-700">{teachers.filter(t => t.status === "حرج" && t.selected).length}</span></span></div>
+            <div className="flex items-center gap-1.5 px-3 border-l border-slate-200 last:border-0"><span className="w-2 h-2 rounded-full bg-emerald-500"></span><span className="text-xs font-bold text-slate-600">ممتاز: <span className="font-black text-emerald-700">{localTeachers.filter(t => t.status === "ممتاز" && t.selected).length}</span></span></div>
+            <div className="flex items-center gap-1.5 px-3 border-l border-slate-200 last:border-0"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="text-xs font-bold text-slate-600">تحذير: <span className="font-black text-amber-700">{localTeachers.filter(t => t.status === "تحذير" && t.selected).length}</span></span></div>
+            <div className="flex items-center gap-1.5 px-3"><span className="w-2 h-2 rounded-full bg-rose-500"></span><span className="text-xs font-bold text-slate-600">حرج: <span className="font-black text-rose-700">{localTeachers.filter(t => t.status === "حرج" && t.selected).length}</span></span></div>
           </div>
         </div>
 
@@ -314,14 +322,14 @@ export default function TeachersReportPage() {
                 <tr>
                   <th className="py-4 pr-6 pl-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest w-16">تضمين</th>
                   <th className="px-4 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">المعلم</th>
-                  <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">الالتزام (حصص)</th>
+                  <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">الرصد / المطالب به</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">المؤشر المئوي</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">آخر تحديث للرصد</th>
                   <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">الحالة</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {loading ? (
+                {isDataLoading ? (
                   <tr><td colSpan={6} className="py-24 text-center">
                     <div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-slate-400 font-bold text-sm">جاري التجميع والتحليل...</p>
@@ -342,14 +350,16 @@ export default function TeachersReportPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-center">
-                      {teacher.total === 0 ? (
-                        <span className="text-[10px] font-bold text-slate-400">لا جدول</span>
+                      {teacher.scheduled === 0 ? (
+                        <span className="text-[10px] font-bold text-slate-400">لا حصص مجدولة</span>
+                      ) : teacher.expected === 0 ? (
+                        <span className="text-[10px] font-bold text-indigo-400 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100">لم يحن وقتها</span>
                       ) : (
                         <div className="flex flex-col items-center">
                           <div className="text-sm sm:text-base font-black">
-                            <span className={teacher.recorded === teacher.total ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span>
+                            <span className={teacher.recorded === teacher.expected ? "text-emerald-600" : "text-amber-600"}>{teacher.recorded}</span>
                             <span className="text-slate-300 mx-1">/</span>
-                            <span className="text-slate-700">{teacher.total}</span>
+                            <span className="text-slate-700">{teacher.expected}</span>
                           </div>
                           {teacher.missed > 0 && <span className="text-[9px] font-bold text-rose-500 mt-1 flex items-center gap-1"><Zap className="w-3 h-3"/> تأخر ({teacher.missed})</span>}
                         </div>
@@ -402,7 +412,7 @@ export default function TeachersReportPage() {
         <table className="print-table">
           <thead>
             <tr>
-              <th className="w-10">م</th><th className="w-48 text-right">اسم المعلم</th><th className="w-24 text-right">التخصص</th><th className="w-24">الرصد / الإجمالي</th><th className="w-24">حصص متأخرة</th><th className="w-24">نسبة الالتزام</th><th className="w-32">توقيت آخر رصد</th><th className="w-24">التقييم الفني</th>
+              <th className="w-10">م</th><th className="w-48 text-right">اسم المعلم</th><th className="w-24 text-right">التخصص</th><th className="w-24">الرصد / المطالب به</th><th className="w-24">حصص متأخرة</th><th className="w-24">نسبة الالتزام</th><th className="w-32">توقيت آخر رصد</th><th className="w-24">التقييم الفني</th>
             </tr>
           </thead>
           <tbody>
@@ -410,7 +420,7 @@ export default function TeachersReportPage() {
               const statusClass = t.status === "ممتاز" ? "status-excel" : t.status === "جيد" ? "status-good" : t.status === "تحذير" ? "status-warn" : "status-crit";
               return (
               <tr key={t.id}>
-                <td className="font-black text-slate-500">{i + 1}</td><td className="font-black text-right">{t.name}</td><td className="text-xs font-bold text-slate-600 text-right">{t.specialization}</td><td className="font-black text-indigo-700" dir="ltr">{t.recorded} / {t.total}</td><td className={`font-black ${t.missed > 0 ? "text-rose-600 bg-rose-50" : "text-slate-400"}`}>{t.missed > 0 ? t.missed : "0"}</td><td className="font-black" dir="ltr">{t.percent}%</td><td className="text-xs font-bold text-slate-700">{t.lastRecorded ? new Date(t.lastRecorded).toLocaleString("ar-EG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span className={`status-badge ${statusClass}`}>{t.status}</span></td>
+                <td className="font-black text-slate-500">{i + 1}</td><td className="font-black text-right">{t.name}</td><td className="text-xs font-bold text-slate-600 text-right">{t.specialization}</td><td className="font-black text-indigo-700" dir="ltr">{t.recorded} / {t.expected}</td><td className={`font-black ${t.missed > 0 ? "text-rose-600 bg-rose-50" : "text-slate-400"}`}>{t.missed > 0 ? t.missed : "0"}</td><td className="font-black" dir="ltr">{t.percent}%</td><td className="text-xs font-bold text-slate-700">{t.lastRecorded ? new Date(t.lastRecorded).toLocaleString("ar-EG", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span className={`status-badge ${statusClass}`}>{t.status}</span></td>
               </tr>
             )})}
           </tbody>
