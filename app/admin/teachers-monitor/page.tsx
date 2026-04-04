@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -71,13 +70,11 @@ export default function TeachersMonitorPage() {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = now.getDay() + 1; // 1=الأحد
+      const currentDbDay = now.getDay() + 1;
 
-      // 1. استخدام الهوك لضمان استرجاع الأسماء والتكليفات (assignments) والاختبارات (exams)
       const data = await fetchTeachersMonitorData(todayStr, currentDbDay, weekAgoStr);
       const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
-      // 2. جلب الحصص للحصول على الأوقات الفعلية
       const { data: dbPeriods } = await supabase.from('class_periods').select('period_number, end_time');
       const periodsMap: Record<string, string> = {};
       dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
@@ -85,7 +82,6 @@ export default function TeachersMonitorPage() {
       const isSystemActive = now >= SYSTEM_START_DATE;
 
       const results: TeacherMonitor[] = (teachersData as any[]).map((teacher: any) => {
-        // نربط الجدول برقم المعلم
         const daySchedules = allSchedules?.filter((s: any) => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay)) || [];
         const total = daySchedules.length;
 
@@ -105,7 +101,6 @@ export default function TeachersMonitorPage() {
           }
 
           if (isSystemActive) {
-            // 🚀 التحقق من الحضور باستخدام رقم الفصل (section_id) ورقم الحصة وليس رقم المعلم فقط
             const hasRecord = allAttendance?.find((a: any) => 
               String(a.section_id) === String(sch.section_id) && 
               String(a.period) === String(sch.period)
@@ -113,7 +108,8 @@ export default function TeachersMonitorPage() {
             
             if (hasRecord) {
               actualRecorded++;
-              if (!lastRecorded || hasRecord.created_at > lastRecorded) lastRecorded = hasRecord.created_at;
+              const recTime = (hasRecord as any).created_at || (hasRecord as any).date;
+              if (!lastRecorded || recTime > lastRecorded) lastRecorded = recTime;
             } else if (isPassed) {
               actualMissed++;
             }
@@ -136,7 +132,6 @@ export default function TeachersMonitorPage() {
         const assignmentsCount = allAssignments?.filter((a: any) => String(a.teacher_id) === String(teacher.id)).length || 0;
         const examsCount = allExams?.filter((e: any) => String(e.teacher_id) === String(teacher.id)).length || 0;
 
-        // 🚀 استخراج الاسم المحمي عبر الهوك
         const teacherName = teacher.users 
           ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
           : "غير محدد";
@@ -227,7 +222,7 @@ export default function TeachersMonitorPage() {
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
           <Info className="w-5 h-5 shrink-0" />
           <p className="text-sm font-bold">
-            هذه الصفحة مخصصة لمراقبة &quot;اليوم الحالي&quot; لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
+            هذه الصفحة مخصصة لمراقبة "اليوم الحالي" لحظة بلحظة، وحيث أن اليوم عطلة رسمية، فلن تظهر جداول هنا. يمكنك الانتقال إلى <strong>التقارير الشاملة</strong> للاطلاع على الأسبوع الماضي.
           </p>
         </motion.div>
       )}
@@ -259,7 +254,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت &quot;الآن&quot; في الحرم المدرسي</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت الآن في الحرم المدرسي</p>
             </div>
           </div>
           <div className="relative w-full lg:w-72 shrink-0">
