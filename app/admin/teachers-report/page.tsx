@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -44,7 +43,6 @@ const getSchoolTime = () => {
 };
 
 export default function TeachersReportPage() {
-  // 🚀 نستخدم الهوك الآمن لجلب الأسماء والبيانات بشكل صحيح
   const { loading: hookLoading, fetchTeachersReportData } = useTeachersSystem();
   const [teachers, setTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,14 +77,11 @@ export default function TeachersReportPage() {
       const weekAgoStr = `${wYear}-${wMonth}-${wDay}`;
       
       const jsDay = now.getDay();
-      // 1=الأحد ... 7=السبت
       const dbDay = jsDay + 1; 
       setIsWeekend(dbDay === 6 || dbDay === 7);
 
-      // 1. جلب البيانات عبر الهوك لضمان استرجاع الأسماء (users) بشكل صحيح عبر RLS
       const data = await fetchTeachersReportData(reportType, todayStr, dbDay, weekAgoStr);
 
-      // 2. جلب أوقات الحصص الصحيحة لمعرفة التأخير الفعلي
       const { data: dbPeriods } = await supabase.from('class_periods').select('period_number, end_time');
       const periodsMap: Record<string, string> = {};
       dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
@@ -120,7 +115,6 @@ export default function TeachersReportPage() {
                     const [h, m] = endTimeStr.split(':').map(Number);
                     const periodEndTime = new Date(now);
                     periodEndTime.setHours(h, m, 0, 0);
-                    // إذا انتهى وقت الحصة ولم يسجلها -> تعتبر متأخرة
                     if (now > periodEndTime) missed++;
                   }
                 }
@@ -144,7 +138,7 @@ export default function TeachersReportPage() {
           ? [...attendanceData].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
           : null;
 
-        let status: TeacherReport["status"] = "ممتاز";
+        let status: "ممتاز" | "جيد" | "تحذير" | "حرج" = "ممتاز";
         let notes = "";
 
         if (!isSystemActive) {
@@ -162,7 +156,6 @@ export default function TeachersReportPage() {
           else if (percent < 95) status = "جيد";
         }
 
-        // 🚀 استخراج الاسم بشكل محصن وناجح بفضل الهوك الأصلي
         const teacherName = teacher.users 
           ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name)
           : "غير محدد";
@@ -268,7 +261,6 @@ export default function TeachersReportPage() {
           <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
         </div>
 
-        {/* 🚀 تنبيه عطلة نهاية الأسبوع */}
         {isWeekend && reportType === "day" && !loading && (
            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-sky-50 border border-sky-200 p-4 rounded-2xl flex items-center gap-3 text-sky-800 shadow-sm">
              <Info className="w-5 h-5 shrink-0" />
