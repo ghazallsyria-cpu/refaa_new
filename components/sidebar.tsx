@@ -1,7 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   Users,
@@ -27,29 +32,6 @@ import {
   Activity,
   Medal // 🚀 أيقونة إدارة الأوسمة
 } from 'lucide-react';
-
-// --- Mocks to ensure the component compiles in the preview environment ---
-// Note: Replace these with your actual Next.js imports in your local project
-const Link = ({ href, children, className, onClick, title }: any) => (
-  <a href={href} className={className} onClick={(e) => { e.preventDefault(); if (onClick) onClick(e); }} title={title}>
-    {children}
-  </a>
-);
-const Image = ({ src, alt, fill, className }: any) => (
-  <img src={src} alt={alt} className={className} style={fill ? { position: 'absolute', height: '100%', width: '100%', objectFit: 'contain' } : {}} />
-);
-const usePathname = () => '/';
-const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
-// Mock supabase for the preview environment
-const supabase = {
-  from: (table: string) => ({
-    select: (cols: string) => ({
-      single: async () => ({ data: { school_name: 'الرفعة النموذجية', logo_url: '' } })
-    })
-  })
-};
-const createClientComponentClient = () => supabase;
-// ------------------------------------------------------------------------
 
 const navigation = [
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
@@ -92,14 +74,13 @@ export function Sidebar({
   onToggleCollapse?: () => void
 }) {
   const pathname = usePathname();
-  const supabaseClient = createClientComponentClient();
   
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
 
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {
-        const { data } = await supabaseClient.from('platform_settings').select('school_name, logo_url').single();
+        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
         if (data) {
           setSchoolData({
             name: data.school_name?.split(' ')[0] || 'الرفعة',
@@ -111,7 +92,7 @@ export function Sidebar({
       }
     };
     fetchSchoolData();
-  }, [supabaseClient]);
+  }, []);
 
   const filteredNavigation = navigation.filter(item => {
     if (authRole === 'admin' || authRole === 'management') return true;
