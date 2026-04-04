@@ -46,6 +46,9 @@ export default function StudentDashboard() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  
+  // 🚀 حالة أوسمة الطالب
+  const [myBadges, setMyBadges] = useState<any[]>([]);
 
   // 🚀 حالات للخط الزمني وحسابات الغياب الجديدة
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -77,6 +80,19 @@ export default function StudentDashboard() {
         try {
             const studentId = data.student?.id;
             if (studentId) {
+                // ==========================================
+                // 0️⃣ 🚀 جلب الأوسمة الخاصة بالطالب بذكاء
+                // ==========================================
+                const { data: badgesData } = await supabase
+                  .from('student_badges')
+                  .select('*, badge:badges(*)')
+                  .eq('student_id', studentId)
+                  .order('granted_at', { ascending: false });
+                
+                if (badgesData) {
+                  setMyBadges(badgesData);
+                }
+
                 // 1. جلب العلامات
                 const { data: dbGrades } = await supabase
                   .from('exam_attempts')
@@ -252,6 +268,52 @@ export default function StudentDashboard() {
             </div>
           </div>
         </div>
+
+        {/* 🚀 قسم عرض الأوسمة الذكي للطالب (لا يفسد التصميم ومضاعف الحجم) */}
+        {myBadges.length > 0 && (
+          <div className="relative z-10 mt-10 pt-6 border-t border-white/20 w-full">
+            <h3 className="text-sm sm:text-base font-bold text-indigo-100 mb-4 flex items-center gap-2">
+              <Award className="w-5 h-5 text-yellow-300" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
+            </h3>
+            {/* Horizontal Scroll Container */}
+            <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
+              {myBadges.map((badgeEntry, index) => (
+                <div 
+                  key={badgeEntry.id || index} 
+                  className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[22rem] sm:w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 group cursor-default"
+                >
+                  {/* 🚀 إعادة التنسيق الأصلي الجميل مع مضاعفة الحجم */}
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
+                    {/* تأثير التوهج الخلفي للوسام */}
+                    <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
+                    
+                    {badgeEntry.badge?.image_url ? (
+                      <Image 
+                        src={badgeEntry.badge.image_url} 
+                        alt={badgeEntry.badge.name} 
+                        fill 
+                        unoptimized 
+                        referrerPolicy="no-referrer" 
+                        className="object-contain drop-shadow-2xl relative z-10" 
+                      />
+                    ) : (
+                      <Award className="w-full h-full text-yellow-300 relative z-10 drop-shadow-lg p-2" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base sm:text-lg font-black text-white truncate">{badgeEntry.badge?.name}</p>
+                    <p className="text-xs sm:text-sm font-bold text-indigo-200 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>
+                      {badgeEntry.reason || 'تقديراً للجهود والتميز'}
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-white/50 mt-2 bg-black/20 w-fit px-2 py-1 rounded-lg">
+                      بتاريخ: {safeFormat(badgeEntry.granted_at, 'd MMM yyyy')}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl mix-blend-overlay animate-pulse pointer-events-none"></div>
         <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay pointer-events-none"></div>
