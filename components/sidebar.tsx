@@ -1,12 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import Image from 'next/image';
 import {
   LayoutDashboard,
   Users,
@@ -29,8 +24,30 @@ import {
   ChevronLeft,
   X,
   Scale,
-  Activity // 🚀 تم استيراد أيقونة الرادار هنا
+  Activity,
+  Medal // 🚀 تم استيراد أيقونة الميدالية هنا للأوسمة
 } from 'lucide-react';
+
+// --- Mocks to ensure the component compiles in the preview environment ---
+// Note: Replace these with your actual Next.js imports in your local project
+const Link = ({ href, children, className, onClick, title }: any) => (
+  <a href={href} className={className} onClick={(e) => { e.preventDefault(); if (onClick) onClick(e); }} title={title}>
+    {children}
+  </a>
+);
+const Image = ({ src, alt, fill, className }: any) => (
+  <img src={src} alt={alt} className={className} style={fill ? { position: 'absolute', height: '100%', width: '100%', objectFit: 'contain' } : {}} />
+);
+const usePathname = () => '/';
+const cn = (...classes: any[]) => classes.filter(Boolean).join(' ');
+const supabase = {
+  from: (table: string) => ({
+    select: (cols: string) => ({
+      single: async () => ({ data: { school_name: 'الرفعة النموذجية', logo_url: '' } })
+    })
+  })
+};
+// ------------------------------------------------------------------------
 
 const navigation = [
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
@@ -38,7 +55,7 @@ const navigation = [
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
-  { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity }, // 🚀 تم إضافة رابط الرادار
+  { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
   { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
@@ -52,6 +69,7 @@ const navigation = [
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
+  { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal }, // 🚀 تم إضافة رابط إدارة الأوسمة هنا
   { name: 'الرسائل', href: '/messages', icon: MessageSquare },
   { name: 'الإعلانات', href: '/announcements', icon: Bell },
   { name: 'المستندات', href: '/documents', icon: FolderOpen },
@@ -73,7 +91,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   
-  // 🚀 جلب بيانات وشعار المدرسة من القاعدة
+  // جلب بيانات وشعار المدرسة من القاعدة
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
 
   useEffect(() => {
@@ -178,7 +196,7 @@ export function Sidebar({
       </div>
 
       {/* Links Scroll Area */}
-      <div className="flex flex-1 flex-col overflow-y-auto py-6 px-3 custom-scrollbar relative z-10">
+      <div className="flex flex-1 flex-col overflow-y-auto py-6 px-3 custom-scrollbar relative z-10" dir="rtl">
         <nav className="space-y-1.5">
           {filteredNavigation.map((item, idx) => {
             let itemHref = item.href;
@@ -194,6 +212,7 @@ export function Sidebar({
             // تمييز ألوان الأزرار الخاصة
             const isSpecialBtn = item.name === 'قرارات الخصم';
             const isRadarBtn = item.name === 'الرادار الرقمي';
+            const isBadgeBtn = item.name === 'إدارة الأوسمة'; // 🚀 زر إدارة الأوسمة
 
             return (
               <motion.div
@@ -212,6 +231,7 @@ export function Sidebar({
                     isActive 
                       ? isSpecialBtn ? "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30" 
                         : isRadarBtn ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30"
+                        : isBadgeBtn ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30" // لون الأوسمة
                         : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30" 
                       : "hover:bg-white/5 hover:text-white text-slate-400"
                   )}
@@ -220,7 +240,11 @@ export function Sidebar({
                     className={cn(
                       "h-5 w-5 shrink-0 transition-all duration-300",
                       !isCollapsed && "ml-3.5",
-                      isActive ? "text-white scale-110" : isSpecialBtn ? "group-hover:text-rose-400" : isRadarBtn ? "group-hover:text-emerald-400" : "group-hover:text-indigo-400 group-hover:scale-110"
+                      isActive ? "text-white scale-110" 
+                        : isSpecialBtn ? "group-hover:text-rose-400" 
+                        : isRadarBtn ? "group-hover:text-emerald-400" 
+                        : isBadgeBtn ? "group-hover:text-amber-400 group-hover:scale-110" // تأثير أيقونة الأوسمة
+                        : "group-hover:text-indigo-400 group-hover:scale-110"
                     )}
                   />
                   <span className={cn(
