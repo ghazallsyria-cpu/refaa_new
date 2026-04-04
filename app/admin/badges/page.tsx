@@ -201,7 +201,15 @@ export default function AdminBadgesPage() {
                       
                       {badge.image_url ? (
                         <div className="relative h-32 w-32 z-10 group-hover:scale-110 transition-transform duration-500">
-                          <Image src={badge.image_url} alt={badge.name} fill className="object-contain drop-shadow-2xl" />
+                          {/* 🚀 السر هنا: إضافة unoptimized و referrerPolicy */}
+                          <Image 
+                            src={badge.image_url} 
+                            alt={badge.name} 
+                            fill 
+                            unoptimized
+                            referrerPolicy="no-referrer"
+                            className="object-contain drop-shadow-2xl" 
+                          />
                         </div>
                       ) : (
                         <Medal className={`h-24 w-24 z-10 ${theme.text} opacity-50`} />
