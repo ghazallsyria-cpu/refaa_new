@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -70,13 +71,12 @@ export default function TeachersMonitorPage() {
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
       const jsDay = now.getDay();
-      // 🚀 الإصلاح 1: التوافق مع العطلة والتجربة المفتوحة
-      const dbDay = jsDay + 1;
+      const dbDay = jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 :
+                    jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 
       const data = await fetchTeachersMonitorData(todayStr, dbDay, weekAgoStr);
       const { teachersData, allSchedules, allAttendance, allAssignments, allExams } = data;
 
-      // 🚀 الإصلاح 2: استهداف الجدول (class_periods)
       const { data: dbPeriods } = await supabase.from('class_periods').select('period_number, end_time');
       const periodsMap: Record<string, string> = {};
       dbPeriods?.forEach(p => { periodsMap[String(p.period_number)] = p.end_time; });
@@ -90,7 +90,6 @@ export default function TeachersMonitorPage() {
         ) || [];
         const total = teacherSchedules.length;
 
-        // 🚀 الإصلاح 3: التأكد من سحب الحضور للمعلم الصحيح بطريقة آمنة
         const teacherAttendance = allAttendance?.filter((a: any) => {
           const recDate = a.date ? String(a.date).split('T')[0] : '';
           const tId = a.teacher_id || a.teachers?.id || a.teacher?.id;
@@ -256,7 +255,7 @@ export default function TeachersMonitorPage() {
             </div>
             <div>
               <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight">حالة الرصد اليومية</h3>
-              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت "الآن" في الحرم المدرسي</p>
+              <p className="text-[10px] sm:text-xs lg:text-sm text-slate-500 font-bold mt-1">يتم تحديث البيانات بناءً على توقيت &quot;الآن&quot; في الحرم المدرسي</p>
             </div>
           </div>
           
