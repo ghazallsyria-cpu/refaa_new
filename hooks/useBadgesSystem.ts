@@ -1,203 +1,149 @@
-'use client';
-
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// تعريف أنواع البيانات (Types)
 export interface Badge {
   id: string;
   name: string;
-  description: string;
-  image_url: string; 
+  description: string | null;
+  image_url: string | null;
   color_theme: string;
   points: number;
   created_at: string;
 }
 
-export interface StudentBadge {
+export interface GrantedBadge {
   id: string;
-  badge_id: string;
   student_id: string;
-  teacher_id: string;
+  badge_id: string;
+  granted_by: string;
   reason: string | null;
   granted_at: string;
-  badge?: Badge; 
-  teacher_name?: string; 
+  badge?: Badge;
 }
 
 export function useBadgesSystem() {
   const [availableBadges, setAvailableBadges] = useState<Badge[]>([]);
-  const [studentBadges, setStudentBadges] = useState<StudentBadge[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // ==========================================
-  // --- دوال العرض والجلب العامة ---
-  // ==========================================
-
-  // 1. جلب قائمة الأوسمة المتاحة (يستخدمها المدير للعرض، والمعلم للاختيار)
+  // 1️⃣ جلب جميع الأوسمة المتاحة في النظام (الكاتالوج)
   const fetchAvailableBadges = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const { data, error: supabaseError } = await supabase
+      const { data, error } = await supabase
         .from('badges')
         .select('*')
-        .order('points', { ascending: false });
-
-      if (supabaseError) throw supabaseError;
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
       setAvailableBadges(data || []);
-    } catch (err: any) {
-      console.error('Error fetching badges:', err);
-      setError(err.message || 'حدث خطأ أثناء جلب الأوسمة المتاحة');
+    } catch (error) {
+      console.error('Error fetching available badges:', error);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // 2. جلب الأوسمة الخاصة بطالب معين (يستخدمها الطالب في لوحته، أو المعلم في ملف الطالب)
-  const fetchStudentBadges = useCallback(async (studentId: string) => {
-    setLoading(true);
-    setError(null);
+  // 2️⃣ إنشاء وسام جديد (خاص بالمدير)
+  const createBadge = async (badgeData: Partial<Badge>) => {
     try {
-      const { data, error: supabaseError } = await supabase
-        .from('student_badges')
-        .select(`
-          *,
-          badge:badges (*)
-        `)
-        .eq('student_id', studentId)
-        .order('granted_at', { ascending: false });
-
-      if (supabaseError) throw supabaseError;
-      
-      setStudentBadges(data || []);
-      return data;
-    } catch (err: any) {
-      console.error('Error fetching student badges:', err);
-      setError(err.message || 'حدث خطأ أثناء جلب أوسمة الطالب');
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // ==========================================
-  // --- دوال المعلم (منح وسحب الأوسمة) ---
-  // ==========================================
-
-  // 3. منح وسام لطالب
-  const grantBadge = async (studentId: string, teacherId: string, badgeId: string, reason?: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: supabaseError } = await supabase
-        .from('student_badges')
-        .insert([
-          {
-            student_id: studentId,
-            teacher_id: teacherId,
-            badge_id: badgeId,
-            reason: reason || null,
-          }
-        ])
+      const { data, error } = await supabase
+        .from('badges')
+        .insert([badgeData])
         .select()
         .single();
-
-      if (supabaseError) throw supabaseError;
+        
+      if (error) throw error;
+      
+      // تحديث الحالة محلياً فوراً
+      setAvailableBadges(prev => [data, ...prev]);
       return { success: true, data };
-    } catch (err: any) {
-      console.error('Error granting badge:', err);
-      setError(err.message || 'حدث خطأ أثناء منح الوسام');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
   };
 
-  // 4. التراجع عن وسام (في حال أخطأ المعلم)
-  const revokeBadge = async (studentBadgeId: string) => {
-    setLoading(true);
-    setError(null);
+  // 3️⃣ تعديل وسام موجود (خاص بالمدير)
+  const updateBadge = async (id: string, updates: Partial<Badge>) => {
     try {
-      const { error: supabaseError } = await supabase
+      const { data, error } = await supabase
+        .from('badges')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      // تحديث الحالة محلياً
+      setAvailableBadges(prev => prev.map(b => b.id === id ? data : b));
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  // 4️⃣ حذف وسام نهائياً من الكاتالوج (خاص بالمدير)
+  const deleteAdminBadge = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('badges')
+        .delete()
+        .eq('id', id);
+        
+      if (error) throw error;
+      
+      setAvailableBadges(prev => prev.filter(b => b.id !== id));
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  // 5️⃣ 🚀 منح وسام لطالب أو معلم (التتويج)
+  const grantBadge = async (recipientId: string, granterId: string, badgeId: string, reason?: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('student_badges')
+        .insert([{
+          student_id: recipientId,
+          badge_id: badgeId,
+          granted_by: granterId,
+          reason: reason || null
+        }])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return { success: true, data };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  // 6️⃣ 🚀 سحب أو إلغاء وسام تم منحه مسبقاً (الحذف من ملف الطالب)
+  const revokeBadge = async (studentBadgeId: string) => {
+    try {
+      const { error } = await supabase
         .from('student_badges')
         .delete()
         .eq('id', studentBadgeId);
 
-      if (supabaseError) throw supabaseError;
-      
-      setStudentBadges(prev => prev.filter(b => b.id !== studentBadgeId));
+      if (error) throw error;
       return { success: true };
-    } catch (err: any) {
-      console.error('Error revoking badge:', err);
-      setError(err.message || 'حدث خطأ أثناء سحب الوسام');
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==========================================
-  // --- دوال المدير (إدارة كاتالوج الأوسمة) ---
-  // ==========================================
-
-  // 5. إضافة وسام جديد (للمدير)
-  const createBadge = async (badgeData: Partial<Badge>) => {
-    setLoading(true);
-    try {
-      const { error: supabaseError } = await supabase.from('badges').insert([badgeData]);
-      if (supabaseError) throw supabaseError;
-      await fetchAvailableBadges(); // تحديث القائمة بعد الإضافة
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 6. تحديث بيانات وسام (للمدير)
-  const updateBadge = async (id: string, badgeData: Partial<Badge>) => {
-    setLoading(true);
-    try {
-      const { error: supabaseError } = await supabase.from('badges').update(badgeData).eq('id', id);
-      if (supabaseError) throw supabaseError;
-      await fetchAvailableBadges(); // تحديث القائمة بعد التعديل
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 7. حذف وسام نهائياً من الكاتالوج (للمدير)
-  const deleteAdminBadge = async (id: string) => {
-    setLoading(true);
-    try {
-      const { error: supabaseError } = await supabase.from('badges').delete().eq('id', id);
-      if (supabaseError) throw supabaseError;
-      await fetchAvailableBadges(); // تحديث القائمة بعد الحذف
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      console.error('Error revoking badge:', error);
+      return { success: false, error: error.message };
     }
   };
 
   return {
     availableBadges,
-    studentBadges,
     loading,
-    error,
     fetchAvailableBadges,
-    fetchStudentBadges,
-    grantBadge,
-    revokeBadge,
     createBadge,
     updateBadge,
-    deleteAdminBadge
+    deleteAdminBadge,
+    grantBadge,
+    revokeBadge // 👈 تأكدنا من إرجاع هذه الدالة ليتم استخدامها في الصفحات
   };
 }
