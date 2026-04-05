@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react'
 import { Loader2 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 
-// 🚀 استيراد مباشر لـ Quill بدلاً من dynamic import لتفادي مشاكل الـ SSR والـ ref
+// 🚀 استيراد مباشر لـ Quill بدلاً من dynamic import لتفادي مشاكل الـ SSR
 import ReactQuill from 'react-quill';
 
 interface ForumEditorProps {
@@ -18,7 +18,7 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
   const [isUploading, setIsUploading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // 🚀 التأكد من أن المكون يعمل فقط في المتصفح (لتفادي أخطاء SSR مع Next.js)
+  // التأكد من أن المكون يعمل فقط في المتصفح
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -59,7 +59,8 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
           const range = quill?.getSelection();
           if (quill && range) {
             quill.insertEmbed(range.index, 'image', data.secure_url);
-            quill.setSelection(range.index + 1);
+            // 🚀 الحل الذكي هنا: إرسال كائن (Object) بدلاً من رقم يرضي TypeScript تماماً!
+            quill.setSelection({ index: range.index + 1, length: 0 });
           }
         }
       } catch (error) {
