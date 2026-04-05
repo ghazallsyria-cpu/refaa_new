@@ -269,8 +269,7 @@ export default function TeacherAttendanceMatrix() {
                 <div className="bg-slate-900 rounded-2xl p-6 relative overflow-hidden text-left" dir="ltr">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-indigo-500"></div>
                   <pre className="text-emerald-400 font-mono text-sm leading-loose whitespace-pre-wrap">
-                    DROP POLICY IF EXISTS "Allow read schedule" ON public.schedules;{'\n'}
-                    CREATE POLICY "Allow read schedule" ON public.schedules FOR SELECT USING (auth.role() = 'authenticated');
+                    {`DROP POLICY IF EXISTS "Allow read schedule" ON public.schedules;\nCREATE POLICY "Allow read schedule" ON public.schedules FOR SELECT USING (auth.role() = 'authenticated');`}
                   </pre>
                 </div>
                 <p className="text-rose-500 font-bold text-sm mt-6 flex items-center justify-center gap-2">
