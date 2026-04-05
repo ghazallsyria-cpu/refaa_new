@@ -1,36 +1,51 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// تعريف أنواع البيانات (Types)
+// 🚀 أضفنا واجهة بيانات الصفوف
+export interface SchoolClass {
+  id: string;
+  name: string;
+}
+
 export interface ForumCategory {
   id: string;
   name: string;
   description: string;
   parent_id: string | null;
-  target_level: number[] | null; // 🚀 التحديث هنا: أصبح مصفوفة أرقام
+  target_classes: string[] | null; // 🚀 أصبح يستقبل UUIDs للصفوف
   icon: string | null;
   topics_count?: number;
 }
 
 export interface StructuredCategory extends ForumCategory {
-  subcategories?: StructuredCategory[]; // لدعم الهيكلة الشجرية
+  subcategories?: StructuredCategory[];
 }
 
 export function useForums() {
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [structuredCategories, setStructuredCategories] = useState<StructuredCategory[]>([]);
+  const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]); // 🚀 حالة حفظ الصفوف الحقيقية
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🚀 دالة جلب الأقسام وبناء الهيكلة الشجرية
-  const fetchCategories = useCallback(async () => {
+  const fetchCategoriesAndClasses = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      // 1. جلب الصفوف الحقيقية من المدرسة
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('id, name')
+        .order('name');
+        
+      if (classesError) throw classesError;
+      if (classesData) setSchoolClasses(classesData);
+
+      // 2. جلب أقسام المنتدى
       const { data, error: fetchError } = await supabase
         .from('forum_categories')
         .select(`
-          id, name, description, parent_id, target_level, icon,
+          id, name, description, parent_id, target_classes, icon,
           forum_topics (count)
         `)
         .order('created_at', { ascending: true });
@@ -38,7 +53,6 @@ export function useForums() {
       if (fetchError) throw fetchError;
 
       if (data) {
-        // تنسيق عدد المواضيع
         const formattedData: ForumCategory[] = data.map((cat: any) => ({
           ...cat,
           topics_count: cat.forum_topics?.[0]?.count || 0
@@ -46,7 +60,6 @@ export function useForums() {
 
         setCategories(formattedData);
 
-        // 🧠 بناء الهيكلية الشجرية (Main & Subcategories)
         const mainCategories: StructuredCategory[] = formattedData.filter(c => !c.parent_id);
         const subCategories: StructuredCategory[] = formattedData.filter(c => c.parent_id);
 
@@ -54,20 +67,17 @@ export function useForums() {
           main.subcategories = subCategories.filter(sub => sub.parent_id === main.id);
         });
 
-        // حماية: إذا كان هناك قسم فرعي يتيم (تم حذف أبيه)، نظهره كقسم رئيسي
         const orphanedSubs = subCategories.filter(sub => !mainCategories.some(main => main.id === sub.parent_id));
-        
         setStructuredCategories([...mainCategories, ...orphanedSubs]);
       }
     } catch (err: any) {
-      console.error('Error fetching categories:', err);
+      console.error('Error fetching data:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // 🚀 دالة إنشاء قسم جديد
   const createCategory = async (payload: Partial<ForumCategory>) => {
     try {
       const { error: insertError } = await supabase
@@ -76,8 +86,7 @@ export function useForums() {
 
       if (insertError) throw insertError;
       
-      // تحديث البيانات فوراً بعد الإضافة
-      await fetchCategories(); 
+      await fetchCategoriesAndClasses(); 
       return { success: true };
     } catch (err: any) {
       console.error('Error creating category:', err);
@@ -88,9 +97,10 @@ export function useForums() {
   return {
     categories,
     structuredCategories,
+    schoolClasses, // 🚀 تصدير الصفوف للواجهة
     loading,
     error,
-    fetchCategories,
+    fetchCategoriesAndClasses,
     createCategory
   };
 }
