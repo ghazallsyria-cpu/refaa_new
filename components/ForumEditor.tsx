@@ -1,11 +1,19 @@
 'use client';
 
-import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 
-// 🚀 استيراد مباشر لـ Quill بدلاً من dynamic import لتفادي مشاكل الـ SSR
-import ReactQuill from 'react-quill';
+// 🚀 استيراد ديناميكي لمنع انهيار السيرفر (SSR Crash)
+const ReactQuill = dynamic(() => import('react-quill'), { 
+  ssr: false,
+  loading: () => (
+    <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
+      <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+    </div>
+  )
+});
 
 interface ForumEditorProps {
   content: string;
@@ -14,14 +22,8 @@ interface ForumEditorProps {
 }
 
 export default function ForumEditor({ content, setContent, canUploadImage }: ForumEditorProps) {
-  const quillRef = useRef<ReactQuill>(null);
+  const quillRef = useRef<any>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  // التأكد من أن المكون يعمل فقط في المتصفح
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const imageHandler = useCallback(() => {
     if (!canUploadImage) {
@@ -59,7 +61,6 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
           const range = quill?.getSelection();
           if (quill && range) {
             quill.insertEmbed(range.index, 'image', data.secure_url);
-            // 🚀 الحل الذكي هنا: إرسال كائن (Object) بدلاً من رقم يرضي TypeScript تماماً!
             quill.setSelection({ index: range.index + 1, length: 0 });
           }
         }
@@ -88,14 +89,6 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
       }
     }
   }), [canUploadImage, imageHandler]);
-
-  if (!mounted) {
-    return (
-      <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-      </div>
-    );
-  }
 
   return (
     <div className="relative">
@@ -139,6 +132,7 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         </div>
       )}
 
+      {/* @ts-expect-error - ReactQuill dynamic import typing workaround */}
       <ReactQuill 
         ref={quillRef}
         theme="snow"
