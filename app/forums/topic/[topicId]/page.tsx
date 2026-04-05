@@ -7,9 +7,9 @@ import { supabase } from '@/lib/supabase';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
   MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
-  Heart, MoreVertical, Pin, Trash2, CheckCircle, GraduationCap
+  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle // 🚀 تم إضافة XCircle هنا
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import ForumEditor from '@/components/ForumEditor';
@@ -26,7 +26,7 @@ export default function TopicDetailsPage() {
 
   const [topic, setTopic] = useState<any>(null);
   const [replies, setReplies] = useState<any[]>([]);
-  const [userVotes, setUserVotes] = useState<string[]>([]); // لحفظ الردود التي أعجب بها المستخدم
+  const [userVotes, setUserVotes] = useState<string[]>([]); 
   const [loading, setLoading] = useState(true);
   
   const [replyContent, setReplyContent] = useState('');
@@ -35,7 +35,6 @@ export default function TopicDetailsPage() {
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. جلب الموضوع وصاحبه
       const { data: topicData, error: topicError } = await supabase
         .from('forum_topics')
         .select('*, category:forum_categories(name)')
@@ -44,14 +43,12 @@ export default function TopicDetailsPage() {
 
       if (topicError) throw topicError;
 
-      // 2. جلب صاحب الموضوع والأوسمة
       const { data: authorData } = await supabase.from('users').select('full_name, role, avatar_url').eq('id', topicData.author_id).single();
       
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
       setTopic({ ...topicData, author: authorData, author_badge: badgeText });
 
-      // 3. جلب الردود
       const { data: repliesData } = await supabase
         .from('forum_replies')
         .select('*')
@@ -71,7 +68,6 @@ export default function TopicDetailsPage() {
       }
       setReplies(formattedReplies);
 
-      // 4. جلب إعجابات المستخدم الحالي (لإضاءة زر القلب)
       if (user) {
         const { data: votes } = await supabase.from('forum_votes').select('reply_id').eq('user_id', user.id);
         setUserVotes(votes?.map(v => v.reply_id) || []);
@@ -88,9 +84,8 @@ export default function TopicDetailsPage() {
     fetchTopicData();
   }, [fetchTopicData]);
 
-  // 🚀 نظام إرسال الإشعارات
   const sendNotification = async (targetUserId: string, title: string, content: string, link: string) => {
-    if (!targetUserId || targetUserId === user?.id) return; // لا ترسل إشعار لنفسك
+    if (!targetUserId || targetUserId === user?.id) return;
     await supabase.from('notifications').insert([{
       user_id: targetUserId,
       title,
@@ -100,7 +95,6 @@ export default function TopicDetailsPage() {
     }]);
   };
 
-  // 🚀 إضافة رد جديد + إشعار
   const handleAddReply = async (e: React.FormEvent) => {
     e.preventDefault();
     const strippedContent = replyContent.replace(/<[^>]+>/g, '').trim();
@@ -116,7 +110,6 @@ export default function TopicDetailsPage() {
 
       if (error) throw error;
       
-      // إرسال إشعار لصاحب الموضوع
       await sendNotification(
         topic.author_id, 
         'رد جديد على موضوعك', 
@@ -133,12 +126,10 @@ export default function TopicDetailsPage() {
     }
   };
 
-  // 🚀 نظام الإعجابات (Toggle Like)
   const toggleVote = async (replyId: string, currentCount: number) => {
     if (!user) return;
     const hasVoted = userVotes.includes(replyId);
     
-    // التحديث الفوري في الواجهة (Optimistic Update)
     setUserVotes(prev => hasVoted ? prev.filter(id => id !== replyId) : [...prev, replyId]);
     setReplies(prev => prev.map(r => r.id === replyId ? { ...r, upvotes_count: r.upvotes_count + (hasVoted ? -1 : 1) } : r));
 
@@ -152,11 +143,10 @@ export default function TopicDetailsPage() {
       }
     } catch (error) {
       console.error('Vote error:', error);
-      fetchTopicData(); // تراجع في حال الخطأ
+      fetchTopicData();
     }
   };
 
-  // 🚀 اعتماد الإجابة + إشعار
   const toggleVerify = async (replyId: string, currentStatus: boolean, authorId: string) => {
     try {
       await supabase.from('forum_replies').update({ is_verified: !currentStatus }).eq('id', replyId);
@@ -175,7 +165,6 @@ export default function TopicDetailsPage() {
     }
   };
 
-  // 🚀 أدوات الإدارة (تثبيت، قفل، حذف)
   const toggleTopicAttribute = async (field: 'is_pinned' | 'is_locked', currentValue: boolean) => {
     try {
       await supabase.from('forum_topics').update({ [field]: !currentValue }).eq('id', topicId);
@@ -207,7 +196,6 @@ export default function TopicDetailsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       
-      {/* 🚀 Header */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -222,7 +210,6 @@ export default function TopicDetailsPage() {
             </div>
           </div>
 
-          {/* 🚀 قائمة الإدارة (للمعلمين والمدراء فقط) */}
           {isStaff && (
             <DropdownMenu.Root>
               <DropdownMenu.Trigger className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl outline-none transition-colors">
@@ -249,7 +236,6 @@ export default function TopicDetailsPage() {
 
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         
-        {/* الموضوع الأساسي */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden relative">
           {topic.is_pinned && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-rose-500 to-rose-400 rounded-bl-[3rem] flex items-start justify-end p-3"><Pin className="w-5 h-5 text-white fill-white shadow-sm" /></div>}
           
@@ -277,7 +263,6 @@ export default function TopicDetailsPage() {
           <div className="p-6 sm:p-8 prose max-w-none text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: topic.content }} />
         </motion.div>
 
-        {/* 🚀 قسم الردود */}
         <div className="flex items-center gap-3 mt-12 mb-6 px-2">
           <MessageSquare className="w-6 h-6 text-indigo-600" />
           <h2 className="text-xl font-black text-slate-900">الردود والمناقشات <span className="text-slate-400 text-sm">({replies.length})</span></h2>
@@ -291,7 +276,6 @@ export default function TopicDetailsPage() {
             return (
               <motion.div key={reply.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`bg-white rounded-[2rem] shadow-sm border ${reply.is_verified ? 'border-emerald-300 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden relative`}>
                 
-                {/* شارة الإجابة المعتمدة */}
                 {reply.is_verified && (
                   <div className="bg-emerald-500 text-white text-xs font-black px-4 py-1.5 flex items-center justify-center gap-2">
                     <CheckCircle className="w-4 h-4" /> تم اعتماد هذه الإجابة لحل المشكلة
@@ -299,7 +283,6 @@ export default function TopicDetailsPage() {
                 )}
 
                 <div className="p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:gap-6">
-                  {/* بيانات صاحب الرد */}
                   <div className="shrink-0 flex items-center sm:items-start sm:flex-col gap-3">
                     {reply.users?.avatar_url ? (
                        // eslint-disable-next-line @next/next/no-img-element
@@ -315,27 +298,22 @@ export default function TopicDetailsPage() {
                     </div>
                   </div>
 
-                  {/* محتوى الرد */}
                   <div className="flex-1 min-w-0">
                     <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed mb-4" dangerouslySetInnerHTML={{ __html: reply.content }} />
                     
-                    {/* 🚀 شريط التفاعل (الإعجاب، الاعتماد، الحذف) */}
                     <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-auto">
                       
-                      {/* زر الإعجاب */}
                       <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
                         <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
                         <span dir="ltr">{reply.upvotes_count}</span>
                       </button>
 
-                      {/* زر الاعتماد (للمعلمين وصاحب الموضوع فقط) */}
                       {canModerate && (
                         <button onClick={() => toggleVerify(reply.id, reply.is_verified, reply.author_id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border ${reply.is_verified ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'}`}>
                           {reply.is_verified ? <><XCircle className="w-4 h-4" /> إلغاء الاعتماد</> : <><CheckCircle className="w-4 h-4" /> اعتماد كحل</>}
                         </button>
                       )}
 
-                      {/* زر الحذف */}
                       {(isStaff || user?.id === reply.author_id) && (
                         <button onClick={() => handleDeleteReply(reply.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors mr-auto">
                           <Trash2 className="w-4 h-4" />
@@ -349,7 +327,6 @@ export default function TopicDetailsPage() {
           })}
         </div>
 
-        {/* 🚀 إضافة رد */}
         {!topic.is_locked ? (
           <div className="mt-8 bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
              <div className="bg-slate-50 border-b border-slate-100 p-4 flex items-center gap-3">
