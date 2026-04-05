@@ -52,7 +52,7 @@ export default function TeacherAttendanceMatrix() {
         attRes
       ] = await Promise.all([
         supabase.from('schedules').select('*'),
-        supabase.from('class_periods').select('*').order('period_number'), // 👈 تم التعديل هنا
+        supabase.from('class_periods').select('*').order('period_number'), 
         supabase.from('sections').select('id, name, class_id'), 
         supabase.from('classes').select('id, name'), 
         supabase.from('users').select('id, full_name'),
@@ -159,7 +159,9 @@ export default function TeacherAttendanceMatrix() {
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'management') {
       fetchMatrixData();
-      const interval = setInterval(fetchMatrixData, 60000);
+      // 🚀 تم تغيير التحديث التلقائي إلى 5 دقائق (300,000 ملي ثانية) بدلاً من دقيقة 
+      // لحل مشكلة الـ Disk IO في Supabase بشكل نهائي!
+      const interval = setInterval(fetchMatrixData, 300000);
       return () => clearInterval(interval);
     }
   }, [userRole, fetchMatrixData]);
@@ -236,7 +238,8 @@ export default function TeacherAttendanceMatrix() {
               <button onClick={handlePrint} className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 rounded-xl font-black hover:bg-emerald-600 transition-colors shadow-lg active:scale-95">
                 <Printer className="w-5 h-5" /> طباعة / PDF
               </button>
-              <button onClick={fetchMatrixData} className="p-3 bg-indigo-500/50 hover:bg-indigo-500/80 text-white rounded-xl transition-all border border-indigo-400/50">
+              {/* 🚀 زر التحديث اليدوي (يستخدمه المدير متى ما أراد) */}
+              <button onClick={fetchMatrixData} className="p-3 bg-indigo-500/50 hover:bg-indigo-500/80 text-white rounded-xl transition-all border border-indigo-400/50" title="تحديث البيانات الآن">
                 <RefreshCw className={loading ? 'animate-spin' : ''} />
               </button>
             </div>
