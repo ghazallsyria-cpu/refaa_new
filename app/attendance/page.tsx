@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
-import TeacherCheckInButton from '@/components/TeacherCheckInButton'; // 🚀 استيراد المكون الذكي هنا
+import TeacherCheckInButton from '@/components/TeacherCheckInButton';
 
 // 🚀 تعريف كلاسات الألوان بشكل كامل وصريح لمنع Tailwind من حذفها (Purging)
 const ATTENDANCE_OPTIONS = [
