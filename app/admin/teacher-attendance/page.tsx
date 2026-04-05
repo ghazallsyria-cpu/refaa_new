@@ -22,7 +22,13 @@ export default function TeacherAttendanceReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'pending' | 'all'>('all');
   
-  const currentDay = new Date().getDay(); // 0 للأحد
+  // 🚀 السر كان هنا: ترجمة أيام الأسبوع لتطابق قاعدة بياناتك (الأحد = 1)
+  const getDbDay = () => {
+    const jsDay = new Date().getDay(); // جافاسكريبت تعتبر الأحد 0
+    return jsDay + 1; // نضيف 1 ليصبح الأحد 1، الإثنين 2...
+  };
+
+  const currentDay = getDbDay();
   const [selectedDay, setSelectedDay] = useState<number>(currentDay);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
@@ -54,19 +60,15 @@ export default function TeacherAttendanceReport() {
         .eq('date', todayStr);
       if (attError) throw attError;
 
-      // 🚀 4. الذكاء الاصطناعي (المحرك البرمجي) لدمج البيانات ومعرفة حالة كل حصة
+      // 4. الذكاء الاصطناعي لمعرفة حالة كل حصة
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
       const processedData = (schedules || []).map((sch: any) => {
-        // استخراج الأسماء بأمان
         const className = Array.isArray(sch.sections?.classes) ? sch.sections?.classes[0]?.name : sch.sections?.classes?.name;
         const teacherName = Array.isArray(sch.teachers?.users) ? sch.teachers?.users[0]?.full_name : sch.teachers?.users?.full_name;
         
-        // البحث عن وقت الحصة
         const periodInfo = periods?.find(p => p.period_number === sch.period);
-        
-        // البحث هل سجل المعلم حضوره في هذه الحصة اليوم؟
         const hasAttended = attendance?.some(a => a.teacher_id === sch.teacher_id && a.period_number === sch.period);
 
         let status = 'pending'; // الافتراضي: قيد الانتظار
@@ -74,12 +76,11 @@ export default function TeacherAttendanceReport() {
         if (hasAttended) {
           status = 'present';
         } else if (periodInfo && periodInfo.end_time) {
-          // حساب وقت انتهاء الحصة بالدقائق لمقارنته بالوقت الحالي
           const [endH, endM] = periodInfo.end_time.split(':').map(Number);
           const periodEndMinutes = endH * 60 + endM;
 
-          // إذا كان اليوم المختار هو نفس اليوم الحالي، والوقت تجاوز نهاية الحصة -> غائب!
-          if (sch.day_of_week === currentDay && currentMinutes > periodEndMinutes) {
+          // تحويل الأنواع لنصوص لضمان التطابق التام 100%
+          if (String(sch.day_of_week) === String(currentDay) && currentMinutes > periodEndMinutes) {
             status = 'absent';
           }
         }
@@ -116,21 +117,19 @@ export default function TeacherAttendanceReport() {
     }
   }, [userRole]);
 
-  // 🚀 الفلترة الذكية
+  // 🚀 الفلترة الذكية المطورة
   const filteredData = scheduleData.filter(record => {
-    // التطابق مع اليوم (نأخذ بالاعتبار احتمالية أن الأحد 0 أو 7)
-    const isMatchingDay = record.day_of_week === selectedDay || (selectedDay === 0 && record.day_of_week === 7);
+    // -1 تعني عرض جميع الأيام
+    const isMatchingDay = selectedDay === -1 || String(record.day_of_week) === String(selectedDay);
     
-    // البحث النصي
     const matchesSearch = (record.teacher_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                           (record.class_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                           (record.subject_name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     
-    // فلتر التبويبات (حاضر، غائب...)
     const matchesTab = activeTab === 'all' || record.current_status === activeTab;
 
     return isMatchingDay && matchesSearch && matchesTab;
-  }).sort((a, b) => a.period - b.period); // ترتيب تصاعدي حسب رقم الحصة
+  }).sort((a, b) => a.period - b.period);
 
   const absences = filteredData.filter(r => r.current_status === 'absent');
   const presents = filteredData.filter(r => r.current_status === 'present');
@@ -156,9 +155,11 @@ export default function TeacherAttendanceReport() {
 
   if (userRole !== 'admin' && userRole !== 'management') return null;
 
+  // 🚀 أضفنا زر "الكل" لتتمكن من رؤية الجدول كاملاً
   const daysOfWeek = [
-    { id: 0, name: 'الأحد' }, { id: 1, name: 'الإثنين' }, { id: 2, name: 'الثلاثاء' },
-    { id: 3, name: 'الأربعاء' }, { id: 4, name: 'الخميس' }, { id: 5, name: 'الجمعة' }
+    { id: -1, name: 'الكل (كامل الأسبوع)' },
+    { id: 1, name: 'الأحد' }, { id: 2, name: 'الإثنين' }, { id: 3, name: 'الثلاثاء' },
+    { id: 4, name: 'الأربعاء' }, { id: 5, name: 'الخميس' }
   ];
 
   return (
@@ -197,7 +198,7 @@ export default function TeacherAttendanceReport() {
         </div>
       </div>
 
-      {/* 🚀 أزرار اختيار الأيام (اكتشف الحقيقة بنفسك!) */}
+      {/* 🚀 أزرار اختيار الأيام */}
       <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-2 justify-center">
         {daysOfWeek.map(day => (
           <button 
