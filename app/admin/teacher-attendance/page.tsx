@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   Users, AlertTriangle, Search, Filter, Download, 
-  Calendar, Clock, AlertCircle, ShieldAlert, ArrowLeft, RefreshCw
+  Calendar, Clock, AlertCircle, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2 // 🚀 تمت إضافة CheckCircle2 هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
