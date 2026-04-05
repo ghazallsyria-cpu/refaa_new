@@ -14,6 +14,21 @@ import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import ForumEditor from '@/components/ForumEditor';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { deleteFromCloudinary } from '@/lib/cloudinary'; // 🚀 استيراد دالتك الجاهزة
+
+// 🚀 دالة لاستخراج روابط الصور من نصوص HTML
+const extractUrlsFromHtml = (htmlStrings: string[]) => {
+  const urls: string[] = [];
+  const regex = /<img[^>]+src="([^">]+)"/g;
+  htmlStrings.forEach(html => {
+    if (!html) return;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      if (match[1].includes('cloudinary.com')) urls.push(match[1]);
+    }
+  });
+  return urls;
+};
 
 export default function TopicDetailsPage() {
   const params = useParams();
@@ -35,32 +50,20 @@ export default function TopicDetailsPage() {
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: topicData, error: topicError } = await supabase
-        .from('forum_topics')
-        .select('*, category:forum_categories(name)')
-        .eq('id', topicId)
-        .single();
-
+      const { data: topicData, error: topicError } = await supabase.from('forum_topics').select('*, category:forum_categories(name)').eq('id', topicId).single();
       if (topicError) throw topicError;
 
       const { data: authorData } = await supabase.from('users').select('full_name, role, avatar_url').eq('id', topicData.author_id).single();
-      
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
       setTopic({ ...topicData, author: authorData, author_badge: badgeText });
 
-      const { data: repliesData } = await supabase
-        .from('forum_replies')
-        .select('*')
-        .eq('topic_id', topicId)
-        .order('is_verified', { ascending: false })
-        .order('created_at', { ascending: true });
+      const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
 
       let formattedReplies: any[] = [];
       if (repliesData && repliesData.length > 0) {
         const authorIds = [...new Set(repliesData.map(r => r.author_id))];
         const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url').in('id', authorIds);
-        
         formattedReplies = repliesData.map(reply => {
           const author = usersData?.find(u => u.id === reply.author_id);
           return { ...reply, users: author || { full_name: 'مجهول', role: 'student' } };
@@ -72,7 +75,6 @@ export default function TopicDetailsPage() {
         const { data: votes } = await supabase.from('forum_votes').select('reply_id').eq('user_id', user.id);
         setUserVotes(votes?.map(v => v.reply_id) || []);
       }
-
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -80,19 +82,11 @@ export default function TopicDetailsPage() {
     }
   }, [topicId, user]);
 
-  useEffect(() => {
-    fetchTopicData();
-  }, [fetchTopicData]);
+  useEffect(() => { fetchTopicData(); }, [fetchTopicData]);
 
   const sendNotification = async (targetUserId: string, title: string, content: string, link: string) => {
     if (!targetUserId || targetUserId === user?.id) return;
-    await supabase.from('notifications').insert([{
-      user_id: targetUserId,
-      title,
-      content,
-      type: 'forum',
-      link
-    }]);
+    await supabase.from('notifications').insert([{ user_id: targetUserId, title, content, type: 'forum', link }]);
   };
 
   const handleAddReply = async (e: React.FormEvent) => {
@@ -102,21 +96,10 @@ export default function TopicDetailsPage() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('forum_replies').insert([{
-        topic_id: topicId,
-        author_id: user.id,
-        content: replyContent
-      }]);
-
+      const { error } = await supabase.from('forum_replies').insert([{ topic_id: topicId, author_id: user.id, content: replyContent }]);
       if (error) throw error;
       
-      await sendNotification(
-        topic.author_id, 
-        'رد جديد على موضوعك', 
-        `قام ${user.user_metadata?.full_name || 'مستخدم'} بالرد على موضوعك: ${topic.title}`, 
-        `/forums/topic/${topicId}`
-      );
-
+      await sendNotification(topic.author_id, 'رد جديد على موضوعك', `قام ${user.user_metadata?.full_name || 'مستخدم'} بالرد على موضوعك: ${topic.title}`, `/forums/topic/${topicId}`);
       setReplyContent('');
       await fetchTopicData();
     } catch (error) {
@@ -129,8 +112,6 @@ export default function TopicDetailsPage() {
   const toggleVote = async (replyId: string, currentCount: number) => {
     if (!user) return;
     const hasVoted = userVotes.includes(replyId);
-    
-    // 🚀 إعطاء Types صريحة (string[]) و (any[])
     setUserVotes((prev: string[]) => hasVoted ? prev.filter(id => id !== replyId) : [...prev, replyId]);
     setReplies((prev: any[]) => prev.map((r: any) => r.id === replyId ? { ...r, upvotes_count: r.upvotes_count + (hasVoted ? -1 : 1) } : r));
 
@@ -142,51 +123,51 @@ export default function TopicDetailsPage() {
         await supabase.from('forum_votes').insert([{ reply_id: replyId, user_id: user.id }]);
         await supabase.from('forum_replies').update({ upvotes_count: currentCount + 1 }).eq('id', replyId);
       }
-    } catch (error) {
-      console.error('Vote error:', error);
-      fetchTopicData();
-    }
+    } catch (error) { fetchTopicData(); }
   };
 
   const toggleVerify = async (replyId: string, currentStatus: boolean, authorId: string) => {
     try {
       await supabase.from('forum_replies').update({ is_verified: !currentStatus }).eq('id', replyId);
-      
-      if (!currentStatus) {
-        await sendNotification(
-          authorId, 
-          'إجابة معتمدة! ⭐️', 
-          `تم اعتماد إجابتك كحل صحيح في موضوع: ${topic.title}`, 
-          `/forums/topic/${topicId}`
-        );
-      }
+      if (!currentStatus) await sendNotification(authorId, 'إجابة معتمدة! ⭐️', `تم اعتماد إجابتك كحل صحيح في موضوع: ${topic.title}`, `/forums/topic/${topicId}`);
       fetchTopicData();
-    } catch (error) {
-      console.error(error);
-    }
+    } catch (error) { console.error(error); }
   };
 
   const toggleTopicAttribute = async (field: 'is_pinned' | 'is_locked', currentValue: boolean) => {
     try {
       await supabase.from('forum_topics').update({ [field]: !currentValue }).eq('id', topicId);
-      // 🚀 إعطاء Type صريح هنا (any)
       setTopic((prev: any) => ({ ...prev, [field]: !currentValue }));
     } catch (error) { console.error(error); }
   };
 
+  // 🚀 استخدام دالتك لحذف صور الموضوع والردود
   const handleDeleteTopic = async () => {
-    if (!confirm('هل أنت متأكد من حذف هذا الموضوع نهائياً؟')) return;
+    if (!confirm('هل أنت متأكد من حذف هذا الموضوع نهائياً؟ سيتم حذف جميع الردود والصور المرفقة.')) return;
     try {
+      // استخراج الروابط وحذفها باستخدام دالتك
+      const urlsToDelete = extractUrlsFromHtml([topic.content, ...replies.map(r => r.content)]);
+      if (urlsToDelete.length > 0) {
+        await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
+      }
+
+      await supabase.from('forum_replies').delete().eq('topic_id', topicId);
       await supabase.from('forum_topics').delete().eq('id', topicId);
+      
       router.push(`/forums/${topic.category_id}`);
     } catch (error) { alert('خطأ في الحذف'); }
   };
 
-  const handleDeleteReply = async (replyId: string) => {
+  // 🚀 استخدام دالتك لحذف صور الرد
+  const handleDeleteReply = async (replyId: string, content: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا الرد؟')) return;
     try {
+      const urlsToDelete = extractUrlsFromHtml([content]);
+      if (urlsToDelete.length > 0) {
+        await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
+      }
+
       await supabase.from('forum_replies').delete().eq('id', replyId);
-      // 🚀 إعطاء Type صريح هنا (any[])
       setReplies((prev: any[]) => prev.filter((r: any) => r.id !== replyId));
     } catch (error) { alert('خطأ في الحذف'); }
   };
@@ -198,7 +179,6 @@ export default function TopicDetailsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
-      
       <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -228,7 +208,7 @@ export default function TopicDetailsPage() {
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
                   <DropdownMenu.Item onClick={handleDeleteTopic} className="flex items-center gap-2 p-3 hover:bg-rose-50 text-rose-600 rounded-xl cursor-pointer outline-none transition-colors">
-                    <Trash2 className="w-4 h-4" /> حذف الموضوع نهائياً
+                    <Trash2 className="w-4 h-4" /> حذف الموضوع والصور نهائياً
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
@@ -238,7 +218,6 @@ export default function TopicDetailsPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-        
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden relative">
           {topic.is_pinned && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-rose-500 to-rose-400 rounded-bl-[3rem] flex items-start justify-end p-3"><Pin className="w-5 h-5 text-white fill-white shadow-sm" /></div>}
           
@@ -278,13 +257,11 @@ export default function TopicDetailsPage() {
 
             return (
               <motion.div key={reply.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`bg-white rounded-[2rem] shadow-sm border ${reply.is_verified ? 'border-emerald-300 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden relative`}>
-                
                 {reply.is_verified && (
                   <div className="bg-emerald-500 text-white text-xs font-black px-4 py-1.5 flex items-center justify-center gap-2">
                     <CheckCircle className="w-4 h-4" /> تم اعتماد هذه الإجابة لحل المشكلة
                   </div>
                 )}
-
                 <div className="p-5 sm:p-6 flex flex-col sm:flex-row gap-4 sm:gap-6">
                   <div className="shrink-0 flex items-center sm:items-start sm:flex-col gap-3">
                     {reply.users?.avatar_url ? (
@@ -305,7 +282,6 @@ export default function TopicDetailsPage() {
                     <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed mb-4" dangerouslySetInnerHTML={{ __html: reply.content }} />
                     
                     <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-auto">
-                      
                       <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
                         <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
                         <span dir="ltr">{reply.upvotes_count}</span>
@@ -318,7 +294,7 @@ export default function TopicDetailsPage() {
                       )}
 
                       {(isStaff || user?.id === reply.author_id) && (
-                        <button onClick={() => handleDeleteReply(reply.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors mr-auto">
+                        <button onClick={() => handleDeleteReply(reply.id, reply.content)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors mr-auto">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
@@ -352,7 +328,6 @@ export default function TopicDetailsPage() {
             <p className="text-sm font-bold text-slate-500 mt-2">لا يمكن إضافة ردود جديدة على هذا الموضوع.</p>
           </div>
         )}
-
       </div>
     </div>
   );
