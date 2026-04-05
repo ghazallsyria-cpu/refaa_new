@@ -30,7 +30,7 @@ export default function ForumsPage() {
   const [newCatDesc, setNewCatDesc] = useState('');
   const [parentId, setParentId] = useState<string | 'none'>('none');
   
-  // 🚀 مصفوفة لتخزين الصفوف المحددة
+  // 🚀 مصفوفة الأرقام للاختيار المتعدد
   const [targetLevels, setTargetLevels] = useState<number[]>([]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,7 +39,7 @@ export default function ForumsPage() {
     fetchCategories();
   }, [fetchCategories]);
 
-  // دالة لاختيار أو إلغاء اختيار صف معين
+  // 🚀 دالة لاختيار أو إلغاء اختيار صف معين
   const toggleGrade = (grade: number) => {
     if (targetLevels.includes(grade)) {
       setTargetLevels(targetLevels.filter(g => g !== grade));
@@ -54,11 +54,12 @@ export default function ForumsPage() {
     
     setIsSubmitting(true);
     
+    // 🚀 إرسال المصفوفة كما يتوقعها TypeScript
     const payload = {
       name: newCatName,
       description: newCatDesc,
       parent_id: parentId === 'none' ? null : parentId,
-      target_level: targetLevels.length === 0 ? null : targetLevels // إذا كانت فارغة = للجميع
+      target_level: targetLevels.length === 0 ? null : targetLevels
     };
 
     const result = await createCategory(payload);
@@ -110,7 +111,7 @@ export default function ForumsPage() {
               <MessageSquare className="w-3.5 h-3.5" />
               {cat.topics_count} موضوع
             </div>
-            {/* 🚀 عرض الصفوف المستهدفة بشكل أنيق */}
+            {/* 🚀 عرض الصفوف المستهدفة */}
             {cat.target_level && cat.target_level.length > 0 ? (
               <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 max-w-[120px]">
                 <Target className="w-3 h-3 shrink-0" />
@@ -287,7 +288,7 @@ export default function ForumsPage() {
                   </select>
                 </div>
 
-                {/* 🎯 نظام اختيار الصفوف المتعددة الجديد */}
+                {/* 🚀 نظام اختيار الصفوف المتعددة */}
                 <div className="bg-indigo-50/50 p-4 sm:p-5 rounded-[1.5rem] border border-indigo-100">
                   <label className="flex items-center gap-2 text-xs font-black text-indigo-700 uppercase tracking-widest mb-3">
                     <Target className="w-4 h-4" /> الفئة المستهدفة (الصفوف)
