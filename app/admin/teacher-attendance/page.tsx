@@ -5,15 +5,14 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   Printer, Calendar, Clock, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2,
-  XCircle, Hourglass, Minus
+  XCircle, Hourglass, Minus, AlertTriangle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
 
-// دالة ذكية لتحويل أيام الأسبوع في الجافاسكريبت إلى نظام قاعدة بياناتك (الأحد = 1)
+// دالة تحويل أيام الأسبوع من نظام المتصفح إلى نظام مدرستك (الأحد = 1)
 const getDbDay = () => {
   const jsDay = new Date().getDay(); // 0 = الأحد، 1 = الإثنين...
   if (jsDay === 0) return 1; // الأحد
@@ -41,28 +40,29 @@ export default function TeacherAttendanceMatrix() {
     try {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       
-      // 🚀 1. جلب جميع البيانات الخام بدون فلاتر معقدة لتجنب ضياع البيانات
+      // 🚀 الهندسة العكسية: نجلب الجدول أولاً وكل شيء بشكل مستقل لتجنب أي حظر أمني
       const [
-        { data: teachers },
-        { data: users },
+        { data: allSchedules },
         { data: periods },
-        { data: allSchedules }, // نجلب كل الجدول
         { data: subjects },
+        { data: users }, // المستخدمون (لجلب أسماء المعلمين لأن teacher_id هو نفسه user_id)
         { data: attendance }
       ] = await Promise.all([
-        supabase.from('teachers').select('id'),
-        supabase.from('users').select('id, full_name'),
-        supabase.from('periods').select('*').order('period_number'),
         supabase.from('schedule').select('*'), 
+        supabase.from('periods').select('*').order('period_number'),
         supabase.from('subjects').select('id, name'),
+        supabase.from('users').select('id, full_name'),
         supabase.from('teacher_attendance_records').select('*').eq('date', todayStr)
       ]);
 
-      // ترتيب الحصص بشكل صحيح (1, 2, 3...)
-      const sortedPeriods = (periods || []).sort((a, b) => Number(a.period_number) - Number(b.period_number));
+      // تجهيز الحصص (إذا لم يوجد جدول أوقات، نصنع أعمدة افتراضية 1 إلى 7)
+      const sortedPeriods = periods && periods.length > 0 
+        ? periods.sort((a, b) => Number(a.period_number) - Number(b.period_number))
+        : [1, 2, 3, 4, 5, 6, 7].map(n => ({ period_number: n, start_time: null, end_time: null }));
+        
       setPeriodsList(sortedPeriods);
 
-      // 🚀 2. تصفية جدول اليوم المختار فقط في المتصفح لضمان عدم ضياع شيء
+      // تصفية جدول اليوم المختار فقط (بالأرقام لتجنب أي أخطاء نصية)
       const todaysSchedule = (allSchedules || []).filter(s => Number(s.day_of_week) === Number(selectedDay));
 
       const now = new Date();
@@ -73,62 +73,68 @@ export default function TeacherAttendanceMatrix() {
       let absencesCount = 0;
       let presentsCount = 0;
 
-      // 🚀 3. بناء المصفوفة (الماتريكس)
-      let matrix = (teachers || []).map(teacher => {
-        const user = (users || []).find(u => u.id === teacher.id);
-        const row: any = {
-          teacher_id: teacher.id,
-          teacher_name: user?.full_name || 'معلم غير محدد',
-          hasAnyClassToday: false, // لمعرفة هل لديه حصص اليوم أم لا
-          periodsData: {}
-        };
+      // 🚀 بناء المصفوفة بناءً على "من لديه حصة" وليس "من هو مسجل كمعلم"
+      const teacherMap = new Map();
 
-        sortedPeriods.forEach(period => {
-          // 🚀 4. المطابقة الدقيقة جداً (باستخدام Number لتجنب أخطاء النصوص والأرقام)
-          const sch = todaysSchedule.find(s => 
-            s.teacher_id === teacher.id && Number(s.period) === Number(period.period_number)
-          );
-          
-          if (!sch) {
-            row.periodsData[period.period_number] = { status: 'free' };
-            return;
+      todaysSchedule.forEach(sch => {
+        // إذا لم نضف المعلم للمصفوفة بعد، نضيفه
+        if (!teacherMap.has(sch.teacher_id)) {
+          const userRecord = (users || []).find(u => u.id === sch.teacher_id);
+          teacherMap.set(sch.teacher_id, {
+            teacher_id: sch.teacher_id,
+            teacher_name: userRecord?.full_name || `معلم غير مسجل (${sch.teacher_id.substring(0, 4)})`,
+            periodsData: {}
+          });
+        }
+
+        const row = teacherMap.get(sch.teacher_id);
+        const subject = (subjects || []).find(s => s.id === sch.subject_id);
+        
+        // التحقق من الحضور
+        const hasAttended = (attendance || []).some(a => a.teacher_id === sch.teacher_id && Number(a.period_number) === Number(sch.period));
+        const periodInfo = sortedPeriods.find(p => p.period_number === sch.period);
+
+        let status = 'pending';
+
+        if (hasAttended) {
+          status = 'present';
+          presentsCount++;
+        } else if (periodInfo && periodInfo.end_time) {
+          const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+          const periodEndMinutes = endH * 60 + endM;
+
+          if (isPastDay) {
+            // يوم مضى ولم يحضر = غائب
+            status = 'absent';
+            absencesCount++;
+          } else if (isToday && currentMinutes > periodEndMinutes) {
+            // اليوم، وانتهت الحصة ولم يحضر = غائب
+            status = 'absent';
+            absencesCount++;
           }
+        } else if (isPastDay) {
+          // لا يوجد وقت مسجل للحصة، لكن اليوم مضى وانتهى
+          status = 'absent';
+          absencesCount++;
+        }
 
-          row.hasAnyClassToday = true; // وجدنا له حصة!
-          const subject = (subjects || []).find(s => s.id === sch.subject_id);
-          const hasAttended = (attendance || []).some(a => a.teacher_id === teacher.id && Number(a.period_number) === Number(period.period_number));
+        row.periodsData[sch.period] = {
+          status,
+          subject: subject?.name || 'مادة'
+        };
+      });
 
-          if (hasAttended) {
-            row.periodsData[period.period_number] = { status: 'present', subject: subject?.name };
-            presentsCount++;
-          } else {
-            if (period.end_time) {
-              const [endH, endM] = period.end_time.split(':').map(Number);
-              const periodEndMinutes = endH * 60 + endM;
-
-              if (isPastDay) {
-                // إذا كان يوماً في الماضي ولم يسجل حضور، فهو غائب حتماً
-                row.periodsData[period.period_number] = { status: 'absent', subject: subject?.name };
-                absencesCount++;
-              } else if (isToday && currentMinutes > periodEndMinutes) {
-                // إذا كان اليوم، وانتهى وقت الحصة ولم يسجل، فهو غائب
-                row.periodsData[period.period_number] = { status: 'absent', subject: subject?.name };
-                absencesCount++;
-              } else {
-                // الحصة لم تبدأ بعد أو ما زالت قائمة
-                row.periodsData[period.period_number] = { status: 'pending', subject: subject?.name };
-              }
-            } else {
-               row.periodsData[period.period_number] = { status: 'pending', subject: subject?.name };
-            }
+      // تعبئة الفراغات (الحصص التي ليس لديه فيها جدول)
+      const matrix = Array.from(teacherMap.values()).map(row => {
+        sortedPeriods.forEach(p => {
+          if (!row.periodsData[p.period_number]) {
+            row.periodsData[p.period_number] = { status: 'free' };
           }
         });
-
         return row;
       });
 
-      // 🚀 5. تنظيف القائمة: إخفاء المعلمين الذين ليس لديهم أي حصة في هذا اليوم، وترتيب الباقين أبجدياً
-      matrix = matrix.filter(row => row.hasAnyClassToday);
+      // الترتيب الأبجدي
       matrix.sort((a, b) => a.teacher_name.localeCompare(b.teacher_name, 'ar'));
       
       setMatrixData(matrix);
@@ -162,7 +168,6 @@ export default function TeacherAttendanceMatrix() {
 
   return (
     <>
-      {/* ستايل مخصص للطباعة */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * { visibility: hidden; }
@@ -181,18 +186,17 @@ export default function TeacherAttendanceMatrix() {
           </Link>
         </div>
 
-        {/* الترويسة العلوية */}
         <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 to-indigo-900 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-900/20 border border-slate-700 no-print">
           <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
           
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-black uppercase tracking-widest mb-4 shadow-inner">
-                <ShieldAlert className="w-4 h-4 text-emerald-400" /> مصفوفة الدوام الشاملة (النسخة الذكية)
+                <ShieldAlert className="w-4 h-4 text-emerald-400" /> مصفوفة الدوام المباشرة
               </div>
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">السجل اليومي لحضور المعلمين</h1>
               <p className="text-indigo-200 font-bold text-base max-w-2xl leading-relaxed">
-                هذه اللوحة مرتبطة بشكل مباشر بجدول الحصص الفعلي. المعلمون الذين لا يوجد لديهم حصص في اليوم المحدد لن يظهروا في القائمة.
+                تقرأ هذه اللوحة بيانات الجدول مباشرة. أي معلم مسند إليه حصة سيظهر فوراً.
               </p>
             </div>
             
@@ -207,7 +211,6 @@ export default function TeacherAttendanceMatrix() {
           </div>
         </div>
 
-        {/* أزرار اختيار الأيام */}
         <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-2 justify-center no-print">
           {daysOfWeek.map(day => (
             <button 
@@ -222,12 +225,8 @@ export default function TeacherAttendanceMatrix() {
           ))}
         </div>
 
-        {/* ========================================= */}
-        {/* 🖨️ منطقة الطباعة والجدول (Print Area) */}
-        {/* ========================================= */}
         <div className="print-area bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
           
-          {/* ترويسة التقرير (تظهر في الطباعة بشكل أنيق) */}
           <div className="p-8 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -239,7 +238,6 @@ export default function TeacherAttendanceMatrix() {
               </p>
             </div>
             
-            {/* ملخص إحصائي سريع */}
             <div className="flex gap-4">
               <div className="bg-white px-6 py-3 rounded-xl border border-slate-200 text-center shadow-sm">
                 <p className="text-emerald-600 font-black text-xl">{stats.totalPresents}</p>
@@ -252,17 +250,19 @@ export default function TeacherAttendanceMatrix() {
             </div>
           </div>
 
-          {/* 🚀 الجدول الماتريكس */}
           <div className="overflow-x-auto p-6">
             {loading ? (
               <div className="py-20 flex justify-center"><RefreshCw className="w-10 h-10 text-indigo-500 animate-spin" /></div>
             ) : matrixData.length === 0 ? (
               <div className="py-20 text-center flex flex-col items-center gap-4">
-                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
-                   <Clock className="w-10 h-10 text-slate-300" />
+                <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center border border-rose-100 text-rose-500">
+                   <AlertTriangle className="w-10 h-10" />
                 </div>
-                <h3 className="font-black text-xl text-slate-800">لا يوجد حصص اليوم</h3>
-                <p className="font-bold text-slate-500 text-sm">لم نجد أي جدول مسجل لأي معلم في هذا اليوم ({daysOfWeek.find(d => d.id === selectedDay)?.name}).</p>
+                <h3 className="font-black text-xl text-slate-800">الجدول فارغ أو محجوب</h3>
+                <p className="font-bold text-slate-500 text-sm max-w-md leading-relaxed">
+                  لم نجد أي حصص. إذا كنت متأكداً من وجود حصص مسندة، يرجى التأكد من أن قاعدة البيانات 
+                  (Supabase) تسمح للمدير بقراءة جدول <code>schedule</code> (قواعد RLS).
+                </p>
               </div>
             ) : (
               <table className="w-full text-sm text-right border-collapse">
@@ -275,7 +275,7 @@ export default function TeacherAttendanceMatrix() {
                       <th key={period.period_number} className="p-4 bg-slate-100 text-slate-700 font-black border border-slate-200 text-center min-w-[140px]">
                         الحصة {period.period_number}
                         <div className="text-[10px] font-bold text-slate-400 mt-1" dir="ltr">
-                          {period.start_time?.substring(0,5)} - {period.end_time?.substring(0,5)}
+                          {period.start_time?.substring(0,5) || '--:--'} - {period.end_time?.substring(0,5) || '--:--'}
                         </div>
                       </th>
                     ))}
@@ -288,7 +288,6 @@ export default function TeacherAttendanceMatrix() {
                         {idx + 1}. {row.teacher_name}
                       </td>
                       
-                      {/* تفريغ بيانات الحصص */}
                       {periodsList.map(period => {
                         const cellData = row.periodsData[period.period_number];
                         
@@ -324,7 +323,6 @@ export default function TeacherAttendanceMatrix() {
             )}
           </div>
 
-          {/* تذييل الطباعة */}
           <div className="p-6 border-t border-slate-200 bg-white text-center hidden print:block mt-10">
             <div className="flex justify-between items-end px-20">
               <div>
