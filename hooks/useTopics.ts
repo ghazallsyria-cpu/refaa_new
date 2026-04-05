@@ -42,44 +42,49 @@ export function useTopics(categoryId: string) {
       if (catError) throw catError;
       setCategoryInfo(catData);
 
-      // 2. جلب المواضيع (معالجة قوية للأخطاء)
+      // 2. جلب المواضيع (بدون ربط مباشر لتفادي خطأ auth.users)
       const { data: topicsData, error: topicsError } = await supabase
         .from('forum_topics')
-        .select(`
-          id, title, content, created_at, views_count, is_pinned, is_locked, author_id,
-          users (full_name, role, avatar_url),
-          forum_replies (id)
-        `)
+        .select(`id, title, content, created_at, views_count, is_pinned, is_locked, author_id`)
         .eq('category_id', categoryId)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (topicsError) {
-        console.error("DB Error:", topicsError);
-        throw topicsError;
-      }
+      if (topicsError) throw topicsError;
 
-      if (topicsData) {
+      if (topicsData && topicsData.length > 0) {
+        // 3. استخراج معرفات الكتاب الفريدة لجلب بياناتهم
+        const authorIds = [...new Set(topicsData.map(t => t.author_id))];
+        
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name, role, avatar_url')
+          .in('id', authorIds);
+
+        // 4. جلب عدد الردود لكل موضوع
+        const topicIds = topicsData.map(t => t.id);
+        const { data: repliesData } = await supabase
+          .from('forum_replies')
+          .select('id, topic_id')
+          .in('topic_id', topicIds);
+
+        // 5. دمج البيانات بذكاء (Merge)
         const formattedTopics: Topic[] = topicsData.map((t: any) => {
-          // استخراج بيانات المستخدم بشكل آمن (سواء كان مصفوفة أو كائن)
-          const userData = Array.isArray(t.users) ? t.users[0] : t.users;
+          const author = usersData?.find(u => u.id === t.author_id);
+          const repliesCount = repliesData?.filter(r => r.topic_id === t.id).length || 0;
           
           return {
-            id: t.id,
-            title: t.title,
-            content: t.content,
-            created_at: t.created_at,
-            views_count: t.views_count,
-            is_pinned: t.is_pinned,
-            is_locked: t.is_locked,
-            author_id: t.author_id,
-            author_name: userData?.full_name || 'مستخدم غير معروف',
-            author_role: userData?.role || 'student',
-            author_avatar: userData?.avatar_url || null,
-            replies_count: t.forum_replies ? t.forum_replies.length : 0
+            ...t,
+            author_name: author?.full_name || 'مستخدم غير معروف',
+            author_role: author?.role || 'student',
+            author_avatar: author?.avatar_url || null,
+            replies_count: repliesCount
           };
         });
+
         setTopics(formattedTopics);
+      } else {
+        setTopics([]); // لا توجد مواضيع
       }
     } catch (error) {
       console.error('Error fetching topics:', error);
@@ -101,7 +106,7 @@ export function useTopics(categoryId: string) {
 
       if (error) throw error;
       
-      await fetchTopicsAndCategory(); // تحديث القائمة فوراً
+      await fetchTopicsAndCategory(); // تحديث فوري
       return { success: true };
     } catch (error: any) {
       console.error('Error creating topic:', error);
