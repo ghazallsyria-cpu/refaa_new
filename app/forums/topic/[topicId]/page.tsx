@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
   MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
-  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle // 🚀 تم إضافة XCircle هنا
+  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
@@ -130,8 +130,9 @@ export default function TopicDetailsPage() {
     if (!user) return;
     const hasVoted = userVotes.includes(replyId);
     
-    setUserVotes(prev => hasVoted ? prev.filter(id => id !== replyId) : [...prev, replyId]);
-    setReplies(prev => prev.map(r => r.id === replyId ? { ...r, upvotes_count: r.upvotes_count + (hasVoted ? -1 : 1) } : r));
+    // 🚀 إعطاء Types صريحة (string[]) و (any[])
+    setUserVotes((prev: string[]) => hasVoted ? prev.filter(id => id !== replyId) : [...prev, replyId]);
+    setReplies((prev: any[]) => prev.map((r: any) => r.id === replyId ? { ...r, upvotes_count: r.upvotes_count + (hasVoted ? -1 : 1) } : r));
 
     try {
       if (hasVoted) {
@@ -168,7 +169,8 @@ export default function TopicDetailsPage() {
   const toggleTopicAttribute = async (field: 'is_pinned' | 'is_locked', currentValue: boolean) => {
     try {
       await supabase.from('forum_topics').update({ [field]: !currentValue }).eq('id', topicId);
-      setTopic(prev => ({ ...prev, [field]: !currentValue }));
+      // 🚀 إعطاء Type صريح هنا (any)
+      setTopic((prev: any) => ({ ...prev, [field]: !currentValue }));
     } catch (error) { console.error(error); }
   };
 
@@ -184,7 +186,8 @@ export default function TopicDetailsPage() {
     if (!confirm('هل أنت متأكد من حذف هذا الرد؟')) return;
     try {
       await supabase.from('forum_replies').delete().eq('id', replyId);
-      setReplies(prev => prev.filter(r => r.id !== replyId));
+      // 🚀 إعطاء Type صريح هنا (any[])
+      setReplies((prev: any[]) => prev.filter((r: any) => r.id !== replyId));
     } catch (error) { alert('خطأ في الحذف'); }
   };
 
