@@ -5,15 +5,24 @@ import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 
-// 🚀 استيراد ديناميكي لمنع انهيار السيرفر (SSR Crash)
-const ReactQuill = dynamic(() => import('react-quill'), { 
-  ssr: false,
-  loading: () => (
-    <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
-      <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-    </div>
-  )
-});
+// 🚀 تغليف ذكي (Wrapper) لمكتبة Quill لحل كل مشاكل الـ SSR والـ Ref مع TypeScript
+const ReactQuillWrapper = dynamic(
+  async () => {
+    const { default: RQ } = await import('react-quill');
+    // نقوم بتمرير الـ ref باسم مستعار لخدعة TypeScript
+    return function Comp({ forwardedRef, ...props }: any) {
+      return <RQ ref={forwardedRef} {...props} />;
+    };
+  },
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      </div>
+    )
+  }
+);
 
 interface ForumEditorProps {
   content: string;
@@ -132,9 +141,8 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         </div>
       )}
 
-      {/* @ts-expect-error - ReactQuill dynamic import typing workaround */}
-      <ReactQuill 
-        ref={quillRef}
+      <ReactQuillWrapper 
+        forwardedRef={quillRef}
         theme="snow"
         value={content}
         onChange={setContent}
