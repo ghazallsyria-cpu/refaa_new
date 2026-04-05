@@ -15,6 +15,8 @@ export interface ForumCategory {
   target_classes: string[] | null; // 🚀 أصبح يستقبل UUIDs للصفوف
   icon: string | null;
   topics_count?: number;
+  post_permission?: 'all' | 'teachers_admin' | 'admin_only'; // 🚀 الصلاحيات الجديدة
+  reply_permission?: 'all' | 'teachers_admin' | 'admin_only' | 'none'; // 🚀 الصلاحيات الجديدة
 }
 
 export interface StructuredCategory extends ForumCategory {
@@ -41,11 +43,11 @@ export function useForums() {
       if (classesError) throw classesError;
       if (classesData) setSchoolClasses(classesData);
 
-      // 2. جلب أقسام المنتدى
+      // 2. جلب أقسام المنتدى مع الصلاحيات الجديدة
       const { data, error: fetchError } = await supabase
         .from('forum_categories')
         .select(`
-          id, name, description, parent_id, target_classes, icon,
+          id, name, description, parent_id, target_classes, icon, post_permission, reply_permission,
           forum_topics (count)
         `)
         .order('created_at', { ascending: true });
