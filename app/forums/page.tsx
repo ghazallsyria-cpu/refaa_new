@@ -130,7 +130,7 @@ export default function ForumsPage() {
                 <div className="h-32 w-full relative overflow-hidden bg-slate-100">
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={cat.icon} alt="cover" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+<img src={cat.icon} alt="cover" className="w-full h-full object-contain bg-white p-2 group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute bottom-3 right-4 z-20 text-white font-black text-lg drop-shadow-md">{cat.name}</div>
                 </div>
             ) : (
