@@ -1,18 +1,49 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
-import { useTopics } from '@/hooks/useTopics';
 import { 
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
   Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import ForumEditor from '@/components/ForumEditor';
+
+// --- 🚀 الاستيرادات الأصلية (معطلة مؤقتاً لتجنب أخطاء المعاينة) ---
+// import { useParams, useRouter } from 'next/navigation';
+// import { useAuth } from '@/context/auth-context';
+// import { useTopics } from '@/hooks/useTopics';
+// import Link from 'next/link';
+// import ForumEditor from '@/components/ForumEditor';
+
+// --- 🛠️ نسخ وهمية (Mocks) مخصصة فقط لتعمل المعاينة في المتصفح ---
+const useParams = () => ({ id: '1' });
+const useRouter = () => ({ push: () => {} });
+const useAuth = () => ({ user: { id: '1' }, userRole: 'admin', authRole: 'admin' });
+const Link = ({ href, children, className }: any) => <a href={href} className={className}>{children}</a>;
+const ForumEditor = ({ content, setContent }: any) => (
+  <textarea 
+    value={content} 
+    onChange={(e) => setContent(e.target.value)} 
+    className="w-full border border-slate-200 rounded-xl p-4 min-h-[150px] outline-none focus:border-indigo-500" 
+    placeholder="اكتب المحتوى هنا..." 
+  />
+);
+const useTopics = (categoryId: string) => {
+  return {
+    topics: [
+      {
+        id: '101', title: 'قرار إداري هام: مواعيد الاختبارات', content: 'تم تحديد مواعيد الاختبارات النهائية لتكون في منتصف الشهر القادم. نرجو الالتزام.',
+        author_role: 'admin', author_avatar: null, is_pinned: true, is_locked: false, author_name: 'مدير النظام', author_badge: 'إدارة المدرسة', author_gamification_badges: [], created_at: new Date().toISOString(), replies_count: 0
+      }
+    ],
+    categoryInfo: { id: categoryId, name: 'التعاميم والقرارات', description: 'قسم مخصص لنشر القرارات الإدارية', post_permission: 'admin_only' },
+    loading: false,
+    fetchTopicsAndCategory: async () => {},
+    createTopic: async () => ({ success: true })
+  };
+};
+// ------------------------------------------------------------------
 
 export default function CategoryPage() {
   const params = useParams();
@@ -71,7 +102,7 @@ export default function CategoryPage() {
     setIsSubmitting(false);
   };
 
-  const filteredTopics = topics.filter(t => 
+  const filteredTopics = topics.filter((t: any) => 
     t.title.includes(searchQuery) || t.content.includes(searchQuery)
   );
 
@@ -154,7 +185,7 @@ export default function CategoryPage() {
           </div>
         ) : (
           <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden divide-y divide-slate-100">
-            {filteredTopics.map((topic) => {
+            {filteredTopics.map((topic: any) => {
               const isStaff = topic.author_role === 'teacher' || topic.author_role === 'admin' || topic.author_role === 'management';
               
               return (
@@ -199,7 +230,7 @@ export default function CategoryPage() {
 
                       {topic.author_gamification_badges && topic.author_gamification_badges.length > 0 && (
                         <div className="flex items-center gap-1 border-r-2 border-indigo-100 pr-2">
-                          {topic.author_gamification_badges.map((badge, idx) => (
+                          {topic.author_gamification_badges.map((badge: any, idx: number) => (
                             <div key={idx} className="relative group/badge flex items-center justify-center">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img 
