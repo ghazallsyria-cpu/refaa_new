@@ -28,6 +28,8 @@ export interface CategoryDetails {
   id: string;
   name: string;
   description: string;
+  post_permission?: string; // 🚀 حقل الصلاحية الجديد
+  reply_permission?: string; // 🚀 حقل الصلاحية الجديد
 }
 
 export function useTopics(categoryId: string) {
@@ -40,9 +42,10 @@ export function useTopics(categoryId: string) {
     setLoading(true);
     
     try {
+      // 🚀 تم إضافة جلب الصلاحيات في استعلام القسم
       const { data: catData, error: catError } = await supabase
         .from('forum_categories')
-        .select('id, name, description')
+        .select('id, name, description, post_permission, reply_permission')
         .eq('id', categoryId)
         .single();
 
