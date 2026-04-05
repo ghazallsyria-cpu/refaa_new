@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
-  MessageSquare, Send, Reply, Eye, BadgeCheck, Lock // 🚀 تم إضافة Lock هنا
+  MessageSquare, Send, Reply, Eye, BadgeCheck, Lock
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
@@ -34,10 +34,9 @@ export default function TopicDetailsPage() {
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. زيادة عدد المشاهدات
-      await supabase.rpc('increment_topic_views', { topic_id: topicId }).catch(() => {});
+      // 🚀 تم إزالة السطر المسبب للمشكلة (increment_topic_views) هنا
 
-      // 2. جلب الموضوع وصاحبه
+      // 1. جلب الموضوع وصاحبه
       const { data: topicData, error: topicError } = await supabase
         .from('forum_topics')
         .select(`
@@ -49,7 +48,7 @@ export default function TopicDetailsPage() {
 
       if (topicError) throw topicError;
 
-      // 3. جلب بيانات صاحب الموضوع
+      // 2. جلب بيانات صاحب الموضوع
       const { data: authorData } = await supabase
         .from('users')
         .select('full_name, role, avatar_url')
@@ -61,7 +60,7 @@ export default function TopicDetailsPage() {
         author: authorData
       });
 
-      // 4. جلب الردود
+      // 3. جلب الردود
       const { data: repliesData } = await supabase
         .from('forum_replies')
         .select(`
