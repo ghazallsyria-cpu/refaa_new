@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { usePeriodsSystem, Period } from '@/hooks/usePeriodsSystem';
-import { Clock, Plus, Trash2, X, Save, AlertCircle } from 'lucide-react';
+import { Clock, Plus, Trash2, X, Save, AlertCircle, Edit2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from '@/lib/supabase'; // تمت إضافة استيراد Supabase للتعديل المباشر
 
 export default function PeriodsPage() {
   const { loading: hookLoading, fetchPeriods, addPeriod, deletePeriod } = usePeriodsSystem();
@@ -12,6 +13,10 @@ export default function PeriodsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newPeriod, setNewPeriod] = useState({ period_number: 1, start_time: '', end_time: '' });
   const [message, setMessage] = useState({ text: '', type: '' });
+
+  // 🚀 حالات التعديل المباشر (Inline Editing)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState({ start_time: '', end_time: '' });
 
   const loadPeriods = useCallback(async () => {
     setLoading(true);
@@ -62,12 +67,48 @@ export default function PeriodsPage() {
     }
   };
 
+  // 🚀 بدء عملية التعديل
+  const handleStartEdit = (p: Period) => {
+    setEditingId(p.id);
+    setEditData({ 
+      start_time: p.start_time.slice(0, 5), 
+      end_time: p.end_time.slice(0, 5) 
+    });
+  };
+
+  // 🚀 حفظ التعديلات الجديدة في قاعدة البيانات
+  const handleSaveEdit = async (id: string) => {
+    setIsSubmitting(true);
+    try {
+      // نستخدم Supabase مباشرة لضمان عمل التحديث على جدول class_periods
+      const { error } = await supabase
+        .from('class_periods')
+        .update({
+          start_time: editData.start_time,
+          end_time: editData.end_time,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setMessage({ text: 'تم تحديث توقيت الحصة بنجاح', type: 'success' });
+      setEditingId(null);
+      loadPeriods(); // إعادة تحميل الجدول بعد التحديث
+    } catch (error: any) {
+      console.error('Error updating period:', error);
+      setMessage({ text: 'حدث خطأ أثناء تحديث الحصة', type: 'error' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8">
+    <div className="max-w-4xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8" dir="rtl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">إدارة توقيت الحصص</h1>
-          <p className="text-slate-500">تحديد أوقات بداية ونهاية كل حصة دراسية</p>
+          <p className="text-slate-500">إضافة وتعديل أوقات بداية ونهاية كل حصة دراسية</p>
         </div>
         <div className="h-12 w-12 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
           <Clock className="h-6 w-6" />
@@ -85,11 +126,12 @@ export default function PeriodsPage() {
             }`}
           >
             {message.type === 'success' ? <Save className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-            <span className="text-sm font-medium">{message.text}</span>
+            <span className="text-sm font-bold">{message.text}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* قسم إضافة حصة جديدة */}
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50/50">
           <h2 className="text-lg font-bold text-slate-900">إضافة حصة جديدة</h2>
@@ -100,7 +142,7 @@ export default function PeriodsPage() {
               <label className="block text-sm font-bold text-slate-700 mb-2">رقم الحصة</label>
               <input 
                 type="number" 
-                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-sm" 
+                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-sm font-bold" 
                 value={newPeriod.period_number} 
                 onChange={e => setNewPeriod({...newPeriod, period_number: parseInt(e.target.value)})} 
                 required 
@@ -110,7 +152,7 @@ export default function PeriodsPage() {
               <label className="block text-sm font-bold text-slate-700 mb-2">وقت البدء</label>
               <input 
                 type="time" 
-                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-sm" 
+                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-sm font-bold" 
                 value={newPeriod.start_time} 
                 onChange={e => setNewPeriod({...newPeriod, start_time: e.target.value})} 
                 required 
@@ -120,7 +162,7 @@ export default function PeriodsPage() {
               <label className="block text-sm font-bold text-slate-700 mb-2">وقت الانتهاء</label>
               <input 
                 type="time" 
-                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-sm" 
+                className="w-full rounded-xl border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 text-sm font-bold" 
                 value={newPeriod.end_time} 
                 onChange={e => setNewPeriod({...newPeriod, end_time: e.target.value})} 
                 required 
@@ -140,15 +182,16 @@ export default function PeriodsPage() {
         </form>
       </div>
 
+      {/* قسم عرض وتعديل الحصص الحالية */}
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-100 bg-slate-50/50">
           <h2 className="text-lg font-bold text-slate-900">قائمة الحصص الحالية</h2>
         </div>
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-12 text-center text-slate-500">جاري التحميل...</div>
+            <div className="p-12 text-center text-slate-500 font-bold">جاري التحميل...</div>
           ) : periods.length === 0 ? (
-            <div className="p-12 text-center text-slate-500">لا توجد حصص مضافة بعد</div>
+            <div className="p-12 text-center text-slate-500 font-bold">لا توجد حصص مضافة بعد</div>
           ) : (
             <table className="w-full text-right">
               <thead>
@@ -162,17 +205,75 @@ export default function PeriodsPage() {
               <tbody className="divide-y divide-slate-100">
                 {periods.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-slate-900">الحصة {p.period_number}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{p.start_time.slice(0, 5)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{p.end_time.slice(0, 5)}</td>
+                    <td className="px-6 py-4 text-sm font-black text-slate-900">الحصة {p.period_number}</td>
+                    
+                    {/* 🚀 حقل وقت البدء (يتحول لمدخل عند التعديل) */}
+                    <td className="px-6 py-4 text-sm text-slate-600 font-bold" dir="ltr">
+                      {editingId === p.id ? (
+                        <input 
+                          type="time" 
+                          value={editData.start_time}
+                          onChange={(e) => setEditData({...editData, start_time: e.target.value})}
+                          className="rounded-lg border-slate-300 px-3 py-1.5 text-sm w-32 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      ) : (
+                        p.start_time.slice(0, 5)
+                      )}
+                    </td>
+
+                    {/* 🚀 حقل وقت الانتهاء (يتحول لمدخل عند التعديل) */}
+                    <td className="px-6 py-4 text-sm text-slate-600 font-bold" dir="ltr">
+                      {editingId === p.id ? (
+                        <input 
+                          type="time" 
+                          value={editData.end_time}
+                          onChange={(e) => setEditData({...editData, end_time: e.target.value})}
+                          className="rounded-lg border-slate-300 px-3 py-1.5 text-sm w-32 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      ) : (
+                        p.end_time.slice(0, 5)
+                      )}
+                    </td>
+
                     <td className="px-6 py-4 text-left">
-                      <button 
-                        onClick={() => handleDeletePeriod(p.id)} 
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="حذف"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {editingId === p.id ? (
+                          <>
+                            <button 
+                              onClick={() => handleSaveEdit(p.id)} 
+                              disabled={isSubmitting}
+                              className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                              title="حفظ التعديلات"
+                            >
+                              <Check className="h-5 w-5" />
+                            </button>
+                            <button 
+                              onClick={() => setEditingId(null)} 
+                              className="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                              title="إلغاء"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => handleStartEdit(p)} 
+                              className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="تعديل التوقيت"
+                            >
+                              <Edit2 className="h-5 w-5" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeletePeriod(p.id)} 
+                              className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="حذف الحصة"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
