@@ -1,16 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
-  Users, Printer, Calendar, Clock, AlertCircle, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2,
+  Printer, Calendar, Clock, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2,
   XCircle, Hourglass, Minus
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
+
+// دالة ذكية لتحويل أيام الأسبوع في الجافاسكريبت إلى نظام قاعدة بياناتك (الأحد = 1)
+const getDbDay = () => {
+  const jsDay = new Date().getDay(); // 0 = الأحد، 1 = الإثنين...
+  if (jsDay === 0) return 1; // الأحد
+  if (jsDay === 1) return 2; // الإثنين
+  if (jsDay === 2) return 3; // الثلاثاء
+  if (jsDay === 3) return 4; // الأربعاء
+  if (jsDay === 4) return 5; // الخميس
+  return 1; // الجمعة والسبت نعرض جدول الأحد كافتراضي
+};
 
 export default function TeacherAttendanceMatrix() {
   const { userRole } = useAuth();
@@ -18,89 +30,92 @@ export default function TeacherAttendanceMatrix() {
   const [matrixData, setMatrixData] = useState<any[]>([]);
   const [periodsList, setPeriodsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<number>(1); // الافتراضي: الأحد = 1 (حسب بياناتك)
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   
-  // إحصائيات سريعة
+  const currentDbDay = getDbDay();
+  const [selectedDay, setSelectedDay] = useState<number>(currentDbDay);
+  
   const [stats, setStats] = useState({ totalAbsences: 0, totalPresents: 0 });
 
-  const fetchMatrixData = async () => {
+  const fetchMatrixData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. جلب جميع البيانات الخام دفعة واحدة
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       
+      // 🚀 1. جلب جميع البيانات الخام بدون فلاتر معقدة لتجنب ضياع البيانات
       const [
         { data: teachers },
         { data: users },
         { data: periods },
-        { data: schedule },
+        { data: allSchedules }, // نجلب كل الجدول
         { data: subjects },
         { data: attendance }
       ] = await Promise.all([
         supabase.from('teachers').select('id'),
         supabase.from('users').select('id, full_name'),
         supabase.from('periods').select('*').order('period_number'),
-        supabase.from('schedule').select('*').eq('day_of_week', selectedDay),
+        supabase.from('schedule').select('*'), 
         supabase.from('subjects').select('id, name'),
         supabase.from('teacher_attendance_records').select('*').eq('date', todayStr)
       ]);
 
-      // تحديد عدد الحصص (مثلاً من 1 إلى 5 أو 7 حسب المبرمج في القاعدة)
-      const sortedPeriods = (periods || []).sort((a, b) => a.period_number - b.period_number);
+      // ترتيب الحصص بشكل صحيح (1, 2, 3...)
+      const sortedPeriods = (periods || []).sort((a, b) => Number(a.period_number) - Number(b.period_number));
       setPeriodsList(sortedPeriods);
+
+      // 🚀 2. تصفية جدول اليوم المختار فقط في المتصفح لضمان عدم ضياع شيء
+      const todaysSchedule = (allSchedules || []).filter(s => Number(s.day_of_week) === Number(selectedDay));
 
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      
-      // هل اليوم المختار هو اليوم الفعلي الحالي؟
-      // (الجافاسكريبت تعتبر الأحد 0، وفي بياناتك الأحد 1)
-      const isToday = (now.getDay() + 1) === selectedDay || (now.getDay() === 0 && selectedDay === 1);
+      const isToday = currentDbDay === selectedDay;
+      const isPastDay = selectedDay < currentDbDay;
 
       let absencesCount = 0;
       let presentsCount = 0;
 
-      // 2. بناء المصفوفة (لكل معلم، نمر على جميع الحصص)
-      const matrix = (teachers || []).map(teacher => {
+      // 🚀 3. بناء المصفوفة (الماتريكس)
+      let matrix = (teachers || []).map(teacher => {
         const user = (users || []).find(u => u.id === teacher.id);
         const row: any = {
           teacher_id: teacher.id,
           teacher_name: user?.full_name || 'معلم غير محدد',
+          hasAnyClassToday: false, // لمعرفة هل لديه حصص اليوم أم لا
           periodsData: {}
         };
 
         sortedPeriods.forEach(period => {
-          // هل لديه حصة في هذا الوقت؟
-          const sch = (schedule || []).find(s => s.teacher_id === teacher.id && s.period === period.period_number);
+          // 🚀 4. المطابقة الدقيقة جداً (باستخدام Number لتجنب أخطاء النصوص والأرقام)
+          const sch = todaysSchedule.find(s => 
+            s.teacher_id === teacher.id && Number(s.period) === Number(period.period_number)
+          );
           
           if (!sch) {
-            // ليس لديه حصة (فراغ)
             row.periodsData[period.period_number] = { status: 'free' };
             return;
           }
 
+          row.hasAnyClassToday = true; // وجدنا له حصة!
           const subject = (subjects || []).find(s => s.id === sch.subject_id);
-          
-          // هل سجل حضوره؟
-          const hasAttended = (attendance || []).some(a => a.teacher_id === teacher.id && a.period_number === period.period_number);
+          const hasAttended = (attendance || []).some(a => a.teacher_id === teacher.id && Number(a.period_number) === Number(period.period_number));
 
           if (hasAttended) {
             row.periodsData[period.period_number] = { status: 'present', subject: subject?.name };
             presentsCount++;
           } else {
-            // لم يسجل، نتحقق من الوقت
             if (period.end_time) {
               const [endH, endM] = period.end_time.split(':').map(Number);
               const periodEndMinutes = endH * 60 + endM;
 
-              if (isToday && currentMinutes > periodEndMinutes) {
+              if (isPastDay) {
+                // إذا كان يوماً في الماضي ولم يسجل حضور، فهو غائب حتماً
                 row.periodsData[period.period_number] = { status: 'absent', subject: subject?.name };
                 absencesCount++;
-              } else if (!isToday && now > new Date(todayStr)) {
-                // إذا كنا نستعرض يوماً في الماضي ولم يحضر
+              } else if (isToday && currentMinutes > periodEndMinutes) {
+                // إذا كان اليوم، وانتهى وقت الحصة ولم يسجل، فهو غائب
                 row.periodsData[period.period_number] = { status: 'absent', subject: subject?.name };
                 absencesCount++;
               } else {
+                // الحصة لم تبدأ بعد أو ما زالت قائمة
                 row.periodsData[period.period_number] = { status: 'pending', subject: subject?.name };
               }
             } else {
@@ -112,25 +127,19 @@ export default function TeacherAttendanceMatrix() {
         return row;
       });
 
-      // ترتيب المعلمين أبجدياً
+      // 🚀 5. تنظيف القائمة: إخفاء المعلمين الذين ليس لديهم أي حصة في هذا اليوم، وترتيب الباقين أبجدياً
+      matrix = matrix.filter(row => row.hasAnyClassToday);
       matrix.sort((a, b) => a.teacher_name.localeCompare(b.teacher_name, 'ar'));
       
       setMatrixData(matrix);
       setStats({ totalAbsences: absencesCount, totalPresents: presentsCount });
-      setLastUpdated(new Date());
 
     } catch (error) {
       console.error('Error fetching matrix data:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    // تحديد اليوم الحالي افتراضياً (تحويل من نظام JS لنظام مدرستك)
-    const jsDay = new Date().getDay();
-    setSelectedDay(jsDay === 0 ? 1 : jsDay + 1);
-  }, []);
+  }, [selectedDay, currentDbDay]);
 
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'management') {
@@ -138,9 +147,8 @@ export default function TeacherAttendanceMatrix() {
       const interval = setInterval(fetchMatrixData, 60000);
       return () => clearInterval(interval);
     }
-  }, [userRole, selectedDay]);
+  }, [userRole, fetchMatrixData]);
 
-  // دالة الطباعة وتصدير PDF
   const handlePrint = () => {
     window.print();
   };
@@ -154,7 +162,7 @@ export default function TeacherAttendanceMatrix() {
 
   return (
     <>
-      {/* 🚀 ستايل مخصص للطباعة (يخفي كل شيء ما عدا الجدول) */}
+      {/* ستايل مخصص للطباعة */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * { visibility: hidden; }
@@ -173,18 +181,18 @@ export default function TeacherAttendanceMatrix() {
           </Link>
         </div>
 
-        {/* Hero Header */}
+        {/* الترويسة العلوية */}
         <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 to-indigo-900 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-900/20 border border-slate-700 no-print">
-          <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
           
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div>
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-black uppercase tracking-widest mb-4 shadow-inner">
-                <ShieldAlert className="w-4 h-4 text-emerald-400" /> مصفوفة الدوام الشاملة
+                <ShieldAlert className="w-4 h-4 text-emerald-400" /> مصفوفة الدوام الشاملة (النسخة الذكية)
               </div>
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">السجل اليومي لحضور المعلمين</h1>
               <p className="text-indigo-200 font-bold text-base max-w-2xl leading-relaxed">
-                راقب جميع المعلمين وحصصهم في شاشة واحدة. قم بطباعة التقرير في نهاية اليوم للتوثيق الإداري.
+                هذه اللوحة مرتبطة بشكل مباشر بجدول الحصص الفعلي. المعلمون الذين لا يوجد لديهم حصص في اليوم المحدد لن يظهروا في القائمة.
               </p>
             </div>
             
@@ -199,7 +207,7 @@ export default function TeacherAttendanceMatrix() {
           </div>
         </div>
 
-        {/* أزرار الأيام */}
+        {/* أزرار اختيار الأيام */}
         <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-2 justify-center no-print">
           {daysOfWeek.map(day => (
             <button 
@@ -209,7 +217,7 @@ export default function TeacherAttendanceMatrix() {
                 selectedDay === day.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              {day.name}
+              {day.name} {day.id === currentDbDay && '(اليوم)'}
             </button>
           ))}
         </div>
@@ -249,7 +257,13 @@ export default function TeacherAttendanceMatrix() {
             {loading ? (
               <div className="py-20 flex justify-center"><RefreshCw className="w-10 h-10 text-indigo-500 animate-spin" /></div>
             ) : matrixData.length === 0 ? (
-              <div className="py-20 text-center font-bold text-slate-500">لا يوجد معلمين مسجلين.</div>
+              <div className="py-20 text-center flex flex-col items-center gap-4">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
+                   <Clock className="w-10 h-10 text-slate-300" />
+                </div>
+                <h3 className="font-black text-xl text-slate-800">لا يوجد حصص اليوم</h3>
+                <p className="font-bold text-slate-500 text-sm">لم نجد أي جدول مسجل لأي معلم في هذا اليوم ({daysOfWeek.find(d => d.id === selectedDay)?.name}).</p>
+              </div>
             ) : (
               <table className="w-full text-sm text-right border-collapse">
                 <thead>
