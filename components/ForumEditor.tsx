@@ -1,18 +1,11 @@
 'use client';
 
-import React, { useMemo, useRef, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
 
-const ReactQuill = dynamic(() => import('react-quill'), { 
-  ssr: false, 
-  loading: () => (
-    <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
-      <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-    </div>
-  )
-});
+// 🚀 استيراد مباشر لـ Quill بدلاً من dynamic import لتفادي مشاكل الـ SSR والـ ref
+import ReactQuill from 'react-quill';
 
 interface ForumEditorProps {
   content: string;
@@ -21,8 +14,14 @@ interface ForumEditorProps {
 }
 
 export default function ForumEditor({ content, setContent, canUploadImage }: ForumEditorProps) {
-  const quillRef = useRef<any>(null);
+  const quillRef = useRef<ReactQuill>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // 🚀 التأكد من أن المكون يعمل فقط في المتصفح (لتفادي أخطاء SSR مع Next.js)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const imageHandler = useCallback(() => {
     if (!canUploadImage) {
@@ -89,6 +88,14 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
     }
   }), [canUploadImage, imageHandler]);
 
+  if (!mounted) {
+    return (
+      <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -126,7 +133,7 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
       {isUploading && (
         <div className="absolute inset-0 z-10 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl border border-indigo-100">
           <div className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold flex items-center gap-3 shadow-lg">
-            <Loader2 className="w-5 h-5 animate-spin" /> جاري رفع الصورة وتشفيرها...
+            <Loader2 className="w-5 h-5 animate-spin" /> جاري رفع الصورة...
           </div>
         </div>
       )}
