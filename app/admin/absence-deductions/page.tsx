@@ -315,9 +315,9 @@ export default function AbsenceDeductionsPage() {
         {/* ترويسة كلاسيكية رسمية */}
         <div className="border-b-4 border-double border-slate-900 pb-6 mb-8 flex justify-between items-start">
           <div className="text-right space-y-1">
-            <h2 className="text-lg font-black">وزارة التربية والتعليم</h2>
-            <h3 className="text-md font-bold">الإدارة العامة للتعليم</h3>
-            <h4 className="text-sm font-bold text-slate-700">مدرسة الرفعة النموذجية - قسم شؤون الطلاب</h4>
+            <h2 className="text-lg font-black">وزارة التربية </h2>
+            <h3 className="text-md font-bold"> الإدارة العامة للتعليم الخاص</h3>
+            <h4 className="text-sm font-bold text-slate-700">مدرسة الرفعة النموذجية(م-ث) بنين - قسم شؤون الطلاب</h4>
           </div>
           <div className="text-center">
             <div className="w-24 h-24 mx-auto border-2 border-slate-900 rounded-full flex items-center justify-center mb-2">
@@ -371,7 +371,7 @@ export default function AbsenceDeductionsPage() {
         {/* توقيعات الاعتماد الرسمية */}
         <div className="flex justify-between items-end mt-20 pt-10 border-t-2 border-slate-900 px-10">
           <div className="text-center w-1/3">
-            <h4 className="font-black mb-12">المرشد الطلابي / شؤون الطلاب</h4>
+            <h4 className="font-black mb-12">إدارة المنصة / شؤون الطلاب</h4>
             <div className="w-48 border-b-2 border-slate-900 border-dashed mx-auto mb-2"></div>
             <p className="text-xs font-bold text-slate-500">الاسم والتوقيع</p>
           </div>
