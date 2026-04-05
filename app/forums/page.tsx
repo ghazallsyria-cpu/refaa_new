@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { useForums, StructuredCategory } from '@/hooks/useForums'; // 👈 استيراد الهوك
+import { useForums, StructuredCategory } from '@/hooks/useForums'; 
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
-  Loader2, Sparkles, BookOpen, Layers, Globe, Target
+  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save // 🚀 تم إضافة Save هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -15,7 +15,6 @@ export default function ForumsPage() {
   const currentRole = authRole || userRole;
   const isAdmin = currentRole === 'admin' || currentRole === 'management';
 
-  // 🚀 استخدام الهوك الذكي (بدل التخاطب المباشر مع DB)
   const { 
     categories, 
     structuredCategories, 
@@ -26,7 +25,6 @@ export default function ForumsPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   
-  // حالات نافذة إدارة الأقسام
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
@@ -38,7 +36,6 @@ export default function ForumsPage() {
     fetchCategories();
   }, [fetchCategories]);
 
-  // معالجة الإرسال عبر الهوك
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
@@ -67,7 +64,6 @@ export default function ForumsPage() {
     setIsSubmitting(false);
   };
 
-  // فلترة الأقسام بناءً على البحث
   const filterHierarchy = (cats: StructuredCategory[], query: string): StructuredCategory[] => {
     if (!query) return cats;
     return cats.map(main => {
@@ -85,7 +81,6 @@ export default function ForumsPage() {
 
   const displayedCategories = filterHierarchy(structuredCategories, searchQuery);
 
-  // مكون بطاقة القسم
   const CategoryCard = ({ cat }: { cat: StructuredCategory }) => (
     <Link href={`/forums/${cat.id}`} className="block h-full">
       <motion.div 
@@ -135,7 +130,6 @@ export default function ForumsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       
-      {/* 🚀 الهيدر والبانر الرئيسي */}
       <div className="bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 pt-12 pb-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -167,7 +161,6 @@ export default function ForumsPage() {
               />
             </div>
             
-            {/* زر الإدارة للتحكم بالهيكلية */}
             {isAdmin && (
               <button 
                 onClick={() => setIsModalOpen(true)}
@@ -180,7 +173,6 @@ export default function ForumsPage() {
         </div>
       </div>
 
-      {/* 🚀 عرض الأقسام والهيكلية */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 relative z-20 space-y-12">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2rem] shadow-sm border border-slate-100">
@@ -206,7 +198,6 @@ export default function ForumsPage() {
               viewport={{ once: true }}
               className="space-y-6"
             >
-              {/* 🏆 عنوان القسم الرئيسي (الحاوية) */}
               <div className="flex items-center gap-4 bg-white/60 backdrop-blur-md p-4 rounded-[1.5rem] border border-slate-200 shadow-sm">
                 <div className="h-12 w-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-inner shrink-0">
                   <BookOpen className="w-6 h-6" />
@@ -224,7 +215,6 @@ export default function ForumsPage() {
                 )}
               </div>
 
-              {/* 🌿 الأقسام الفرعية (البطاقات) */}
               {mainCat.subcategories && mainCat.subcategories.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pr-4 sm:pr-8 border-r-4 border-indigo-100">
                   {mainCat.subcategories.map(subCat => (
@@ -241,7 +231,6 @@ export default function ForumsPage() {
         )}
       </div>
 
-      {/* 🚀 نافذة الإدارة (بناء الهيكل) */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
@@ -267,7 +256,6 @@ export default function ForumsPage() {
                   />
                 </div>
 
-                {/* 🌳 اختيار الهيكلية */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">تفرع القسم (الهيكلية)</label>
                   <select 
@@ -283,7 +271,6 @@ export default function ForumsPage() {
                   </select>
                 </div>
 
-                {/* 🎯 اختيار الاستهداف */}
                 <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                   <label className="flex items-center gap-2 text-xs font-black text-indigo-700 uppercase tracking-widest mb-3">
                     <Target className="w-4 h-4" /> الفئة المستهدفة
