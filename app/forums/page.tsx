@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useForums, StructuredCategory } from '@/hooks/useForums'; 
 import { supabase } from '@/lib/supabase';
-import { deleteFromCloudinary } from '@/lib/cloudinary'; // 🚀 استيراد دالتك الجاهزة
+import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
-  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle, Image as ImageIcon, Trash2
+  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle, Image as ImageIcon, Trash2, Lock, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -26,6 +26,10 @@ export default function ForumsPage() {
   const [parentId, setParentId] = useState<string | 'none'>('none');
   const [targetClasses, setTargetClasses] = useState<string[]>([]);
   
+  // 🚀 حالات الصلاحيات الجديدة
+  const [postPerm, setPostPerm] = useState('all');
+  const [replyPerm, setReplyPerm] = useState('all');
+
   const [coverUrl, setCoverUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,12 +66,21 @@ export default function ForumsPage() {
       description: newCatDesc,
       parent_id: parentId === 'none' ? null : parentId,
       target_classes: targetClasses.length === 0 ? null : targetClasses,
-      icon: coverUrl || null 
+      icon: coverUrl || null,
+      post_permission: postPerm as any, // 🚀 إضافة الصلاحيات
+      reply_permission: replyPerm as any // 🚀 إضافة الصلاحيات
     };
 
     const result = await createCategory(payload);
     if (result.success) {
-      setIsModalOpen(false); setNewCatName(''); setNewCatDesc(''); setParentId('none'); setTargetClasses([]); setCoverUrl('');
+      setIsModalOpen(false); 
+      setNewCatName(''); 
+      setNewCatDesc(''); 
+      setParentId('none'); 
+      setTargetClasses([]); 
+      setCoverUrl('');
+      setPostPerm('all');
+      setReplyPerm('all');
     } else {
       alert(`خطأ: ${result.error}`);
     }
@@ -146,6 +159,18 @@ export default function ForumsPage() {
                     <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
                         <Globe className="w-3 h-3" /> عام للجميع
                     </div>
+                    )}
+
+                    {/* 🚀 إضافة شارات الصلاحيات على الكرت */}
+                    {cat.post_permission === 'admin_only' && (
+                        <div className="bg-red-50 border border-red-100 text-red-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 mt-1">
+                            <ShieldAlert className="w-3 h-3" /> قسم رسمي
+                        </div>
+                    )}
+                    {cat.reply_permission === 'none' && (
+                        <div className="bg-slate-100 border border-slate-200 text-slate-600 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 mt-1">
+                            <Lock className="w-3 h-3" /> للقراءة فقط
+                        </div>
                     )}
                 </div>
                 </div>
@@ -289,6 +314,30 @@ export default function ForumsPage() {
                     {schoolClasses.map(cls => (
                       <button key={cls.id} type="button" onClick={() => toggleClass(cls.id)} className={`py-2 rounded-xl text-xs font-black border-2 ${targetClasses.includes(cls.id) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white'}`}>{cls.name}</button>
                     ))}
+                  </div>
+                </div>
+
+                {/* 🚀 قسم الصلاحيات الجديد */}
+                <div className="bg-amber-50/50 p-4 rounded-[1.5rem] border border-amber-100">
+                  <label className="flex items-center gap-2 text-xs font-black text-amber-700 mb-3"><ShieldAlert className="w-4 h-4" /> صلاحيات القسم (مهم)</label>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">من يمكنه كتابة مواضيع؟</label>
+                      <select value={postPerm} onChange={e => setPostPerm(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-400">
+                        <option value="all">الجميع (طلاب، معلمون، إدارة)</option>
+                        <option value="teachers_admin">المعلمون والإدارة فقط</option>
+                        <option value="admin_only">الإدارة فقط (قسم رسمي)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">من يمكنه الرد؟</label>
+                      <select value={replyPerm} onChange={e => setReplyPerm(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-400">
+                        <option value="all">الجميع</option>
+                        <option value="teachers_admin">المعلمون والإدارة فقط</option>
+                        <option value="admin_only">الإدارة فقط</option>
+                        <option value="none">مغلق للجميع (للقراءة فقط)</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
