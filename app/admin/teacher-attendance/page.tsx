@@ -155,7 +155,7 @@ export default function TeacherAttendanceMatrix() {
   return (
     <>
       {/* 🚀 ستايل مخصص للطباعة (يخفي كل شيء ما عدا الجدول) */}
-      <style dangerouslySetContent={{ __html: `
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * { visibility: hidden; }
           .print-area, .print-area * { visibility: visible; }
