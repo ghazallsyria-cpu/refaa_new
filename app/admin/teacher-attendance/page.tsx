@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
-  Users, AlertTriangle, Search, Filter, Download, 
-  Calendar, Clock, AlertCircle, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2 // 🚀 تمت إضافة CheckCircle2 هنا
+  Users, Search, Download, 
+  Calendar, Clock, AlertCircle, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2,
+  XCircle, Hourglass, BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -16,25 +17,92 @@ import * as XLSX from 'xlsx';
 export default function TeacherAttendanceReport() {
   const { user, userRole } = useAuth();
   
-  const [absences, setAbsences] = useState<any[]>([]);
+  const [scheduleData, setScheduleData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'pending' | 'all'>('all');
+  
+  const currentDay = new Date().getDay(); // 0 للأحد
+  const [selectedDay, setSelectedDay] = useState<number>(currentDay);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  const fetchAbsences = async () => {
+  const fetchEverythingAndCalculate = async () => {
     setLoading(true);
     try {
-      // 🚀 جلب البيانات مباشرة من العرض الذكي (VIEW) الذي بنيناه في SQL
-      const { data, error } = await supabase
-        .from('admin_teacher_absences')
-        .select('*')
-        .order('period', { ascending: true });
+      // 1. جلب الجدول الدراسي بالكامل مع العلاقات
+      const { data: schedules, error: schError } = await supabase
+        .from('schedule')
+        .select(`
+          id, day_of_week, period, teacher_id,
+          sections ( name, classes ( name ) ),
+          subjects ( name ),
+          teachers ( id, users ( full_name ) )
+        `);
+      if (schError) throw schError;
 
-      if (error) throw error;
-      setAbsences(data || []);
+      // 2. جلب أوقات الحصص
+      const { data: periods, error: perError } = await supabase
+        .from('periods')
+        .select('*');
+      if (perError) throw perError;
+
+      // 3. جلب سجلات الحضور الخاصة باليوم فقط
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const { data: attendance, error: attError } = await supabase
+        .from('teacher_attendance_records')
+        .select('*')
+        .eq('date', todayStr);
+      if (attError) throw attError;
+
+      // 🚀 4. الذكاء الاصطناعي (المحرك البرمجي) لدمج البيانات ومعرفة حالة كل حصة
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      const processedData = (schedules || []).map((sch: any) => {
+        // استخراج الأسماء بأمان
+        const className = Array.isArray(sch.sections?.classes) ? sch.sections?.classes[0]?.name : sch.sections?.classes?.name;
+        const teacherName = Array.isArray(sch.teachers?.users) ? sch.teachers?.users[0]?.full_name : sch.teachers?.users?.full_name;
+        
+        // البحث عن وقت الحصة
+        const periodInfo = periods?.find(p => p.period_number === sch.period);
+        
+        // البحث هل سجل المعلم حضوره في هذه الحصة اليوم؟
+        const hasAttended = attendance?.some(a => a.teacher_id === sch.teacher_id && a.period_number === sch.period);
+
+        let status = 'pending'; // الافتراضي: قيد الانتظار
+
+        if (hasAttended) {
+          status = 'present';
+        } else if (periodInfo && periodInfo.end_time) {
+          // حساب وقت انتهاء الحصة بالدقائق لمقارنته بالوقت الحالي
+          const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+          const periodEndMinutes = endH * 60 + endM;
+
+          // إذا كان اليوم المختار هو نفس اليوم الحالي، والوقت تجاوز نهاية الحصة -> غائب!
+          if (sch.day_of_week === currentDay && currentMinutes > periodEndMinutes) {
+            status = 'absent';
+          }
+        }
+
+        return {
+          id: sch.id,
+          teacher_id: sch.teacher_id,
+          teacher_name: teacherName || 'معلم غير محدد',
+          day_of_week: sch.day_of_week,
+          period: sch.period,
+          start_time: periodInfo?.start_time,
+          end_time: periodInfo?.end_time,
+          class_name: className || 'صف غير محدد',
+          section_name: sch.sections?.name || 'شعبة',
+          subject_name: sch.subjects?.name || 'مادة',
+          current_status: status
+        };
+      });
+
+      setScheduleData(processedData);
       setLastUpdated(new Date());
     } catch (error) {
-      console.error('Error fetching teacher absences:', error);
+      console.error('Error fetching and calculating data:', error);
     } finally {
       setLoading(false);
     }
@@ -42,183 +110,213 @@ export default function TeacherAttendanceReport() {
 
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'management') {
-      fetchAbsences();
-      // تحديث تلقائي كل دقيقة ليكون التقرير فورياً
-      const interval = setInterval(fetchAbsences, 60000);
+      fetchEverythingAndCalculate();
+      const interval = setInterval(fetchEverythingAndCalculate, 60000);
       return () => clearInterval(interval);
     }
   }, [userRole]);
 
-  // فلترة النتائج حسب البحث
-  const filteredAbsences = absences.filter(record => 
-    record.teacher_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.class_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.subject_name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 🚀 الفلترة الذكية
+  const filteredData = scheduleData.filter(record => {
+    // التطابق مع اليوم (نأخذ بالاعتبار احتمالية أن الأحد 0 أو 7)
+    const isMatchingDay = record.day_of_week === selectedDay || (selectedDay === 0 && record.day_of_week === 7);
+    
+    // البحث النصي
+    const matchesSearch = (record.teacher_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                          (record.class_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                          (record.subject_name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+    
+    // فلتر التبويبات (حاضر، غائب...)
+    const matchesTab = activeTab === 'all' || record.current_status === activeTab;
+
+    return isMatchingDay && matchesSearch && matchesTab;
+  }).sort((a, b) => a.period - b.period); // ترتيب تصاعدي حسب رقم الحصة
+
+  const absences = filteredData.filter(r => r.current_status === 'absent');
+  const presents = filteredData.filter(r => r.current_status === 'present');
+  const pendings = filteredData.filter(r => r.current_status === 'pending');
 
   const exportToExcel = () => {
-    if (filteredAbsences.length === 0) {
-      alert('لا توجد بيانات للتصدير');
-      return;
-    }
+    if (filteredData.length === 0) return alert('لا توجد بيانات للتصدير');
 
-    const dataToExport = filteredAbsences.map(record => ({
+    const dataToExport = filteredData.map(record => ({
       'المعلم': record.teacher_name,
-      'الحصة المتغيب عنها': `الحصة ${record.period}`,
+      'الحصة': `الحصة ${record.period}`,
       'الصف والشعبة': `${record.class_name} - ${record.section_name}`,
       'المادة': record.subject_name,
-      'التاريخ': format(new Date(record.check_date), 'yyyy/MM/dd'),
-      'الحالة': 'غياب غير مبرر ❌'
+      'الحالة': record.current_status === 'absent' ? 'غياب ❌' : 
+                record.current_status === 'present' ? 'حاضر ✅' : 'قيد الانتظار ⏳'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير غياب المعلمين");
-    
-    const fileName = `غياب_المعلمين_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير المراقبة");
+    XLSX.writeFile(workbook, `المراقبة_الآلية_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  if (userRole !== 'admin' && userRole !== 'management') {
-    return (
-      <div className="flex h-[80vh] items-center justify-center p-6">
-        <div className="bg-rose-50 text-rose-600 p-8 rounded-3xl text-center border-2 border-rose-200 shadow-xl max-w-lg">
-          <ShieldAlert className="w-16 h-16 mx-auto mb-4 animate-bounce" />
-          <h2 className="text-2xl font-black mb-2">صلاحيات غير كافية</h2>
-          <p className="font-bold">هذه الصفحة مخصصة للإدارة العليا فقط لمراقبة الدوام.</p>
-        </div>
-      </div>
-    );
-  }
+  if (userRole !== 'admin' && userRole !== 'management') return null;
+
+  const daysOfWeek = [
+    { id: 0, name: 'الأحد' }, { id: 1, name: 'الإثنين' }, { id: 2, name: 'الثلاثاء' },
+    { id: 3, name: 'الأربعاء' }, { id: 4, name: 'الخميس' }, { id: 5, name: 'الجمعة' }
+  ];
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-8" dir="rtl"
-    >
-      {/* 🚀 Navigation Back */}
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-8" dir="rtl">
+      
       <div>
-        <Link href="/dashboard/admin" className="flex items-center gap-2 text-slate-500 hover:text-rose-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
+        <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
         </Link>
       </div>
 
-      {/* 🚀 Hero Header */}
-      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-rose-600 to-red-700 p-8 sm:p-12 text-white shadow-2xl shadow-rose-200 border-2 border-rose-400/50">
+      {/* Hero Header */}
+      <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 to-indigo-900 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-900/20 border border-slate-700">
         <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 mix-blend-overlay pointer-events-none"></div>
-        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/20 blur-3xl pointer-events-none"></div>
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"></div>
         
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-black uppercase tracking-widest mb-4 shadow-inner">
-              <ShieldAlert className="w-4 h-4 text-yellow-300" />
-              <span>الرقابة الآلية الذكية</span>
+              <ShieldAlert className="w-4 h-4 text-emerald-400" /> المحرك البرمجي المستقل
             </div>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">تقرير غياب المعلمين الفوري</h1>
-            <p className="text-rose-100 font-bold text-lg max-w-2xl leading-relaxed">
-              يقوم النظام بمقارنة جدول الحصص مع نشاط المعلمين في المنصة. إذا انتهت حصة ولم يتواجد المعلم، يظهر هنا فوراً!
+            <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">رادار المتابعة الفوري</h1>
+            <p className="text-indigo-200 font-bold text-base max-w-2xl leading-relaxed">
+              تم تحديث المحرك ليعمل بشكل مستقل عن تعقيدات قاعدة البيانات. اختر اليوم من الأسفل لترى الجدول بالكامل.
             </p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
-            <div className="bg-black/20 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/10 text-center flex-1 sm:flex-none">
-              <p className="text-[10px] text-rose-200 uppercase tracking-widest font-black mb-1">حصص لم تُغطى اليوم</p>
-              <p className="text-3xl font-black text-white">{absences.length}</p>
-            </div>
-            <div className="flex flex-col gap-2 w-full sm:w-auto">
-              <button onClick={exportToExcel} className="flex items-center justify-center gap-2 bg-white text-rose-700 px-6 py-3 rounded-xl font-black hover:bg-rose-50 transition-colors shadow-lg active:scale-95 w-full">
-                <Download className="w-5 h-5" /> تصدير التقرير
-              </button>
-              <button onClick={fetchAbsences} className="flex items-center justify-center gap-2 bg-rose-500/50 hover:bg-rose-500/80 text-white px-6 py-3 rounded-xl font-black transition-colors border border-rose-400/50 active:scale-95 w-full">
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> تحديث الآن
-              </button>
-            </div>
+          <div className="flex flex-col gap-2 w-full sm:w-auto">
+            <button onClick={exportToExcel} className="flex items-center justify-center gap-2 bg-white text-indigo-900 px-6 py-3 rounded-xl font-black hover:bg-indigo-50 transition-colors shadow-lg active:scale-95 w-full">
+              <Download className="w-5 h-5" /> تصدير التقرير
+            </button>
+            <button onClick={fetchEverythingAndCalculate} className="flex items-center justify-center gap-2 bg-indigo-500/50 hover:bg-indigo-500/80 text-white px-6 py-3 rounded-xl font-black transition-colors border border-indigo-400/50 active:scale-95 w-full">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> تحديث الآن
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 🚀 Filters Bar */}
-      <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-4">
-        <div className="relative flex-1 w-full group">
-          <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-rose-600 transition-colors" />
-          <input 
-            type="text" 
-            className="w-full rounded-xl border-0 py-3.5 pr-12 pl-5 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-rose-500 font-bold transition-all" 
-            placeholder="البحث باسم المعلم، الصف، المادة..." 
-            value={searchTerm} 
-            onChange={(e) => setSearchTerm(e.target.value)} 
-          />
-        </div>
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-500 px-4 py-2 bg-slate-50 rounded-xl border border-slate-200 shrink-0">
-          <Clock className="w-4 h-4 text-slate-400" />
-          آخر تحديث: {format(lastUpdated, 'hh:mm a', { locale: arSA })}
-        </div>
+      {/* 🚀 أزرار اختيار الأيام (اكتشف الحقيقة بنفسك!) */}
+      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-2 justify-center">
+        {daysOfWeek.map(day => (
+          <button 
+            key={day.id}
+            onClick={() => setSelectedDay(day.id)}
+            className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex-1 sm:flex-none ${
+              selectedDay === day.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            {day.name} {day.id === currentDay && '(اليوم)'}
+          </button>
+        ))}
       </div>
 
-      {/* 🚀 The Report List */}
+      {/* Tabs & Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <button onClick={() => setActiveTab('all')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'all' ? 'bg-slate-900 border-slate-800 text-white shadow-xl shadow-slate-900/20 scale-[1.02]' : 'bg-white border-slate-100 hover:border-slate-300 text-slate-600'}`}>
+           <Calendar className={`w-8 h-8 ${activeTab === 'all' ? 'text-indigo-400' : 'text-slate-400'}`} />
+           <span className="font-black text-2xl">{filteredData.length}</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">إجمالي الحصص المجدولة</span>
+        </button>
+        <button onClick={() => setActiveTab('absent')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'absent' ? 'bg-rose-500 border-rose-600 text-white shadow-xl shadow-rose-500/30 scale-[1.02]' : 'bg-rose-50 border-rose-100 hover:border-rose-300 text-rose-700'}`}>
+           <XCircle className={`w-8 h-8 ${activeTab === 'absent' ? 'text-white' : 'text-rose-500'}`} />
+           <span className="font-black text-2xl">{absences.length}</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">غياب / حصص فائتة</span>
+        </button>
+        <button onClick={() => setActiveTab('present')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'present' ? 'bg-emerald-500 border-emerald-600 text-white shadow-xl shadow-emerald-500/30 scale-[1.02]' : 'bg-emerald-50 border-emerald-100 hover:border-emerald-300 text-emerald-700'}`}>
+           <CheckCircle2 className={`w-8 h-8 ${activeTab === 'present' ? 'text-white' : 'text-emerald-500'}`} />
+           <span className="font-black text-2xl">{presents.length}</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">حضور / تمت التغطية</span>
+        </button>
+        <button onClick={() => setActiveTab('pending')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'pending' ? 'bg-amber-500 border-amber-600 text-white shadow-xl shadow-amber-500/30 scale-[1.02]' : 'bg-amber-50 border-amber-100 hover:border-amber-300 text-amber-700'}`}>
+           <Hourglass className={`w-8 h-8 ${activeTab === 'pending' ? 'text-white' : 'text-amber-500'}`} />
+           <span className="font-black text-2xl">{pendings.length}</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">قيد الانتظار (لم يحن وقتها)</span>
+        </button>
+      </div>
+
+      {/* The Report List */}
       <div className="space-y-4">
         {loading ? (
           <div className="py-20 text-center bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
-            <div className="h-12 w-12 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="font-bold text-slate-500">جاري فحص السجلات وجدول الحصص...</p>
+            <div className="h-12 w-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="font-bold text-slate-500">جاري فحص رادار الحركة...</p>
           </div>
-        ) : filteredAbsences.length === 0 ? (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="py-20 text-center bg-gradient-to-b from-emerald-50 to-white rounded-[2.5rem] border border-emerald-100 shadow-sm">
-            <div className="h-20 w-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-              <CheckCircle2 className="h-10 w-10" />
+        ) : filteredData.length === 0 ? (
+          <div className="py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200 shadow-sm flex flex-col items-center">
+            <div className="h-20 w-20 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center mb-6">
+              <BookOpen className="h-10 w-10" />
             </div>
-            <h3 className="text-2xl font-black text-emerald-800 mb-2">ممتاز! لا يوجد غياب</h3>
-            <p className="font-bold text-emerald-600/70 max-w-md mx-auto">
-              جميع المعلمين تواجدوا في حصصهم المجدولة اليوم وتم تغطية جميع الفصول بنجاح.
-            </p>
-          </motion.div>
+            <h3 className="text-xl font-black text-slate-800 mb-2">الجدول فارغ</h3>
+            <p className="font-bold text-slate-500">لا يوجد أي حصص مسجلة في قاعدة البيانات لهذا اليوم.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             <AnimatePresence>
-              {filteredAbsences.map((record, index) => (
-                <motion.div 
-                  key={`${record.teacher_id}-${record.period}`}
-                  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: index * 0.05 }}
-                  className="bg-white rounded-[2rem] p-6 border-2 border-rose-100 shadow-sm hover:shadow-xl hover:border-rose-300 transition-all group relative overflow-hidden flex flex-col"
-                >
-                  <div className="absolute top-0 left-0 w-24 h-24 bg-rose-50 rounded-br-full -mt-2 -ml-2 transition-transform group-hover:scale-110 z-0"></div>
-                  
-                  <div className="flex items-start justify-between relative z-10 mb-6">
-                    <div className="flex items-center gap-4">
-                      <div className="h-14 w-14 rounded-2xl bg-rose-50 text-rose-600 font-black text-xl flex items-center justify-center shadow-inner border border-rose-100 shrink-0">
-                        {record.teacher_name?.charAt(0) || 'م'}
-                      </div>
-                      <div>
-                        <h3 className="font-black text-slate-900 text-lg group-hover:text-rose-700 transition-colors line-clamp-1">{record.teacher_name}</h3>
-                        <div className="inline-flex items-center gap-1.5 mt-1 bg-slate-50 px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 border border-slate-100">
-                          <AlertCircle className="w-3 h-3 text-rose-500" /> لم يتواجد بالمنصة
+              {filteredData.map((record, index) => {
+                const isAbsent = record.current_status === 'absent';
+                const isPresent = record.current_status === 'present';
+                
+                return (
+                  <motion.div 
+                    key={record.id || index}
+                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: index * 0.02 }}
+                    className={`bg-white rounded-[2rem] p-6 border-2 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden flex flex-col ${
+                      isAbsent ? 'border-rose-100 hover:border-rose-300' : 
+                      isPresent ? 'border-emerald-100 hover:border-emerald-300' : 
+                      'border-amber-100 hover:border-amber-300'
+                    }`}
+                  >
+                    <div className={`absolute top-0 left-0 w-24 h-24 rounded-br-full -mt-2 -ml-2 transition-transform group-hover:scale-110 z-0 ${
+                      isAbsent ? 'bg-rose-50' : isPresent ? 'bg-emerald-50' : 'bg-amber-50'
+                    }`}></div>
+                    
+                    <div className="flex items-start justify-between relative z-10 mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className={`h-14 w-14 rounded-2xl font-black text-xl flex items-center justify-center shadow-inner border shrink-0 ${
+                          isAbsent ? 'bg-rose-50 text-rose-600 border-rose-100' : 
+                          isPresent ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                          'bg-amber-50 text-amber-600 border-amber-100'
+                        }`}>
+                          {record.teacher_name?.charAt(0) || 'م'}
+                        </div>
+                        <div className="max-w-[150px] sm:max-w-[200px]">
+                          <h3 className="font-black text-slate-900 text-lg truncate" title={record.teacher_name}>{record.teacher_name}</h3>
+                          <div className={`inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            isAbsent ? 'bg-rose-50 text-rose-600 border-rose-100' : 
+                            isPresent ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                            'bg-amber-50 text-amber-600 border-amber-100'
+                          }`}>
+                            {isAbsent ? <><AlertCircle className="w-3 h-3" /> غياب / لم يتواجد</> : 
+                             isPresent ? <><CheckCircle2 className="w-3 h-3" /> حاضر بالمنصة</> : 
+                             <><Hourglass className="w-3 h-3" /> حصة قادمة / لم تبدأ</>}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3 relative z-10 mb-6 mt-auto">
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">تغيب عن</p>
-                      <p className="font-black text-rose-600">الحصة {record.period}</p>
+                    <div className="grid grid-cols-2 gap-3 relative z-10 mb-6 mt-auto">
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">الحصة</p>
+                        <p className={`font-black ${isAbsent ? 'text-rose-600' : isPresent ? 'text-emerald-600' : 'text-amber-600'}`}>الحصة {record.period}</p>
+                        <p className="text-[9px] text-slate-400 mt-1 font-bold truncate" dir="ltr">{record.start_time?.substring(0,5) || '?'} - {record.end_time?.substring(0,5) || '?'}</p>
+                      </div>
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center flex flex-col justify-center">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">المادة</p>
+                        <p className="font-black text-slate-700 truncate text-sm" title={record.subject_name}>{record.subject_name}</p>
+                      </div>
                     </div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">المادة</p>
-                      <p className="font-black text-slate-700 truncate">{record.subject_name}</p>
-                    </div>
-                  </div>
 
-                  <div className="relative z-10 pt-4 border-t border-slate-100 flex items-center justify-between text-sm font-bold text-slate-600 bg-slate-50/50 -mx-6 -mb-6 px-6 py-4 rounded-b-[2rem]">
-                    <span className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-slate-400" />
-                      {record.class_name} - {record.section_name}
-                    </span>
-                    <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-1 rounded-lg">
-                      اليوم
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
+                    <div className="relative z-10 pt-4 border-t border-slate-100 flex items-center justify-between text-sm font-bold text-slate-600 bg-slate-50/50 -mx-6 -mb-6 px-6 py-4 rounded-b-[2rem]">
+                      <span className="flex items-center gap-2 truncate">
+                        <Users className="w-4 h-4 text-slate-400 shrink-0" />
+                        <span className="truncate">{record.class_name} - {record.section_name}</span>
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
         )}
