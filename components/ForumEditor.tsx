@@ -9,21 +9,19 @@ import {
 interface ForumEditorProps {
   content: string;
   setContent: (val: string) => void;
-  canUploadImage: boolean; // هل المستخدم معلم/مدير؟
+  canUploadImage: boolean;
 }
 
 export default function ForumEditor({ content, setContent, canUploadImage }: ForumEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // دالة لتنفيذ أوامر التنسيق (Bold, Italic, Color...)
   const execCommand = (command: string, value: string | undefined = undefined) => {
     document.execCommand(command, false, value);
     editorRef.current?.focus();
     setContent(editorRef.current?.innerHTML || '');
   };
 
-  // دالة رفع الصورة لـ Cloudinary
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -44,7 +42,6 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
 
       const data = await res.json();
       if (data.secure_url) {
-        // إدراج الصورة داخل المحرر
         const imgHtml = `<img src="${data.secure_url}" alt="مرفق" style="max-width: 100%; border-radius: 12px; margin: 10px 0;" />`;
         execCommand('insertHTML', imgHtml);
       }
@@ -53,14 +50,12 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
       alert('حدث خطأ أثناء رفع الصورة.');
     } finally {
       setIsUploading(false);
-      // إعادة تعيين حقل الملف
       if (e.target) e.target.value = '';
     }
   };
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-      {/* شريط الأدوات (Toolbar) */}
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sm:gap-2">
         <button type="button" onClick={() => execCommand('bold')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="عريض"><Bold className="w-4 h-4" /></button>
         <button type="button" onClick={() => execCommand('italic')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="مائل"><Italic className="w-4 h-4" /></button>
@@ -74,18 +69,15 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         
         <div className="w-px h-6 bg-slate-300 mx-1"></div>
 
-        {/* زر تغيير الحجم (H3) */}
         <button type="button" onClick={() => execCommand('formatBlock', 'H3')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors flex items-center gap-1" title="عنوان كبير">
           <Type className="w-4 h-4" /> <span className="text-[10px] font-bold">كبير</span>
         </button>
 
-        {/* زر اختيار اللون */}
         <label className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors cursor-pointer flex items-center gap-1" title="لون النص">
           <Palette className="w-4 h-4" />
           <input type="color" className="w-0 h-0 opacity-0 absolute" onChange={(e) => execCommand('foreColor', e.target.value)} />
         </label>
 
-        {/* 🚀 زر رفع الصور (مخصص للمعلمين/المدراء فقط) */}
         {canUploadImage && (
           <>
             <div className="w-px h-6 bg-slate-300 mx-1"></div>
@@ -98,14 +90,21 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         )}
       </div>
 
-      {/* مساحة التحرير (Editor Canvas) */}
+      {/* 🚀 تم إزالة placeholder وإضافة style و class بديل يعمل مع contentEditable */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .prose-editor:empty:before {
+          content: 'اكتب محتوى موضوعك هنا...';
+          color: #94a3b8;
+          pointer-events: none;
+          display: block;
+        }
+      `}} />
       <div 
         ref={editorRef}
         contentEditable
         onInput={(e) => setContent(e.currentTarget.innerHTML)}
-        className="w-full p-4 min-h-[200px] outline-none text-sm font-bold text-slate-800 leading-loose prose max-w-none"
+        className="w-full p-4 min-h-[200px] outline-none text-sm font-bold text-slate-800 leading-loose prose max-w-none prose-editor"
         dir="auto"
-        placeholder="اكتب محتوى موضوعك هنا..."
         style={{ emptyCells: 'show' }}
       />
     </div>
