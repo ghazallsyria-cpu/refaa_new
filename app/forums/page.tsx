@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { useForums, StructuredCategory } from '@/hooks/useForums'; 
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
-  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save
+  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -18,8 +18,9 @@ export default function ForumsPage() {
   const { 
     categories, 
     structuredCategories, 
+    schoolClasses, // 🚀 استيراد الصفوف الحقيقية من الهوك
     loading, 
-    fetchCategories, 
+    fetchCategoriesAndClasses, 
     createCategory 
   } = useForums();
 
@@ -30,21 +31,21 @@ export default function ForumsPage() {
   const [newCatDesc, setNewCatDesc] = useState('');
   const [parentId, setParentId] = useState<string | 'none'>('none');
   
-  // 🚀 مصفوفة الأرقام للاختيار المتعدد
-  const [targetLevels, setTargetLevels] = useState<number[]>([]);
+  // 🚀 مصفوفة الـ UUIDs للصفوف المختارة
+  const [targetClasses, setTargetClasses] = useState<string[]>([]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+    fetchCategoriesAndClasses();
+  }, [fetchCategoriesAndClasses]);
 
-  // 🚀 دالة لاختيار أو إلغاء اختيار صف معين
-  const toggleGrade = (grade: number) => {
-    if (targetLevels.includes(grade)) {
-      setTargetLevels(targetLevels.filter(g => g !== grade));
+  // دالة اختيار الصفوف
+  const toggleClass = (classId: string) => {
+    if (targetClasses.includes(classId)) {
+      setTargetClasses(targetClasses.filter(id => id !== classId));
     } else {
-      setTargetLevels([...targetLevels, grade]);
+      setTargetClasses([...targetClasses, classId]);
     }
   };
 
@@ -54,12 +55,11 @@ export default function ForumsPage() {
     
     setIsSubmitting(true);
     
-    // 🚀 إرسال المصفوفة كما يتوقعها TypeScript
     const payload = {
       name: newCatName,
       description: newCatDesc,
       parent_id: parentId === 'none' ? null : parentId,
-      target_level: targetLevels.length === 0 ? null : targetLevels
+      target_classes: targetClasses.length === 0 ? null : targetClasses
     };
 
     const result = await createCategory(payload);
@@ -69,7 +69,7 @@ export default function ForumsPage() {
       setNewCatName('');
       setNewCatDesc('');
       setParentId('none');
-      setTargetLevels([]); // تصفير المصفوفة
+      setTargetClasses([]); // تصفير
     } else {
       alert(`خطأ في إنشاء القسم: ${result.error}`);
     }
@@ -94,55 +94,70 @@ export default function ForumsPage() {
 
   const displayedCategories = filterHierarchy(structuredCategories, searchQuery);
 
-  const CategoryCard = ({ cat }: { cat: StructuredCategory }) => (
-    <Link href={`/forums/${cat.id}`} className="block h-full">
-      <motion.div 
-        whileHover={{ y: -5, scale: 1.01 }}
-        className="bg-white rounded-[1.5rem] p-5 sm:p-6 shadow-sm hover:shadow-xl border border-slate-200 hover:border-indigo-200 transition-all group flex flex-col h-full relative overflow-hidden"
-      >
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        
-        <div className="flex items-start justify-between mb-4">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm border border-indigo-100 shrink-0">
-            <Hash className="w-6 h-6 sm:w-7 sm:h-7" />
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="bg-slate-50 border border-slate-100 text-slate-500 text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm">
-              <MessageSquare className="w-3.5 h-3.5" />
-              {cat.topics_count} موضوع
-            </div>
-            {/* 🚀 عرض الصفوف المستهدفة */}
-            {cat.target_level && cat.target_level.length > 0 ? (
-              <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 max-w-[120px]">
-                <Target className="w-3 h-3 shrink-0" />
-                <span className="truncate" dir="ltr" title={`صفوف: ${cat.target_level.join(', ')}`}>
-                  صف: {cat.target_level.join(', ')}
-                </span>
-              </div>
-            ) : (
-              <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
-                <Globe className="w-3 h-3" /> عام للجميع
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="flex-1">
-          <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1">
-            {cat.name}
-          </h3>
-          <p className="text-xs sm:text-sm font-bold text-slate-500 leading-relaxed line-clamp-2">
-            {cat.description || 'مساحة مخصصة لتبادل النقاشات والأسئلة.'}
-          </p>
-        </div>
+  const CategoryCard = ({ cat }: { cat: StructuredCategory }) => {
+    // 🚀 دالة ذكية لتحويل الـ UUIDs إلى أسماء صفوف مقروءة للبطاقة
+    const getTargetClassNames = () => {
+      if (!cat.target_classes || cat.target_classes.length === 0) return null;
+      const names = cat.target_classes.map(id => {
+        const found = schoolClasses.find(c => c.id === id);
+        return found ? found.name : 'صف غير معروف';
+      });
+      return names.join('، ');
+    };
 
-        <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-indigo-600 font-black text-[10px] sm:text-xs uppercase tracking-widest">
-          <span>دخول الساحة</span>
-          <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-        </div>
-      </motion.div>
-    </Link>
-  );
+    const targetNames = getTargetClassNames();
+
+    return (
+      <Link href={`/forums/${cat.id}`} className="block h-full">
+        <motion.div 
+          whileHover={{ y: -5, scale: 1.01 }}
+          className="bg-white rounded-[1.5rem] p-5 sm:p-6 shadow-sm hover:shadow-xl border border-slate-200 hover:border-indigo-200 transition-all group flex flex-col h-full relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          
+          <div className="flex items-start justify-between mb-4">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm border border-indigo-100 shrink-0">
+              <Hash className="w-6 h-6 sm:w-7 sm:h-7" />
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <div className="bg-slate-50 border border-slate-100 text-slate-500 text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm">
+                <MessageSquare className="w-3.5 h-3.5" />
+                {cat.topics_count} موضوع
+              </div>
+              
+              {/* عرض أسماء الصفوف الحقيقية المستهدفة */}
+              {targetNames ? (
+                <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 max-w-[150px]">
+                  <Target className="w-3 h-3 shrink-0" />
+                  <span className="truncate" dir="ltr" title={targetNames}>
+                    {targetNames}
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
+                  <Globe className="w-3 h-3" /> عام للجميع
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex-1">
+            <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1">
+              {cat.name}
+            </h3>
+            <p className="text-xs sm:text-sm font-bold text-slate-500 leading-relaxed line-clamp-2">
+              {cat.description || 'مساحة مخصصة لتبادل النقاشات والأسئلة.'}
+            </p>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-indigo-600 font-black text-[10px] sm:text-xs uppercase tracking-widest">
+            <span>دخول الساحة</span>
+            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          </div>
+        </motion.div>
+      </Link>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
@@ -253,14 +268,19 @@ export default function ForumsPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 my-auto"
+              className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl overflow-hidden border border-slate-100 my-auto"
             >
-              <div className="bg-slate-50 p-6 border-b border-slate-100 flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl"><Layers className="w-6 h-6" /></div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-900">إضافة قسم للمنتدى</h2>
-                  <p className="text-xs font-bold text-slate-500 mt-1">يمكنك إنشاء قسم رئيسي أو تفريعه داخل قسم موجود.</p>
+              <div className="bg-slate-50 p-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl"><Layers className="w-6 h-6" /></div>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">إضافة قسم للمنتدى</h2>
+                    <p className="text-xs font-bold text-slate-500 mt-1">يمكنك إنشاء قسم رئيسي أو تفريعه داخل قسم موجود.</p>
+                  </div>
                 </div>
+                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                   <XCircle className="w-6 h-6" />
+                </button>
               </div>
               
               <form onSubmit={handleCreateCategory} className="p-6 space-y-5">
@@ -288,47 +308,55 @@ export default function ForumsPage() {
                   </select>
                 </div>
 
-                {/* 🚀 نظام اختيار الصفوف المتعددة */}
+                {/* 🚀 نظام اختيار الصفوف الحقيقية */}
                 <div className="bg-indigo-50/50 p-4 sm:p-5 rounded-[1.5rem] border border-indigo-100">
                   <label className="flex items-center gap-2 text-xs font-black text-indigo-700 uppercase tracking-widest mb-3">
-                    <Target className="w-4 h-4" /> الفئة المستهدفة (الصفوف)
+                    <Target className="w-4 h-4" /> الفئة المستهدفة (من صفوف المدرسة)
                   </label>
                   
                   <div className="mb-3">
                     <button 
                       type="button" 
-                      onClick={() => setTargetLevels([])}
+                      onClick={() => setTargetClasses([])}
                       className={`w-full py-2.5 rounded-xl text-sm font-black transition-all border-2 ${
-                        targetLevels.length === 0 
+                        targetClasses.length === 0 
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-500 shadow-md shadow-emerald-100' 
                           : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200'
                       }`}
                     >
-                      🌍 عام (متاح لجميع الصفوف)
+                      🌍 عام (متاح لجميع الصفوف في المدرسة)
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(grade => {
-                      const isSelected = targetLevels.includes(grade);
-                      return (
-                        <button
-                          key={grade}
-                          type="button"
-                          onClick={() => toggleGrade(grade)}
-                          className={`py-2 rounded-xl text-xs font-black transition-all border-2 flex flex-col items-center justify-center gap-1 ${
-                            isSelected 
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200' 
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                          }`}
-                        >
-                          صف {grade}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {schoolClasses.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-indigo-200">
+                      {schoolClasses.map(cls => {
+                        const isSelected = targetClasses.includes(cls.id);
+                        return (
+                          <button
+                            key={cls.id}
+                            type="button"
+                            onClick={() => toggleClass(cls.id)}
+                            className={`py-2 px-2 rounded-xl text-xs font-black transition-all border-2 flex items-center justify-center text-center truncate ${
+                              isSelected 
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200' 
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                            }`}
+                            title={cls.name}
+                          >
+                            {cls.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-xs font-bold text-slate-500 border-2 border-dashed border-slate-200 rounded-xl">
+                      لا توجد صفوف مضافة في المدرسة حالياً.
+                    </div>
+                  )}
+                  
                   <p className="text-[10px] font-bold text-indigo-500 mt-3 leading-relaxed">
-                    يمكنك تحديد صف واحد أو عدة صفوف معاً. الصفوف غير المحددة لن تتمكن من رؤية هذا القسم.
+                    سيتمكن طلاب الصفوف المحددة أعلاه فقط من رؤية هذا القسم.
                   </p>
                 </div>
 
