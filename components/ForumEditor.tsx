@@ -1,10 +1,19 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { 
-  Bold, Italic, Underline, Image as ImageIcon, 
-  Loader2, AlignRight, AlignCenter, AlignLeft, Type, Palette
-} from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { Loader2 } from 'lucide-react';
+import 'react-quill/dist/quill.snow.css'; // استيراد تنسيقات المحرر العالمية
+
+// استيراد ديناميكي لمنع أخطاء السيرفر (SSR) في Next.js
+const ReactQuill = dynamic(() => import('react-quill'), { 
+  ssr: false, 
+  loading: () => (
+    <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
+      <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+    </div>
+  )
+});
 
 interface ForumEditorProps {
   content: string;
@@ -13,99 +22,127 @@ interface ForumEditorProps {
 }
 
 export default function ForumEditor({ content, setContent, canUploadImage }: ForumEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
+  const quillRef = useRef<any>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const execCommand = (command: string, value: string | undefined = undefined) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
-    setContent(editorRef.current?.innerHTML || '');
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
-
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      if (!cloudName) throw new Error("Cloudinary Cloud Name is missing");
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (data.secure_url) {
-        const imgHtml = `<img src="${data.secure_url}" alt="مرفق" style="max-width: 100%; border-radius: 12px; margin: 10px 0;" />`;
-        execCommand('insertHTML', imgHtml);
-      }
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      alert('حدث خطأ أثناء رفع الصورة.');
-    } finally {
-      setIsUploading(false);
-      if (e.target) e.target.value = '';
+  // 🚀 النظام الذكي لرفع الصور (Cloudinary Integration)
+  const imageHandler = useCallback(() => {
+    if (!canUploadImage) {
+      alert('عذراً، رفع الصور متاح للمعلمين والإدارة فقط.');
+      return;
     }
-  };
+
+    const input = document.createElement('input');
+    input.setAttribute('type', 'file');
+    input.setAttribute('accept', 'image/*');
+    input.click();
+
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      setIsUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+
+        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+        if (!cloudName) throw new Error("Cloudinary Cloud Name is missing");
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+        
+        if (data.secure_url) {
+          // جلب مؤشر الكتابة الحالي وإدراج الصورة بذكاء
+          const quill = quillRef.current?.getEditor();
+          const range = quill?.getSelection();
+          if (quill && range) {
+            quill.insertEmbed(range.index, 'image', data.secure_url);
+            quill.setSelection(range.index + 1); // تحريك المؤشر بعد الصورة
+          }
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('حدث خطأ أثناء رفع الصورة.');
+      } finally {
+        setIsUploading(false);
+      }
+    };
+  }, [canUploadImage]);
+
+  // إعدادات شريط الأدوات الاحترافي
+  const modules = useMemo(() => ({
+    toolbar: {
+      container: [
+        [{ 'header': [2, 3, 4, false] }],
+        ['bold', 'italic', 'underline', 'strike'],        
+        [{ 'color': [] }, { 'background': [] }],          
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        [{ 'align': [] }],
+        ['link', canUploadImage ? 'image' : ''], // إظهار زر الصورة بناءً على الصلاحية
+        ['clean']                                         
+      ],
+      handlers: {
+        image: imageHandler
+      }
+    }
+  }), [canUploadImage, imageHandler]);
 
   return (
-    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-      <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sm:gap-2">
-        <button type="button" onClick={() => execCommand('bold')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="عريض"><Bold className="w-4 h-4" /></button>
-        <button type="button" onClick={() => execCommand('italic')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="مائل"><Italic className="w-4 h-4" /></button>
-        <button type="button" onClick={() => execCommand('underline')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="تسطير"><Underline className="w-4 h-4" /></button>
-        
-        <div className="w-px h-6 bg-slate-300 mx-1"></div>
-        
-        <button type="button" onClick={() => execCommand('justifyRight')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors"><AlignRight className="w-4 h-4" /></button>
-        <button type="button" onClick={() => execCommand('justifyCenter')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors"><AlignCenter className="w-4 h-4" /></button>
-        <button type="button" onClick={() => execCommand('justifyLeft')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors"><AlignLeft className="w-4 h-4" /></button>
-        
-        <div className="w-px h-6 bg-slate-300 mx-1"></div>
-
-        <button type="button" onClick={() => execCommand('formatBlock', 'H3')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors flex items-center gap-1" title="عنوان كبير">
-          <Type className="w-4 h-4" /> <span className="text-[10px] font-bold">كبير</span>
-        </button>
-
-        <label className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors cursor-pointer flex items-center gap-1" title="لون النص">
-          <Palette className="w-4 h-4" />
-          <input type="color" className="w-0 h-0 opacity-0 absolute" onChange={(e) => execCommand('foreColor', e.target.value)} />
-        </label>
-
-        {canUploadImage && (
-          <>
-            <div className="w-px h-6 bg-slate-300 mx-1"></div>
-            <label className={`p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${isUploading ? 'bg-indigo-100 text-indigo-400' : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-600'}`} title="إرفاق صورة">
-              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-              <span className="text-[10px] font-black">{isUploading ? 'جاري الرفع...' : 'صورة'}</span>
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
-            </label>
-          </>
-        )}
-      </div>
-
-      {/* 🚀 تم إزالة placeholder وإضافة style و class بديل يعمل مع contentEditable */}
+    <div className="relative">
       <style dangerouslySetInnerHTML={{ __html: `
-        .prose-editor:empty:before {
-          content: 'اكتب محتوى موضوعك هنا...';
-          color: #94a3b8;
-          pointer-events: none;
+        .quill-custom .ql-toolbar {
+          border-top-left-radius: 1rem;
+          border-top-right-radius: 1rem;
+          border-color: #e2e8f0;
+          background: #f8fafc;
+          padding: 12px;
+          direction: ltr; /* أزرار المحرر العالمية تكون LTR دائماً */
+        }
+        .quill-custom .ql-container {
+          border-bottom-left-radius: 1rem;
+          border-bottom-right-radius: 1rem;
+          border-color: #e2e8f0;
+          min-height: 250px;
+          font-family: inherit;
+          font-size: 16px;
+        }
+        .quill-custom .ql-editor {
+          min-height: 250px;
+          direction: rtl; /* الكتابة تكون عربي RTL */
+          text-align: right;
+          padding: 20px;
+        }
+        .quill-custom .ql-editor img {
+          border-radius: 12px;
+          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+          margin: 1rem auto;
           display: block;
+          max-width: 100%;
         }
       `}} />
-      <div 
-        ref={editorRef}
-        contentEditable
-        onInput={(e) => setContent(e.currentTarget.innerHTML)}
-        className="w-full p-4 min-h-[200px] outline-none text-sm font-bold text-slate-800 leading-loose prose max-w-none prose-editor"
-        dir="auto"
-        style={{ emptyCells: 'show' }}
+      
+      {isUploading && (
+        <div className="absolute inset-0 z-10 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl border border-indigo-100">
+          <div className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold flex items-center gap-3 shadow-lg">
+            <Loader2 className="w-5 h-5 animate-spin" /> جاري رفع الصورة وتشفيرها...
+          </div>
+        </div>
+      )}
+
+      <ReactQuill 
+        ref={quillRef}
+        theme="snow"
+        value={content}
+        onChange={setContent}
+        modules={modules}
+        className="quill-custom bg-white"
+        placeholder="اكتب تفاصيل موضوعك هنا... يمكنك تنسيق النص وإضافة الألوان!"
       />
     </div>
   );
