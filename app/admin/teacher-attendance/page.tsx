@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   Printer, Calendar, Clock, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2,
-  XCircle, Hourglass, Minus, AlertTriangle, Database
+  XCircle, Hourglass, Minus, AlertTriangle, Database, Users
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -34,7 +34,7 @@ export default function TeacherAttendanceMatrix() {
   const [selectedDay, setSelectedDay] = useState<number>(currentDbDay);
   
   const [stats, setStats] = useState({ totalAbsences: 0, totalPresents: 0 });
-  const [debugInfo, setDebugInfo] = useState({ schedulesCount: -1, error: null as string | null });
+  const [debugInfo, setDebugInfo] = useState({ schedulesCount: -1, periodsCount: -1, error: null as string | null });
 
   const fetchMatrixData = useCallback(async () => {
     setLoading(true);
@@ -44,25 +44,29 @@ export default function TeacherAttendanceMatrix() {
       // سحب الجداول بشكل مستقل تماماً
       const schRes = await supabase.from('schedules').select('*');
       const perRes = await supabase.from('periods').select('*').order('period_number');
-      const subRes = await supabase.from('subjects').select('id, name');
+      const secRes = await supabase.from('sections').select('id, name, class_id'); // جلب الشعب
+      const clsRes = await supabase.from('classes').select('id, name'); // جلب الفصول
       const usrRes = await supabase.from('users').select('id, full_name');
       const attRes = await supabase.from('teacher_attendance_records').select('*').eq('date', todayStr);
 
-      // 🚨 كاشف الأعطال الصامتة
+      // كاشف الأعطال (للتأكد أن الأوقات تأتي من القاعدة)
       setDebugInfo({
         schedulesCount: schRes.data?.length || 0,
-        error: schRes.error?.message || null
+        periodsCount: perRes.data?.length || 0,
+        error: schRes.error?.message || perRes.error?.message || null
       });
 
       const allSchedules = schRes.data || [];
       const periods = perRes.data || [];
-      const subjects = subRes.data || [];
+      const sections = secRes.data || [];
+      const classes = clsRes.data || [];
       const users = usrRes.data || [];
       const attendance = attRes.data || [];
 
+      // 🚀 الآن نحن نعتمد 100% على جدول الأوقات الفعلي من قاعدة بياناتك!
       const sortedPeriods = periods.length > 0 
         ? periods.sort((a: any, b: any) => Number(a.period_number) - Number(b.period_number))
-        : [1, 2, 3, 4, 5, 6, 7].map(n => ({ period_number: n, start_time: null, end_time: null }));
+        : []; // إذا كان فارغاً، لن نرسم حصصاً وهمية بعد الآن!
         
       setPeriodsList(sortedPeriods);
 
@@ -90,7 +94,11 @@ export default function TeacherAttendanceMatrix() {
         }
 
         const row = teacherMap.get(sch.teacher_id);
-        const subject = subjects.find(s => s.id === sch.subject_id);
+        
+        // 🚀 استخراج اسم الصف والشعبة بدلاً من المادة
+        const section = sections.find(s => s.id === sch.section_id);
+        const cls = section ? classes.find(c => c.id === section.class_id) : null;
+        const classNameToDisplay = cls && section ? `${cls.name} - ${section.name}` : 'صف غير محدد';
         
         const hasAttended = attendance.some(a => a.teacher_id === sch.teacher_id && Number(a.period_number) === Number(sch.period));
         const periodInfo = sortedPeriods.find(p => Number(p.period_number) === Number(sch.period));
@@ -118,7 +126,7 @@ export default function TeacherAttendanceMatrix() {
 
         row.periodsData[sch.period] = {
           status,
-          subject: subject?.name || 'مادة'
+          displayData: classNameToDisplay // 🚀 عرض اسم الصف بدلاً من المادة
         };
       });
 
@@ -151,31 +159,81 @@ export default function TeacherAttendanceMatrix() {
     }
   }, [userRole, fetchMatrixData]);
 
+  // دالة الطباعة (تفتح نافذة الطباعة الافتراضية للمتصفح التي تتيح الحفظ كـ PDF)
   const handlePrint = () => {
     window.print();
   };
 
   if (userRole !== 'admin' && userRole !== 'management') return null;
 
-  // 🚀 تغطية جميع الاحتمالات لأرقام الأيام في قاعدة البيانات
   const daysOfWeek = [
-    { id: 0, name: 'تأكد: (0)' },
-    { id: 1, name: 'الأحد (1)' }, 
-    { id: 2, name: 'الإثنين (2)' }, 
-    { id: 3, name: 'الثلاثاء (3)' },
-    { id: 4, name: 'الأربعاء (4)' }, 
-    { id: 5, name: 'الخميس (5)' }
+    { id: 1, name: 'الأحد' }, { id: 2, name: 'الإثنين' }, { id: 3, name: 'الثلاثاء' },
+    { id: 4, name: 'الأربعاء' }, { id: 5, name: 'الخميس' }
   ];
 
   return (
     <>
+      {/* 🚀 كود الطباعة الفولاذي (Print CSS) */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
-          .print-area { position: absolute; left: 0; top: 0; width: 100%; direction: rtl; }
-          .no-print { display: none !important; }
-          @page { size: landscape; margin: 1cm; }
+          /* إخفاء كل شيء في الصفحة افتراضياً */
+          body * { 
+            visibility: hidden; 
+          }
+          
+          /* إجبار المتصفح على طباعة الألوان والخلفيات */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* إظهار منطقة التقرير فقط ومحتوياتها */
+          #printable-matrix, #printable-matrix * { 
+            visibility: visible; 
+          }
+
+          /* سحب منطقة الطباعة لأعلى ويسار الصفحة لتأخذ المساحة كاملة */
+          #printable-matrix { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100vw !important;
+            margin: 0 !important;
+            padding: 10mm !important;
+            background: white !important;
+          }
+
+          /* إخفاء الأزرار المخصصة للشاشة داخل التقرير */
+          .no-print { 
+            display: none !important; 
+          }
+
+          /* ضبط اتجاه الورقة أفقي وإزالة الهوامش الافتراضية المزعجة */
+          @page { 
+            size: landscape A4; 
+            margin: 0; 
+          }
+
+          /* منع الجدول من الانقسام بشكل قبيح */
+          table {
+            page-break-inside: auto;
+            width: 100% !important;
+          }
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
+          }
+          
+          /* إظهار التوقيعات في الطباعة فقط */
+          .print-signatures {
+            display: block !important;
+            margin-top: 40px;
+          }
+          
+          /* إزالة السكرول لتجنب قص الجدول في الطباعة */
+          .overflow-x-auto {
+            overflow: visible !important;
+          }
         }
       `}} />
 
@@ -212,7 +270,6 @@ export default function TeacherAttendanceMatrix() {
           </div>
         </div>
 
-        {/* أزرار اختيار الأيام */}
         <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-2 justify-center no-print">
           {daysOfWeek.map(day => (
             <button 
@@ -222,12 +279,13 @@ export default function TeacherAttendanceMatrix() {
                 selectedDay === day.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
               }`}
             >
-              {day.name}
+              {day.name} {day.id === currentDbDay && '(اليوم)'}
             </button>
           ))}
         </div>
 
-        <div className="print-area bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+        {/* 🚀 العنصر الأساسي للطباعة (تم إضافة المعرف id هنا) */}
+        <div id="printable-matrix" className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
           
           <div className="p-8 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
             <div>
@@ -254,27 +312,20 @@ export default function TeacherAttendanceMatrix() {
 
           <div className="overflow-x-auto p-6">
             {loading ? (
-              <div className="py-20 flex justify-center"><RefreshCw className="w-10 h-10 text-indigo-500 animate-spin" /></div>
-            ) : debugInfo.schedulesCount === 0 ? (
-              /* 🚨 الشاشة الحمراء الانقاذية (كاشف الحظر) 🚨 */
-              <div className="py-16 px-8 bg-rose-50 border-2 border-rose-200 rounded-3xl mx-auto max-w-3xl text-center shadow-inner">
+              <div className="py-20 flex justify-center no-print"><RefreshCw className="w-10 h-10 text-indigo-500 animate-spin" /></div>
+            ) : debugInfo.schedulesCount === 0 || debugInfo.periodsCount === 0 ? (
+              <div className="py-16 px-8 bg-rose-50 border-2 border-rose-200 rounded-3xl mx-auto max-w-3xl text-center shadow-inner no-print">
                 <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-rose-100 text-rose-500">
                   <Database className="w-12 h-12" />
                 </div>
-                <h3 className="font-black text-2xl text-rose-700 mb-4">قاعدة البيانات تمنع قراءة الجدول! (RLS Block)</h3>
-                <p className="font-bold text-slate-600 text-sm leading-relaxed mb-8">
-                  المتصفح يحاول قراءة جدول الحصص، لكن Supabase ترسل له 0 حصص بسبب قفل الأمان (Row Level Security). 
-                  لحل المشكلة نهائياً وعرض الجدول، اذهب إلى <strong>SQL Editor</strong> في Supabase وشغل الكود التالي:
-                </p>
+                <h3 className="font-black text-2xl text-rose-700 mb-4">
+                  {debugInfo.periodsCount === 0 ? 'أوقات الحصص مفقودة أو محجوبة!' : 'قاعدة البيانات تمنع قراءة الجدول!'}
+                </h3>
                 <div className="bg-slate-900 rounded-2xl p-6 relative overflow-hidden text-left" dir="ltr">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-indigo-500"></div>
                   <pre className="text-emerald-400 font-mono text-sm leading-loose whitespace-pre-wrap">
-                    {`DROP POLICY IF EXISTS "Allow read schedule" ON public.schedules;\nCREATE POLICY "Allow read schedule" ON public.schedules FOR SELECT USING (auth.role() = 'authenticated');`}
+                    {`-- يجب فتح الحماية لجدول schedule و جدول periods\nDROP POLICY IF EXISTS "Allow read schedule" ON public.schedules;\nCREATE POLICY "Allow read schedule" ON public.schedules FOR SELECT USING (auth.role() = 'authenticated');\n\nDROP POLICY IF EXISTS "Allow read periods" ON public.periods;\nCREATE POLICY "Allow read periods" ON public.periods FOR SELECT USING (auth.role() = 'authenticated');`}
                   </pre>
                 </div>
-                <p className="text-rose-500 font-bold text-sm mt-6 flex items-center justify-center gap-2">
-                  <AlertTriangle className="w-5 h-5" /> بعد تشغيل الكود، اضغط تحديث البيانات.
-                </p>
               </div>
             ) : matrixData.length === 0 ? (
               <div className="py-20 text-center flex flex-col items-center gap-4">
@@ -284,7 +335,6 @@ export default function TeacherAttendanceMatrix() {
                 <h3 className="font-black text-xl text-slate-800">لا يوجد جدول مسجل في هذا اليوم</h3>
                 <p className="font-bold text-slate-500 text-sm max-w-md leading-relaxed">
                   قاعدة البيانات مفتوحة، ولكن لا يوجد أي حصص مسندة لأي معلم في اليوم المحدد ({daysOfWeek.find(d => d.id === selectedDay)?.name}).
-                  جرب الضغط على الأيام الأخرى في الأزرار العلوية.
                 </p>
               </div>
             ) : (
@@ -295,10 +345,10 @@ export default function TeacherAttendanceMatrix() {
                       اسم المعلم
                     </th>
                     {periodsList.map(period => (
-                      <th key={period.period_number} className="p-4 bg-slate-100 text-slate-700 font-black border border-slate-200 text-center min-w-[140px]">
+                      <th key={period.period_number} className="p-4 bg-slate-100 text-slate-700 font-black border border-slate-200 text-center min-w-[100px]">
                         الحصة {period.period_number}
                         <div className="text-[10px] font-bold text-slate-400 mt-1" dir="ltr">
-                          {period.start_time?.substring(0,5) || '--:--'} - {period.end_time?.substring(0,5) || '--:--'}
+                          {period.start_time?.substring(0,5)} - {period.end_time?.substring(0,5)}
                         </div>
                       </th>
                     ))}
@@ -317,23 +367,23 @@ export default function TeacherAttendanceMatrix() {
                         return (
                           <td key={period.period_number} className="p-3 border border-slate-200 text-center align-middle">
                             {cellData?.status === 'free' ? (
-                              <div className="w-full h-full min-h-[60px] flex items-center justify-center text-slate-300 bg-slate-50/50 rounded-lg">
+                              <div className="w-full h-full min-h-[50px] flex items-center justify-center text-slate-300 bg-slate-50/50 rounded-lg">
                                 <Minus className="w-5 h-5 opacity-50" />
                               </div>
                             ) : cellData?.status === 'present' ? (
-                              <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-100 print-color-adjust-exact">
-                                <CheckCircle2 className="w-6 h-6 mb-1" />
-                                <span className="font-bold text-[10px] truncate max-w-[120px]">{cellData.subject}</span>
+                              <div className="w-full h-full min-h-[50px] flex flex-col items-center justify-center bg-[#ecfdf5] text-[#047857] rounded-lg border border-[#a7f3d0] print-color-adjust-exact">
+                                <CheckCircle2 className="w-5 h-5 mb-1" />
+                                <span className="font-bold text-[9px] truncate max-w-[120px]">{cellData.displayData}</span>
                               </div>
                             ) : cellData?.status === 'absent' ? (
-                              <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center bg-rose-50 text-rose-700 rounded-lg border border-rose-200 print-color-adjust-exact">
-                                <XCircle className="w-6 h-6 mb-1" />
-                                <span className="font-black text-[10px] uppercase">غيـاب</span>
+                              <div className="w-full h-full min-h-[50px] flex flex-col items-center justify-center bg-[#fff1f2] text-[#be123c] rounded-lg border border-[#fecdd3] print-color-adjust-exact">
+                                <XCircle className="w-5 h-5 mb-1" />
+                                <span className="font-black text-[9px] uppercase">غيـاب</span>
                               </div>
                             ) : (
-                              <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center bg-amber-50 text-amber-600 rounded-lg border border-amber-100 print-color-adjust-exact">
-                                <Hourglass className="w-5 h-5 mb-1 opacity-70" />
-                                <span className="font-bold text-[10px] truncate max-w-[120px]">{cellData.subject}</span>
+                              <div className="w-full h-full min-h-[50px] flex flex-col items-center justify-center bg-[#fffbeb] text-[#b45309] rounded-lg border border-[#fde68a] print-color-adjust-exact">
+                                <Hourglass className="w-4 h-4 mb-1 opacity-70" />
+                                <span className="font-bold text-[9px] truncate max-w-[120px]">{cellData.displayData}</span>
                               </div>
                             )}
                           </td>
@@ -346,18 +396,21 @@ export default function TeacherAttendanceMatrix() {
             )}
           </div>
 
-          <div className="p-6 border-t border-slate-200 bg-white text-center hidden print:block mt-10">
-            <div className="flex justify-between items-end px-20">
-              <div>
-                <p className="font-bold text-slate-600 mb-8">توقيع الإشراف الإداري</p>
-                <p className="border-t border-slate-400 w-48 mx-auto"></p>
+          {/* التوقيعات (تكون مخفية في الشاشة وتظهر فقط عند الطباعة) */}
+          <div className="print-signatures hidden w-full px-12 pb-12">
+            <div className="flex justify-between items-end w-full">
+              <div className="text-center">
+                <p className="font-bold text-slate-800 text-lg mb-12">توقيع الإشراف الإداري</p>
+                <div className="border-t-2 border-slate-400 w-64 mx-auto"></div>
               </div>
-              <div>
-                <p className="font-bold text-slate-600 mb-8">توقيع مدير المدرسة</p>
-                <p className="border-t border-slate-400 w-48 mx-auto"></p>
+              <div className="text-center">
+                <p className="font-bold text-slate-800 text-lg mb-12">توقيع مدير المدرسة</p>
+                <div className="border-t-2 border-slate-400 w-64 mx-auto"></div>
               </div>
             </div>
-            <p className="text-xs text-slate-400 mt-10 font-bold">تم إصدار هذا التقرير آلياً من المنصة الرقمية</p>
+            <div className="mt-12 text-center text-slate-500 text-sm font-bold border-t border-slate-200 pt-4">
+              تم إصدار هذا التقرير آلياً من المنصة الرقمية - نظام إدارة المدارس
+            </div>
           </div>
 
         </div>
