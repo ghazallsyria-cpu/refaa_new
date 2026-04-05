@@ -7,7 +7,7 @@ export interface ForumCategory {
   name: string;
   description: string;
   parent_id: string | null;
-  target_level: number | null;
+  target_level: number[] | null; // 🚀 التحديث هنا: أصبح مصفوفة أرقام
   icon: string | null;
   topics_count?: number;
 }
