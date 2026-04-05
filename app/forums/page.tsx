@@ -1,21 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-// --- الاستيرادات الأصلية الخاصة بمشروعك (جاهزة لـ Netlify) ---
-// ملاحظة: قد تظهر رسالة خطأ في بيئة العرض هنا، لكن الكود سليم 100% للنسخ لمشروعك.
 import { useAuth } from '@/context/auth-context';
 import { useForums, StructuredCategory } from '@/hooks/useForums'; 
 import { supabase } from '@/lib/supabase';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
-import Link from 'next/link';
-// -------------------------------------------------------------
-
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
   Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle, Image as ImageIcon, Trash2, Lock, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 
 export default function ForumsPage() {
   const { userRole, authRole } = useAuth() as any;
@@ -92,7 +87,7 @@ export default function ForumsPage() {
   };
 
   const handleDeleteCategory = async (categoryId: string, categoryIconUrl: string | null) => {
-      if (!confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع المواضيع والردود بداخله.')) return;
+      if (!confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع المواضيع والردود بداخله. هذا الإجراء لا يمكن التراجع عنه.')) return;
       try {
           if (categoryIconUrl) await deleteFromCloudinary(categoryIconUrl);
           await supabase.from('forum_categories').delete().eq('id', categoryId);
@@ -262,6 +257,7 @@ export default function ForumsPage() {
               ) : (
                  <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                     <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    {/* eslint-disable-next-line react/no-unescaped-entities */}
                     <p className="text-sm font-black text-slate-400">لا توجد أقسام فرعية داخل "{mainCat.name}" حتى الآن.</p>
                     <p className="text-xs font-bold text-slate-400 mt-1">اضغط على اسم القسم بالأعلى للدخول إليه أو أضف أقساماً فرعية.</p>
                  </div>
