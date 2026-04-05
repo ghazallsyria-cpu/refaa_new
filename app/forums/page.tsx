@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { useForums, StructuredCategory } from '@/hooks/useForums'; 
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
-  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save // 🚀 تم إضافة Save هنا
+  Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -29,12 +29,24 @@ export default function ForumsPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [parentId, setParentId] = useState<string | 'none'>('none');
-  const [targetLevel, setTargetLevel] = useState<string | 'all'>('all');
+  
+  // 🚀 مصفوفة لتخزين الصفوف المحددة
+  const [targetLevels, setTargetLevels] = useState<number[]>([]);
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
+
+  // دالة لاختيار أو إلغاء اختيار صف معين
+  const toggleGrade = (grade: number) => {
+    if (targetLevels.includes(grade)) {
+      setTargetLevels(targetLevels.filter(g => g !== grade));
+    } else {
+      setTargetLevels([...targetLevels, grade]);
+    }
+  };
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +58,7 @@ export default function ForumsPage() {
       name: newCatName,
       description: newCatDesc,
       parent_id: parentId === 'none' ? null : parentId,
-      target_level: targetLevel === 'all' ? null : parseInt(targetLevel)
+      target_level: targetLevels.length === 0 ? null : targetLevels // إذا كانت فارغة = للجميع
     };
 
     const result = await createCategory(payload);
@@ -56,7 +68,7 @@ export default function ForumsPage() {
       setNewCatName('');
       setNewCatDesc('');
       setParentId('none');
-      setTargetLevel('all');
+      setTargetLevels([]); // تصفير المصفوفة
     } else {
       alert(`خطأ في إنشاء القسم: ${result.error}`);
     }
@@ -98,9 +110,13 @@ export default function ForumsPage() {
               <MessageSquare className="w-3.5 h-3.5" />
               {cat.topics_count} موضوع
             </div>
-            {cat.target_level ? (
-              <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
-                <Target className="w-3 h-3" /> صف {cat.target_level}
+            {/* 🚀 عرض الصفوف المستهدفة بشكل أنيق */}
+            {cat.target_level && cat.target_level.length > 0 ? (
+              <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 max-w-[120px]">
+                <Target className="w-3 h-3 shrink-0" />
+                <span className="truncate" dir="ltr" title={`صفوف: ${cat.target_level.join(', ')}`}>
+                  صف: {cat.target_level.join(', ')}
+                </span>
               </div>
             ) : (
               <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
@@ -271,24 +287,47 @@ export default function ForumsPage() {
                   </select>
                 </div>
 
-                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                {/* 🎯 نظام اختيار الصفوف المتعددة الجديد */}
+                <div className="bg-indigo-50/50 p-4 sm:p-5 rounded-[1.5rem] border border-indigo-100">
                   <label className="flex items-center gap-2 text-xs font-black text-indigo-700 uppercase tracking-widest mb-3">
-                    <Target className="w-4 h-4" /> الفئة المستهدفة
+                    <Target className="w-4 h-4" /> الفئة المستهدفة (الصفوف)
                   </label>
-                  <select 
-                    value={targetLevel} onChange={e => setTargetLevel(e.target.value)}
-                    className="w-full bg-white border border-indigo-200 rounded-xl px-4 py-3 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer text-indigo-900"
-                  >
-                    <option value="all">🌍 عام (متاح لجميع الصفوف)</option>
-                    <option value="7">مخصص للصف: السابع</option>
-                    <option value="8">مخصص للصف: الثامن</option>
-                    <option value="9">مخصص للصف: التاسع</option>
-                    <option value="10">مخصص للصف: العاشر</option>
-                    <option value="11">مخصص للصف: الحادي عشر</option>
-                    <option value="12">مخصص للصف: الثاني عشر</option>
-                  </select>
-                  <p className="text-[10px] font-bold text-indigo-500 mt-2 leading-relaxed">
-                    إذا اخترت صفاً محدداً، لن يتمكن طلاب الصفوف الأخرى من رؤية أو الدخول لهذا القسم.
+                  
+                  <div className="mb-3">
+                    <button 
+                      type="button" 
+                      onClick={() => setTargetLevels([])}
+                      className={`w-full py-2.5 rounded-xl text-sm font-black transition-all border-2 ${
+                        targetLevels.length === 0 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-500 shadow-md shadow-emerald-100' 
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200'
+                      }`}
+                    >
+                      🌍 عام (متاح لجميع الصفوف)
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(grade => {
+                      const isSelected = targetLevels.includes(grade);
+                      return (
+                        <button
+                          key={grade}
+                          type="button"
+                          onClick={() => toggleGrade(grade)}
+                          className={`py-2 rounded-xl text-xs font-black transition-all border-2 flex flex-col items-center justify-center gap-1 ${
+                            isSelected 
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200' 
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                          }`}
+                        >
+                          صف {grade}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] font-bold text-indigo-500 mt-3 leading-relaxed">
+                    يمكنك تحديد صف واحد أو عدة صفوف معاً. الصفوف غير المحددة لن تتمكن من رؤية هذا القسم.
                   </p>
                 </div>
 
