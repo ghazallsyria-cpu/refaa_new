@@ -14,7 +14,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import ForumEditor from '@/components/ForumEditor';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { deleteFromCloudinary } from '@/lib/cloudinary'; // 🚀 استيراد دالتك الجاهزة
+import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 // 🚀 دالة لاستخراج روابط الصور من نصوص HTML
 const extractUrlsFromHtml = (htmlStrings: string[]) => {
@@ -50,7 +50,13 @@ export default function TopicDetailsPage() {
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: topicData, error: topicError } = await supabase.from('forum_topics').select('*, category:forum_categories(name)').eq('id', topicId).single();
+      // 🚀 تم إضافة جلب الصلاحية reply_permission للقسم
+      const { data: topicData, error: topicError } = await supabase
+        .from('forum_topics')
+        .select('*, category:forum_categories(name, reply_permission)')
+        .eq('id', topicId)
+        .single();
+        
       if (topicError) throw topicError;
 
       const { data: authorData } = await supabase.from('users').select('full_name, role, avatar_url').eq('id', topicData.author_id).single();
@@ -83,6 +89,21 @@ export default function TopicDetailsPage() {
   }, [topicId, user]);
 
   useEffect(() => { fetchTopicData(); }, [fetchTopicData]);
+
+  // 🚀 التحقق من صلاحية الرد بناءً على إعدادات القسم
+  const checkReplyPermission = () => {
+    if (!currentRole || !topic?.category) return false;
+    const perm = topic.category.reply_permission;
+    
+    if (perm === 'none') return false;
+    if (perm === 'all' || !perm) return true;
+    if (perm === 'admin_only' && (currentRole === 'admin' || currentRole === 'management')) return true;
+    if (perm === 'teachers_admin' && (currentRole === 'admin' || currentRole === 'management' || currentRole === 'teacher')) return true;
+    
+    return false;
+  };
+
+  const canReply = checkReplyPermission();
 
   const sendNotification = async (targetUserId: string, title: string, content: string, link: string) => {
     if (!targetUserId || targetUserId === user?.id) return;
@@ -141,11 +162,9 @@ export default function TopicDetailsPage() {
     } catch (error) { console.error(error); }
   };
 
-  // 🚀 استخدام دالتك لحذف صور الموضوع والردود
   const handleDeleteTopic = async () => {
     if (!confirm('هل أنت متأكد من حذف هذا الموضوع نهائياً؟ سيتم حذف جميع الردود والصور المرفقة.')) return;
     try {
-      // استخراج الروابط وحذفها باستخدام دالتك
       const urlsToDelete = extractUrlsFromHtml([topic.content, ...replies.map(r => r.content)]);
       if (urlsToDelete.length > 0) {
         await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
@@ -158,7 +177,6 @@ export default function TopicDetailsPage() {
     } catch (error) { alert('خطأ في الحذف'); }
   };
 
-  // 🚀 استخدام دالتك لحذف صور الرد
   const handleDeleteReply = async (replyId: string, content: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا الرد؟')) return;
     try {
@@ -306,21 +324,30 @@ export default function TopicDetailsPage() {
           })}
         </div>
 
+        {/* 🚀 إظهار حقل الرد حسب الصلاحية أو رسالة الإغلاق */}
         {!topic.is_locked ? (
-          <div className="mt-8 bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-             <div className="bg-slate-50 border-b border-slate-100 p-4 flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><Reply className="w-5 h-5" /></div>
-              <h3 className="font-black text-slate-900">إضافة رد جديد</h3>
-            </div>
-            <form onSubmit={handleAddReply} className="p-4 sm:p-6 space-y-4">
-              <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={isStaff} />
-              <div className="flex justify-end pt-2">
-                <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
-                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} إرسال الرد
-                </button>
+          canReply ? (
+            <div className="mt-8 bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+               <div className="bg-slate-50 border-b border-slate-100 p-4 flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><Reply className="w-5 h-5" /></div>
+                <h3 className="font-black text-slate-900">إضافة رد جديد</h3>
               </div>
-            </form>
-          </div>
+              <form onSubmit={handleAddReply} className="p-4 sm:p-6 space-y-4">
+                <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={isStaff} />
+                <div className="flex justify-end pt-2">
+                  <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} إرسال الرد
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="mt-8 bg-slate-100 rounded-[2rem] border border-slate-200 p-8 text-center flex flex-col items-center justify-center">
+              <Lock className="w-12 h-12 text-slate-300 mb-4" />
+              <h3 className="text-lg font-black text-slate-700">هذا القسم للقراءة فقط</h3>
+              <p className="text-sm font-bold text-slate-500 mt-2">لا يُسمح بإضافة ردود في هذا القسم المخصص للتعاميم الرسمية.</p>
+            </div>
+          )
         ) : (
           <div className="mt-8 bg-slate-50 rounded-[2rem] border border-slate-200 p-8 text-center flex flex-col items-center justify-center">
             <Lock className="w-12 h-12 text-slate-300 mb-4" />
