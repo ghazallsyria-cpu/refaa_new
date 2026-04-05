@@ -10,8 +10,10 @@ export interface Topic {
   is_pinned: boolean;
   is_locked: boolean;
   author_id: string;
-  author_name?: string;
-  replies_count?: number;
+  author_name: string;
+  author_role: string;
+  author_avatar: string | null;
+  replies_count: number;
 }
 
 export interface CategoryDetails {
@@ -30,7 +32,7 @@ export function useTopics(categoryId: string) {
     setLoading(true);
     
     try {
-      // 1. جلب تفاصيل القسم (العنوان والوصف)
+      // 1. جلب تفاصيل القسم
       const { data: catData, error: catError } = await supabase
         .from('forum_categories')
         .select('id, name, description')
@@ -40,26 +42,43 @@ export function useTopics(categoryId: string) {
       if (catError) throw catError;
       setCategoryInfo(catData);
 
-      // 2. جلب المواضيع داخل هذا القسم مع اسم الكاتب وعدد الردود
+      // 2. جلب المواضيع (معالجة قوية للأخطاء)
       const { data: topicsData, error: topicsError } = await supabase
         .from('forum_topics')
         .select(`
           id, title, content, created_at, views_count, is_pinned, is_locked, author_id,
-          author:users!author_id (full_name),
-          replies:forum_replies (count)
+          users (full_name, role, avatar_url),
+          forum_replies (id)
         `)
         .eq('category_id', categoryId)
-        .order('is_pinned', { ascending: false }) // المثبت أولاً
-        .order('created_at', { ascending: false }); // ثم الأحدث
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      if (topicsError) throw topicsError;
+      if (topicsError) {
+        console.error("DB Error:", topicsError);
+        throw topicsError;
+      }
 
       if (topicsData) {
-        const formattedTopics = topicsData.map((t: any) => ({
-          ...t,
-          author_name: Array.isArray(t.author) ? t.author[0]?.full_name : t.author?.full_name || 'مستخدم',
-          replies_count: Array.isArray(t.replies) ? t.replies[0]?.count : t.replies?.count || 0
-        }));
+        const formattedTopics: Topic[] = topicsData.map((t: any) => {
+          // استخراج بيانات المستخدم بشكل آمن (سواء كان مصفوفة أو كائن)
+          const userData = Array.isArray(t.users) ? t.users[0] : t.users;
+          
+          return {
+            id: t.id,
+            title: t.title,
+            content: t.content,
+            created_at: t.created_at,
+            views_count: t.views_count,
+            is_pinned: t.is_pinned,
+            is_locked: t.is_locked,
+            author_id: t.author_id,
+            author_name: userData?.full_name || 'مستخدم غير معروف',
+            author_role: userData?.role || 'student',
+            author_avatar: userData?.avatar_url || null,
+            replies_count: t.forum_replies ? t.forum_replies.length : 0
+          };
+        });
         setTopics(formattedTopics);
       }
     } catch (error) {
@@ -82,7 +101,7 @@ export function useTopics(categoryId: string) {
 
       if (error) throw error;
       
-      await fetchTopicsAndCategory(); // تحديث القائمة بعد النشر
+      await fetchTopicsAndCategory(); // تحديث القائمة فوراً
       return { success: true };
     } catch (error: any) {
       console.error('Error creating topic:', error);
