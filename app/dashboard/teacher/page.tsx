@@ -17,11 +17,13 @@ import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context'; // 🚀 تم استيراد سياق المصادقة لجلب هوية المعلم
 
 // 🚀 تاريخ بدء النظام الإلزامي (1-3-2026)
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
 export default function TeacherDashboard() {
+  const { user, userRole } = useAuth(); // 🚀 جلب المستخدم للرصد الآلي
   const [teacherData, setTeacherData] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [recentExams, setRecentExams] = useState<any[]>([]);
@@ -57,9 +59,29 @@ export default function TeacherDashboard() {
   useEffect(() => {
     setMounted(true);
     setCurrentTime(new Date());
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+
+    // 🚀 دالة رصد حضور المعلم الآلية (ترسل إشارة صامتة للمراقب)
+    const autoRecordPresence = async () => {
+      if (user?.id && userRole === 'teacher') {
+        try {
+          await supabase.rpc('auto_record_teacher_presence', { p_user_id: user.id });
+        } catch (error) {
+          console.error("Error auto-recording presence:", error);
+        }
+      }
+    };
+
+    // 1. التشغيل فور الدخول للصفحة
+    autoRecordPresence();
+
+    // 2. تحديث الوقت وتشغيل الرصد الآلي كل دقيقة
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      autoRecordPresence();
+    }, 60000);
+
     return () => clearInterval(timer);
-  }, []);
+  }, [user, userRole]);
 
   const isCurrentClass = (period: number) => {
     if (!currentTime) return false;
@@ -361,8 +383,7 @@ export default function TeacherDashboard() {
           </div>
         </div>
 
-        {/* 🚀 قسم عرض الأوسمة الذكي (لا يفسد التصميم مهما زاد عدد الأوسمة) */}
-{/* 🚀 قسم عرض الأوسمة الذكي */}
+        {/* 🚀 قسم عرض الأوسمة الذكي */}
         {myBadges.length > 0 && (
           <div className="relative z-10 mt-10 pt-6 border-t border-white/20 w-full">
             <h3 className="text-sm font-bold text-indigo-100 mb-4 flex items-center gap-2">
@@ -371,13 +392,11 @@ export default function TeacherDashboard() {
             {/* Horizontal Scroll Container */}
             <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
               {myBadges.map((badgeEntry, index) => (
-           <div 
+               <div 
                   key={badgeEntry.id || index} 
                   className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 group cursor-default"
                 >
-                  {/* 🚀 تكبير الحاوية إلى w-16 h-16 */}
-                  {/* 🚀 تكبير الحاوية، جعلها دائرية، واستخدام object-cover لاقتصاص الحواف الزائدة برمجياً */}
-               {/* 🚀 إعادة التنسيق الأصلي الجميل مع مضاعفة الحجم (w-24 h-24 للموبايل و w-28 h-28 للكمبيوتر) */}
+                  {/* 🚀 إعادة التنسيق الأصلي الجميل مع مضاعفة الحجم (w-24 h-24 للموبايل و w-28 h-28 للكمبيوتر) */}
                   <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
                     {/* تأثير التوهج الخلفي للوسام */}
                     <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
