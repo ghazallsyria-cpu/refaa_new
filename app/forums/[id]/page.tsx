@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { useTopics } from '@/hooks/useTopics';
 import { 
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
-  Pin, Lock, User, Clock, ChevronLeft, Send
+  Pin, Lock, User, Clock, ChevronLeft, Send, XCircle // 🚀 تم إضافة XCircle هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
