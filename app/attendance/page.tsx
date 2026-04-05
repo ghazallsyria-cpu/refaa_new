@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase'; 
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
+import TeacherCheckInButton from '@/components/TeacherCheckInButton'; // 🚀 استيراد المكون الذكي هنا
 
 // 🚀 تعريف كلاسات الألوان بشكل كامل وصريح لمنع Tailwind من حذفها (Purging)
 const ATTENDANCE_OPTIONS = [
@@ -610,10 +611,24 @@ export default function AttendancePage() {
           </div>
         </div>
 
+        {/* 🚀 الزر الذكي تم دمجه هنا! */}
         {selectedSection && selectedSubject && (
-          <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-white/10 flex items-start sm:items-center gap-2 text-emerald-400 text-xs sm:text-sm font-bold relative z-10">
-            <Info className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5 sm:mt-0" />
-            <span className="leading-tight">أنت الآن تقوم بتسجيل الغياب <strong>للحصة {period}</strong> - إحصائيات هذه الحصة تظهر بالأسفل مباشرة.</span>
+          <div className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+            <div className="flex items-start sm:items-center gap-2 text-emerald-400 text-xs sm:text-sm font-bold">
+              <Info className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5 sm:mt-0" />
+              <span className="leading-tight">أنت الآن تقوم بتسجيل الغياب <strong>للحصة {period}</strong> - إحصائيات هذه الحصة تظهر بالأسفل مباشرة.</span>
+            </div>
+            
+            {/* 🚀 زر إثبات الحضور الخاص بالمعلم */}
+            {currentRole === 'teacher' && user?.id && (
+               <div className="shrink-0 w-full sm:w-auto">
+                  <TeacherCheckInButton 
+                    teacherId={user.id} 
+                    periodNumber={period} 
+                    className="w-full sm:w-auto"
+                  />
+               </div>
+            )}
           </div>
         )}
       </div>
