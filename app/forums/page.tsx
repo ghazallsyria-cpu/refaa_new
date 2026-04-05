@@ -1,16 +1,21 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+// --- الاستيرادات الأصلية الخاصة بمشروعك (جاهزة لـ Netlify) ---
+// ملاحظة: قد تظهر رسالة خطأ في بيئة العرض هنا، لكن الكود سليم 100% للنسخ لمشروعك.
 import { useAuth } from '@/context/auth-context';
 import { useForums, StructuredCategory } from '@/hooks/useForums'; 
 import { supabase } from '@/lib/supabase';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import Link from 'next/link';
+// -------------------------------------------------------------
+
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
   Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle, Image as ImageIcon, Trash2, Lock, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Link from 'next/link';
 
 export default function ForumsPage() {
   const { userRole, authRole } = useAuth() as any;
@@ -26,7 +31,6 @@ export default function ForumsPage() {
   const [parentId, setParentId] = useState<string | 'none'>('none');
   const [targetClasses, setTargetClasses] = useState<string[]>([]);
   
-  // 🚀 حالات الصلاحيات الجديدة
   const [postPerm, setPostPerm] = useState('all');
   const [replyPerm, setReplyPerm] = useState('all');
 
@@ -67,8 +71,8 @@ export default function ForumsPage() {
       parent_id: parentId === 'none' ? null : parentId,
       target_classes: targetClasses.length === 0 ? null : targetClasses,
       icon: coverUrl || null,
-      post_permission: postPerm as any, // 🚀 إضافة الصلاحيات
-      reply_permission: replyPerm as any // 🚀 إضافة الصلاحيات
+      post_permission: postPerm as any, 
+      reply_permission: replyPerm as any 
     };
 
     const result = await createCategory(payload);
@@ -87,9 +91,8 @@ export default function ForumsPage() {
     setIsSubmitting(false);
   };
 
-  // 🚀 استخدام دالتك لحذف غلاف القسم
   const handleDeleteCategory = async (categoryId: string, categoryIconUrl: string | null) => {
-      if (!confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع المواضيع والردود بداخله. هذا الإجراء لا يمكن التراجع عنه.')) return;
+      if (!confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع المواضيع والردود بداخله.')) return;
       try {
           if (categoryIconUrl) await deleteFromCloudinary(categoryIconUrl);
           await supabase.from('forum_categories').delete().eq('id', categoryId);
@@ -127,64 +130,63 @@ export default function ForumsPage() {
             <motion.div whileHover={{ y: -5, scale: 1.01 }} className="bg-white rounded-[1.5rem] shadow-sm hover:shadow-xl border border-slate-200 hover:border-indigo-200 transition-all flex flex-col h-full relative overflow-hidden">
             
             {cat.icon ? (
-                <div className="h-32 w-full relative overflow-hidden bg-slate-100">
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
+                <div className="h-36 w-full relative bg-slate-50 flex items-center justify-center p-4 border-b border-slate-100 overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-<img src={cat.icon} alt="cover" className="w-full h-full object-contain bg-white p-2 group-hover:scale-105 transition-transform duration-500" />
-                    <div className="absolute bottom-3 right-4 z-20 text-white font-black text-lg drop-shadow-md">{cat.name}</div>
+                    <img src={cat.icon} alt="cover" className="max-w-full max-h-full object-contain group-hover:scale-110 transition-transform duration-500 drop-shadow-sm" />
                 </div>
             ) : (
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             )}
             
-            <div className={`p-5 sm:p-6 flex flex-col flex-1 ${cat.icon ? 'pt-4' : ''}`}>
-                <div className="flex items-start justify-between mb-4">
-                {!cat.icon && (
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm border border-indigo-100 shrink-0">
-                        <Hash className="w-6 h-6" />
-                    </div>
-                )}
-                
-                <div className={`flex flex-col gap-2 ${cat.icon ? 'w-full flex-row-reverse justify-between items-center' : 'items-end'}`}>
-                    <div className="bg-slate-50 border border-slate-100 text-slate-500 text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm">
-                    <MessageSquare className="w-3.5 h-3.5" /> {cat.topics_count} موضوع
-                    </div>
-                    
-                    {targetNames ? (
-                    <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 max-w-[150px]">
-                        <Target className="w-3 h-3 shrink-0" />
-                        <span className="truncate" dir="ltr" title={targetNames}>{targetNames}</span>
-                    </div>
-                    ) : (
-                    <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
-                        <Globe className="w-3 h-3" /> عام للجميع
-                    </div>
-                    )}
-
-                    {/* 🚀 إضافة شارات الصلاحيات على الكرت */}
-                    {cat.post_permission === 'admin_only' && (
-                        <div className="bg-red-50 border border-red-100 text-red-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 mt-1">
-                            <ShieldAlert className="w-3 h-3" /> قسم رسمي
+            <div className={`p-5 flex flex-col flex-1`}>
+                <div className="flex items-start justify-between mb-3">
+                    {!cat.icon && (
+                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300 shadow-sm border border-indigo-100 shrink-0">
+                            <Hash className="w-6 h-6" />
                         </div>
+                    )}
+                    
+                    <div className={`flex flex-col gap-2 ${cat.icon ? 'w-full flex-row-reverse justify-between items-center' : 'items-end'}`}>
+                        <div className="bg-slate-50 border border-slate-100 text-slate-500 text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm">
+                        <MessageSquare className="w-3.5 h-3.5" /> {cat.topics_count || 0} موضوع
+                        </div>
+                        
+                        {targetNames ? (
+                        <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 max-w-[150px]">
+                            <Target className="w-3 h-3 shrink-0" />
+                            <span className="truncate" dir="ltr" title={targetNames}>{targetNames}</span>
+                        </div>
+                        ) : (
+                        <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
+                            <Globe className="w-3 h-3" /> عام للجميع
+                        </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex gap-2 mb-2">
+                    {cat.post_permission === 'admin_only' && (
+                        <span className="bg-red-50 border border-red-100 text-red-700 text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
+                            <ShieldAlert className="w-3 h-3" /> قسم رسمي
+                        </span>
                     )}
                     {cat.reply_permission === 'none' && (
-                        <div className="bg-slate-100 border border-slate-200 text-slate-600 text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 mt-1">
+                        <span className="bg-slate-100 border border-slate-200 text-slate-600 text-[9px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
                             <Lock className="w-3 h-3" /> للقراءة فقط
-                        </div>
+                        </span>
                     )}
-                </div>
                 </div>
                 
                 <div className="flex-1">
-                {!cat.icon && <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-700 transition-colors line-clamp-1">{cat.name}</h3>}
-                <p className="text-xs sm:text-sm font-bold text-slate-500 leading-relaxed line-clamp-2">
-                    {cat.description || 'مساحة مخصصة لتبادل النقاشات والأسئلة.'}
-                </p>
+                    <h3 className="text-lg font-black text-slate-900 mb-1 group-hover:text-indigo-700 transition-colors line-clamp-1">{cat.name}</h3>
+                    <p className="text-xs sm:text-sm font-bold text-slate-500 leading-relaxed line-clamp-2">
+                        {cat.description || 'مساحة مخصصة لتبادل النقاشات.'}
+                    </p>
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-indigo-600 font-black text-[10px] sm:text-xs uppercase tracking-widest">
-                <span>دخول الساحة</span>
-                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-indigo-600 font-black text-[10px] uppercase tracking-widest">
+                    <span>دخول القسم</span>
+                    <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                 </div>
             </div>
             </motion.div>
@@ -219,7 +221,7 @@ export default function ForumsPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 -mt-12 relative z-20 space-y-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 -mt-12 relative z-20 space-y-8">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2rem] shadow-sm"><Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-4" /></div>
         ) : displayedCategories.length === 0 ? (
@@ -229,29 +231,39 @@ export default function ForumsPage() {
           </div>
         ) : (
           displayedCategories.map((mainCat) => (
-            <motion.div key={mainCat.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="space-y-6">
-              <div className="flex items-center justify-between bg-white/60 backdrop-blur-md p-4 rounded-[1.5rem] border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center text-white shadow-inner"><BookOpen className="w-6 h-6" /></div>
-                    <div>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">{mainCat.name}</h2>
-                    {mainCat.description && <p className="text-sm font-bold text-slate-500 mt-1">{mainCat.description}</p>}
+            <motion.div key={mainCat.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm rounded-[2rem] p-5 sm:p-8">
+              
+              <div className="flex items-center justify-between mb-6 pb-5 border-b border-slate-100">
+                <Link href={`/forums/${mainCat.id}`} className="flex items-center gap-4 group flex-1">
+                    <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl overflow-hidden bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                        {mainCat.icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={mainCat.icon} alt={mainCat.name} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
+                        ) : (
+                            <Layers className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
+                        )}
                     </div>
-                </div>
+                    <div>
+                        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight">{mainCat.name}</h2>
+                        {mainCat.description && <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1">{mainCat.description}</p>}
+                    </div>
+                </Link>
                 {isAdmin && (
-                    <button onClick={() => handleDeleteCategory(mainCat.id, mainCat.icon)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-100" title="حذف القسم الرئيسي">
+                    <button onClick={() => handleDeleteCategory(mainCat.id, mainCat.icon)} className="p-3 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100 shrink-0" title="حذف القسم الرئيسي">
                         <Trash2 className="w-5 h-5" />
                     </button>
                 )}
               </div>
 
               {mainCat.subcategories && mainCat.subcategories.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pr-4 sm:pr-8 border-r-4 border-indigo-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {mainCat.subcategories.map(subCat => <CategoryCard key={subCat.id} cat={subCat} />)}
                 </div>
               ) : (
-                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pr-4 sm:pr-8 border-r-4 border-slate-200">
-                    <CategoryCard cat={mainCat} />
+                 <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm font-black text-slate-400">لا توجد أقسام فرعية داخل "{mainCat.name}" حتى الآن.</p>
+                    <p className="text-xs font-bold text-slate-400 mt-1">اضغط على اسم القسم بالأعلى للدخول إليه أو أضف أقساماً فرعية.</p>
                  </div>
               )}
             </motion.div>
@@ -277,7 +289,7 @@ export default function ForumsPage() {
                     <div className="w-20 h-20 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden shrink-0">
                         {coverUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+                            <img src={coverUrl} alt="cover" className="w-full h-full object-contain p-1" />
                         ) : (
                             <ImageIcon className="w-8 h-8 text-slate-300" />
                         )}
@@ -317,7 +329,6 @@ export default function ForumsPage() {
                   </div>
                 </div>
 
-                {/* 🚀 قسم الصلاحيات الجديد */}
                 <div className="bg-amber-50/50 p-4 rounded-[1.5rem] border border-amber-100">
                   <label className="flex items-center gap-2 text-xs font-black text-amber-700 mb-3"><ShieldAlert className="w-4 h-4" /> صلاحيات القسم (مهم)</label>
                   <div className="space-y-3">
