@@ -1,49 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/context/auth-context';
+import { useTopics } from '@/hooks/useTopics';
 import { 
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
   Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-
-// --- 🚀 الاستيرادات الأصلية (معطلة مؤقتاً لتجنب أخطاء المعاينة) ---
-// import { useParams, useRouter } from 'next/navigation';
-// import { useAuth } from '@/context/auth-context';
-// import { useTopics } from '@/hooks/useTopics';
-// import Link from 'next/link';
-// import ForumEditor from '@/components/ForumEditor';
-
-// --- 🛠️ نسخ وهمية (Mocks) مخصصة فقط لتعمل المعاينة في المتصفح ---
-const useParams = () => ({ id: '1' });
-const useRouter = () => ({ push: () => {} });
-const useAuth = () => ({ user: { id: '1' }, userRole: 'admin', authRole: 'admin' });
-const Link = ({ href, children, className }: any) => <a href={href} className={className}>{children}</a>;
-const ForumEditor = ({ content, setContent }: any) => (
-  <textarea 
-    value={content} 
-    onChange={(e) => setContent(e.target.value)} 
-    className="w-full border border-slate-200 rounded-xl p-4 min-h-[150px] outline-none focus:border-indigo-500" 
-    placeholder="اكتب المحتوى هنا..." 
-  />
-);
-const useTopics = (categoryId: string) => {
-  return {
-    topics: [
-      {
-        id: '101', title: 'قرار إداري هام: مواعيد الاختبارات', content: 'تم تحديد مواعيد الاختبارات النهائية لتكون في منتصف الشهر القادم. نرجو الالتزام.',
-        author_role: 'admin', author_avatar: null, is_pinned: true, is_locked: false, author_name: 'مدير النظام', author_badge: 'إدارة المدرسة', author_gamification_badges: [], created_at: new Date().toISOString(), replies_count: 0
-      }
-    ],
-    categoryInfo: { id: categoryId, name: 'التعاميم والقرارات', description: 'قسم مخصص لنشر القرارات الإدارية', post_permission: 'admin_only' },
-    loading: false,
-    fetchTopicsAndCategory: async () => {},
-    createTopic: async () => ({ success: true })
-  };
-};
-// ------------------------------------------------------------------
+import ForumEditor from '@/components/ForumEditor';
 
 export default function CategoryPage() {
   const params = useParams();
@@ -67,7 +36,6 @@ export default function CategoryPage() {
     fetchTopicsAndCategory();
   }, [fetchTopicsAndCategory]);
 
-  // 🚀 التحقق من صلاحية النشر في هذا القسم
   const checkPostPermission = () => {
     if (!currentRole || !categoryInfo) return false;
     const perm = categoryInfo.post_permission;
@@ -138,7 +106,6 @@ export default function CategoryPage() {
             </div>
           </div>
           
-          {/* 🚀 إخفاء زر النشر لمن ليس لديه صلاحية */}
           {canPost && (
             <button 
               onClick={() => setIsModalOpen(true)}
@@ -152,7 +119,6 @@ export default function CategoryPage() {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         
-        {/* 🚀 رسالة تنبيه لمن ليس لديه صلاحية */}
         {!canPost && !loading && (
            <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 flex items-center gap-3 text-slate-600 text-sm font-bold">
               <Lock className="w-5 h-5 text-slate-400" /> لا تملك صلاحية لإنشاء مواضيع في هذا القسم.
