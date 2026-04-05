@@ -1,28 +1,8 @@
 'use client';
 
-import React, { useMemo, useRef, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import 'react-quill/dist/quill.snow.css';
-
-// 🚀 تغليف ذكي (Wrapper) لمكتبة Quill لحل كل مشاكل الـ SSR والـ Ref مع TypeScript
-const ReactQuillWrapper = dynamic(
-  async () => {
-    const { default: RQ } = await import('react-quill');
-    // نقوم بتمرير الـ ref باسم مستعار لخدعة TypeScript
-    return function Comp({ forwardedRef, ...props }: any) {
-      return <RQ ref={forwardedRef} {...props} />;
-    };
-  },
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-      </div>
-    )
-  }
-);
 
 interface ForumEditorProps {
   content: string;
@@ -31,8 +11,18 @@ interface ForumEditorProps {
 }
 
 export default function ForumEditor({ content, setContent, canUploadImage }: ForumEditorProps) {
+  const [ReactQuill, setReactQuill] = useState<any>(null);
   const quillRef = useRef<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // 🚀 هذه هي الخدعة المضمونة 100%: تحميل المكتبة يدوياً فقط في المتصفح
+  useEffect(() => {
+    setMounted(true);
+    import('react-quill').then((module) => {
+      setReactQuill(() => module.default);
+    });
+  }, []);
 
   const imageHandler = useCallback(() => {
     if (!canUploadImage) {
@@ -99,6 +89,14 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
     }
   }), [canUploadImage, imageHandler]);
 
+  if (!mounted || !ReactQuill) {
+    return (
+      <div className="h-64 flex items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -141,8 +139,8 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         </div>
       )}
 
-      <ReactQuillWrapper 
-        forwardedRef={quillRef}
+      <ReactQuill 
+        ref={quillRef}
         theme="snow"
         value={content}
         onChange={setContent}
