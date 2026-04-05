@@ -15,63 +15,57 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 
 export default function TeacherAttendanceReport() {
-  const { user, userRole } = useAuth();
+  const { userRole } = useAuth();
   
   const [scheduleData, setScheduleData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'absent' | 'present' | 'pending' | 'all'>('all');
   
-  // 🚀 السر كان هنا: ترجمة أيام الأسبوع لتطابق قاعدة بياناتك (الأحد = 1)
-  const getDbDay = () => {
-    const jsDay = new Date().getDay(); // جافاسكريبت تعتبر الأحد 0
-    return jsDay + 1; // نضيف 1 ليصبح الأحد 1، الإثنين 2...
-  };
-
-  const currentDay = getDbDay();
-  const [selectedDay, setSelectedDay] = useState<number>(currentDay);
+  const currentJsDay = new Date().getDay(); // الأحد = 0 في الجافاسكريبت
+  const [selectedDay, setSelectedDay] = useState<number>(-1); // الافتراضي: عرض الكل
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const fetchEverythingAndCalculate = async () => {
     setLoading(true);
     try {
-      // 1. جلب الجدول الدراسي بالكامل مع العلاقات
-      const { data: schedules, error: schError } = await supabase
-        .from('schedule')
-        .select(`
-          id, day_of_week, period, teacher_id,
-          sections ( name, classes ( name ) ),
-          subjects ( name ),
-          teachers ( id, users ( full_name ) )
-        `);
-      if (schError) throw schError;
+      // 🚀 تقنية الـ Memory Join: جلب كل جدول بشكل منفصل تماماً لتجنب أعطال الروابط (Foreign Keys)
+      const [
+        { data: schedules },
+        { data: periods },
+        { data: subjects },
+        { data: sections },
+        { data: classes },
+        { data: users }, // لأن معرف المعلم هو نفسه معرف المستخدم
+        { data: attendance }
+      ] = await Promise.all([
+        supabase.from('schedule').select('*'),
+        supabase.from('periods').select('*'),
+        supabase.from('subjects').select('id, name'),
+        supabase.from('sections').select('id, name, class_id'),
+        supabase.from('classes').select('id, name'),
+        supabase.from('users').select('id, full_name'),
+        supabase.from('teacher_attendance_records').select('*').eq('date', format(new Date(), 'yyyy-MM-dd'))
+      ]);
 
-      // 2. جلب أوقات الحصص
-      const { data: periods, error: perError } = await supabase
-        .from('periods')
-        .select('*');
-      if (perError) throw perError;
+      console.log('Schedules found:', schedules?.length); // للتأكد من وصول البيانات
 
-      // 3. جلب سجلات الحضور الخاصة باليوم فقط
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const { data: attendance, error: attError } = await supabase
-        .from('teacher_attendance_records')
-        .select('*')
-        .eq('date', todayStr);
-      if (attError) throw attError;
-
-      // 4. الذكاء الاصطناعي لمعرفة حالة كل حصة
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
+      // دمج البيانات في المتصفح بذكاء
       const processedData = (schedules || []).map((sch: any) => {
-        const className = Array.isArray(sch.sections?.classes) ? sch.sections?.classes[0]?.name : sch.sections?.classes?.name;
-        const teacherName = Array.isArray(sch.teachers?.users) ? sch.teachers?.users[0]?.full_name : sch.teachers?.users?.full_name;
+        // البحث عن التفاصيل في المصفوفات
+        const subject = (subjects || []).find(s => s.id === sch.subject_id);
+        const section = (sections || []).find(s => s.id === sch.section_id);
+        const cls = section ? (classes || []).find(c => c.id === section.class_id) : null;
+        const teacher = (users || []).find(u => u.id === sch.teacher_id);
+        const periodInfo = (periods || []).find(p => p.period_number === sch.period);
         
-        const periodInfo = periods?.find(p => p.period_number === sch.period);
-        const hasAttended = attendance?.some(a => a.teacher_id === sch.teacher_id && a.period_number === sch.period);
+        // التحقق من الحضور
+        const hasAttended = (attendance || []).some(a => a.teacher_id === sch.teacher_id && a.period_number === sch.period);
 
-        let status = 'pending'; // الافتراضي: قيد الانتظار
+        let status = 'pending';
 
         if (hasAttended) {
           status = 'present';
@@ -79,8 +73,8 @@ export default function TeacherAttendanceReport() {
           const [endH, endM] = periodInfo.end_time.split(':').map(Number);
           const periodEndMinutes = endH * 60 + endM;
 
-          // تحويل الأنواع لنصوص لضمان التطابق التام 100%
-          if (String(sch.day_of_week) === String(currentDay) && currentMinutes > periodEndMinutes) {
+          // إذا تجاوزنا وقت الحصة، نعتبره غائباً (لأغراض المراقبة اليومية)
+          if (currentMinutes > periodEndMinutes) {
             status = 'absent';
           }
         }
@@ -88,14 +82,14 @@ export default function TeacherAttendanceReport() {
         return {
           id: sch.id,
           teacher_id: sch.teacher_id,
-          teacher_name: teacherName || 'معلم غير محدد',
+          teacher_name: teacher?.full_name || 'معلم غير محدد',
           day_of_week: sch.day_of_week,
           period: sch.period,
-          start_time: periodInfo?.start_time,
-          end_time: periodInfo?.end_time,
-          class_name: className || 'صف غير محدد',
-          section_name: sch.sections?.name || 'شعبة',
-          subject_name: sch.subjects?.name || 'مادة',
+          start_time: periodInfo?.start_time || sch.start_time,
+          end_time: periodInfo?.end_time || sch.end_time,
+          class_name: cls?.name || 'صف غير محدد',
+          section_name: section?.name || 'شعبة',
+          subject_name: subject?.name || 'مادة غير محددة',
           current_status: status
         };
       });
@@ -117,11 +111,12 @@ export default function TeacherAttendanceReport() {
     }
   }, [userRole]);
 
-  // 🚀 الفلترة الذكية المطورة
+  // الفلترة
   const filteredData = scheduleData.filter(record => {
-    // -1 تعني عرض جميع الأيام
+    // التطابق مع اليوم
     const isMatchingDay = selectedDay === -1 || String(record.day_of_week) === String(selectedDay);
     
+    // البحث
     const matchesSearch = (record.teacher_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                           (record.class_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
                           (record.subject_name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
@@ -140,6 +135,7 @@ export default function TeacherAttendanceReport() {
 
     const dataToExport = filteredData.map(record => ({
       'المعلم': record.teacher_name,
+      'اليوم': `اليوم ${record.day_of_week}`,
       'الحصة': `الحصة ${record.period}`,
       'الصف والشعبة': `${record.class_name} - ${record.section_name}`,
       'المادة': record.subject_name,
@@ -155,18 +151,19 @@ export default function TeacherAttendanceReport() {
 
   if (userRole !== 'admin' && userRole !== 'management') return null;
 
-  // 🚀 أضفنا زر "الكل" لتتمكن من رؤية الجدول كاملاً
+  // 🚀 أزرار الأيام مع إظهار أرقامها في القاعدة لتعرف كيف تم حفظها!
   const daysOfWeek = [
     { id: -1, name: 'الكل (كامل الأسبوع)' },
-    { id: 1, name: 'الأحد' }, { id: 2, name: 'الإثنين' }, { id: 3, name: 'الثلاثاء' },
-    { id: 4, name: 'الأربعاء' }, { id: 5, name: 'الخميس' }
+    { id: 0, name: 'الأحد (0)' }, { id: 1, name: 'الإثنين (1)' }, 
+    { id: 2, name: 'الثلاثاء (2)' }, { id: 3, name: 'الأربعاء (3)' }, 
+    { id: 4, name: 'الخميس (4)' }, { id: 5, name: 'الجمعة (5)' }
   ];
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-8" dir="rtl">
       
       <div>
-        <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
+        <Link href="/dashboard/admin" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group">
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
         </Link>
       </div>
@@ -183,7 +180,7 @@ export default function TeacherAttendanceReport() {
             </div>
             <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">رادار المتابعة الفوري</h1>
             <p className="text-indigo-200 font-bold text-base max-w-2xl leading-relaxed">
-              تم تحديث المحرك ليعمل بشكل مستقل عن تعقيدات قاعدة البيانات. اختر اليوم من الأسفل لترى الجدول بالكامل.
+              هذه الشاشة تسحب البيانات الخام وتدمجها مباشرة في المتصفح لتجاوز أي مشاكل في الروابط.
             </p>
           </div>
           
@@ -198,17 +195,17 @@ export default function TeacherAttendanceReport() {
         </div>
       </div>
 
-      {/* 🚀 أزرار اختيار الأيام */}
+      {/* أزرار اختيار الأيام */}
       <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-2 justify-center">
         {daysOfWeek.map(day => (
           <button 
             key={day.id}
             onClick={() => setSelectedDay(day.id)}
-            className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex-1 sm:flex-none ${
+            className={`px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all flex-1 sm:flex-none ${
               selectedDay === day.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
             }`}
           >
-            {day.name} {day.id === currentDay && '(اليوم)'}
+            {day.name} {day.id === currentJsDay && ' (اليوم)'}
           </button>
         ))}
       </div>
@@ -218,22 +215,22 @@ export default function TeacherAttendanceReport() {
         <button onClick={() => setActiveTab('all')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'all' ? 'bg-slate-900 border-slate-800 text-white shadow-xl shadow-slate-900/20 scale-[1.02]' : 'bg-white border-slate-100 hover:border-slate-300 text-slate-600'}`}>
            <Calendar className={`w-8 h-8 ${activeTab === 'all' ? 'text-indigo-400' : 'text-slate-400'}`} />
            <span className="font-black text-2xl">{filteredData.length}</span>
-           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">إجمالي الحصص المجدولة</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">إجمالي الحصص</span>
         </button>
         <button onClick={() => setActiveTab('absent')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'absent' ? 'bg-rose-500 border-rose-600 text-white shadow-xl shadow-rose-500/30 scale-[1.02]' : 'bg-rose-50 border-rose-100 hover:border-rose-300 text-rose-700'}`}>
            <XCircle className={`w-8 h-8 ${activeTab === 'absent' ? 'text-white' : 'text-rose-500'}`} />
            <span className="font-black text-2xl">{absences.length}</span>
-           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">غياب / حصص فائتة</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">غياب / فائتة</span>
         </button>
         <button onClick={() => setActiveTab('present')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'present' ? 'bg-emerald-500 border-emerald-600 text-white shadow-xl shadow-emerald-500/30 scale-[1.02]' : 'bg-emerald-50 border-emerald-100 hover:border-emerald-300 text-emerald-700'}`}>
            <CheckCircle2 className={`w-8 h-8 ${activeTab === 'present' ? 'text-white' : 'text-emerald-500'}`} />
            <span className="font-black text-2xl">{presents.length}</span>
-           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">حضور / تمت التغطية</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">حاضر</span>
         </button>
         <button onClick={() => setActiveTab('pending')} className={`p-4 sm:p-6 rounded-[2rem] border transition-all text-center flex flex-col items-center gap-2 ${activeTab === 'pending' ? 'bg-amber-500 border-amber-600 text-white shadow-xl shadow-amber-500/30 scale-[1.02]' : 'bg-amber-50 border-amber-100 hover:border-amber-300 text-amber-700'}`}>
            <Hourglass className={`w-8 h-8 ${activeTab === 'pending' ? 'text-white' : 'text-amber-500'}`} />
            <span className="font-black text-2xl">{pendings.length}</span>
-           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">قيد الانتظار (لم يحن وقتها)</span>
+           <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">قيد الانتظار</span>
         </button>
       </div>
 
@@ -242,15 +239,15 @@ export default function TeacherAttendanceReport() {
         {loading ? (
           <div className="py-20 text-center bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
             <div className="h-12 w-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="font-bold text-slate-500">جاري فحص رادار الحركة...</p>
+            <p className="font-bold text-slate-500">جاري تجميع البيانات الخام...</p>
           </div>
         ) : filteredData.length === 0 ? (
           <div className="py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200 shadow-sm flex flex-col items-center">
             <div className="h-20 w-20 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center mb-6">
               <BookOpen className="h-10 w-10" />
             </div>
-            <h3 className="text-xl font-black text-slate-800 mb-2">الجدول فارغ</h3>
-            <p className="font-bold text-slate-500">لا يوجد أي حصص مسجلة في قاعدة البيانات لهذا اليوم.</p>
+            <h3 className="text-xl font-black text-slate-800 mb-2">لا توجد حصص في هذا اليوم</h3>
+            <p className="font-bold text-slate-500">اضغط على "الكل (كامل الأسبوع)" في الأزرار العلوية لرؤية الجدول.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -313,6 +310,9 @@ export default function TeacherAttendanceReport() {
                       <span className="flex items-center gap-2 truncate">
                         <Users className="w-4 h-4 text-slate-400 shrink-0" />
                         <span className="truncate">{record.class_name} - {record.section_name}</span>
+                      </span>
+                      <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-1 rounded-md text-slate-400 shrink-0">
+                        اليوم: {record.day_of_week}
                       </span>
                     </div>
                   </motion.div>
