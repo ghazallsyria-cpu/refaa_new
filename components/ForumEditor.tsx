@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
-import 'react-quill/dist/quill.snow.css'; // استيراد تنسيقات المحرر العالمية
+import 'react-quill/dist/quill.snow.css';
 
-// استيراد ديناميكي لمنع أخطاء السيرفر (SSR) في Next.js
 const ReactQuill = dynamic(() => import('react-quill'), { 
   ssr: false, 
   loading: () => (
@@ -25,7 +24,6 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
   const quillRef = useRef<any>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // 🚀 النظام الذكي لرفع الصور (Cloudinary Integration)
   const imageHandler = useCallback(() => {
     if (!canUploadImage) {
       alert('عذراً، رفع الصور متاح للمعلمين والإدارة فقط.');
@@ -58,12 +56,11 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         const data = await res.json();
         
         if (data.secure_url) {
-          // جلب مؤشر الكتابة الحالي وإدراج الصورة بذكاء
           const quill = quillRef.current?.getEditor();
           const range = quill?.getSelection();
           if (quill && range) {
             quill.insertEmbed(range.index, 'image', data.secure_url);
-            quill.setSelection(range.index + 1); // تحريك المؤشر بعد الصورة
+            quill.setSelection(range.index + 1);
           }
         }
       } catch (error) {
@@ -75,7 +72,6 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
     };
   }, [canUploadImage]);
 
-  // إعدادات شريط الأدوات الاحترافي
   const modules = useMemo(() => ({
     toolbar: {
       container: [
@@ -84,7 +80,7 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         [{ 'color': [] }, { 'background': [] }],          
         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
         [{ 'align': [] }],
-        ['link', canUploadImage ? 'image' : ''], // إظهار زر الصورة بناءً على الصلاحية
+        ['link', canUploadImage ? 'image' : ''],
         ['clean']                                         
       ],
       handlers: {
@@ -102,7 +98,7 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
           border-color: #e2e8f0;
           background: #f8fafc;
           padding: 12px;
-          direction: ltr; /* أزرار المحرر العالمية تكون LTR دائماً */
+          direction: ltr; 
         }
         .quill-custom .ql-container {
           border-bottom-left-radius: 1rem;
@@ -114,7 +110,7 @@ export default function ForumEditor({ content, setContent, canUploadImage }: For
         }
         .quill-custom .ql-editor {
           min-height: 250px;
-          direction: rtl; /* الكتابة تكون عربي RTL */
+          direction: rtl; 
           text-align: right;
           padding: 20px;
         }
