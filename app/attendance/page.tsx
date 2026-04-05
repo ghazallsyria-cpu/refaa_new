@@ -625,6 +625,7 @@ export default function AttendancePage() {
                   <TeacherCheckInButton 
                     teacherId={user.id} 
                     periodNumber={period} 
+                    selectedDate={date} 
                     className="w-full sm:w-auto"
                   />
                </div>
