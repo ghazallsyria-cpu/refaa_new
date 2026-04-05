@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
-  MessageSquare, Send, Reply, Eye, BadgeCheck
+  MessageSquare, Send, Reply, Eye, BadgeCheck, Lock // 🚀 تم إضافة Lock هنا
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
