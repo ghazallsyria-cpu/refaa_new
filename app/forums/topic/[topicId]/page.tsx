@@ -30,12 +30,10 @@ export default function TopicDetailsPage() {
   const [replyContent, setReplyContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // دالة جلب البيانات
+  // دالة جلب البيانات الذكية
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 تم إزالة السطر المسبب للمشكلة (increment_topic_views) هنا
-
       // 1. جلب الموضوع وصاحبه
       const { data: topicData, error: topicError } = await supabase
         .from('forum_topics')
@@ -60,18 +58,39 @@ export default function TopicDetailsPage() {
         author: authorData
       });
 
-      // 3. جلب الردود
-      const { data: repliesData } = await supabase
+      // 🚀 3. جلب الردود (بالطريقة الآمنة لتفادي مشكلة auth.users)
+      const { data: repliesData, error: repliesError } = await supabase
         .from('forum_replies')
-        .select(`
-          *,
-          users!author_id(full_name, role, avatar_url)
-        `)
+        .select('*')
         .eq('topic_id', topicId)
         .order('is_verified', { ascending: false }) // الرد المعتمد أولاً
         .order('created_at', { ascending: true });
 
-      setReplies(repliesData || []);
+      if (repliesError) throw repliesError;
+
+      let formattedReplies: any[] = [];
+      
+      if (repliesData && repliesData.length > 0) {
+        // استخراج معرفات كُتّاب الردود (بدون تكرار)
+        const authorIds = [...new Set(repliesData.map(r => r.author_id))];
+
+        // جلب بياناتهم من جدول المستخدمين العام
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name, role, avatar_url')
+          .in('id', authorIds);
+
+        // دمج البيانات مع الردود
+        formattedReplies = repliesData.map(reply => {
+          const author = usersData?.find(u => u.id === reply.author_id);
+          return {
+            ...reply,
+            users: author || { full_name: 'مستخدم غير معروف', role: 'student', avatar_url: null }
+          };
+        });
+      }
+
+      setReplies(formattedReplies);
 
     } catch (error) {
       console.error('Error fetching topic details:', error);
@@ -102,8 +121,8 @@ export default function TopicDetailsPage() {
 
       if (error) throw error;
       
-      setReplyContent(''); // تصفير المحرر
-      await fetchTopicData(); // تحديث الردود
+      setReplyContent(''); // تصفير المحرر بعد النجاح
+      await fetchTopicData(); // تحديث قائمة الردود فوراً
     } catch (error) {
       console.error('Error adding reply:', error);
       alert('حدث خطأ أثناء إضافة الرد.');
@@ -178,7 +197,7 @@ export default function TopicDetailsPage() {
             </div>
           </div>
           
-          {/* محتوى الموضوع (يتم عرضه كـ HTML ليدعم التنسيقات والصور) */}
+          {/* محتوى الموضوع */}
           <div 
             className="p-5 sm:p-8 prose max-w-none text-slate-800 leading-loose"
             dangerouslySetInnerHTML={{ __html: topic.content }}
@@ -223,9 +242,11 @@ export default function TopicDetailsPage() {
                         {formatDistanceToNow(new Date(reply.created_at), { addSuffix: true, locale: arSA })}
                       </span>
                     </div>
+                    {/* عرض محتوى الرد بأمان */}
                     <div 
                       className="prose prose-sm max-w-none text-slate-700 leading-relaxed"
                       dangerouslySetInnerHTML={{ __html: reply.content }}
+                      style={{ wordBreak: 'break-word' }}
                     />
                   </div>
                 </div>
@@ -242,6 +263,7 @@ export default function TopicDetailsPage() {
               <h3 className="font-black text-slate-900">إضافة رد جديد</h3>
             </div>
             <form onSubmit={handleAddReply} className="p-4 sm:p-6 space-y-4">
+              {/* استدعاء المحرر الجديد الذي برمجناه */}
               <ForumEditor 
                 content={replyContent} 
                 setContent={setReplyContent} 
