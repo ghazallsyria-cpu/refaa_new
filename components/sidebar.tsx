@@ -30,7 +30,8 @@ import {
   X,
   Scale,
   Activity,
-  Medal // 🚀 أيقونة إدارة الأوسمة
+  Medal,
+  ShieldAlert
 } from 'lucide-react';
 
 const navigation = [
@@ -40,6 +41,7 @@ const navigation = [
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
   { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
+  { name: 'رصد الغياب الآلي', href: '/admin/teacher-attendance', icon: ShieldAlert },
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
   { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
@@ -53,7 +55,7 @@ const navigation = [
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
-  { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal }, // 🚀 رابط إدارة الأوسمة
+  { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
   { name: 'الرسائل', href: '/messages', icon: MessageSquare },
   { name: 'الإعلانات', href: '/announcements', icon: Bell },
   { name: 'المستندات', href: '/documents', icon: FolderOpen },
@@ -193,7 +195,7 @@ export function Sidebar({
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
             
             const isSpecialBtn = item.name === 'قرارات الخصم';
-            const isRadarBtn = item.name === 'الرادار الرقمي';
+            const isRadarBtn = item.name === 'الرادار الرقمي' || item.name === 'رصد الغياب الآلي';
             const isBadgeBtn = item.name === 'إدارة الأوسمة';
 
             return (
