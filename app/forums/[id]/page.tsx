@@ -12,14 +12,15 @@ import { arSA } from 'date-fns/locale';
 
 
 
-import { useParams, useRouter } from 'next/navigation';
+ import { useParams, useRouter } from 'next/navigation';
  import { useAuth } from '@/context/auth-context';
  import { useTopics } from '@/hooks/useTopics';
  import { useForums } from '@/hooks/useForums';
  import { supabase } from '@/lib/supabase';
  import { deleteFromCloudinary } from '@/lib/cloudinary';
-import Link from 'next/link';
+ import Link from 'next/link';
  import ForumEditor from '@/components/ForumEditor';
+
 
 export default function CategoryPage() {
   const params = useParams();
@@ -40,13 +41,15 @@ export default function CategoryPage() {
   const [newContent, setNewContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // 🚀 إضافات نظام الاستطلاعات (Polls)
+  // 🚀 إضافات نظام الاستطلاعات
   const [hasPoll, setHasPoll] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
   const [allowMultiple, setAllowMultiple] = useState(false);
   
   const [subcategories, setSubcategories] = useState<any[]>([]);
+  const [studentClassId, setStudentClassId] = useState<string | null>(null); // 🚀 حالة حفظ صف الطالب الحالي
+  
   const [isSubCatModalOpen, setIsSubCatModalOpen] = useState(false);
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [newSubCatName, setNewSubCatName] = useState('');
@@ -62,8 +65,27 @@ export default function CategoryPage() {
     fetchTopicsAndCategory();
     fetchSubcategories();
     fetchCategoriesAndClasses();
+    
+    // 🚀 جلب معرف صف الطالب للإخفاء الذكي (Smart Visibility)
+    if (currentRole === 'student' && user?.id) {
+      const fetchStudentClass = async () => {
+        try {
+          const { data } = await supabase
+            .from('students')
+            .select('sections(class_id)')
+            .eq('id', user.id)
+            .single();
+          
+          const sec = Array.isArray(data?.sections) ? data?.sections[0] : data?.sections;
+          if (sec?.class_id) setStudentClassId(sec.class_id);
+        } catch (e) {
+          console.error("Error fetching student class", e);
+        }
+      };
+      fetchStudentClass();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryId]);
+  }, [categoryId, currentRole, user?.id]);
 
   const fetchSubcategories = async () => {
     try {
@@ -84,6 +106,23 @@ export default function CategoryPage() {
       console.error('Error fetching subcategories:', err);
     }
   };
+
+  // 🚀 الفلترة الذكية للأقسام (Smart Visibility)
+  const visibleSubcategories = subcategories.filter(subCat => {
+    // 1. الإدارة والمعلمين يرون كل الأقسام دائماً لإدارتها
+    if (['admin', 'management', 'teacher'].includes(currentRole)) return true;
+    
+    // 2. الأقسام العامة (بدون تخصيص فصول) تظهر للجميع
+    if (!subCat.target_classes || subCat.target_classes.length === 0) return true;
+    
+    // 3. مطابقة صف الطالب مع صفوف القسم الفرعي
+    if (currentRole === 'student' && studentClassId) {
+      return subCat.target_classes.includes(studentClassId);
+    }
+    
+    // 4. إخفاء القسم عن بقية الطلاب
+    return false;
+  });
 
   const checkPostPermission = () => {
     if (!currentRole || !categoryInfo) return false;
@@ -109,7 +148,6 @@ export default function CategoryPage() {
     setIsSubmitting(true);
     
     try {
-      // 1. إنشاء الموضوع
       const { data: newTopicData, error: topicError } = await supabase
         .from('forum_topics')
         .insert([{
@@ -123,7 +161,6 @@ export default function CategoryPage() {
 
       if (topicError) throw topicError;
 
-      // 2. إنشاء الاستطلاع إذا تم تفعيله
       if (hasPoll && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2) {
         const { data: pollData, error: pollError } = await supabase
           .from('forum_polls')
@@ -136,7 +173,6 @@ export default function CategoryPage() {
           .single();
 
         if (!pollError) {
-          // إدخال خيارات الاستطلاع
           const validOptions = pollOptions.filter(o => o.trim()).map(opt => ({
             poll_id: pollData.id,
             option_text: opt
@@ -321,13 +357,14 @@ export default function CategoryPage() {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         
-        {subcategories.length > 0 && (
+        {/* 🚀 يتم الآن عرض الأقسام المرئية فقط حسب صلاحيات الطالب (visibleSubcategories) */}
+        {visibleSubcategories.length > 0 && (
           <div className="mb-8">
             <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-indigo-600" /> الأقسام الفرعية داخل {categoryInfo?.name}
+              <Layers className="w-5 h-5 text-indigo-600" /> الأقسام الفرعية
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subcategories.map(subCat => {
+              {visibleSubcategories.map(subCat => {
                 const targetNames = subCat.target_classes && subCat.target_classes.length > 0 
                   ? subCat.target_classes.map((id: string) => schoolClasses.find((c: any) => c.id === id)?.name || 'غير معروف').join('، ') 
                   : null;
@@ -503,6 +540,7 @@ export default function CategoryPage() {
         )}
       </div>
 
+      {/* 🚀 نافذة إضافة موضوع جديد */}
       <AnimatePresence>
         {isModalOpen && canPost && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
