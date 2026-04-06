@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
   MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
-  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal
+  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal, BookOpen
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -83,7 +83,30 @@ export default function TopicDetailsPage() {
       const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
-      // 🚀 جلب أوسمة كاتب الموضوع بناءً على جداول قاعدة بياناتك الحقيقية
+      // 🚀 جلب تخصص المعلم كاتب الموضوع بناءً على هيكل الجداول الدقيق
+      let authorSubject = '';
+      if (authorData?.role === 'teacher') {
+         try {
+            // محاولة جلب المادة من جدول الربط
+            const { data: tsData } = await supabase
+               .from('teacher_subjects')
+               .select('subjects(name)')
+               .eq('teacher_id', topicData.author_id)
+               .limit(1);
+
+            if (tsData && tsData.length > 0 && (tsData[0] as any).subjects) {
+               authorSubject = (tsData[0] as any).subjects.name || '';
+            } else {
+               // إذا لم يتم العثور على مادة في جدول الربط، نبحث في عمود specialization كخطة بديلة
+               const { data: tData } = await supabase.from('teachers').select('specialization').eq('id', topicData.author_id).single();
+               if (tData && tData.specialization) authorSubject = tData.specialization;
+            }
+         } catch (e) {
+            console.log("Could not fetch teacher subject for author");
+         }
+      }
+
+      // جلب أوسمة كاتب الموضوع
       const { data: authorBadgesRaw } = await supabase
         .from('student_badges')
         .select(`
@@ -94,7 +117,13 @@ export default function TopicDetailsPage() {
       
       const parsedBadges = authorBadgesRaw?.map((b: any) => b.badges).filter(Boolean) || [];
 
-      setTopic({ ...topicData, author: authorData, author_badge: badgeText, author_earned_badges: parsedBadges });
+      setTopic({ 
+        ...topicData, 
+        author: authorData, 
+        author_badge: badgeText, 
+        author_subject: authorSubject,
+        author_earned_badges: parsedBadges 
+      });
 
       // جلب الاستطلاعات
       const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
@@ -112,7 +141,40 @@ export default function TopicDetailsPage() {
         const authorIds = [...new Set(repliesData.map((r: any) => r.author_id))];
         const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').in('id', authorIds);
         
-        // 🚀 جلب أوسمة جميع المعلقين دفعة واحدة بناءً على جدول student_badges
+        // 🚀 جلب تخصصات جميع المعلمين المعلقين بناءً على هيكل الجداول الدقيق
+        let teachersSubjectsMap = new Map();
+        const teacherIds = usersData?.filter((u: any) => u.role === 'teacher').map((u: any) => u.id) || [];
+        
+        if (teacherIds.length > 0) {
+           try {
+              // جلب من جدول الربط
+              const { data: tsData } = await supabase
+                 .from('teacher_subjects')
+                 .select('teacher_id, subjects(name)')
+                 .in('teacher_id', teacherIds);
+
+              if (tsData) {
+                 tsData.forEach((ts: any) => {
+                    if (ts.subjects?.name && !teachersSubjectsMap.has(ts.teacher_id)) {
+                       teachersSubjectsMap.set(ts.teacher_id, ts.subjects.name);
+                    }
+                 });
+              }
+
+              // جلب الخطة البديلة لمن ليس له مادة مسجلة في جدول الربط
+              const missingTeacherIds = teacherIds.filter(id => !teachersSubjectsMap.has(id));
+              if (missingTeacherIds.length > 0) {
+                  const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missingTeacherIds);
+                  tData?.forEach((t: any) => {
+                      if (t.specialization) teachersSubjectsMap.set(t.id, t.specialization);
+                  });
+              }
+           } catch (e) {
+              console.log("Could not fetch teacher subjects for replies");
+           }
+        }
+
+        // جلب أوسمة جميع المعلقين دفعة واحدة
         const { data: allReplyBadgesRaw } = await supabase
           .from('student_badges')
           .select(`
@@ -124,12 +186,18 @@ export default function TopicDetailsPage() {
 
         formattedReplies = repliesData.map((reply: any) => {
           const author = usersData?.find((u: any) => u.id === reply.author_id);
+          const subjectName = teachersSubjectsMap.get(reply.author_id) || '';
           
           // استخراج أوسمة هذا المعلق بالذات
           const userBadgeRows = allReplyBadgesRaw?.filter((b: any) => b.student_id === reply.author_id) || [];
           const replyBadges = userBadgeRows.map((b: any) => b.badges).filter(Boolean);
 
-          return { ...reply, users: author || { full_name: 'مجهول', role: 'student' }, earned_badges: replyBadges };
+          return { 
+            ...reply, 
+            users: author || { full_name: 'مجهول', role: 'student' }, 
+            subject_name: subjectName,
+            earned_badges: replyBadges 
+          };
         });
 
         // جلب المعجبين
@@ -281,7 +349,7 @@ export default function TopicDetailsPage() {
     } catch (error) {}
   };
 
-  const UserProfileColumn = ({ author, badgeText, badges, isTopicAuthor = false }: any) => (
+  const UserProfileColumn = ({ author, badgeText, badges, subjectName, isTopicAuthor = false }: any) => (
     <div className={`w-full md:w-64 shrink-0 flex flex-col items-center p-6 bg-slate-50/50 md:bg-transparent ${isTopicAuthor ? 'md:border-l' : 'md:border-l'} border-slate-100`}>
       <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full p-1 bg-white shadow-sm border-2 ${author?.role !== 'student' ? 'border-amber-400' : 'border-slate-200'} mb-3`}>
         {author?.avatar_url ? (
@@ -294,11 +362,12 @@ export default function TopicDetailsPage() {
       <h3 className="font-black text-base text-slate-900 text-center flex flex-col items-center gap-1">
         {author?.full_name || 'مستخدم مجهول'}
       </h3>
-      <span className={`mt-2 text-[10px] font-black px-3 py-1 rounded-full border ${author?.role !== 'student' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-        {badgeText}
+      
+      {/* 🚀 عرض رتبة المستخدم مع المادة إن وجدت (مثال: معلم - رياضيات) */}
+      <span className={`mt-2 text-[10px] font-black px-3 py-1 rounded-full border flex items-center gap-1 ${author?.role !== 'student' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+        {badgeText} {subjectName ? <><span className="opacity-50 mx-0.5">•</span> <BookOpen className="w-3 h-3 inline"/> {subjectName}</> : ''}
       </span>
       
-      {/* 🚀 قسم عرض الأوسمة المحدث */}
       {badges && badges.length > 0 && (
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {badges.map((badge: any, idx: number) => (
@@ -387,7 +456,13 @@ export default function TopicDetailsPage() {
         {/* Main Topic Container */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row max-w-full w-full">
           
-          <UserProfileColumn author={topic.author} badgeText={topic.author_badge} badges={topic.author_earned_badges} isTopicAuthor={true} />
+          <UserProfileColumn 
+            author={topic.author} 
+            badgeText={topic.author_badge} 
+            badges={topic.author_earned_badges} 
+            subjectName={topic.author_subject} 
+            isTopicAuthor={true} 
+          />
           
           <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
              <div className="p-6 md:p-8 flex-1 min-w-0">
@@ -455,7 +530,12 @@ export default function TopicDetailsPage() {
                     </div>
                   )}
 
-                  <UserProfileColumn author={reply.users} badgeText={badgeText} badges={reply.earned_badges} />
+                  <UserProfileColumn 
+                     author={reply.users} 
+                     badgeText={badgeText} 
+                     badges={reply.earned_badges} 
+                     subjectName={reply.subject_name} 
+                  />
                   
                   <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
                     <div className="p-6 md:p-8 flex-1 min-w-0">
