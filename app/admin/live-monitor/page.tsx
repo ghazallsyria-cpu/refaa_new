@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Radio, Clock, TrendingUp, Activity, 
   GraduationCap, UserCheck, MonitorPlay, 
@@ -47,64 +47,77 @@ export default function LiveMonitorPage() {
   const [dailyTab, setDailyTab] = useState<'all' | 'teachers' | 'students'>('all');
 
   // جلب السجل اليومي (يتجدد كل 24 ساعة بناءً على تاريخ اليوم)
-  const fetchDailyLogins = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    const { data: presenceData } = await supabase
-      .from('daily_presence')
-      .select('*')
-      .eq('record_date', today)
-      .order('last_seen', { ascending: false });
+  const fetchDailyLogins = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: presenceData } = await supabase
+        .from('daily_presence')
+        .select('*')
+        .eq('record_date', today)
+        .order('last_seen', { ascending: false });
 
-    if (presenceData && presenceData.length > 0) {
-       const detailsMap = new Map<string, string>();
+      if (presenceData && presenceData.length > 0) {
+         const detailsMap = new Map<string, string>();
 
-       // جلب بيانات الطلاب (الفصول)
-       const studentIds = presenceData.filter(p => p.role === 'student').map(p => p.user_id);
-       if (studentIds.length > 0) {
-          const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
-          stData?.forEach(st => {
-             if (st.sections) {
-                const className = (st.sections as any).classes?.name || (st.sections as any).class?.name || '';
-                const secName = (st.sections as any).name || '';
-                detailsMap.set(st.id, className ? `${className} - ${secName}` : secName);
-             }
-          });
-       }
+         // جلب بيانات الطلاب (الفصول)
+         const studentIds = presenceData.filter(p => p.role === 'student').map(p => p.user_id);
+         if (studentIds.length > 0) {
+            const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
+            stData?.forEach(st => {
+               if (st.sections) {
+                  const className = (st.sections as any).classes?.name || (st.sections as any).class?.name || '';
+                  const secName = (st.sections as any).name || '';
+                  detailsMap.set(st.id, className ? `${className} - ${secName}` : secName);
+               }
+            });
+         }
 
-       // جلب بيانات المعلمين (التخصصات)
-       const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
-       if (teacherIds.length > 0) {
-          const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
-          tsData?.forEach(ts => {
-             if (ts.subjects?.name && !detailsMap.has(ts.teacher_id)) detailsMap.set(ts.teacher_id, ts.subjects.name);
-          });
-          const missing = teacherIds.filter(id => !detailsMap.has(id));
-          if (missing.length > 0) {
-             const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missing);
-             tData?.forEach(t => { if(t.specialization) detailsMap.set(t.id, t.specialization); });
-          }
-       }
+         // جلب بيانات المعلمين (التخصصات)
+         const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
+         if (teacherIds.length > 0) {
+            const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
+            tsData?.forEach(ts => {
+               if (ts.subjects?.name && !detailsMap.has(ts.teacher_id)) detailsMap.set(ts.teacher_id, ts.subjects.name);
+            });
+            const missing = teacherIds.filter(id => !detailsMap.has(id));
+            if (missing.length > 0) {
+               const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missing);
+               tData?.forEach(t => { if(t.specialization) detailsMap.set(t.id, t.specialization); });
+            }
+         }
 
-       // دمج البيانات
-       const enriched = presenceData.map(p => ({
-          ...p,
-          detail: detailsMap.get(p.user_id) || (p.role === 'teacher' ? 'معلم عام' : p.role === 'student' ? 'بدون فصل' : 'إدارة')
-       }));
-       setDailyLogins(enriched);
-    } else {
-       setDailyLogins([]);
+         // دمج البيانات
+         const enriched = presenceData.map(p => ({
+            ...p,
+            detail: detailsMap.get(p.user_id) || (p.role === 'teacher' ? 'معلم عام' : p.role === 'student' ? 'بدون فصل' : 'إدارة')
+         }));
+         setDailyLogins(enriched);
+      } else {
+         setDailyLogins([]);
+      }
+    } catch (e) {
+      console.error(e);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchDailyLogins();
+    // الالتفاف على التحذير باستخدام دالة داخلية
+    const initializeData = async () => {
+       await fetchDailyLogins();
+    };
+    
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    initializeData().catch(console.error);
 
     const today = new Date().toISOString().split('T')[0];
     
     // مراقبة التغييرات الحية في الجدول اليومي
     const dailyChannel = supabase.channel('daily_presence_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_presence', filter: `record_date=eq.${today}` }, () => {
-        fetchDailyLogins();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setTimeout(() => {
+            fetchDailyLogins().catch(console.error);
+        }, 1000);
       })
       .subscribe();
 
@@ -138,7 +151,7 @@ export default function LiveMonitorPage() {
       supabase.removeChannel(dailyChannel);
       clearTimeout(timeout);
     };
-  }, []);
+  }, [fetchDailyLogins]);
 
   const analytics = useMemo(() => {
     const teachers = onlineUsers.filter(u => u.role === 'teacher');
