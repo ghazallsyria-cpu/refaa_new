@@ -76,8 +76,12 @@ export default function LiveMonitorPage() {
          const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
          if (teacherIds.length > 0) {
             const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
-            tsData?.forEach(ts => {
-               if (ts.subjects?.name && !detailsMap.has(ts.teacher_id)) detailsMap.set(ts.teacher_id, ts.subjects.name);
+            tsData?.forEach((ts: any) => {
+               // 🚀 تم إصلاح خطأ TypeScript هنا بالتحقق من النوع والوصول الآمن للاسم
+               const subjectName = Array.isArray(ts.subjects) ? ts.subjects[0]?.name : ts.subjects?.name;
+               if (subjectName && !detailsMap.has(ts.teacher_id)) {
+                  detailsMap.set(ts.teacher_id, subjectName);
+               }
             });
             const missing = teacherIds.filter(id => !detailsMap.has(id));
             if (missing.length > 0) {
