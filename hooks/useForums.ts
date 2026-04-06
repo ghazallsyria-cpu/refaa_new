@@ -96,6 +96,24 @@ export function useForums() {
     }
   };
 
+  // 🚀 تم إضافة دالة التحديث السحرية هنا
+  const updateCategory = async (id: string, payload: Partial<ForumCategory>) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('forum_categories')
+        .update(payload)
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+      
+      await fetchCategoriesAndClasses(); 
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error updating category:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   return {
     categories,
     structuredCategories,
@@ -103,6 +121,7 @@ export function useForums() {
     loading,
     error,
     fetchCategoriesAndClasses,
-    createCategory
+    createCategory,
+    updateCategory // 🚀 تصدير الدالة لتكون متاحة في الواجهات
   };
 }
