@@ -65,6 +65,15 @@ export default function ForumEditor({
     if (editorRef.current) setContent(editorRef.current.innerHTML);
   };
 
+  // الدالة التي كانت مفقودة وتسببت بالخطأ
+  const addLink = () => {
+    if (linkUrl) {
+      execCommand('createLink', linkUrl);
+      setLinkUrl('');
+      setShowLinkInput(false);
+    }
+  };
+
   const uploadImageFile = async (file: File) => {
     setIsUploading(true);
     try {
