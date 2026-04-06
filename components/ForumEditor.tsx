@@ -28,33 +28,37 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 // ==========================================
 // 1. إضافة مخصصة لحجم الخط (Font Size)
 // ==========================================
+// ==========================================
+// 1. إضافة مخصصة لحجم الخط (Font Size) - مصححة لـ TypeScript
+// ==========================================
 const FontSize = Mark.create({
   name: 'fontSize',
   addOptions() { return { types: ['textStyle'] }; },
   addGlobalAttributes() {
-    return {
-      types: this.options.types,
-      attributes: {
-        fontSize: {
-          default: null,
-          parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
-          renderHTML: attributes => {
-            if (!attributes.fontSize) return {};
-            return { style: `font-size: ${attributes.fontSize}` };
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}` };
+            },
           },
         },
-      },
-    };
+      }
+    ];
   },
   addCommands() {
     return {
-      setFontSize: fontSize => ({ chain }) => chain().setMark('textStyle', { fontSize }).run(),
+      setFontSize: (fontSize: string) => ({ chain }) => chain().setMark('textStyle', { fontSize }).run(),
       unsetFontSize: () => ({ chain }) => chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run(),
     };
   },
 });
 
-// ==========================================
 // 2. إضافة مخصصة للرسم البياني (Chart Node)
 // ==========================================
 const ChartComponent = (props: any) => {
