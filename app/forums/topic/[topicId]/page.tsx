@@ -31,7 +31,7 @@ const extractUrlsFromHtml = (htmlStrings: string[]) => {
   return urls;
 };
 
-// 🚀 تم التعديل هنا: إجبار المعادلات على النزول لسطر جديد وعدم تجاوز الشاشة
+// إجبار المعادلات والجداول على التجاوب مع الموبايل
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = content.replace(
@@ -79,18 +79,24 @@ export default function TopicDetailsPage() {
          sessionStorage.setItem('viewed_topics', JSON.stringify([...viewedTopics, topicId]));
       }
 
+      // جلب بيانات كاتب الموضوع
       const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
-      const { data: authorBadges } = await supabase
-        .from('user_badges')
-        .select(`gamification_badges(id, name, image_url)`)
-        .eq('user_id', topicData.author_id);
+      // 🚀 جلب أوسمة كاتب الموضوع بناءً على جداول قاعدة بياناتك الحقيقية
+      const { data: authorBadgesRaw } = await supabase
+        .from('student_badges')
+        .select(`
+          badge_id,
+          badges ( id, name, image_url )
+        `)
+        .eq('student_id', topicData.author_id);
       
-      const parsedBadges = authorBadges?.map((b: any) => b.gamification_badges).filter(Boolean) || [];
+      const parsedBadges = authorBadgesRaw?.map((b: any) => b.badges).filter(Boolean) || [];
 
       setTopic({ ...topicData, author: authorData, author_badge: badgeText, author_earned_badges: parsedBadges });
 
+      // جلب الاستطلاعات
       const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
       if (poll) {
          const { data: options } = await supabase.from('forum_poll_options').select('*').eq('poll_id', poll.id);
@@ -98,6 +104,7 @@ export default function TopicDetailsPage() {
          setPollData({ ...poll, options: options || [], votes: votes || [] });
       }
 
+      // جلب الردود
       const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
 
       let formattedReplies: any[] = [];
@@ -105,17 +112,27 @@ export default function TopicDetailsPage() {
         const authorIds = [...new Set(repliesData.map((r: any) => r.author_id))];
         const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').in('id', authorIds);
         
-        const { data: allReplyBadges } = await supabase
-          .from('user_badges')
-          .select(`user_id, gamification_badges(id, name, image_url)`)
-          .in('user_id', authorIds);
+        // 🚀 جلب أوسمة جميع المعلقين دفعة واحدة بناءً على جدول student_badges
+        const { data: allReplyBadgesRaw } = await supabase
+          .from('student_badges')
+          .select(`
+            student_id,
+            badge_id,
+            badges ( id, name, image_url )
+          `)
+          .in('student_id', authorIds);
 
         formattedReplies = repliesData.map((reply: any) => {
           const author = usersData?.find((u: any) => u.id === reply.author_id);
-          const replyBadges = allReplyBadges?.filter((b:any) => b.user_id === reply.author_id).map((b:any) => b.gamification_badges).filter(Boolean) || [];
+          
+          // استخراج أوسمة هذا المعلق بالذات
+          const userBadgeRows = allReplyBadgesRaw?.filter((b: any) => b.student_id === reply.author_id) || [];
+          const replyBadges = userBadgeRows.map((b: any) => b.badges).filter(Boolean);
+
           return { ...reply, users: author || { full_name: 'مجهول', role: 'student' }, earned_badges: replyBadges };
         });
 
+        // جلب المعجبين
         const replyIds = repliesData.map((r: any) => r.id);
         const { data: allVotes } = await supabase.from('forum_votes').select('reply_id, user_id').in('reply_id', replyIds);
         
@@ -281,12 +298,18 @@ export default function TopicDetailsPage() {
         {badgeText}
       </span>
       
+      {/* 🚀 قسم عرض الأوسمة المحدث */}
       {badges && badges.length > 0 && (
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {badges.map((badge: any, idx: number) => (
              <div key={idx} className="relative group/userbadge cursor-help">
                {/* eslint-disable-next-line @next/next/no-img-element */}
-               <img src={badge.image_url} alt={badge.name} className="w-7 h-7 object-contain drop-shadow-sm hover:scale-110 transition-transform" />
+               <img 
+                  src={badge.image_url} 
+                  alt={badge.name} 
+                  className="w-7 h-7 object-contain drop-shadow-sm hover:scale-110 transition-transform" 
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+               />
                <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover/userbadge:opacity-100 pointer-events-none whitespace-nowrap z-20">
                  {badge.name}
                </div>
@@ -310,7 +333,6 @@ export default function TopicDetailsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       
-      {/* 🚀 إضافة ملف CSS فرعي لإجبار الجداول والصور على التجاوب داخل الـ Prose */}
       <style dangerouslySetInnerHTML={{__html: `
         .prose-container .prose table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
         .prose-container .prose img { max-width: 100%; height: auto; }
@@ -373,7 +395,6 @@ export default function TopicDetailsPage() {
                    <Clock className="w-4 h-4" /> تم النشر: {formatDistanceToNow(new Date(topic.created_at), { addSuffix: true, locale: arSA })}
                 </div>
                 
-                {/* 🚀 تم التعديل هنا: إضافة كلاسات منع التمدد (word-break و overflow-x-auto) */}
                 <div 
                   className="prose prose-slate prose-indigo max-w-none text-slate-800 leading-loose font-medium w-full break-words overflow-x-auto overflow-y-hidden" 
                   style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
@@ -443,7 +464,6 @@ export default function TopicDetailsPage() {
                          {reply.is_verified && <span className="text-emerald-600 flex items-center gap-1"><Medal className="w-4 h-4" /> أفضل إجابة</span>}
                       </div>
                       
-                      {/* 🚀 تم التعديل هنا أيضاً للردود */}
                       <div 
                         className="prose prose-slate max-w-none text-slate-700 leading-loose w-full break-words overflow-x-auto overflow-y-hidden" 
                         style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
