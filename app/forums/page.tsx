@@ -305,13 +305,20 @@ export default function ForumsPage() {
                   <input type="text" required value={newCatName} onChange={e => setNewCatName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black focus:ring-indigo-500 outline-none" />
                 </div>
 
+                {/* 🚀 تم الإصلاح هنا: إزالة optgroup واستخدام structuredCategories مباشرة */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">تفرع القسم</label>
-                  <select value={parentId} onChange={e => setParentId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black outline-none">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">نوع القسم (رئيسي أم فرعي؟)</label>
+                  <select 
+                    value={parentId} 
+                    onChange={e => setParentId(e.target.value)} 
+                    className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 cursor-pointer"
+                  >
                     <option value="none">🌟 قسم رئيسي (مستقل)</option>
-                    <optgroup label="تفريعه تحت:">
-                      {categories.filter(c => !c.parent_id).map(main => <option key={main.id} value={main.id}>↳ يتبع لـ: {main.name}</option>)}
-                    </optgroup>
+                    {structuredCategories.map(main => (
+                      <option key={main.id} value={main.id}>
+                        ↳ قسم فرعي يتبع لـ: {main.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
