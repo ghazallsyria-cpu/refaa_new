@@ -21,15 +21,12 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   
-  // 🚀 حالة لتحديث الأزرار النشطة (مثال: زر Bold يكون مفعلاً إذا كان النص المحدد عريضاً)
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
 
-  // 🚀 مزامنة المحتوى الأولي فقط عند التحميل أو عند مسح الحقل خارجياً
   useEffect(() => {
     if (editorRef.current && content === '') {
       editorRef.current.innerHTML = '';
     } else if (editorRef.current && editorRef.current.innerHTML !== content && content) {
-       // تجنب التحديث المستمر أثناء الكتابة
        if (!document.activeElement || document.activeElement !== editorRef.current) {
           editorRef.current.innerHTML = content;
        }
@@ -58,7 +55,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
     setActiveFormats(active);
   };
 
-  // 🚀 دالة إضافة رابط
   const addLink = () => {
     if (linkUrl) {
       execCommand('createLink', linkUrl);
@@ -67,7 +63,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
     }
   };
 
-  // 🚀 دالة إضافة جدول
   const insertTable = () => {
     const tableHTML = `
       <table style="width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;">
@@ -86,7 +81,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
     execCommand('insertHTML', tableHTML);
   };
 
-  // 🚀 دالة رفع الصورة وإدراجها مباشرة داخل النص
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -105,7 +99,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
       const data = await res.json();
       
       if (data.secure_url) {
-        // إدراج الصورة كـ HTML داخل المحرر
         const imgHTML = `<img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" /><br/>`;
         execCommand('insertHTML', imgHTML);
       }
@@ -117,7 +110,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
     }
   };
 
-  // 🚀 مكون زر شريط الأدوات
   const ToolbarButton = ({ icon: Icon, onClick, isActive, title }: any) => (
     <button
       type="button"
@@ -136,31 +128,26 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-all">
       
-      {/* 🚀 شريط الأدوات العلوي */}
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1.5 sticky top-0 z-10">
         
-        {/* تنسيق النص الأساسي */}
         <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1">
           <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} isActive={activeFormats.includes('bold')} title="عريض" />
           <ToolbarButton icon={Italic} onClick={() => execCommand('italic')} isActive={activeFormats.includes('italic')} title="مائل" />
           <ToolbarButton icon={Underline} onClick={() => execCommand('underline')} isActive={activeFormats.includes('underline')} title="تسطير" />
         </div>
 
-        {/* أحجام الخطوط (العناوين) */}
         <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1">
           <ToolbarButton icon={Heading1} onClick={() => execCommand('formatBlock', 'H3')} title="عنوان كبير" />
           <ToolbarButton icon={Heading2} onClick={() => execCommand('formatBlock', 'H4')} title="عنوان متوسط" />
           <ToolbarButton icon={Heading3} onClick={() => execCommand('formatBlock', 'H5')} title="عنوان صغير" />
         </div>
 
-        {/* القوائم والجداول */}
         <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1">
           <ToolbarButton icon={List} onClick={() => execCommand('insertUnorderedList')} isActive={activeFormats.includes('insertUnorderedList')} title="قائمة نقطية" />
           <ToolbarButton icon={ListOrdered} onClick={() => execCommand('insertOrderedList')} isActive={activeFormats.includes('insertOrderedList')} title="قائمة رقمية" />
           <ToolbarButton icon={Table} onClick={insertTable} title="إدراج جدول" />
         </div>
 
-        {/* الروابط وإزالة التنسيق */}
         <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1 relative">
           <ToolbarButton icon={LinkIcon} onClick={() => setShowLinkInput(!showLinkInput)} isActive={showLinkInput} title="إضافة رابط" />
           <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
@@ -179,7 +166,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
           )}
         </div>
 
-        {/* 🚀 رفع الصور مباشرة داخل النص */}
         {canUploadImage && (
           <div className="mr-auto">
              <input 
@@ -203,7 +189,6 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
         )}
       </div>
 
-      {/* 🚀 مساحة الكتابة التفاعلية */}
       <div 
         ref={editorRef}
         contentEditable
@@ -213,10 +198,10 @@ export default function ForumEditor({ content, setContent, canUploadImage, place
         className="w-full min-h-[250px] max-h-[500px] overflow-y-auto p-5 outline-none prose prose-slate max-w-none text-slate-800 leading-relaxed"
         data-placeholder={placeholder}
         dir="auto"
-        style={{ WebkitUserModify: 'read-write-plaintext-only' }}
+        style={{ WebkitUserModify: 'read-write-plaintext-only' } as any}
       />
 
-      <style dangerouslySetContents={{__html: `
+      <style dangerouslySetInnerHTML={{__html: `
         [contenteditable]:empty:before {
           content: attr(data-placeholder);
           color: #94a3b8;
