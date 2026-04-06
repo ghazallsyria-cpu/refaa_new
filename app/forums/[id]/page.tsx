@@ -1,27 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/context/auth-context';
+import { useTopics } from '@/hooks/useTopics';
+import { useForums } from '@/hooks/useForums';
+import { supabase } from '@/lib/supabase';
+import { deleteFromCloudinary } from '@/lib/cloudinary';
+import Link from 'next/link';
+import ForumEditor from '@/components/ForumEditor';
 import { 
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
   Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen, Layers, Hash,
-  Target, ShieldAlert, Image as ImageIcon, Save, Edit2, Trash2
+  Target, ShieldAlert, Image as ImageIcon, Save, Edit2, Trash2, Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-
-
-
-
-import { useParams, useRouter } from 'next/navigation';
- import { useAuth } from '@/context/auth-context';
- import { useTopics } from '@/hooks/useTopics';
- import { useForums } from '@/hooks/useForums';
-import { supabase } from '@/lib/supabase';
- import { deleteFromCloudinary } from '@/lib/cloudinary';
- import Link from 'next/link';
- import ForumEditor from '@/components/ForumEditor';
-
 
 export default function CategoryPage() {
   const params = useParams();
@@ -147,9 +142,7 @@ export default function CategoryPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      // @ts-ignore
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
-      // @ts-ignore
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       if (data.secure_url) setSubCoverUrl(data.secure_url);
@@ -175,6 +168,7 @@ export default function CategoryPage() {
     if (editingCatId) {
       result = await updateCategory(editingCatId, payload); 
     } else {
+      // 🚀 هنا السحر: يتم إنشاء القسم بربطه كفرع من القسم الحالي، مما يسمح بالتفرع اللانهائي!
       result = await createCategory({ ...payload, parent_id: categoryId });
     }
 
@@ -282,7 +276,13 @@ export default function CategoryPage() {
               <Layers className="w-5 h-5 text-indigo-600" /> الأقسام الفرعية داخل {categoryInfo?.name}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subcategories.map(subCat => (
+              {subcategories.map(subCat => {
+                // 🚀 عرض أسماء الفصول المحددة لهذا القسم الفرعي بدقة
+                const targetNames = subCat.target_classes && subCat.target_classes.length > 0 
+                  ? subCat.target_classes.map((id: string) => schoolClasses.find((c: any) => c.id === id)?.name || 'غير معروف').join('، ') 
+                  : null;
+
+                return (
                 <div key={subCat.id} className="relative group h-full">
                   {isAdmin && (
                       <div className="absolute top-2 left-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -304,15 +304,31 @@ export default function CategoryPage() {
                             <Hash className="w-6 h-6" />
                          )}
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <h3 className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1 text-sm">{subCat.name}</h3>
                         <p className="text-[11px] font-bold text-slate-500 mt-1 line-clamp-2">{subCat.description || 'قسم فرعي'}</p>
-                        <div className="flex gap-2 mt-3">
-                           <span className="text-[10px] font-black bg-slate-50 border border-slate-100 text-slate-500 px-2 py-1 rounded-lg flex items-center gap-1">
+                        
+                        {/* 🚀 الشارات التوضيحية للصفوف والصلاحيات أصبحت تظهر هنا الآن! */}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                           <span className="text-[10px] font-black bg-slate-50 border border-slate-100 text-slate-500 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
                              <MessageSquare className="w-3 h-3" /> {subCat.topics_count || 0}
                            </span>
+                           {targetNames ? (
+                             <span className="text-[10px] font-black bg-amber-50 border border-amber-100 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1 truncate max-w-[120px]" title={targetNames}>
+                               <Target className="w-3 h-3 shrink-0" /> {targetNames}
+                             </span>
+                           ) : (
+                             <span className="text-[10px] font-black bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                               <Globe className="w-3 h-3" /> عام
+                             </span>
+                           )}
+                           {subCat.post_permission === 'admin_only' && (
+                              <span className="text-[10px] font-black bg-red-50 border border-red-100 text-red-700 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                                <ShieldAlert className="w-3 h-3" /> رسمي
+                              </span>
+                           )}
                            {subCat.reply_permission === 'none' && (
-                              <span className="text-[10px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-lg flex items-center gap-1">
+                              <span className="text-[10px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
                                 <Lock className="w-3 h-3" /> للقراءة
                               </span>
                            )}
@@ -321,7 +337,7 @@ export default function CategoryPage() {
                     </motion.div>
                   </Link>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
@@ -486,7 +502,7 @@ export default function CategoryPage() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة إضافة قسم فرعي جديد وتعديل الإعدادات للقسم (خاصة بالمدير) */}
+      {/* 🚀 نافذة إضافة وتعديل القسم الفرعي */}
       <AnimatePresence>
         {isSubCatModalOpen && isAdmin && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
