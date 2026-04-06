@@ -1,14 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
-import { useTopics } from '@/hooks/useTopics';
-import { useForums } from '@/hooks/useForums';
-import { supabase } from '@/lib/supabase';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
-import Link from 'next/link';
-import ForumEditor from '@/components/ForumEditor';
 import { 
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
   Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen, Layers, Hash,
@@ -17,6 +9,17 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+
+
+
+import { useParams, useRouter } from 'next/navigation';
+ import { useAuth } from '@/context/auth-context';
+ import { useTopics } from '@/hooks/useTopics';
+ import { useForums } from '@/hooks/useForums';
+ import { supabase } from '@/lib/supabase';
+ import { deleteFromCloudinary } from '@/lib/cloudinary';
+import Link from 'next/link';
+ import ForumEditor from '@/components/ForumEditor';
 
 export default function CategoryPage() {
   const params = useParams();
@@ -29,7 +32,7 @@ export default function CategoryPage() {
   const canUploadImage = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management';
 
   const { topics, categoryInfo, loading, fetchTopicsAndCategory } = useTopics(categoryId);
-  const { createCategory, updateCategory, schoolClasses } = useForums(); 
+  const { createCategory, updateCategory, schoolClasses, fetchCategoriesAndClasses } = useForums(); 
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -58,6 +61,7 @@ export default function CategoryPage() {
   useEffect(() => {
     fetchTopicsAndCategory();
     fetchSubcategories();
+    fetchCategoriesAndClasses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId]);
 
@@ -499,7 +503,6 @@ export default function CategoryPage() {
         )}
       </div>
 
-      {/* 🚀 نافذة إضافة موضوع جديد */}
       <AnimatePresence>
         {isModalOpen && canPost && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
@@ -536,7 +539,6 @@ export default function CategoryPage() {
                   />
                 </div>
 
-                {/* 🚀 واجهة إضافة استطلاع للموضوع */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-4">
                      <label className="flex items-center gap-2 cursor-pointer">
