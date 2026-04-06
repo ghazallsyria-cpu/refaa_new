@@ -13,9 +13,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
 export default function ForumsPage() {
-  const { userRole, authRole } = useAuth() as any;
+  const { user, userRole, authRole } = useAuth() as any;
   const currentRole = authRole || userRole;
   const isAdmin = currentRole === 'admin' || currentRole === 'management';
+  const isTeacher = currentRole === 'teacher';
 
   const { categories, structuredCategories, schoolClasses, loading, fetchCategoriesAndClasses, createCategory } = useForums();
 
@@ -33,7 +34,36 @@ export default function ForumsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 🚀 حالة جديدة لتخزين صف الطالب وتجنب عرض الأقسام قبل التحقق
+  const [studentClassIds, setStudentClassIds] = useState<string[]>([]);
+  const [isStudentDataLoading, setIsStudentDataLoading] = useState(currentRole === 'student');
+
   useEffect(() => { fetchCategoriesAndClasses(); }, [fetchCategoriesAndClasses]);
+
+  // 🚀 جلب صف الطالب لمعرفة الأقسام المسموحة له
+  useEffect(() => {
+    const fetchStudentClass = async () => {
+      if (currentRole === 'student' && user?.id) {
+        try {
+          const { data } = await supabase
+            .from('students')
+            .select('sections(class_id)')
+            .eq('id', user.id)
+            .single();
+            
+          if (data && data.sections) {
+            const classId = (data.sections as any).class_id;
+            if (classId) setStudentClassIds([classId]);
+          }
+        } catch (error) {
+          console.error('Error fetching student class for forum visibility', error);
+        }
+      }
+      setIsStudentDataLoading(false);
+    };
+    
+    fetchStudentClass();
+  }, [currentRole, user]);
 
   const toggleClass = (classId: string) => {
     if (targetClasses.includes(classId)) setTargetClasses(targetClasses.filter(id => id !== classId));
@@ -97,17 +127,40 @@ export default function ForumsPage() {
       }
   }
 
-  const filterHierarchy = (cats: StructuredCategory[], query: string): StructuredCategory[] => {
-    if (!query) return cats;
-    return cats.map(main => {
-      const mainMatches = main.name.includes(query) || (main.description && main.description.includes(query));
-      const matchingSubs = (main.subcategories || []).filter(sub => sub.name.includes(query) || (sub.description && sub.description.includes(query)));
+  // 🚀 الفلتر المزدوج: فلتر الصلاحيات أولاً، ثم فلتر البحث ثانياً
+  const getDisplayedCategories = () => {
+    // 1. فلترة الصلاحيات
+    const permissionFiltered = structuredCategories.map(mainCat => {
+      // الإدارة والمعلمون يرون كل شيء
+      if (isAdmin || isTeacher) return mainCat;
+
+      // هل القسم الرئيسي مسموح للطالب؟ (إذا كان عاماً أو يحتوي صف الطالب)
+      const isMainAllowed = !mainCat.target_classes || mainCat.target_classes.length === 0 || mainCat.target_classes.some(id => studentClassIds.includes(id));
+
+      // فلترة الأقسام الفرعية بناءً على صف الطالب
+      const allowedSubs = (mainCat.subcategories || []).filter(sub => {
+        return !sub.target_classes || sub.target_classes.length === 0 || sub.target_classes.some(id => studentClassIds.includes(id));
+      });
+
+      // إظهار القسم إذا كان مسموحاً أو إذا كان يحتوي أقساماً فرعية مسموحة
+      if (isMainAllowed || allowedSubs.length > 0) {
+        return { ...mainCat, subcategories: allowedSubs };
+      }
+      return null;
+    }).filter(Boolean) as StructuredCategory[];
+
+    // 2. فلترة البحث
+    if (!searchQuery) return permissionFiltered;
+    
+    return permissionFiltered.map(main => {
+      const mainMatches = main.name.includes(searchQuery) || (main.description && main.description.includes(searchQuery));
+      const matchingSubs = (main.subcategories || []).filter(sub => sub.name.includes(searchQuery) || (sub.description && sub.description.includes(searchQuery)));
       if (mainMatches || matchingSubs.length > 0) return { ...main, subcategories: matchingSubs.length > 0 ? matchingSubs : main.subcategories };
       return null;
     }).filter(Boolean) as StructuredCategory[];
   };
 
-  const displayedCategories = filterHierarchy(structuredCategories, searchQuery);
+  const displayedCategories = getDisplayedCategories();
 
   const CategoryCard = ({ cat }: { cat: StructuredCategory }) => {
     const targetNames = cat.target_classes && cat.target_classes.length > 0 
@@ -217,12 +270,13 @@ export default function ForumsPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 -mt-12 relative z-20 space-y-8">
-        {loading ? (
+        {loading || isStudentDataLoading ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2rem] shadow-sm"><Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-4" /></div>
         ) : displayedCategories.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-[2rem] shadow-sm border border-slate-100">
              <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-4" />
             <h3 className="text-xl font-black text-slate-800 mb-2">لا توجد أقسام حالياً</h3>
+            <p className="text-slate-500 font-medium">عذراً، لا توجد أقسام متاحة لك في الوقت الحالي.</p>
           </div>
         ) : (
           displayedCategories.map((mainCat) => (
@@ -305,7 +359,6 @@ export default function ForumsPage() {
                   <input type="text" required value={newCatName} onChange={e => setNewCatName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black focus:ring-indigo-500 outline-none" />
                 </div>
 
-                {/* 🚀 تم الإصلاح هنا: إزالة optgroup واستخدام structuredCategories مباشرة */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">نوع القسم (رئيسي أم فرعي؟)</label>
                   <select 
