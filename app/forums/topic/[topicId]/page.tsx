@@ -11,16 +11,12 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
-
-
-// --- ✅ أزل التعليق (//) عن هذه الاستيرادات في مشروعك الفعلي ✅ ---
- import { useParams, useRouter } from 'next/navigation';
- import { useAuth } from '@/context/auth-context';
- import { supabase } from '@/lib/supabase';
- import Link from 'next/link';
- import ForumEditor from '@/components/ForumEditor';
- import { deleteFromCloudinary } from '@/lib/cloudinary';
-// -------------------------------------------------------------------------------------
+import { useParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
+import ForumEditor from '@/components/ForumEditor';
+import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 const extractUrlsFromHtml = (htmlStrings: string[]) => {
   const urls: string[] = [];
@@ -35,12 +31,13 @@ const extractUrlsFromHtml = (htmlStrings: string[]) => {
   return urls;
 };
 
-// 🚀 أداة دمج الرياضيات والمعادلات (تُعالج النص الذي يحتوي على $$)
+// 🚀 تم التعديل هنا: إجبار المعادلات على النزول لسطر جديد وعدم تجاوز الشاشة
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
-   // هذه دالة بسيطة لاستبدال $$ بمعادلات مائلة كحل مبدئي، في المشروع الحقيقي 
-   // يفضل استخدام مكتبة KaTeX عبر <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
-   let html = content.replace(/\$\$(.*?)\$\$/g, '<span class="math-tex text-indigo-700 bg-indigo-50 px-2 py-1 rounded font-mono font-bold mx-1 shadow-sm" dir="ltr">$1</span>');
+   let html = content.replace(
+     /\$\$(.*?)\$\$/g, 
+     '<span class="math-tex text-indigo-700 bg-indigo-50 px-2 py-1 rounded font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
+   );
    return { __html: html };
 };
 
@@ -82,11 +79,9 @@ export default function TopicDetailsPage() {
          sessionStorage.setItem('viewed_topics', JSON.stringify([...viewedTopics, topicId]));
       }
 
-      // جلب بيانات الكاتب
       const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
-      // 🚀 جلب أوسمة الكاتب الحقيقية من قاعدة البيانات
       const { data: authorBadges } = await supabase
         .from('user_badges')
         .select(`gamification_badges(id, name, image_url)`)
@@ -96,7 +91,6 @@ export default function TopicDetailsPage() {
 
       setTopic({ ...topicData, author: authorData, author_badge: badgeText, author_earned_badges: parsedBadges });
 
-      // جلب الاستطلاعات
       const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
       if (poll) {
          const { data: options } = await supabase.from('forum_poll_options').select('*').eq('poll_id', poll.id);
@@ -104,7 +98,6 @@ export default function TopicDetailsPage() {
          setPollData({ ...poll, options: options || [], votes: votes || [] });
       }
 
-      // جلب الردود
       const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
 
       let formattedReplies: any[] = [];
@@ -112,7 +105,6 @@ export default function TopicDetailsPage() {
         const authorIds = [...new Set(repliesData.map((r: any) => r.author_id))];
         const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').in('id', authorIds);
         
-        // 🚀 جلب أوسمة المعلقين
         const { data: allReplyBadges } = await supabase
           .from('user_badges')
           .select(`user_id, gamification_badges(id, name, image_url)`)
@@ -124,7 +116,6 @@ export default function TopicDetailsPage() {
           return { ...reply, users: author || { full_name: 'مجهول', role: 'student' }, earned_badges: replyBadges };
         });
 
-        // جلب المعجبين
         const replyIds = repliesData.map((r: any) => r.id);
         const { data: allVotes } = await supabase.from('forum_votes').select('reply_id, user_id').in('reply_id', replyIds);
         
@@ -290,7 +281,6 @@ export default function TopicDetailsPage() {
         {badgeText}
       </span>
       
-      {/* 🚀 عرض الأوسمة التي حصل عليها المستخدم */}
       {badges && badges.length > 0 && (
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {badges.map((badge: any, idx: number) => (
@@ -320,7 +310,13 @@ export default function TopicDetailsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       
-      {/* 🚀 Header Bar with Breadcrumbs & Actions */}
+      {/* 🚀 إضافة ملف CSS فرعي لإجبار الجداول والصور على التجاوب داخل الـ Prose */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .prose-container .prose table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
+        .prose-container .prose img { max-width: 100%; height: auto; }
+      `}} />
+
+      {/* Header Bar */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -364,23 +360,28 @@ export default function TopicDetailsPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6 prose-container">
         
-        {/* 🚀 Main Topic Container (New Architecture) */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
+        {/* Main Topic Container */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row max-w-full w-full">
           
           <UserProfileColumn author={topic.author} badgeText={topic.author_badge} badges={topic.author_earned_badges} isTopicAuthor={true} />
           
-          <div className="flex-1 flex flex-col min-w-0">
-             <div className="p-6 md:p-8 flex-1">
+          <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
+             <div className="p-6 md:p-8 flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-100 text-xs font-bold text-slate-400">
                    <Clock className="w-4 h-4" /> تم النشر: {formatDistanceToNow(new Date(topic.created_at), { addSuffix: true, locale: arSA })}
                 </div>
                 
-                <div className="prose prose-slate prose-indigo max-w-none text-slate-800 leading-loose font-medium" dangerouslySetInnerHTML={renderContentWithMath(topic.content)} />
+                {/* 🚀 تم التعديل هنا: إضافة كلاسات منع التمدد (word-break و overflow-x-auto) */}
+                <div 
+                  className="prose prose-slate prose-indigo max-w-none text-slate-800 leading-loose font-medium w-full break-words overflow-x-auto overflow-y-hidden" 
+                  style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                  dangerouslySetInnerHTML={renderContentWithMath(topic.content)} 
+                />
                 
                 {pollData && (
-                  <div className="mt-10 p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <div className="mt-10 p-6 bg-slate-50 border border-slate-200 rounded-2xl w-full">
                      <h3 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2">📊 {pollData.question}</h3>
                      <p className="text-xs font-bold text-slate-500 mb-6">إجمالي الأصوات: {pollData.votes.length} {pollData.allow_multiple && ' • يسمح باختيارات متعددة'}</p>
                      
@@ -407,7 +408,7 @@ export default function TopicDetailsPage() {
                 )}
              </div>
              
-             <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-3">
+             <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-3 w-full">
                 <button onClick={() => { document.getElementById('replyEditor')?.scrollIntoView({ behavior: 'smooth' }); }} className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50 transition-colors">
                    <Reply className="w-4 h-4" /> إضافة رد
                 </button>
@@ -415,9 +416,9 @@ export default function TopicDetailsPage() {
           </div>
         </motion.div>
 
-        {/* 🚀 Replies Section */}
+        {/* Replies Section */}
         {replies.length > 0 && (
-          <div className="space-y-6 pt-6">
+          <div className="space-y-6 pt-6 w-full">
             <h3 className="font-black text-xl text-slate-900 flex items-center gap-2 px-2"><MessageSquare className="w-6 h-6 text-indigo-500" /> الردود ({replies.length})</h3>
             
             {replies.map((reply) => {
@@ -425,7 +426,7 @@ export default function TopicDetailsPage() {
               const badgeText = reply.users?.role === 'student' ? 'طالب' : (reply.users?.role === 'teacher' ? 'معلم' : 'إدارة');
 
               return (
-                <motion.div key={reply.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`bg-white rounded-3xl shadow-sm border ${reply.is_verified ? 'border-emerald-300 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden flex flex-col md:flex-row relative`}>
+                <motion.div key={reply.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`bg-white rounded-3xl shadow-sm border ${reply.is_verified ? 'border-emerald-300 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden flex flex-col md:flex-row relative max-w-full w-full`}>
                   
                   {reply.is_verified && (
                     <div className="absolute top-4 left-4 z-20 bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-md">
@@ -435,17 +436,22 @@ export default function TopicDetailsPage() {
 
                   <UserProfileColumn author={reply.users} badgeText={badgeText} badges={reply.earned_badges} />
                   
-                  <div className="flex-1 flex flex-col min-w-0">
-                    <div className="p-6 md:p-8 flex-1">
+                  <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
+                    <div className="p-6 md:p-8 flex-1 min-w-0">
                       <div className="text-xs font-bold text-slate-400 mb-4 pb-3 border-b border-slate-100 flex justify-between items-center">
                          <span>{formatDistanceToNow(new Date(reply.created_at), { addSuffix: true, locale: arSA })}</span>
                          {reply.is_verified && <span className="text-emerald-600 flex items-center gap-1"><Medal className="w-4 h-4" /> أفضل إجابة</span>}
                       </div>
                       
-                      <div className="prose prose-slate max-w-none text-slate-700 leading-loose" dangerouslySetInnerHTML={renderContentWithMath(reply.content)} />
+                      {/* 🚀 تم التعديل هنا أيضاً للردود */}
+                      <div 
+                        className="prose prose-slate max-w-none text-slate-700 leading-loose w-full break-words overflow-x-auto overflow-y-hidden" 
+                        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                        dangerouslySetInnerHTML={renderContentWithMath(reply.content)} 
+                      />
                     </div>
                     
-                    <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-3 flex items-center gap-4">
+                    <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-3 flex items-center gap-4 w-full">
                       <div className="relative group/like">
                         <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200 shadow-sm'}`}>
                           <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
@@ -479,17 +485,19 @@ export default function TopicDetailsPage() {
           </div>
         )}
 
-        {/* 🚀 Reply Box */}
-        <div id="replyEditor" className="pt-6">
+        {/* Reply Box */}
+        <div id="replyEditor" className="pt-6 w-full">
         {!topic.is_locked ? (
           canReply ? (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden w-full max-w-full">
                <div className="bg-slate-50 border-b border-slate-100 p-5 flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><Reply className="w-5 h-5" /></div>
                 <h3 className="font-black text-lg text-slate-900">أضف رداً للمناقشة</h3>
               </div>
               <form onSubmit={handleAddReply} className="p-5 sm:p-6 space-y-5">
-                <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} />
+                <div className="max-w-full w-full overflow-hidden">
+                  <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} />
+                </div>
                 <div className="flex justify-end">
                   <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
                     {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} نشر الرد
@@ -498,14 +506,14 @@ export default function TopicDetailsPage() {
               </form>
             </div>
           ) : (
-            <div className="bg-slate-100 rounded-3xl border border-slate-200 p-10 text-center flex flex-col items-center justify-center">
+            <div className="bg-slate-100 rounded-3xl border border-slate-200 p-10 text-center flex flex-col items-center justify-center w-full">
               <Lock className="w-12 h-12 text-slate-300 mb-4" />
               <h3 className="text-xl font-black text-slate-700 mb-2">هذا القسم للقراءة فقط</h3>
               <p className="text-sm font-bold text-slate-500">لا يُسمح بإضافة ردود في هذا القسم.</p>
             </div>
           )
         ) : (
-          <div className="bg-slate-50 rounded-3xl border border-slate-200 p-10 text-center flex flex-col items-center justify-center">
+          <div className="bg-slate-50 rounded-3xl border border-slate-200 p-10 text-center flex flex-col items-center justify-center w-full">
             <Lock className="w-12 h-12 text-slate-300 mb-4" />
             <h3 className="text-xl font-black text-slate-700 mb-2">هذا الموضوع مغلق</h3>
             <p className="text-sm font-bold text-slate-500">تم إغلاق النقاش في هذا الموضوع من قِبل الإدارة.</p>
