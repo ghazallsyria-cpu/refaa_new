@@ -1,21 +1,27 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
-import { useTopics } from '@/hooks/useTopics';
-import { useForums } from '@/hooks/useForums'; // 🚀 استيراد هوك المنتديات لإنشاء القسم الفرعي
-import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
-import ForumEditor from '@/components/ForumEditor';
 import { 
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
   Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen, Layers, Hash,
-  Target, ShieldAlert, Image as ImageIcon, Save // 🚀 استيرادات أيقونات نافذة القسم الفرعي
+  Target, ShieldAlert, Image as ImageIcon, Save, Edit2, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+
+
+
+
+import { useParams, useRouter } from 'next/navigation';
+ import { useAuth } from '@/context/auth-context';
+ import { useTopics } from '@/hooks/useTopics';
+ import { useForums } from '@/hooks/useForums';
+import { supabase } from '@/lib/supabase';
+ import { deleteFromCloudinary } from '@/lib/cloudinary';
+ import Link from 'next/link';
+ import ForumEditor from '@/components/ForumEditor';
+
 
 export default function CategoryPage() {
   const params = useParams();
@@ -28,7 +34,7 @@ export default function CategoryPage() {
   const canUploadImage = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management';
 
   const { topics, categoryInfo, loading, fetchTopicsAndCategory, createTopic } = useTopics(categoryId);
-  const { createCategory, schoolClasses } = useForums(); // 🚀 استخدام دوال إنشاء القسم والصفوف
+  const { createCategory, updateCategory, schoolClasses } = useForums(); 
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,9 +42,9 @@ export default function CategoryPage() {
   const [newContent, setNewContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // 🚀 حالات حفظ وإنشاء الأقسام الفرعية
   const [subcategories, setSubcategories] = useState<any[]>([]);
   const [isSubCatModalOpen, setIsSubCatModalOpen] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [newSubCatName, setNewSubCatName] = useState('');
   const [newSubCatDesc, setNewSubCatDesc] = useState('');
   const [subTargetClasses, setSubTargetClasses] = useState<string[]>([]);
@@ -103,12 +109,32 @@ export default function CategoryPage() {
       setNewTitle('');
       setNewContent('');
     } else {
-      alert(`خطأ في النشر: ${result.error}`);
+      alert(`خطأ في النشر: ${result?.error || 'حدث خطأ'}`);
     }
     setIsSubmitting(false);
   };
 
-  // 🚀 دوال إنشاء القسم الفرعي الجديد
+  const openEditCategoryModal = (cat: any) => {
+    setEditingCatId(cat.id);
+    setNewSubCatName(cat.name);
+    setNewSubCatDesc(cat.description || '');
+    setSubTargetClasses(cat.target_classes || []);
+    setSubCoverUrl(cat.icon || '');
+    setSubPostPerm(cat.post_permission || 'all');
+    setSubReplyPerm(cat.reply_permission || 'all');
+    setIsSubCatModalOpen(true);
+  };
+
+  const resetSubCatForm = () => {
+    setEditingCatId(null);
+    setNewSubCatName(''); 
+    setNewSubCatDesc(''); 
+    setSubTargetClasses([]); 
+    setSubCoverUrl('');
+    setSubPostPerm('all');
+    setSubReplyPerm('all');
+  };
+
   const toggleSubClass = (classId: string) => {
     if (subTargetClasses.includes(classId)) setSubTargetClasses(subTargetClasses.filter(id => id !== classId));
     else setSubTargetClasses([...subTargetClasses, classId]);
@@ -121,7 +147,9 @@ export default function CategoryPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      // @ts-ignore
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+      // @ts-ignore
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       if (data.secure_url) setSubCoverUrl(data.secure_url);
@@ -137,27 +165,46 @@ export default function CategoryPage() {
     const payload = {
       name: newSubCatName,
       description: newSubCatDesc,
-      parent_id: categoryId, // 🚀 تحديد القسم الحالي كقسم أب للقسم الجديد
       target_classes: subTargetClasses.length === 0 ? null : subTargetClasses,
       icon: subCoverUrl || null,
       post_permission: subPostPerm as any, 
       reply_permission: subReplyPerm as any 
     };
 
-    const result = await createCategory(payload);
+    let result;
+    if (editingCatId) {
+      result = await updateCategory(editingCatId, payload); 
+    } else {
+      result = await createCategory({ ...payload, parent_id: categoryId });
+    }
+
     if (result.success) {
       setIsSubCatModalOpen(false); 
-      setNewSubCatName(''); 
-      setNewSubCatDesc(''); 
-      setSubTargetClasses([]); 
-      setSubCoverUrl('');
-      setSubPostPerm('all');
-      setSubReplyPerm('all');
-      fetchSubcategories(); // 🚀 تحديث قائمة الأقسام الفرعية فوراً
+      resetSubCatForm();
+      
+      if (editingCatId === categoryId) {
+         fetchTopicsAndCategory(); 
+      }
+      fetchSubcategories(); 
     } else {
-      alert(`خطأ في إنشاء القسم: ${result.error}`);
+      alert(`خطأ: ${result?.error || 'حدث خطأ'}`);
     }
     setIsSubSubmitting(false);
+  };
+
+  const handleDeleteCategory = async (catId: string, catIcon: string | null) => {
+      if (!confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع المواضيع والردود بداخله. هذا الإجراء لا يمكن التراجع عنه.')) return;
+      try {
+          if (catIcon) await deleteFromCloudinary(catIcon);
+          await supabase.from('forum_categories').delete().eq('id', catId);
+          if (catId === categoryId) {
+              router.push('/forums');
+          } else {
+              fetchSubcategories();
+          }
+      } catch(e) {
+          alert("خطأ في الحذف");
+      }
   };
 
   const filteredTopics = topics.filter((t: any) => 
@@ -197,14 +244,22 @@ export default function CategoryPage() {
           </div>
           
           <div className="flex items-center gap-2">
-            {/* 🚀 زر إضافة القسم الفرعي (للمدير فقط) */}
             {isAdmin && (
-              <button 
-                onClick={() => setIsSubCatModalOpen(true)}
-                className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 whitespace-nowrap"
-              >
-                <Layers className="w-4 h-4" /> <span className="hidden sm:inline">قسم فرعي</span>
-              </button>
+              <>
+                <button 
+                  onClick={() => openEditCategoryModal({ ...categoryInfo, id: categoryId, target_classes: (categoryInfo as any)?.target_classes, icon: (categoryInfo as any)?.icon })}
+                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-black text-sm transition-all shadow-sm active:scale-95 whitespace-nowrap"
+                  title="تعديل هذا القسم"
+                >
+                  <Edit2 className="w-4 h-4" /> <span className="hidden sm:inline">إعدادات القسم</span>
+                </button>
+                <button 
+                  onClick={() => { resetSubCatForm(); setIsSubCatModalOpen(true); }}
+                  className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 whitespace-nowrap"
+                >
+                  <Layers className="w-4 h-4" /> <span className="hidden sm:inline">قسم فرعي</span>
+                </button>
+              </>
             )}
             
             {canPost && (
@@ -228,32 +283,44 @@ export default function CategoryPage() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {subcategories.map(subCat => (
-                <Link key={subCat.id} href={`/forums/${subCat.id}`} className="block h-full">
-                  <motion.div whileHover={{ y: -4 }} className="bg-white rounded-2xl shadow-sm hover:shadow-md border border-slate-200 transition-all p-4 flex items-start gap-4 h-full">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 border border-indigo-100 overflow-hidden">
-                       {subCat.icon ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={subCat.icon} alt={subCat.name} className="w-full h-full object-contain p-1 bg-white" />
-                       ) : (
-                          <Hash className="w-6 h-6" />
-                       )}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1 text-sm">{subCat.name}</h3>
-                      <p className="text-[11px] font-bold text-slate-500 mt-1 line-clamp-2">{subCat.description || 'قسم فرعي'}</p>
-                      <div className="flex gap-2 mt-3">
-                         <span className="text-[10px] font-black bg-slate-50 border border-slate-100 text-slate-500 px-2 py-1 rounded-lg flex items-center gap-1">
-                           <MessageSquare className="w-3 h-3" /> {subCat.topics_count || 0}
-                         </span>
-                         {subCat.reply_permission === 'none' && (
-                            <span className="text-[10px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-lg flex items-center gap-1">
-                              <Lock className="w-3 h-3" /> للقراءة
-                            </span>
+                <div key={subCat.id} className="relative group h-full">
+                  {isAdmin && (
+                      <div className="absolute top-2 left-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditCategoryModal(subCat); }} className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-100 shadow-sm border border-indigo-100" title="تعديل القسم الفرعي">
+                              <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteCategory(subCat.id, subCat.icon); }} className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 shadow-sm border border-rose-100" title="حذف القسم الفرعي">
+                              <Trash2 className="w-4 h-4" />
+                          </button>
+                      </div>
+                  )}
+                  <Link href={`/forums/${subCat.id}`} className="block h-full">
+                    <motion.div whileHover={{ y: -4 }} className="bg-white rounded-2xl shadow-sm hover:shadow-md border border-slate-200 transition-all p-4 flex items-start gap-4 h-full relative overflow-hidden">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 border border-indigo-100 overflow-hidden">
+                         {subCat.icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={subCat.icon} alt={subCat.name} className="w-full h-full object-contain p-1 bg-white" />
+                         ) : (
+                            <Hash className="w-6 h-6" />
                          )}
                       </div>
-                    </div>
-                  </motion.div>
-                </Link>
+                      <div className="flex-1">
+                        <h3 className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1 text-sm">{subCat.name}</h3>
+                        <p className="text-[11px] font-bold text-slate-500 mt-1 line-clamp-2">{subCat.description || 'قسم فرعي'}</p>
+                        <div className="flex gap-2 mt-3">
+                           <span className="text-[10px] font-black bg-slate-50 border border-slate-100 text-slate-500 px-2 py-1 rounded-lg flex items-center gap-1">
+                             <MessageSquare className="w-3 h-3" /> {subCat.topics_count || 0}
+                           </span>
+                           {subCat.reply_permission === 'none' && (
+                              <span className="text-[10px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-lg flex items-center gap-1">
+                                <Lock className="w-3 h-3" /> للقراءة
+                              </span>
+                           )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </Link>
+                </div>
               ))}
             </div>
           </div>
@@ -419,15 +486,17 @@ export default function CategoryPage() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 نافذة إضافة قسم فرعي جديد (خاصة بالمدير) */}
+      {/* 🚀 نافذة إضافة قسم فرعي جديد وتعديل الإعدادات للقسم (خاصة بالمدير) */}
       <AnimatePresence>
         {isSubCatModalOpen && isAdmin && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl border border-slate-100 my-auto">
               <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between">
                 <div>
-                    <h2 className="text-xl font-black text-slate-900">إضافة قسم فرعي جديد</h2>
-                    <p className="text-xs font-bold text-slate-500 mt-1">هذا القسم سيتبع مباشرة لـ: <span className="text-indigo-600 font-black">{categoryInfo?.name}</span></p>
+                    <h2 className="text-xl font-black text-slate-900">{editingCatId ? 'تعديل بيانات القسم' : 'إضافة قسم فرعي جديد'}</h2>
+                    <p className="text-xs font-bold text-slate-500 mt-1">
+                        {editingCatId ? 'قم بتحديث الإعدادات والصلاحيات.' : <>هذا القسم سيتبع مباشرة لـ: <span className="text-indigo-600 font-black">{categoryInfo?.name}</span></>}
+                    </p>
                 </div>
                 <button onClick={() => setIsSubCatModalOpen(false)} className="text-slate-400 hover:text-rose-500"><XCircle className="w-6 h-6" /></button>
               </div>
@@ -462,7 +531,7 @@ export default function CategoryPage() {
                   <label className="flex items-center gap-2 text-xs font-black text-indigo-700 mb-3"><Target className="w-4 h-4" /> الفئة المستهدفة</label>
                   <button type="button" onClick={() => setSubTargetClasses([])} className={`w-full py-2 mb-2 rounded-xl text-sm font-black border-2 ${subTargetClasses.length === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-500' : 'bg-white'}`}>🌍 عام للجميع</button>
                   <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                    {schoolClasses.map(cls => (
+                    {schoolClasses.map((cls: any) => (
                       <button key={cls.id} type="button" onClick={() => toggleSubClass(cls.id)} className={`py-2 rounded-xl text-xs font-black border-2 ${subTargetClasses.includes(cls.id) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white'}`}>{cls.name}</button>
                     ))}
                   </div>
@@ -492,12 +561,12 @@ export default function CategoryPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">وصف القسم الفرعي</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">وصف القسم {editingCatId ? '' : 'الفرعي'}</label>
                   <textarea rows={2} value={newSubCatDesc} onChange={e => setNewSubCatDesc(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none resize-none" />
                 </div>
                 
                 <div className="flex gap-3 pt-2">
-                  <button type="submit" disabled={isSubSubmitting} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-black text-sm flex justify-center gap-2">{isSubSubmitting ? <Loader2 className="animate-spin" /> : <Save />} إنشاء القسم الفرعي</button>
+                  <button type="submit" disabled={isSubSubmitting} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-black text-sm flex justify-center gap-2">{isSubSubmitting ? <Loader2 className="animate-spin" /> : <Save />} {editingCatId ? 'حفظ التعديلات' : 'إنشاء القسم الفرعي'}</button>
                   <button type="button" onClick={() => setIsSubCatModalOpen(false)} className="px-6 py-3.5 rounded-xl font-black text-sm bg-slate-100">إلغاء</button>
                 </div>
               </form>
