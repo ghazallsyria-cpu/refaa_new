@@ -14,11 +14,13 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 
 // --- ✅ أزل التعليق (//) عن هذه الاستيرادات في مشروعك الفعلي ✅ ---
-import { useParams, useRouter } from 'next/navigation';
+ import { useParams, useRouter } from 'next/navigation';
  import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
- import ForumEditor from '@/components/ import { deleteFromCloudinary } from '@/lib// -------------------------------------------------------------------------------------
+ import { supabase } from '@/lib/supabase';
+ import Link from 'next/link';
+ import ForumEditor from '@/components/ForumEditor';
+ import { deleteFromCloudinary } from '@/lib/cloudinary';
+// -------------------------------------------------------------------------------------
 
 const extractUrlsFromHtml = (htmlStrings: string[]) => {
   const urls: string[] = [];
