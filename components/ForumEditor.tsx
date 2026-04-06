@@ -1,167 +1,231 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
-  Bold, Italic, Underline, Image as ImageIcon, 
-  Loader2, AlignRight, AlignCenter, AlignLeft, Type, Palette,
-  Strikethrough, Heading1, Heading2, List, ListOrdered
+  Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, 
+  List, ListOrdered, RemoveFormatting, Loader2, Table, 
+  Heading1, Heading2, Heading3
 } from 'lucide-react';
 
 interface ForumEditorProps {
   content: string;
-  setContent: (val: string) => void;
+  setContent: (content: string) => void;
   canUploadImage: boolean;
+  placeholder?: string;
 }
 
-export default function ForumEditor({ content, setContent, canUploadImage }: ForumEditorProps) {
+export default function ForumEditor({ content, setContent, canUploadImage, placeholder = "اكتب محتوى موضوعك هنا..." }: ForumEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  
+  // 🚀 حالة لتحديث الأزرار النشطة (مثال: زر Bold يكون مفعلاً إذا كان النص المحدد عريضاً)
+  const [activeFormats, setActiveFormats] = useState<string[]>([]);
 
+  // 🚀 مزامنة المحتوى الأولي فقط عند التحميل أو عند مسح الحقل خارجياً
   useEffect(() => {
-    setIsMounted(true);
-    // إذا كان هناك محتوى مسبق (عند التعديل مثلاً)، ضعه في المحرر
-    if (editorRef.current && content !== editorRef.current.innerHTML) {
-        editorRef.current.innerHTML = content;
+    if (editorRef.current && content === '') {
+      editorRef.current.innerHTML = '';
+    } else if (editorRef.current && editorRef.current.innerHTML !== content && content) {
+       // تجنب التحديث المستمر أثناء الكتابة
+       if (!document.activeElement || document.activeElement !== editorRef.current) {
+          editorRef.current.innerHTML = content;
+       }
     }
   }, [content]);
-
-  const execCommand = (command: string, value: string | undefined = undefined) => {
-    if (!editorRef.current) return;
-    editorRef.current.focus();
-    document.execCommand(command, false, value);
-    setContent(editorRef.current.innerHTML);
-  };
 
   const handleInput = () => {
     if (editorRef.current) {
       setContent(editorRef.current.innerHTML);
+      checkActiveFormats();
     }
   };
 
+  const execCommand = (command: string, value: string | undefined = undefined) => {
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      setContent(editorRef.current.innerHTML);
+      checkActiveFormats();
+    }
+  };
+
+  const checkActiveFormats = () => {
+    const formats = ['bold', 'italic', 'underline', 'insertUnorderedList', 'insertOrderedList'];
+    const active = formats.filter(format => document.queryCommandState(format));
+    setActiveFormats(active);
+  };
+
+  // 🚀 دالة إضافة رابط
+  const addLink = () => {
+    if (linkUrl) {
+      execCommand('createLink', linkUrl);
+      setLinkUrl('');
+      setShowLinkInput(false);
+    }
+  };
+
+  // 🚀 دالة إضافة جدول
+  const insertTable = () => {
+    const tableHTML = `
+      <table style="width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px;">
+        <tbody>
+          <tr>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">خلية 1</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">خلية 2</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">خلية 3</td>
+            <td style="border: 1px solid #cbd5e1; padding: 8px;">خلية 4</td>
+          </tr>
+        </tbody>
+      </table><br/>
+    `;
+    execCommand('insertHTML', tableHTML);
+  };
+
+  // 🚀 دالة رفع الصورة وإدراجها مباشرة داخل النص
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !canUploadImage) return;
+    if (!file) return;
 
     setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
-
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      if (!cloudName) throw new Error("Cloudinary Cloud Name is missing");
-
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
         method: 'POST',
-        body: formData,
+        body: formData
       });
-
+      
       const data = await res.json();
       
       if (data.secure_url) {
-        editorRef.current?.focus();
-        // إدراج الصورة مع تنسيق أنيق ومسافة تحتها
-        const imgHtml = `<img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; border-radius: 12px; margin: 16px auto; display: block; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" /><br/>`;
-        document.execCommand('insertHTML', false, imgHtml);
-        setContent(editorRef.current?.innerHTML || '');
+        // إدراج الصورة كـ HTML داخل المحرر
+        const imgHTML = `<img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;" /><br/>`;
+        execCommand('insertHTML', imgHTML);
       }
     } catch (error) {
-      console.error('Error uploading image:', error);
-      alert('حدث خطأ أثناء رفع الصورة. تأكد من إعدادات Cloudinary.');
+      alert('حدث خطأ أثناء رفع الصورة.');
     } finally {
       setIsUploading(false);
-      if (e.target) e.target.value = ''; // إعادة تعيين الحقل
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  if (!isMounted) return null; // منع أخطاء Hydration
+  // 🚀 مكون زر شريط الأدوات
+  const ToolbarButton = ({ icon: Icon, onClick, isActive, title }: any) => (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); onClick(); }}
+      className={`p-2 rounded-lg transition-colors border ${
+        isActive 
+          ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-inner' 
+          : 'bg-white text-slate-600 hover:bg-slate-100 border-transparent hover:border-slate-200'
+      }`}
+      title={title}
+    >
+      <Icon className="w-4 h-4" />
+    </button>
+  );
 
   return (
-    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm focus-within:ring-2 focus-within:ring-indigo-500 transition-all flex flex-col relative">
+    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-all">
       
-      {/* 🚀 شريط الأدوات الاحترافي (Toolbar) */}
-      <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sm:gap-2">
-        {/* التنسيقات الأساسية */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-            <button type="button" onClick={() => execCommand('bold')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="عريض"><Bold className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('italic')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="مائل"><Italic className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('underline')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="تسطير"><Underline className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('strikeThrough')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="يتوسطه خط"><Strikethrough className="w-4 h-4" /></button>
-        </div>
+      {/* 🚀 شريط الأدوات العلوي */}
+      <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap items-center gap-1.5 sticky top-0 z-10">
         
-        {/* المحاذاة */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-            <button type="button" onClick={() => execCommand('justifyRight')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="محاذاة لليمين"><AlignRight className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('justifyCenter')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="محاذاة للوسط"><AlignCenter className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('justifyLeft')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="محاذاة لليسار"><AlignLeft className="w-4 h-4" /></button>
+        {/* تنسيق النص الأساسي */}
+        <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} isActive={activeFormats.includes('bold')} title="عريض" />
+          <ToolbarButton icon={Italic} onClick={() => execCommand('italic')} isActive={activeFormats.includes('italic')} title="مائل" />
+          <ToolbarButton icon={Underline} onClick={() => execCommand('underline')} isActive={activeFormats.includes('underline')} title="تسطير" />
         </div>
 
-        {/* القوائم */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-            <button type="button" onClick={() => execCommand('insertUnorderedList')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="قائمة نقطية"><List className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('insertOrderedList')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="قائمة رقمية"><ListOrdered className="w-4 h-4" /></button>
+        {/* أحجام الخطوط (العناوين) */}
+        <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={Heading1} onClick={() => execCommand('formatBlock', 'H3')} title="عنوان كبير" />
+          <ToolbarButton icon={Heading2} onClick={() => execCommand('formatBlock', 'H4')} title="عنوان متوسط" />
+          <ToolbarButton icon={Heading3} onClick={() => execCommand('formatBlock', 'H5')} title="عنوان صغير" />
         </div>
 
-        {/* العناوين والألوان */}
-        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
-            <button type="button" onClick={() => execCommand('formatBlock', 'H2')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="عنوان كبير"><Heading1 className="w-4 h-4" /></button>
-            <button type="button" onClick={() => execCommand('formatBlock', 'H3')} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors" title="عنوان متوسط"><Heading2 className="w-4 h-4" /></button>
-            
-            <div className="w-px h-4 bg-slate-200 mx-1"></div>
-
-            <label className="p-1.5 hover:bg-slate-100 rounded-md text-slate-700 transition-colors cursor-pointer relative" title="لون النص">
-            <Palette className="w-4 h-4" />
-            <input type="color" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onChange={(e) => execCommand('foreColor', e.target.value)} />
-            </label>
+        {/* القوائم والجداول */}
+        <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={List} onClick={() => execCommand('insertUnorderedList')} isActive={activeFormats.includes('insertUnorderedList')} title="قائمة نقطية" />
+          <ToolbarButton icon={ListOrdered} onClick={() => execCommand('insertOrderedList')} isActive={activeFormats.includes('insertOrderedList')} title="قائمة رقمية" />
+          <ToolbarButton icon={Table} onClick={insertTable} title="إدراج جدول" />
         </div>
 
-        {/* 🚀 رفع الصور (للمعلمين/المدراء فقط) */}
+        {/* الروابط وإزالة التنسيق */}
+        <div className="flex items-center gap-1 border-l border-slate-300 pl-2 ml-1 relative">
+          <ToolbarButton icon={LinkIcon} onClick={() => setShowLinkInput(!showLinkInput)} isActive={showLinkInput} title="إضافة رابط" />
+          <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
+          
+          {showLinkInput && (
+             <div className="absolute top-full mt-2 left-0 bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex gap-2 z-50 w-64">
+                <input 
+                  type="url" 
+                  placeholder="https://..." 
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-400"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                />
+                <button type="button" onClick={addLink} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-indigo-700">إضافة</button>
+             </div>
+          )}
+        </div>
+
+        {/* 🚀 رفع الصور مباشرة داخل النص */}
         {canUploadImage && (
           <div className="mr-auto">
-            <label className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-2 font-bold text-xs shadow-sm border ${isUploading ? 'bg-indigo-50 border-indigo-200 text-indigo-400' : 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700'}`} title="إرفاق صورة للموضوع">
-              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-              {isUploading ? 'جاري الرفع...' : 'إدراج صورة'}
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
-            </label>
+             <input 
+               type="file" 
+               accept="image/*" 
+               className="hidden" 
+               ref={fileInputRef}
+               onChange={handleImageUpload}
+             />
+             <button
+               type="button"
+               disabled={isUploading}
+               onClick={() => fileInputRef.current?.click()}
+               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-xs border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+               title="إدراج صورة داخل النص"
+             >
+               {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+               {isUploading ? 'جاري الرفع...' : 'إدراج صورة'}
+             </button>
           </div>
         )}
       </div>
 
-      {/* 🚀 مساحة التحرير (Editor Canvas) */}
-      <div className="relative flex-1">
-        {/* طبقة شفافة تظهر عند رفع الصورة لمنع الكتابة */}
-        {isUploading && (
-          <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-[1px] flex flex-col items-center justify-center">
-            <div className="bg-white px-4 py-2 rounded-xl shadow-lg border border-indigo-100 flex items-center gap-3 text-indigo-600 font-bold text-sm">
-               <Loader2 className="w-5 h-5 animate-spin" /> يتم الآن رفع وتشفير الصورة...
-            </div>
-          </div>
-        )}
+      {/* 🚀 مساحة الكتابة التفاعلية */}
+      <div 
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        onKeyUp={checkActiveFormats}
+        onMouseUp={checkActiveFormats}
+        className="w-full min-h-[250px] max-h-[500px] overflow-y-auto p-5 outline-none prose prose-slate max-w-none text-slate-800 leading-relaxed"
+        data-placeholder={placeholder}
+        dir="auto"
+        style={{ WebkitUserModify: 'read-write-plaintext-only' }}
+      />
 
-        <style dangerouslySetInnerHTML={{ __html: `
-            .custom-editor-prose:empty:before {
-            content: 'اكتب تفاصيل موضوعك هنا... يمكنك تنسيق النص، التلوين، وإضافة الصور.';
-            color: #94a3b8;
-            pointer-events: none;
-            display: block;
-            }
-            .custom-editor-prose h2 { font-size: 1.5rem; font-weight: 900; margin-bottom: 0.5rem; color: #1e293b; }
-            .custom-editor-prose h3 { font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem; color: #334155; }
-            .custom-editor-prose ul { list-style-type: disc; margin-right: 1.5rem; margin-bottom: 1rem; }
-            .custom-editor-prose ol { list-style-type: decimal; margin-right: 1.5rem; margin-bottom: 1rem; }
-            .custom-editor-prose p { margin-bottom: 0.75rem; }
-        `}} />
-        
-        <div 
-            ref={editorRef}
-            contentEditable
-            onInput={handleInput}
-            onBlur={handleInput}
-            className="w-full p-5 min-h-[250px] max-h-[500px] overflow-y-auto outline-none text-base font-medium text-slate-800 leading-relaxed custom-editor-prose"
-            dir="auto"
-        />
-      </div>
+      <style dangerouslySetContents={{__html: `
+        [contenteditable]:empty:before {
+          content: attr(data-placeholder);
+          color: #94a3b8;
+          pointer-events: none;
+          display: block;
+        }
+        .prose table { width: 100%; border-collapse: collapse; margin-top: 1em; margin-bottom: 1em; }
+        .prose td, .prose th { border: 1px solid #cbd5e1; padding: 0.5rem; }
+      `}} />
     </div>
   );
 }
