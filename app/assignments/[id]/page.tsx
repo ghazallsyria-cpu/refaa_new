@@ -7,20 +7,16 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 
-
- import Link from 'next/link';
- import { useRouter, useParams } from 'next/navigation';
- import * as Dialog from '@radix-ui/react-dialog';
- import AssignmentForm from '@/components/assignment-form';
- import ImageUpload from '@/components/ImageUpload';
- import * as XLSX from 'xlsx';
- import { deleteFromCloudinary } from '@/lib/cloudinary';
- import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
- import { useAuth } from '@/context/auth-context';
- import { supabase } from '@/lib/supabase';
-
-
-
+import Link from 'next/link';
+import { useRouter, useParams } from 'next/navigation';
+import * as Dialog from '@radix-ui/react-dialog';
+import AssignmentForm from '@/components/assignment-form';
+import ImageUpload from '@/components/ImageUpload';
+import * as XLSX from 'xlsx';
+import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
+import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase';
 
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -215,10 +211,49 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    
+    // 🚀 الكاش السريع: جلب البيانات من الذاكرة لعدم تأخير فتح الصفحة
+    const cacheKey = `assign_cache_${assignmentId}_${user.id}_${currentRole}`;
+    const cachedData = sessionStorage.getItem(cacheKey);
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (currentRole === 'student') setStudentId(user.id);
+        setAssignment(parsed.assignment);
+        setEditData(parsed.assignment);
+        if (parsed.questions) setQuestions(parsed.questions);
+
+        if (currentRole === 'student' && parsed.submission) {
+           setMySubmission(parsed.submission);
+           setContent(parsed.submission.content || '');
+           setFileUrl(parsed.submission.file_url || '');
+           if (parsed.answers) {
+             const answersMap: Record<string, any> = {};
+             const fullMap: Record<string, any> = {};
+             parsed.answers.forEach((a: any) => {
+               answersMap[a.question_id] = a.selected_options || a.answer_text;
+               fullMap[a.question_id] = a;
+             });
+             setMyAnswers(answersMap);
+             setFullAnswersMap(fullMap);
+           }
+        } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+           setSubmissions(parsed.allSubmissions || []);
+        }
+        setLoading(false); // إظهار الشاشة فوراً دون انتظار!
+      } catch (e) {}
+    } else {
+      setLoading(true); // نظهر التحميل فقط إذا كانت هذه أول مرة نفتح فيها الواجب
+    }
+
     try {
       if (currentRole === 'student') setStudentId(user.id);
       const details = await fetchAssignmentDetails(assignmentId);
+      
+      // 🚀 حفظ البيانات في الكاش للمرة القادمة
+      sessionStorage.setItem(cacheKey, JSON.stringify(details));
+
       setAssignment(details.assignment);
       setEditData(details.assignment);
       if (details.questions) setQuestions(details.questions);
@@ -240,6 +275,18 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             setMyAnswers(answersMap);
             setFullAnswersMap(fullMap);
           }
+        } else {
+          // 🚀 استرجاع المسودة (الحفظ التلقائي) إذا لم يقم الطالب بالتسليم بعد
+          const draftKey = `draft_assign_${assignmentId}_${user.id}`;
+          const draft = localStorage.getItem(draftKey);
+          if (draft) {
+             try {
+               const parsedDraft = JSON.parse(draft);
+               if (parsedDraft.answers) setMyAnswers(parsedDraft.answers);
+               if (parsedDraft.content) setContent(parsedDraft.content);
+               if (parsedDraft.fileUrl) setFileUrl(parsedDraft.fileUrl);
+             } catch(e) {}
+          }
         }
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         setSubmissions(details.allSubmissions);
@@ -254,6 +301,19 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // 🚀 حفظ تلقائي (Auto-Save) في المتصفح عند تغيير أي إجابة للطالب
+  useEffect(() => {
+    if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
+      const draftData = { answers: myAnswers, content, fileUrl };
+      const hasData = Object.keys(myAnswers).length > 0 || content || fileUrl;
+      const draftKey = `draft_assign_${assignmentId}_${user.id}`;
+      
+      if (hasData) {
+        localStorage.setItem(draftKey, JSON.stringify(draftData));
+      }
+    }
+  }, [myAnswers, content, fileUrl, currentRole, mySubmission, assignmentId, user?.id]);
 
   const handleSubmitAnswers = async (answers: Record<string, string | string[] | null>) => {
     setIsSubmitting(true);
@@ -279,6 +339,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       });
 
       await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
+      
+      // 🚀 مسح المسودة و الكاش بعد التسليم لكي تظهر النتيجة كـ "مُسلمة"
+      localStorage.removeItem(`draft_assign_${assignmentId}_${user?.id}`);
+      sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
+
       showNotification('success', 'تم تسليم الواجب بنجاح!');
       await fetchData();
     } catch (error: any) {
@@ -294,7 +359,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     try {
       const payload = { title: editData.title!, description: editData.description || null, due_date: new Date(editData.due_date!).toISOString() };
       
-      // 🚀 الحل الجذري: التحديث المباشر للواجب دون المساس بالأسئلة لتجنب حذف إجابات الطلاب
       const { error } = await supabase
         .from('assignments')
         .update(payload)
@@ -302,6 +366,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       if (error) throw error;
       
+      // مسح الكاش لكي تظهر التعديلات الجديدة
+      sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
+
       showNotification('success', 'تم تمديد/تحديث الواجب بنجاح');
       setIsEditModalOpen(false);
       await fetchData();
@@ -316,6 +383,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     try {
       if (assignment?.file_url) await deleteFromCloudinary(assignment.file_url);
       await deleteAssignment(assignmentId);
+      sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
       router.push('/assignments');
     } catch (error: any) {
       showNotification('error', 'خطأ في الحذف: ' + error.message);
@@ -327,6 +395,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setIsDeletingSubmission(true);
     try {
       await deleteSubmission(submissionToDelete);
+      
+      // مسح الكاش بعد الحذف
+      sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
+
       showNotification('success', 'تم حذف تسليم الطالب بنجاح');
       setSubmissionToDelete(null);
       await fetchData();
