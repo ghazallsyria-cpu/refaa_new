@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
   MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
-  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal, BookOpen
+  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal, BookOpen, Users
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -83,36 +83,33 @@ export default function TopicDetailsPage() {
       const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
-      // 🚀 جلب تخصص المعلم كاتب الموضوع بناءً على هيكل الجداول الدقيق
-      let authorSubject = '';
+      // 🚀 جلب تفاصيل كاتب الموضوع (المادة للمعلم، والفصل للطالب)
+      let authorRoleDetail = '';
       if (authorData?.role === 'teacher') {
          try {
-            // محاولة جلب المادة من جدول الربط
-            const { data: tsData } = await supabase
-               .from('teacher_subjects')
-               .select('subjects(name)')
-               .eq('teacher_id', topicData.author_id)
-               .limit(1);
-
-            if (tsData && tsData.length > 0 && (tsData[0] as any).subjects) {
-               authorSubject = (tsData[0] as any).subjects.name || '';
-            } else {
-               // إذا لم يتم العثور على مادة في جدول الربط، نبحث في عمود specialization كخطة بديلة
+            const { data: tsData } = await supabase.from('teacher_subjects').select('subjects(name)').eq('teacher_id', topicData.author_id).limit(1);
+            if (tsData && tsData.length > 0 && (tsData[0] as any).subjects) authorRoleDetail = (tsData[0] as any).subjects.name || '';
+            else {
                const { data: tData } = await supabase.from('teachers').select('specialization').eq('id', topicData.author_id).single();
-               if (tData && tData.specialization) authorSubject = tData.specialization;
+               if (tData && tData.specialization) authorRoleDetail = tData.specialization;
             }
-         } catch (e) {
-            console.log("Could not fetch teacher subject for author");
-         }
+         } catch (e) { console.log("Error fetching teacher subject"); }
+      } else if (authorData?.role === 'student') {
+         try {
+            const { data: stData } = await supabase.from('students').select('sections(name, classes(name))').eq('id', topicData.author_id).single();
+            if (stData && stData.sections) {
+               const sec: any = stData.sections;
+               const className = sec.classes?.name || sec.class?.name || '';
+               const secName = sec.name || '';
+               authorRoleDetail = className ? `${className} - ${secName}` : secName;
+            }
+         } catch (e) { console.log("Error fetching student section"); }
       }
 
       // جلب أوسمة كاتب الموضوع
       const { data: authorBadgesRaw } = await supabase
         .from('student_badges')
-        .select(`
-          badge_id,
-          badges ( id, name, image_url )
-        `)
+        .select(`badge_id, badges ( id, name, image_url )`)
         .eq('student_id', topicData.author_id);
       
       const parsedBadges = authorBadgesRaw?.map((b: any) => b.badges).filter(Boolean) || [];
@@ -121,7 +118,7 @@ export default function TopicDetailsPage() {
         ...topicData, 
         author: authorData, 
         author_badge: badgeText, 
-        author_subject: authorSubject,
+        author_role_detail: authorRoleDetail,
         author_earned_badges: parsedBadges 
       });
 
@@ -141,61 +138,58 @@ export default function TopicDetailsPage() {
         const authorIds = [...new Set(repliesData.map((r: any) => r.author_id))];
         const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').in('id', authorIds);
         
-        // 🚀 جلب تخصصات جميع المعلمين المعلقين بناءً على هيكل الجداول الدقيق
-        let teachersSubjectsMap = new Map();
-        const teacherIds = usersData?.filter((u: any) => u.role === 'teacher').map((u: any) => u.id) || [];
+        let userRoleDetailsMap = new Map();
         
+        // 🚀 1. جلب تخصصات المعلمين المعلقين
+        const teacherIds = usersData?.filter((u: any) => u.role === 'teacher').map((u: any) => u.id) || [];
         if (teacherIds.length > 0) {
            try {
-              // جلب من جدول الربط
-              const { data: tsData } = await supabase
-                 .from('teacher_subjects')
-                 .select('teacher_id, subjects(name)')
-                 .in('teacher_id', teacherIds);
+              const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
+              if (tsData) tsData.forEach((ts: any) => { if (ts.subjects?.name && !userRoleDetailsMap.has(ts.teacher_id)) userRoleDetailsMap.set(ts.teacher_id, ts.subjects.name); });
 
-              if (tsData) {
-                 tsData.forEach((ts: any) => {
-                    if (ts.subjects?.name && !teachersSubjectsMap.has(ts.teacher_id)) {
-                       teachersSubjectsMap.set(ts.teacher_id, ts.subjects.name);
+              const missingTeacherIds = teacherIds.filter(id => !userRoleDetailsMap.has(id));
+              if (missingTeacherIds.length > 0) {
+                  const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missingTeacherIds);
+                  tData?.forEach((t: any) => { if (t.specialization) userRoleDetailsMap.set(t.id, t.specialization); });
+              }
+           } catch (e) {}
+        }
+
+        // 🚀 2. جلب صفوف وفصول الطلاب المعلقين
+        const studentIds = usersData?.filter((u: any) => u.role === 'student').map((u: any) => u.id) || [];
+        if (studentIds.length > 0) {
+           try {
+              const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
+              if (stData) {
+                 stData.forEach((st: any) => {
+                    if (st.sections) {
+                       const className = st.sections.classes?.name || st.sections.class?.name || '';
+                       const secName = st.sections.name || '';
+                       const fullSec = className ? `${className} - ${secName}` : secName;
+                       if (fullSec) userRoleDetailsMap.set(st.id, fullSec);
                     }
                  });
               }
-
-              // جلب الخطة البديلة لمن ليس له مادة مسجلة في جدول الربط
-              const missingTeacherIds = teacherIds.filter(id => !teachersSubjectsMap.has(id));
-              if (missingTeacherIds.length > 0) {
-                  const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missingTeacherIds);
-                  tData?.forEach((t: any) => {
-                      if (t.specialization) teachersSubjectsMap.set(t.id, t.specialization);
-                  });
-              }
-           } catch (e) {
-              console.log("Could not fetch teacher subjects for replies");
-           }
+           } catch (e) {}
         }
 
-        // جلب أوسمة جميع المعلقين دفعة واحدة
+        // جلب أوسمة جميع المعلقين
         const { data: allReplyBadgesRaw } = await supabase
           .from('student_badges')
-          .select(`
-            student_id,
-            badge_id,
-            badges ( id, name, image_url )
-          `)
+          .select(`student_id, badge_id, badges ( id, name, image_url )`)
           .in('student_id', authorIds);
 
         formattedReplies = repliesData.map((reply: any) => {
           const author = usersData?.find((u: any) => u.id === reply.author_id);
-          const subjectName = teachersSubjectsMap.get(reply.author_id) || '';
+          const roleDetail = userRoleDetailsMap.get(reply.author_id) || '';
           
-          // استخراج أوسمة هذا المعلق بالذات
           const userBadgeRows = allReplyBadgesRaw?.filter((b: any) => b.student_id === reply.author_id) || [];
           const replyBadges = userBadgeRows.map((b: any) => b.badges).filter(Boolean);
 
           return { 
             ...reply, 
             users: author || { full_name: 'مجهول', role: 'student' }, 
-            subject_name: subjectName,
+            role_detail: roleDetail,
             earned_badges: replyBadges 
           };
         });
@@ -349,7 +343,7 @@ export default function TopicDetailsPage() {
     } catch (error) {}
   };
 
-  const UserProfileColumn = ({ author, badgeText, badges, subjectName, isTopicAuthor = false }: any) => (
+  const UserProfileColumn = ({ author, badgeText, badges, roleDetail, isTopicAuthor = false }: any) => (
     <div className={`w-full md:w-64 shrink-0 flex flex-col items-center p-6 bg-slate-50/50 md:bg-transparent ${isTopicAuthor ? 'md:border-l' : 'md:border-l'} border-slate-100`}>
       <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full p-1 bg-white shadow-sm border-2 ${author?.role !== 'student' ? 'border-amber-400' : 'border-slate-200'} mb-3`}>
         {author?.avatar_url ? (
@@ -363,9 +357,16 @@ export default function TopicDetailsPage() {
         {author?.full_name || 'مستخدم مجهول'}
       </h3>
       
-      {/* 🚀 عرض رتبة المستخدم مع المادة إن وجدت (مثال: معلم - رياضيات) */}
+      {/* 🚀 عرض رتبة المستخدم مع تفاصيل إضافية (مادة للمعلم أو فصل للطالب) */}
       <span className={`mt-2 text-[10px] font-black px-3 py-1 rounded-full border flex items-center gap-1 ${author?.role !== 'student' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-        {badgeText} {subjectName ? <><span className="opacity-50 mx-0.5">•</span> <BookOpen className="w-3 h-3 inline"/> {subjectName}</> : ''}
+        {badgeText} 
+        {roleDetail ? (
+           <>
+             <span className="opacity-50 mx-0.5">•</span> 
+             {author?.role === 'teacher' ? <BookOpen className="w-3 h-3 inline"/> : <Users className="w-3 h-3 inline"/>} 
+             <span className="mr-0.5">{roleDetail}</span>
+           </>
+        ) : ''}
       </span>
       
       {badges && badges.length > 0 && (
@@ -460,7 +461,7 @@ export default function TopicDetailsPage() {
             author={topic.author} 
             badgeText={topic.author_badge} 
             badges={topic.author_earned_badges} 
-            subjectName={topic.author_subject} 
+            roleDetail={topic.author_role_detail} 
             isTopicAuthor={true} 
           />
           
@@ -534,7 +535,7 @@ export default function TopicDetailsPage() {
                      author={reply.users} 
                      badgeText={badgeText} 
                      badges={reply.earned_badges} 
-                     subjectName={reply.subject_name} 
+                     roleDetail={reply.role_detail} 
                   />
                   
                   <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
