@@ -20,7 +20,17 @@ interface OnlineUser {
   role: string;
   metadata: string; 
   joined_at: string;
-  presence_ref?: string; // أضفنا هذه لحل مشكلة TypeScript في Netlify
+  presence_ref?: string; 
+}
+
+// واجهة السجل اليومي
+interface DailyLogin {
+  id: string;
+  user_id: string;
+  full_name: string;
+  role: string;
+  last_seen: string;
+  detail: string; // الفصل أو المادة
 }
 
 export default function LiveMonitorPage() {
@@ -32,15 +42,79 @@ export default function LiveMonitorPage() {
   const [peakUsers, setPeakUsers] = useState(0);
   const [chartData, setChartData] = useState<{ time: string, users: number }[]>([]);
 
-  useEffect(() => {
-    const room = supabase.channel('global_online_users');
+  // 🚀 حالات السجل اليومي
+  const [dailyLogins, setDailyLogins] = useState<DailyLogin[]>([]);
+  const [dailyTab, setDailyTab] = useState<'all' | 'teachers' | 'students'>('all');
 
+  // جلب السجل اليومي (يتجدد كل 24 ساعة بناءً على تاريخ اليوم)
+  const fetchDailyLogins = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: presenceData } = await supabase
+      .from('daily_presence')
+      .select('*')
+      .eq('record_date', today)
+      .order('last_seen', { ascending: false });
+
+    if (presenceData && presenceData.length > 0) {
+       const detailsMap = new Map<string, string>();
+
+       // جلب بيانات الطلاب (الفصول)
+       const studentIds = presenceData.filter(p => p.role === 'student').map(p => p.user_id);
+       if (studentIds.length > 0) {
+          const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
+          stData?.forEach(st => {
+             if (st.sections) {
+                const className = (st.sections as any).classes?.name || (st.sections as any).class?.name || '';
+                const secName = (st.sections as any).name || '';
+                detailsMap.set(st.id, className ? `${className} - ${secName}` : secName);
+             }
+          });
+       }
+
+       // جلب بيانات المعلمين (التخصصات)
+       const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
+       if (teacherIds.length > 0) {
+          const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
+          tsData?.forEach(ts => {
+             if (ts.subjects?.name && !detailsMap.has(ts.teacher_id)) detailsMap.set(ts.teacher_id, ts.subjects.name);
+          });
+          const missing = teacherIds.filter(id => !detailsMap.has(id));
+          if (missing.length > 0) {
+             const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missing);
+             tData?.forEach(t => { if(t.specialization) detailsMap.set(t.id, t.specialization); });
+          }
+       }
+
+       // دمج البيانات
+       const enriched = presenceData.map(p => ({
+          ...p,
+          detail: detailsMap.get(p.user_id) || (p.role === 'teacher' ? 'معلم عام' : p.role === 'student' ? 'بدون فصل' : 'إدارة')
+       }));
+       setDailyLogins(enriched);
+    } else {
+       setDailyLogins([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchDailyLogins();
+
+    const today = new Date().toISOString().split('T')[0];
+    
+    // مراقبة التغييرات الحية في الجدول اليومي
+    const dailyChannel = supabase.channel('daily_presence_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_presence', filter: `record_date=eq.${today}` }, () => {
+        fetchDailyLogins();
+      })
+      .subscribe();
+
+    // البث المباشر الفوري (الرادار)
+    const room = supabase.channel('global_online_users');
     room.on('presence', { event: 'sync' }, () => {
       const newState = room.presenceState();
       const usersArray: OnlineUser[] = [];
       
       for (const id in newState) {
-        // 🚀 الحل لخطأ Netlify هنا: استخدام unknown أولاً
         const user = newState[id][0] as unknown as OnlineUser;
         usersArray.push(user);
       }
@@ -61,6 +135,7 @@ export default function LiveMonitorPage() {
 
     return () => {
       supabase.removeChannel(room);
+      supabase.removeChannel(dailyChannel);
       clearTimeout(timeout);
     };
   }, []);
@@ -93,6 +168,12 @@ export default function LiveMonitorPage() {
     (u.name.includes(searchQuery) || u.metadata?.includes(searchQuery))
   );
 
+  const filteredDailyLogins = dailyLogins.filter(u => 
+    dailyTab === 'all' || 
+    (dailyTab === 'teachers' && u.role === 'teacher') || 
+    (dailyTab === 'students' && u.role === 'student')
+  );
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#020817]">
@@ -108,7 +189,7 @@ export default function LiveMonitorPage() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-24 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
       
-      {/* 🚀 Hero Radar Section */}
+      {/* Hero Radar Section */}
       <div className="relative overflow-hidden rounded-[2.5rem] bg-[#020817] p-8 sm:p-12 text-white shadow-2xl border border-emerald-900/50">
         <div className="absolute top-1/2 left-1/4 w-[800px] h-[800px] -translate-x-1/2 -translate-y-1/2 border border-emerald-500/10 rounded-full pointer-events-none">
           <div className="absolute inset-0 border border-emerald-500/20 rounded-full scale-75"></div>
@@ -139,7 +220,7 @@ export default function LiveMonitorPage() {
         </div>
       </div>
 
-      {/* 🚀 Analytics Grid */}
+      {/* Analytics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { title: 'الذروة الحالية', value: peakUsers, sub: 'أعلى عدد متصل معاً', icon: Clock, color: 'indigo' },
@@ -162,7 +243,7 @@ export default function LiveMonitorPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* 🚀 Real-time Chart */}
+        {/* Real-time Chart */}
         <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 flex flex-col">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><Activity className="w-5 h-5"/></div>
@@ -187,8 +268,8 @@ export default function LiveMonitorPage() {
           </div>
         </div>
 
-        {/* 🚀 Live Feed Column */}
-        <div className="bg-slate-50 rounded-3xl border border-slate-200 overflow-hidden flex flex-col h-[500px] lg:h-auto">
+        {/* Live Feed Column */}
+        <div className="bg-slate-50 rounded-3xl border border-slate-200 overflow-hidden flex flex-col h-[400px] lg:h-auto">
           <div className="p-5 bg-white border-b border-slate-200">
             <h3 className="text-base font-black text-slate-900 flex items-center gap-2 mb-4">
               <MonitorPlay className="w-4 h-4 text-indigo-600" /> البث المباشر
@@ -202,7 +283,7 @@ export default function LiveMonitorPage() {
             </div>
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input type="text" placeholder="ابحث..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full rounded-xl bg-slate-50 border border-slate-200 py-2 pr-9 pl-3 text-xs font-bold outline-none" />
+              <input type="text" placeholder="ابحث عن متصل..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full rounded-xl bg-slate-50 border border-slate-200 py-2 pr-9 pl-3 text-xs font-bold outline-none" />
             </div>
           </div>
 
@@ -233,6 +314,69 @@ export default function LiveMonitorPage() {
         </div>
 
       </div>
+
+      {/* 🚀 Daily Logins Table Section */}
+      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-6 sm:p-8 mt-6">
+         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-4">
+               <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shadow-sm"><UserCheck className="w-7 h-7"/></div>
+               <div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">سجل الدخول اليومي</h3>
+                  <p className="text-sm font-bold text-slate-500 mt-1">يتجدد تلقائياً كل 24 ساعة (عند منتصف الليل)</p>
+               </div>
+            </div>
+            <div className="flex bg-slate-50 p-1.5 rounded-xl border border-slate-100 w-full md:w-auto">
+               {['all', 'teachers', 'students'].map((tab) => (
+                  <button key={tab} onClick={() => setDailyTab(tab as any)} className={`flex-1 md:flex-none px-6 py-2.5 text-xs font-black rounded-lg transition-all ${dailyTab === tab ? 'bg-white text-indigo-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                     {tab === 'all' ? 'الكل' : tab === 'teachers' ? 'المعلمين' : 'الطلاب'} 
+                     <span className="opacity-60 mr-1">
+                        ({tab === 'all' ? dailyLogins.length : dailyLogins.filter(u => u.role === (tab === 'teachers' ? 'teacher' : 'student')).length})
+                     </span>
+                  </button>
+               ))}
+            </div>
+         </div>
+
+         <div className="overflow-x-auto rounded-2xl border border-slate-100 bg-slate-50/30">
+           <table className="w-full text-right border-collapse whitespace-nowrap">
+             <thead>
+               <tr className="bg-slate-50 border-b border-slate-100">
+                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest w-1/3">المستخدم</th>
+                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest w-1/4">التصنيف</th>
+                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest w-1/4">الفصل / التخصص</th>
+                 <th className="p-4 font-black text-slate-500 text-xs uppercase tracking-widest">آخر نشاط اليوم</th>
+               </tr>
+             </thead>
+             <tbody className="divide-y divide-slate-100">
+               {filteredDailyLogins.map(u => (
+                 <tr key={u.id} className="hover:bg-white transition-colors group bg-white/50">
+                   <td className="p-4">
+                     <div className="flex items-center gap-3">
+                       <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-black text-sm shadow-sm ${u.role === 'teacher' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : u.role === 'student' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100'}`}>
+                         {u.full_name.charAt(0)}
+                       </div>
+                       <span className="font-bold text-slate-800">{u.full_name}</span>
+                     </div>
+                   </td>
+                   <td className="p-4">
+                      <span className={`px-3 py-1.5 text-[10px] font-black rounded-full border ${u.role === 'teacher' ? 'bg-blue-50 text-blue-600 border-blue-100' : u.role === 'student' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                         {u.role === 'teacher' ? 'معلم' : u.role === 'student' ? 'طالب' : 'إدارة'}
+                      </span>
+                   </td>
+                   <td className="p-4 font-bold text-slate-600 text-sm">{u.detail}</td>
+                   <td className="p-4 font-bold text-slate-500 text-sm" dir="ltr">
+                      {new Date(u.last_seen).toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'})}
+                   </td>
+                 </tr>
+               ))}
+               {filteredDailyLogins.length === 0 && (
+                 <tr><td colSpan={4} className="p-12 text-center text-slate-400 font-bold text-sm bg-white">لا يوجد سجلات مطابقة اليوم</td></tr>
+               )}
+             </tbody>
+           </table>
+         </div>
+      </div>
+
     </motion.div>
   );
 }
