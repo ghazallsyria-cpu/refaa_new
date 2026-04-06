@@ -79,6 +79,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           metadata: authRole === 'teacher' ? 'قسم المعلمين' : authRole === 'student' ? 'طالب مسجل' : 'الإدارة العليا',
           joined_at: new Date().toISOString(),
         });
+
+        // 🚀 تسجيل التواجد اليومي للمستخدم في قاعدة البيانات
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          await supabase.from('daily_presence').upsert({
+            user_id: user.id,
+            full_name: userName || user.email?.split('@')[0] || 'مستخدم',
+            role: authRole,
+            record_date: today,
+            last_seen: new Date().toISOString()
+          }, { onConflict: 'user_id, record_date' });
+        } catch (error) {
+          console.error("Error updating daily presence:", error);
+        }
       }
     });
 
