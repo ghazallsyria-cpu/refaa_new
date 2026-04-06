@@ -2,19 +2,25 @@
 
 import { useState, useEffect, useCallback, use } from 'react';
 import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import * as Dialog from '@radix-ui/react-dialog';
-import AssignmentForm from '@/components/assignment-form';
-import ImageUpload from '@/components/ImageUpload';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import * as XLSX from 'xlsx';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
-import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
-import { useAuth } from '@/context/auth-context';
 import { RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
+
+
+ import Link from 'next/link';
+ import { useRouter, useParams } from 'next/navigation';
+ import * as Dialog from '@radix-ui/react-dialog';
+ import AssignmentForm from '@/components/assignment-form';
+ import ImageUpload from '@/components/ImageUpload';
+ import * as XLSX from 'xlsx';
+ import { deleteFromCloudinary } from '@/lib/cloudinary';
+ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
+ import { useAuth } from '@/context/auth-context';
+ import { supabase } from '@/lib/supabase';
+
+
+
 
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -59,18 +65,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // 🚀 الدالة السحرية لاستخراج اسم الفصل والصف بدقة متناهية
   const getStudentSectionName = (studentObj: any) => {
     if (!studentObj || (!studentObj.sections && !studentObj.section)) return 'بدون فصل';
     
-    // محاولة قراءة Sections (الجمع) أو Section (المفرد)
     const sectionData = studentObj.sections || studentObj.section;
     const sec = Array.isArray(sectionData) ? sectionData[0] : sectionData;
     if (!sec) return 'بدون فصل';
 
     const sectionName = sec.name || '';
     
-    // محاولة قراءة Classes
     const classData = sec.classes || sec.class;
     const cls = Array.isArray(classData) ? classData[0] : classData;
     const className = cls?.name || '';
@@ -80,10 +83,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     return 'بدون فصل';
   };
 
-  // 🚀 تحديد الفصول الفريدة للفلترة
   const uniqueSections = Array.from(new Set(submissions.map(sub => getStudentSectionName(sub.student)))).filter(Boolean);
 
-  // 🚀 التسليمات المفلترة
   const filteredSubmissions = selectedSection === 'الكل' 
      ? submissions 
      : submissions.filter(sub => getStudentSectionName(sub.student) === selectedSection);
@@ -93,7 +94,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     
     const csvData = filteredSubmissions.map(sub => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const section = getStudentSectionName(sub.student); // 🚀 استخدام الدالة السحرية
+       const section = getStudentSectionName(sub.student); 
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
@@ -128,7 +129,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
     const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
-       const section = getStudentSectionName(sub.student); // 🚀 استخدام الدالة السحرية
+       const section = getStudentSectionName(sub.student); 
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
@@ -292,9 +293,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setIsSubmittingEdit(true);
     try {
       const payload = { title: editData.title!, description: editData.description || null, due_date: new Date(editData.due_date!).toISOString() };
-      const existingSectionIds = (assignment as any)?.assignment_sections?.map((s: any) => s.section_id) || [];
-      await saveAssignment(payload, assignmentId, questions as any, existingSectionIds, []);
-      showNotification('success', 'تم تحديث الواجب بنجاح');
+      
+      // 🚀 الحل الجذري: التحديث المباشر للواجب دون المساس بالأسئلة لتجنب حذف إجابات الطلاب
+      const { error } = await supabase
+        .from('assignments')
+        .update(payload)
+        .eq('id', assignmentId);
+
+      if (error) throw error;
+      
+      showNotification('success', 'تم تمديد/تحديث الواجب بنجاح');
       setIsEditModalOpen(false);
       await fetchData();
     } catch (error: any) {
@@ -387,7 +395,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           {['teacher', 'admin', 'management'].includes(currentRole || '') && (
             <>
               <button onClick={() => setIsEditModalOpen(true)} className="h-12 px-6 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-2 font-black shadow-sm">
-                <Edit2 className="h-5 w-5" /> <span>تعديل سريع</span>
+                <Edit2 className="h-5 w-5" /> <span>تعديل سريع (لتمديد الوقت)</span>
               </button>
               <button onClick={() => setIsDeleteModalOpen(true)} className="h-12 w-12 flex items-center justify-center rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 transition-all shadow-sm">
                 <Trash2 className="h-5 w-5" />
@@ -513,7 +521,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
                   const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                   
-                  // 🚀 اعتماد حالة الإجابة الصحيحة بناءً على تقييم المعلم
                   const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
 
                   return (
@@ -719,7 +726,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               </button>
             </div>
             
-            {/* 🚀 القائمة المنسدلة لفرز الطلاب حسب الفصل */}
             {activeTab === 'submissions' && uniqueSections.length > 0 && (
               <div className="relative w-full sm:w-64 z-20">
                  <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
