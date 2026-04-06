@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
   MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
@@ -12,8 +9,14 @@ import {
 import { motion } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import ForumEditor from '@/components/ForumEditor';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+
+
+import { useParams, useRouter } from 'next/navigation';
+ import { useAuth } from '@/context/auth-context';
+ import { supabase } from '@/lib/supabase';
+ import Link from 'next/link';
+import ForumEditor from '@/components/ForumEditor';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
 // 🚀 دالة لاستخراج روابط الصور من نصوص HTML
@@ -42,6 +45,8 @@ export default function TopicDetailsPage() {
   const [topic, setTopic] = useState<any>(null);
   const [replies, setReplies] = useState<any[]>([]);
   const [userVotes, setUserVotes] = useState<string[]>([]); 
+  const [replyLikesData, setReplyLikesData] = useState<Record<string, {count: number, names: string[]}>>({}); // 🚀 حفظ أسماء المعجبين
+  const [pollData, setPollData] = useState<any>(null); // 🚀 حفظ بيانات الاستطلاع
   const [loading, setLoading] = useState(true);
   
   const [replyContent, setReplyContent] = useState('');
@@ -50,7 +55,6 @@ export default function TopicDetailsPage() {
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 تم إضافة جلب الصلاحية reply_permission للقسم
       const { data: topicData, error: topicError } = await supabase
         .from('forum_topics')
         .select('*, category:forum_categories(name, reply_permission)')
@@ -59,27 +63,64 @@ export default function TopicDetailsPage() {
         
       if (topicError) throw topicError;
 
+      // 🚀 1. نظام المشاهدات الحقيقي (تحديث مرة واحدة لكل جلسة متصفح)
+      const viewedTopics = JSON.parse(sessionStorage.getItem('viewed_topics') || '[]');
+      if (!viewedTopics.includes(topicId)) {
+         const newViewsCount = (topicData.views_count || 0) + 1;
+         await supabase.from('forum_topics').update({ views_count: newViewsCount }).eq('id', topicId);
+         topicData.views_count = newViewsCount;
+         sessionStorage.setItem('viewed_topics', JSON.stringify([...viewedTopics, topicId]));
+      }
+
       const { data: authorData } = await supabase.from('users').select('full_name, role, avatar_url').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
       setTopic({ ...topicData, author: authorData, author_badge: badgeText });
 
+      // 🚀 2. جلب الاستطلاعات إن وجدت
+      const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
+      if (poll) {
+         const { data: options } = await supabase.from('forum_poll_options').select('*').eq('poll_id', poll.id);
+         const { data: votes } = await supabase.from('forum_poll_votes').select('*').eq('poll_id', poll.id);
+         setPollData({ ...poll, options: options || [], votes: votes || [] });
+      }
+
       const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
 
       let formattedReplies: any[] = [];
       if (repliesData && repliesData.length > 0) {
-        const authorIds = [...new Set(repliesData.map(r => r.author_id))];
+        const authorIds = [...new Set(repliesData.map((r: any) => r.author_id))];
         const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url').in('id', authorIds);
-        formattedReplies = repliesData.map(reply => {
-          const author = usersData?.find(u => u.id === reply.author_id);
+        formattedReplies = repliesData.map((reply: any) => {
+          const author = usersData?.find((u: any) => u.id === reply.author_id);
           return { ...reply, users: author || { full_name: 'مجهول', role: 'student' } };
         });
+
+        // 🚀 3. جلب أسماء المعجبين لكل رد
+        const replyIds = repliesData.map((r: any) => r.id);
+        const { data: allVotes } = await supabase.from('forum_votes').select('reply_id, user_id').in('reply_id', replyIds);
+        
+        if (allVotes && allVotes.length > 0) {
+           const voterIds = [...new Set(allVotes.map((v: any) => v.user_id))];
+           const { data: votersData } = await supabase.from('users').select('id, full_name').in('id', voterIds);
+           
+           const likesMap: Record<string, {count: number, names: string[]}> = {};
+           replyIds.forEach((id: string) => {
+              const votesForReply = allVotes.filter((v: any) => v.reply_id === id);
+              const names = votesForReply.map((v: any) => {
+                 const usr = votersData?.find((u: any) => u.id === v.user_id);
+                 return usr ? usr.full_name : 'مستخدم';
+              });
+              likesMap[id] = { count: votesForReply.length, names };
+           });
+           setReplyLikesData(likesMap);
+        }
       }
       setReplies(formattedReplies);
 
       if (user) {
         const { data: votes } = await supabase.from('forum_votes').select('reply_id').eq('user_id', user.id);
-        setUserVotes(votes?.map(v => v.reply_id) || []);
+        setUserVotes(votes?.map((v: any) => v.reply_id) || []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -134,6 +175,15 @@ export default function TopicDetailsPage() {
     if (!user) return;
     const hasVoted = userVotes.includes(replyId);
     setUserVotes((prev: string[]) => hasVoted ? prev.filter(id => id !== replyId) : [...prev, replyId]);
+    
+    // تحديث أسماء المعجبين محلياً فوراً للشعور بالاستجابة
+    setReplyLikesData((prev: any) => {
+       const currentNames = prev[replyId]?.names || [];
+       const myName = user.user_metadata?.full_name || 'مستخدم';
+       const newNames = hasVoted ? currentNames.filter((n: string) => n !== myName) : [...currentNames, myName];
+       return { ...prev, [replyId]: { count: (prev[replyId]?.count || currentCount) + (hasVoted ? -1 : 1), names: newNames } };
+    });
+    
     setReplies((prev: any[]) => prev.map((r: any) => r.id === replyId ? { ...r, upvotes_count: r.upvotes_count + (hasVoted ? -1 : 1) } : r));
 
     try {
@@ -145,6 +195,40 @@ export default function TopicDetailsPage() {
         await supabase.from('forum_replies').update({ upvotes_count: currentCount + 1 }).eq('id', replyId);
       }
     } catch (error) { fetchTopicData(); }
+  };
+
+  // 🚀 معالجة التصويت في الاستطلاع
+  const handlePollVote = async (optionId: string) => {
+     if (!user || !pollData) return;
+     
+     const hasVoted = pollData.votes.some((v: any) => v.user_id === user.id && (!pollData.allow_multiple || v.option_id === optionId));
+     
+     if (hasVoted && !pollData.allow_multiple) {
+        alert('لقد قمت بالتصويت مسبقاً في هذا الاستطلاع.');
+        return;
+     } else if (hasVoted && pollData.allow_multiple) {
+        // إزالة التصويت إذا كان من المسموح اختيار أكثر من واحد وضغط عليه مرة أخرى
+        try {
+           await supabase.from('forum_poll_votes').delete().eq('poll_id', pollData.id).eq('option_id', optionId).eq('user_id', user.id);
+           setPollData({ ...pollData, votes: pollData.votes.filter((v: any) => !(v.option_id === optionId && v.user_id === user.id)) });
+        } catch (error) { alert('خطأ في إزالة التصويت.'); }
+        return;
+     }
+
+     try {
+        await supabase.from('forum_poll_votes').insert([{
+           poll_id: pollData.id,
+           option_id: optionId,
+           user_id: user.id
+        }]);
+        
+        setPollData({
+           ...pollData,
+           votes: [...pollData.votes, { poll_id: pollData.id, option_id: optionId, user_id: user.id }]
+        });
+     } catch (error) {
+        alert('حدث خطأ أثناء تسجيل التصويت.');
+     }
   };
 
   const toggleVerify = async (replyId: string, currentStatus: boolean, authorId: string) => {
@@ -253,7 +337,7 @@ export default function TopicDetailsPage() {
                   {topic.author?.role !== 'student' && <BadgeCheck className="w-4 h-4 text-amber-500" />}
                 </h3>
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-500 mt-1">
-                  <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {formatDistanceToNow(new Date(topic.created_at), { addSuffix: true, locale: arSA })}</span>
+                  <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {formatDistanceToNow(new Date(topic.created_at || new Date()), { addSuffix: true, locale: arSA })}</span>
                   <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {topic.views_count || 0} مشاهدة</span>
                 </div>
               </div>
@@ -261,6 +345,46 @@ export default function TopicDetailsPage() {
           </div>
           
           <div className="p-6 sm:p-8 prose max-w-none text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: topic.content }} />
+          
+          {/* 🚀 إظهار الاستطلاع في تفاصيل الموضوع */}
+          {pollData && (
+            <div className="mx-6 sm:mx-8 mb-8 p-6 bg-indigo-50/50 border border-indigo-100 rounded-3xl">
+               <h3 className="text-xl font-black text-indigo-900 mb-2 flex items-center gap-2">
+                 📊 {pollData.question}
+               </h3>
+               <p className="text-xs font-bold text-slate-500 mb-6">
+                 {pollData.allow_multiple ? 'يمكنك اختيار أكثر من إجابة.' : 'اختر إجابة واحدة فقط.'} 
+                 <span className="mx-2">•</span> 
+                 إجمالي الأصوات: {pollData.votes.length}
+               </p>
+               
+               <div className="space-y-3">
+                 {pollData.options.map((opt: any) => {
+                    const votesForOption = pollData.votes.filter((v: any) => v.option_id === opt.id).length;
+                    const percentage = pollData.votes.length > 0 ? Math.round((votesForOption / pollData.votes.length) * 100) : 0;
+                    const isMyVote = pollData.votes.some((v: any) => v.option_id === opt.id && v.user_id === user?.id);
+
+                    return (
+                      <div key={opt.id} className="relative w-full">
+                        <button 
+                          onClick={() => handlePollVote(opt.id)}
+                          className={`w-full relative z-10 flex items-center justify-between p-4 rounded-xl border-2 transition-all text-right ${isMyVote ? 'border-indigo-500 bg-indigo-50/80 shadow-sm' : 'border-slate-200 bg-white hover:border-indigo-300'}`}
+                        >
+                           <span className={`font-bold z-20 relative ${isMyVote ? 'text-indigo-800' : 'text-slate-700'}`}>
+                             {isMyVote && <CheckCircle className="w-4 h-4 inline-block ml-2 text-indigo-600" />}
+                             {opt.option_text}
+                           </span>
+                           <span className="font-black text-slate-500 text-sm z-20 relative">{percentage}% ({votesForOption})</span>
+                           
+                           {/* شريط التقدم المرئي (Progress Bar) */}
+                           <div className="absolute top-0 right-0 h-full bg-indigo-100/60 rounded-lg transition-all duration-500 z-0" style={{ width: `${percentage}%` }}></div>
+                        </button>
+                      </div>
+                    );
+                 })}
+               </div>
+            </div>
+          )}
         </motion.div>
 
         <div className="flex items-center gap-3 mt-12 mb-6 px-2">
@@ -300,10 +424,21 @@ export default function TopicDetailsPage() {
                     <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed mb-4" dangerouslySetInnerHTML={{ __html: reply.content }} />
                     
                     <div className="flex items-center gap-2 pt-4 border-t border-slate-100 mt-auto">
-                      <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
-                        <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
-                        <span dir="ltr">{reply.upvotes_count}</span>
-                      </button>
+                      
+                      <div className="relative group/like">
+                        <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                          <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
+                          <span dir="ltr">{replyLikesData[reply.id]?.count !== undefined ? replyLikesData[reply.id].count : reply.upvotes_count}</span>
+                        </button>
+                        
+                        {/* 🚀 إظهار أسماء المعجبين عند التمرير */}
+                        {replyLikesData[reply.id] && replyLikesData[reply.id].names.length > 0 && (
+                           <div className="absolute bottom-full right-0 mb-2 hidden group-hover/like:block w-max max-w-xs bg-slate-800 text-white text-xs font-bold p-2.5 rounded-lg shadow-lg z-10 pointer-events-none transition-opacity duration-200">
+                              أعجب بهذا: {replyLikesData[reply.id].names.slice(0, 5).join('، ')}
+                              {replyLikesData[reply.id].names.length > 5 && ` و ${replyLikesData[reply.id].names.length - 5} آخرين`}
+                           </div>
+                        )}
+                      </div>
 
                       {canModerate && (
                         <button onClick={() => toggleVerify(reply.id, reply.is_verified, reply.author_id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border ${reply.is_verified ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'}`}>
