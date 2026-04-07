@@ -1,5 +1,6 @@
-```tsx
 'use client';
+
+
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSettingsSystem, PlatformSettings, ProfileSettings } from '@/hooks/useSettingsSystem';
