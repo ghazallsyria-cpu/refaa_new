@@ -1,3 +1,4 @@
+```tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -36,7 +37,10 @@ interface ExtendedProfileSettings extends ProfileSettings {
 }
 
 export default function SettingsPage() {
-  const { userRole } = useAuth();
+  // 🚀 الإصلاح هنا: المتغير الصحيح في السياق هو authRole
+  const { authRole } = useAuth(); 
+  const userRole = authRole; // تمريره للمتغير القديم حتى لا نغير أي حرف آخر في كودك
+
   const { 
     loading, 
     error: systemError, 
@@ -714,3 +718,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+```
