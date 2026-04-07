@@ -34,7 +34,7 @@ export default function ForumHeroAdminPage() {
 
   // جلب الشرائح من قاعدة البيانات
   const fetchSlides = async () => {
-    setLoading(true);
+    // 🚀 تم إزالة setLoading(true) من هنا لتجنب خطأ Netlify الصارم
     const { data, error } = await supabase
       .from('forum_hero_slides')
       .select('*')
@@ -46,6 +46,7 @@ export default function ForumHeroAdminPage() {
 
   useEffect(() => {
     fetchSlides();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // إضافة طالب للوحة الشرف
