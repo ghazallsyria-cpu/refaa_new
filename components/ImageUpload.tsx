@@ -18,10 +18,8 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
 
   // 🚀 خوارزمية ضغط الصور السحرية (تعمل داخل متصفح المستخدم)
   const compressImage = async (file: File): Promise<File> => {
-    // 1. الضغط يطبق على الصور فقط
     if (!file.type.startsWith('image/')) return file;
     
-    // 2. إذا كان الملف أقل من 1 ميجا، لا داعي للضغط ونرجعه كما هو
     const MAX_SIZE = 1 * 1024 * 1024; // 1 MB
     if (file.size <= MAX_SIZE) return file;
 
@@ -34,7 +32,6 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
-        // 3. أقصى أبعاد مقبولة للصورة (تمنع الصور العملاقة)
         const MAX_WIDTH = 1920;
         const MAX_HEIGHT = 1920;
         let width = img.width;
@@ -56,7 +53,6 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
         canvas.height = height;
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // 4. تحويل اللوحة إلى ملف JPEG مضغوط بجودة 70%
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -87,7 +83,6 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
     setError(null);
 
     try {
-      // 🚀 استدعاء دالة الضغط قبل الرفع!
       const processedFile = await compressImage(file);
 
       const formData = new FormData();
@@ -143,7 +138,7 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
               </div>
               <div>
                 <p className="text-sm font-black text-indigo-900">{label}</p>
-                <p className="text-[10px] font-bold text-indigo-500 mt-1">سيتم ضغط الصور الكبيرة (أكثر من 1MB) تلقائياً لتسريع الرفع</p>
+                <p className="text-[10px] font-bold text-indigo-500 mt-1">سيتم ضغط الصور الكبيرة تلقائياً لتسريع الرفع</p>
               </div>
             </div>
           )}
@@ -151,14 +146,16 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
       ) : (
         <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 group shadow-sm">
           {isImage ? (
-            <div className="relative w-full h-48 flex items-center justify-center p-2 bg-white">
+            // 🚀 الحل هنا: استخدام object-cover وتغطية كامل المساحة
+            <div className="relative w-full h-56 flex items-center justify-center bg-slate-100">
               <Image 
                 src={imageUrl} 
                 alt="Uploaded" 
                 fill 
-                className="object-contain"
+                className="object-cover" 
                 unoptimized
               />
+              <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           ) : (
             <div className="flex items-center gap-4 p-6">
@@ -174,14 +171,13 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
             </div>
           )}
           
-          {/* 🚀 الإصلاح السحري: تم إزالة opacity-0 لكي يكون زر الإزالة ظاهراً بوضوح على أجهزة الهاتف */}
           <div className="absolute top-3 right-3 flex gap-2 transition-opacity z-10">
             <button
               onClick={(e) => {
-                e.stopPropagation(); // منع أي تداخلات عند النقر
+                e.stopPropagation();
                 handleRemove();
               }}
-              className="h-10 w-10 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700 shadow-md transition-all hover:scale-105 active:scale-95"
+              className="h-10 w-10 bg-rose-100 backdrop-blur-md border-2 border-white rounded-full flex items-center justify-center text-rose-600 hover:bg-rose-500 hover:text-white shadow-xl transition-all hover:scale-110 active:scale-95"
               title="إزالة وتغيير الملف"
             >
               <X className="h-5 w-5 stroke-[3]" />
@@ -191,7 +187,7 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
       )}
 
       {error && (
-        <div className="mt-3 flex items-center gap-2 text-red-600 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100 animate-in fade-in">
+        <div className="mt-3 flex items-center gap-2 text-rose-600 text-sm font-bold bg-rose-50 p-3 rounded-xl border border-rose-100 animate-in fade-in">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <p>{error}</p>
         </div>
