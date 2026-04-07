@@ -4,10 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowRight, Loader2, User, Clock, ShieldCheck, 
   MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
-  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal, BookOpen, Users,
-  Sparkles, Quote, Trophy, Crown, Image as ImageIcon
+  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal, BookOpen, Users
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { formatDistanceToNow, format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -18,24 +17,6 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import ForumEditor from '@/components/ForumEditor';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
-
-// 🚀 خريطة الأيقونات للهيدر الذكي
-const ICON_MAP: Record<string, any> = {
-  'Sparkles': Sparkles,
-  'Trophy': Trophy,
-  'Quote': Quote,
-  'Image': ImageIcon
-};
-
-const DEFAULT_SLIDE = {
-  id: 'default',
-  icon_name: 'Sparkles',
-  badge_text: 'القلب النابض للمنصة',
-  title: 'مجتمع النقاشات المفتوحة',
-  description: 'مساحة تفاعلية تجمع بين العقول المبدعة. شارك أفكارك، اطرح أسئلتك، وكن جزءاً من رحلة التعلم المستمرة.',
-  color_gradient: 'from-indigo-400 to-blue-500',
-  type: 'welcome'
-};
 
 const extractUrlsFromHtml = (htmlStrings: string[]) => {
   const urls: string[] = [];
@@ -50,6 +31,7 @@ const extractUrlsFromHtml = (htmlStrings: string[]) => {
   return urls;
 };
 
+// إجبار المعادلات والجداول على التجاوب مع الموبايل
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = content.replace(
@@ -78,34 +60,6 @@ export default function TopicDetailsPage() {
   const [replyContent, setReplyContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 حالات السلايدر الديناميكي
-  const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
-  const [currentSlide, setCurrentSlide] = useState(0);
-
-  // 🚀 جلب شرائح الهيدر من قاعدة البيانات
-  useEffect(() => {
-    const fetchHeroSlides = async () => {
-      const { data, error } = await supabase
-        .from('forum_hero_slides')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order', { ascending: false })
-        .order('created_at', { ascending: false });
-      
-      if (data && data.length > 0) setHeroSlides(data);
-    };
-    fetchHeroSlides();
-  }, []);
-
-  // 🚀 تأثير تقليب السلايدر تلقائياً
-  useEffect(() => {
-    if (heroSlides.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 7000); 
-    return () => clearInterval(timer);
-  }, [heroSlides.length]);
-
   const fetchTopicData = useCallback(async () => {
     setLoading(true);
     try {
@@ -125,9 +79,11 @@ export default function TopicDetailsPage() {
          sessionStorage.setItem('viewed_topics', JSON.stringify([...viewedTopics, topicId]));
       }
 
+      // جلب بيانات كاتب الموضوع
       const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
       let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
       
+      // 🚀 جلب تفاصيل كاتب الموضوع (المادة للمعلم، والفصل للطالب)
       let authorRoleDetail = '';
       if (authorData?.role === 'teacher') {
          try {
@@ -137,7 +93,7 @@ export default function TopicDetailsPage() {
                const { data: tData } = await supabase.from('teachers').select('specialization').eq('id', topicData.author_id).single();
                if (tData && tData.specialization) authorRoleDetail = tData.specialization;
             }
-         } catch (e) {}
+         } catch (e) { console.log("Error fetching teacher subject"); }
       } else if (authorData?.role === 'student') {
          try {
             const { data: stData } = await supabase.from('students').select('sections(name, classes(name))').eq('id', topicData.author_id).single();
@@ -147,9 +103,10 @@ export default function TopicDetailsPage() {
                const secName = sec.name || '';
                authorRoleDetail = className ? `${className} - ${secName}` : secName;
             }
-         } catch (e) {}
+         } catch (e) { console.log("Error fetching student section"); }
       }
 
+      // جلب أوسمة كاتب الموضوع
       const { data: authorBadgesRaw } = await supabase
         .from('student_badges')
         .select(`badge_id, badges ( id, name, image_url )`)
@@ -165,6 +122,7 @@ export default function TopicDetailsPage() {
         author_earned_badges: parsedBadges 
       });
 
+      // جلب الاستطلاعات
       const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
       if (poll) {
          const { data: options } = await supabase.from('forum_poll_options').select('*').eq('poll_id', poll.id);
@@ -172,6 +130,7 @@ export default function TopicDetailsPage() {
          setPollData({ ...poll, options: options || [], votes: votes || [] });
       }
 
+      // جلب الردود
       const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
 
       let formattedReplies: any[] = [];
@@ -181,11 +140,13 @@ export default function TopicDetailsPage() {
         
         let userRoleDetailsMap = new Map();
         
+        // 🚀 1. جلب تخصصات المعلمين المعلقين
         const teacherIds = usersData?.filter((u: any) => u.role === 'teacher').map((u: any) => u.id) || [];
         if (teacherIds.length > 0) {
            try {
               const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
               if (tsData) tsData.forEach((ts: any) => { if (ts.subjects?.name && !userRoleDetailsMap.has(ts.teacher_id)) userRoleDetailsMap.set(ts.teacher_id, ts.subjects.name); });
+
               const missingTeacherIds = teacherIds.filter(id => !userRoleDetailsMap.has(id));
               if (missingTeacherIds.length > 0) {
                   const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missingTeacherIds);
@@ -194,6 +155,7 @@ export default function TopicDetailsPage() {
            } catch (e) {}
         }
 
+        // 🚀 2. جلب صفوف وفصول الطلاب المعلقين
         const studentIds = usersData?.filter((u: any) => u.role === 'student').map((u: any) => u.id) || [];
         if (studentIds.length > 0) {
            try {
@@ -211,6 +173,7 @@ export default function TopicDetailsPage() {
            } catch (e) {}
         }
 
+        // جلب أوسمة جميع المعلقين
         const { data: allReplyBadgesRaw } = await supabase
           .from('student_badges')
           .select(`student_id, badge_id, badges ( id, name, image_url )`)
@@ -219,6 +182,7 @@ export default function TopicDetailsPage() {
         formattedReplies = repliesData.map((reply: any) => {
           const author = usersData?.find((u: any) => u.id === reply.author_id);
           const roleDetail = userRoleDetailsMap.get(reply.author_id) || '';
+          
           const userBadgeRows = allReplyBadgesRaw?.filter((b: any) => b.student_id === reply.author_id) || [];
           const replyBadges = userBadgeRows.map((b: any) => b.badges).filter(Boolean);
 
@@ -230,14 +194,15 @@ export default function TopicDetailsPage() {
           };
         });
 
+        // جلب المعجبين
         const replyIds = repliesData.map((r: any) => r.id);
         const { data: allVotes } = await supabase.from('forum_votes').select('reply_id, user_id').in('reply_id', replyIds);
         
         if (allVotes && allVotes.length > 0) {
            const voterIds = [...new Set(allVotes.map((v: any) => v.user_id))];
            const { data: votersData } = await supabase.from('users').select('id, full_name').in('id', voterIds);
-           const likesMap: Record<string, {count: number, names: string[]}> = {};
            
+           const likesMap: Record<string, {count: number, names: string[]}> = {};
            replyIds.forEach((id: string) => {
               const votesForReply = allVotes.filter((v: any) => v.reply_id === id);
               const names = votesForReply.map((v: any) => {
@@ -392,6 +357,7 @@ export default function TopicDetailsPage() {
         {author?.full_name || 'مستخدم مجهول'}
       </h3>
       
+      {/* 🚀 عرض رتبة المستخدم مع تفاصيل إضافية (مادة للمعلم أو فصل للطالب) */}
       <span className={`mt-2 text-[10px] font-black px-3 py-1 rounded-full border flex items-center gap-1 ${author?.role !== 'student' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
         {badgeText} 
         {roleDetail ? (
@@ -429,108 +395,42 @@ export default function TopicDetailsPage() {
     </div>
   );
 
-  if (loading) return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin" /></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin" /></div>;
   if (!topic) return <div className="text-center mt-20"><h2 className="text-xl font-bold">الموضوع غير موجود</h2></div>;
 
   const canModerate = isStaff || user?.id === topic.author_id;
-  const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
-  const SlideIcon = ICON_MAP[currentSlideData.icon_name] || Sparkles;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans selection:bg-indigo-500 selection:text-white" dir="rtl">
+    <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       
       <style dangerouslySetInnerHTML={{__html: `
         .prose-container .prose table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
-        .prose-container .prose img { max-width: 100%; height: auto; border-radius: 1rem; }
+        .prose-container .prose img { max-width: 100%; height: auto; }
       `}} />
 
-      {/* 🌟 الواجهة العلوية الفاخرة المتقلبة الديناميكية */}
-      <div className="relative pt-24 pb-40 overflow-hidden bg-[#0F172A] rounded-b-[3rem] sm:rounded-b-[4rem] z-10 shadow-2xl">
-        <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 mix-blend-screen pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-blue-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 mix-blend-screen pointer-events-none"></div>
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20 h-full min-h-[200px] flex items-center justify-center">
-          <AnimatePresence mode="wait">
-            <motion.div 
-              key={currentSlideData.id}
-              initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="flex flex-col items-center text-center w-full"
-            >
-              {currentSlideData.badge_text && (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white text-xs sm:text-sm font-black mb-4 backdrop-blur-md shadow-sm">
-                  <SlideIcon className="w-4 h-4" />
-                  {currentSlideData.badge_text}
-                </div>
-              )}
-
-              <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r ${currentSlideData.color_gradient || 'from-white to-slate-300'} tracking-tight mb-4 drop-shadow-lg line-clamp-2`}>
-                {currentSlideData.title}
-              </h1>
-
-              {currentSlideData.description && (
-                <p className="text-slate-300 text-sm sm:text-base font-bold max-w-2xl leading-relaxed mb-6 line-clamp-3">
-                  {currentSlideData.description}
-                </p>
-              )}
-
-              {/* صور المتفوقين */}
-              {currentSlideData.metadata?.students && (
-                <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
-                  {currentSlideData.metadata.students.map((student: any, i: number) => (
-                    <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-2 sm:p-3 flex items-center gap-3 pr-4 shadow-xl">
-                      <div className="relative">
-                        <Crown className="absolute -top-3 -right-2 w-5 h-5 text-amber-400 drop-shadow-md z-10 rotate-12" />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={student.img} alt={student.name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-white/50 shadow-inner bg-white/50 object-cover" />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs sm:text-sm font-black text-white">{student.name}</p>
-                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-300">{student.grade}</p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {heroSlides.length > 1 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-30">
-            {heroSlides.map((_, i) => (
-              <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 ${currentSlide === i ? 'w-6 sm:w-8 bg-white' : 'w-1.5 sm:w-2 bg-white/30 hover:bg-white/50'}`} aria-label={`Go to slide ${i + 1}`} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 🌟 شريط التحكم الخاص بالموضوع (Glassmorphism & Sticky) */}
-      <div className="sticky top-4 z-40 max-w-6xl mx-auto px-4 sm:px-6 -mt-10 mb-8 transition-all">
-        <div className="bg-white/80 backdrop-blur-2xl border border-white/50 p-3 sm:p-4 rounded-[2rem] shadow-[0_10px_30px_rgb(0,0,0,0.08)] flex justify-between items-center gap-4">
-          <div className="flex items-center gap-3 w-full overflow-hidden">
-            <button onClick={() => router.push(`/forums/${topic.category_id}`)} className="p-2 sm:p-3 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl transition-colors shrink-0">
-              <ArrowRight className="w-5 h-5" />
+      {/* Header Bar */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.push(`/forums/${topic.category_id}`)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+              <ArrowRight className="w-5 h-5 text-slate-600" />
             </button>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 mb-1">
-                <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 truncate max-w-[120px] sm:max-w-none">{topic.category?.name || 'قسم المنتدى'}</span>
-                {topic.is_pinned && <span className="bg-rose-50 text-rose-600 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1 shrink-0"><Pin className="w-3 h-3" /> مثبت</span>}
-                {topic.is_locked && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 shrink-0"><Lock className="w-3 h-3" /> مغلق</span>}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 mb-0.5">
+                <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{topic.category?.name || 'قسم المنتدى'}</span>
+                {topic.is_pinned && <span className="bg-rose-50 text-rose-600 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1"><Pin className="w-3 h-3" /> مثبت</span>}
+                {topic.is_locked && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1"><Lock className="w-3 h-3" /> مغلق</span>}
               </div>
-              <h1 className="text-sm sm:text-base md:text-lg font-black text-slate-900 truncate w-full">{topic.title}</h1>
+              <h1 className="text-base sm:text-lg font-black text-slate-900 line-clamp-1">{topic.title}</h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button className="p-2 sm:p-3 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl transition-colors hidden sm:block" title="نسخ الرابط" onClick={() => navigator.clipboard.writeText(window.location.href)}><Share2 className="w-4 h-4" /></button>
+          <div className="flex items-center gap-2">
+            <button className="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl transition-colors hidden sm:block" title="مشاركة" onClick={() => navigator.clipboard.writeText(window.location.href)}><Share2 className="w-4 h-4" /></button>
             {isStaff && (
               <DropdownMenu.Root>
-                <DropdownMenu.Trigger className="p-2 sm:p-3 bg-slate-900 hover:bg-black text-white rounded-xl outline-none transition-colors shadow-md">
-                  <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+                <DropdownMenu.Trigger className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl outline-none transition-colors">
+                  <MoreVertical className="w-5 h-5" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content className="bg-white rounded-2xl shadow-xl border border-slate-100 p-2 min-w-[200px] z-50 text-sm font-bold animate-in fade-in zoom-in duration-200" align="end" sideOffset={5}>
@@ -552,10 +452,10 @@ export default function TopicDetailsPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8 prose-container relative z-20">
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6 prose-container">
         
         {/* Main Topic Container */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row max-w-full w-full">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row max-w-full w-full">
           
           <UserProfileColumn 
             author={topic.author} 
@@ -566,36 +466,36 @@ export default function TopicDetailsPage() {
           />
           
           <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
-             <div className="p-6 md:p-10 flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-8 pb-4 border-b border-slate-100 text-xs font-bold text-slate-400">
+             <div className="p-6 md:p-8 flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-6 pb-4 border-b border-slate-100 text-xs font-bold text-slate-400">
                    <Clock className="w-4 h-4" /> تم النشر: {formatDistanceToNow(new Date(topic.created_at), { addSuffix: true, locale: arSA })}
                 </div>
                 
                 <div 
-                  className="prose prose-slate prose-indigo max-w-none text-slate-800 leading-loose font-medium w-full break-words overflow-x-auto overflow-y-hidden prose-p:text-lg prose-headings:font-black" 
+                  className="prose prose-slate prose-indigo max-w-none text-slate-800 leading-loose font-medium w-full break-words overflow-x-auto overflow-y-hidden" 
                   style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                   dangerouslySetInnerHTML={renderContentWithMath(topic.content)} 
                 />
                 
                 {pollData && (
-                  <div className="mt-12 p-8 bg-slate-50 border border-slate-200 rounded-[2rem] w-full">
-                     <h3 className="text-xl font-black text-slate-900 mb-2 flex items-center gap-3">📊 {pollData.question}</h3>
-                     <p className="text-xs font-bold text-slate-500 mb-8 bg-white inline-block px-3 py-1.5 rounded-lg border border-slate-200">إجمالي الأصوات: {pollData.votes.length} {pollData.allow_multiple && ' • يسمح باختيارات متعددة'}</p>
+                  <div className="mt-10 p-6 bg-slate-50 border border-slate-200 rounded-2xl w-full">
+                     <h3 className="text-lg font-black text-slate-900 mb-2 flex items-center gap-2">📊 {pollData.question}</h3>
+                     <p className="text-xs font-bold text-slate-500 mb-6">إجمالي الأصوات: {pollData.votes.length} {pollData.allow_multiple && ' • يسمح باختيارات متعددة'}</p>
                      
-                     <div className="space-y-4">
+                     <div className="space-y-3">
                        {pollData.options.map((opt: any) => {
                           const votesForOption = pollData.votes.filter((v: any) => v.option_id === opt.id).length;
                           const percentage = pollData.votes.length > 0 ? Math.round((votesForOption / pollData.votes.length) * 100) : 0;
                           const isMyVote = pollData.votes.some((v: any) => v.option_id === opt.id && v.user_id === user?.id);
 
                           return (
-                            <div key={opt.id} className="relative w-full group/poll">
-                              <button onClick={() => handlePollVote(opt.id)} className={`w-full relative z-10 flex items-center justify-between p-5 rounded-2xl border-2 transition-all text-right overflow-hidden ${isMyVote ? 'border-indigo-500 bg-indigo-50/30' : 'border-slate-200 bg-white hover:border-indigo-300 shadow-sm'}`}>
-                                 <span className={`font-black z-20 relative text-sm sm:text-base ${isMyVote ? 'text-indigo-800' : 'text-slate-700'}`}>
-                                   {isMyVote && <CheckCircle className="w-5 h-5 inline-block ml-3 text-indigo-600" />}{opt.option_text}
+                            <div key={opt.id} className="relative w-full">
+                              <button onClick={() => handlePollVote(opt.id)} className={`w-full relative z-10 flex items-center justify-between p-4 rounded-xl border-2 transition-all text-right ${isMyVote ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 bg-white hover:border-indigo-300'}`}>
+                                 <span className={`font-bold z-20 relative ${isMyVote ? 'text-indigo-800' : 'text-slate-700'}`}>
+                                   {isMyVote && <CheckCircle className="w-4 h-4 inline-block ml-2 text-indigo-600" />}{opt.option_text}
                                  </span>
-                                 <span className="font-black text-slate-500 text-sm z-20 relative bg-white/80 px-2 py-1 rounded-lg backdrop-blur-sm">{percentage}% ({votesForOption})</span>
-                                 <div className="absolute top-0 right-0 h-full bg-indigo-100/50 rounded-xl transition-all duration-700 ease-out z-0" style={{ width: `${percentage}%` }}></div>
+                                 <span className="font-black text-slate-500 text-sm z-20 relative">{percentage}% ({votesForOption})</span>
+                                 <div className="absolute top-0 right-0 h-full bg-indigo-100/60 rounded-lg transition-all duration-500 z-0" style={{ width: `${percentage}%` }}></div>
                               </button>
                             </div>
                           );
@@ -605,9 +505,9 @@ export default function TopicDetailsPage() {
                 )}
              </div>
              
-             <div className="bg-slate-50/50 border-t border-slate-100 px-8 py-5 flex items-center justify-end gap-3 w-full">
-                <button onClick={() => { document.getElementById('replyEditor')?.scrollIntoView({ behavior: 'smooth' }); }} className="flex items-center gap-2 text-sm font-black text-slate-600 hover:text-indigo-600 px-6 py-3 rounded-xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100 active:scale-95">
-                   <Reply className="w-5 h-5" /> أضف ردك الآن
+             <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 flex items-center justify-end gap-3 w-full">
+                <button onClick={() => { document.getElementById('replyEditor')?.scrollIntoView({ behavior: 'smooth' }); }} className="flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50 transition-colors">
+                   <Reply className="w-4 h-4" /> إضافة رد
                 </button>
              </div>
           </div>
@@ -615,19 +515,19 @@ export default function TopicDetailsPage() {
 
         {/* Replies Section */}
         {replies.length > 0 && (
-          <div className="space-y-8 pt-8 w-full">
-            <h3 className="font-black text-2xl text-slate-900 flex items-center gap-3 px-4"><MessageSquare className="w-7 h-7 text-indigo-500" /> المشاركات والردود ({replies.length})</h3>
+          <div className="space-y-6 pt-6 w-full">
+            <h3 className="font-black text-xl text-slate-900 flex items-center gap-2 px-2"><MessageSquare className="w-6 h-6 text-indigo-500" /> الردود ({replies.length})</h3>
             
             {replies.map((reply) => {
               const isLiked = userVotes.includes(reply.id);
               const badgeText = reply.users?.role === 'student' ? 'طالب' : (reply.users?.role === 'teacher' ? 'معلم' : 'إدارة');
 
               return (
-                <motion.div key={reply.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className={`bg-white rounded-[2.5rem] shadow-sm border ${reply.is_verified ? 'border-emerald-400 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden flex flex-col md:flex-row relative max-w-full w-full`}>
+                <motion.div key={reply.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`bg-white rounded-3xl shadow-sm border ${reply.is_verified ? 'border-emerald-300 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden flex flex-col md:flex-row relative max-w-full w-full`}>
                   
                   {reply.is_verified && (
-                    <div className="absolute top-4 left-4 z-20 bg-emerald-500 text-white text-xs font-black px-4 py-2 rounded-full flex items-center gap-1.5 shadow-lg border border-emerald-400">
-                      <CheckCircle className="w-4 h-4" /> إجابة معتمدة كحل
+                    <div className="absolute top-4 left-4 z-20 bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-md">
+                      <CheckCircle className="w-3.5 h-3.5" /> إجابة معتمدة
                     </div>
                   )}
 
@@ -640,27 +540,27 @@ export default function TopicDetailsPage() {
                   
                   <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
                     <div className="p-6 md:p-8 flex-1 min-w-0">
-                      <div className="text-xs font-bold text-slate-400 mb-6 pb-4 border-b border-slate-100 flex justify-between items-center">
+                      <div className="text-xs font-bold text-slate-400 mb-4 pb-3 border-b border-slate-100 flex justify-between items-center">
                          <span>{formatDistanceToNow(new Date(reply.created_at), { addSuffix: true, locale: arSA })}</span>
-                         {reply.is_verified && <span className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg"><Medal className="w-4 h-4" /> أفضل إجابة</span>}
+                         {reply.is_verified && <span className="text-emerald-600 flex items-center gap-1"><Medal className="w-4 h-4" /> أفضل إجابة</span>}
                       </div>
                       
                       <div 
-                        className="prose prose-slate max-w-none text-slate-700 leading-loose w-full break-words overflow-x-auto overflow-y-hidden prose-p:text-base" 
+                        className="prose prose-slate max-w-none text-slate-700 leading-loose w-full break-words overflow-x-auto overflow-y-hidden" 
                         style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                         dangerouslySetInnerHTML={renderContentWithMath(reply.content)} 
                       />
                     </div>
                     
-                    <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 flex items-center gap-4 w-full">
+                    <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-3 flex items-center gap-4 w-full">
                       <div className="relative group/like">
-                        <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm active:scale-95 ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}>
-                          <Heart className={`w-5 h-5 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
+                        <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200 shadow-sm'}`}>
+                          <Heart className={`w-4 h-4 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
                           <span dir="ltr">{replyLikesData[reply.id]?.count !== undefined ? replyLikesData[reply.id].count : reply.upvotes_count}</span>
                         </button>
                         
                         {replyLikesData[reply.id] && replyLikesData[reply.id].names.length > 0 && (
-                           <div className="absolute bottom-full right-0 mb-3 hidden group-hover/like:block w-max max-w-xs bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold p-3 rounded-xl shadow-xl z-10 pointer-events-none transition-opacity duration-200 border border-slate-700">
+                           <div className="absolute bottom-full right-0 mb-2 hidden group-hover/like:block w-max max-w-xs bg-slate-800/95 backdrop-blur-sm text-white text-xs font-bold p-3 rounded-xl shadow-xl z-10 pointer-events-none transition-opacity duration-200">
                               أعجب بهذا: {replyLikesData[reply.id].names.slice(0, 5).join('، ')}
                               {replyLikesData[reply.id].names.length > 5 && ` و ${replyLikesData[reply.id].names.length - 5} آخرين`}
                            </div>
@@ -668,14 +568,14 @@ export default function TopicDetailsPage() {
                       </div>
 
                       {canModerate && (
-                        <button onClick={() => toggleVerify(reply.id, reply.is_verified)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all border shadow-sm active:scale-95 ${reply.is_verified ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'}`}>
-                          {reply.is_verified ? <><XCircle className="w-5 h-5" /> إلغاء الاعتماد</> : <><CheckCircle className="w-5 h-5" /> اعتماد كحل</>}
+                        <button onClick={() => toggleVerify(reply.id, reply.is_verified)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-sm transition-all border shadow-sm ${reply.is_verified ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'}`}>
+                          {reply.is_verified ? <><XCircle className="w-4 h-4" /> إلغاء الاعتماد</> : <><CheckCircle className="w-4 h-4" /> اعتماد كحل</>}
                         </button>
                       )}
 
                       {(isStaff || user?.id === reply.author_id) && (
-                        <button onClick={() => handleDeleteReply(reply.id, reply.content)} className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors mr-auto active:scale-95" title="حذف الرد">
-                          <Trash2 className="w-5 h-5" />
+                        <button onClick={() => handleDeleteReply(reply.id, reply.content)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors mr-auto" title="حذف الرد">
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -687,40 +587,37 @@ export default function TopicDetailsPage() {
         )}
 
         {/* Reply Box */}
-        <div id="replyEditor" className="pt-10 w-full">
+        <div id="replyEditor" className="pt-6 w-full">
         {!topic.is_locked ? (
           canReply ? (
-            <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden w-full max-w-full">
-               <div className="bg-gradient-to-l from-indigo-50 to-white border-b border-slate-100 p-6 flex items-center gap-4">
-                <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl shadow-sm border border-indigo-200"><Reply className="w-6 h-6" /></div>
-                <div>
-                    <h3 className="font-black text-xl text-slate-900 mb-1">أضف ردك للمناقشة</h3>
-                    <p className="text-xs font-bold text-slate-500">شارك رأيك، ارفع صوراً، أو أضف معادلات رياضية (استخدم $$ حول المعادلة).</p>
-                </div>
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden w-full max-w-full">
+               <div className="bg-slate-50 border-b border-slate-100 p-5 flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><Reply className="w-5 h-5" /></div>
+                <h3 className="font-black text-lg text-slate-900">أضف رداً للمناقشة</h3>
               </div>
-              <form onSubmit={handleAddReply} className="p-6 md:p-8 space-y-6">
-                <div className="max-w-full w-full overflow-hidden border border-slate-200 rounded-2xl focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50 transition-all">
+              <form onSubmit={handleAddReply} className="p-5 sm:p-6 space-y-5">
+                <div className="max-w-full w-full overflow-hidden">
                   <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} />
                 </div>
                 <div className="flex justify-end">
-                  <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-slate-900/20 active:scale-95 flex justify-center items-center gap-2">
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} نشر الرد الآن
+                  <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} نشر الرد
                   </button>
                 </div>
               </form>
             </div>
           ) : (
-            <div className="bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-300 p-16 text-center flex flex-col items-center justify-center w-full">
-              <Lock className="w-16 h-16 text-slate-300 mb-4" />
-              <h3 className="text-2xl font-black text-slate-700 mb-2">هذا القسم للقراءة فقط</h3>
-              <p className="text-base font-bold text-slate-500">لا يُسمح بإضافة ردود في هذا القسم حسب إعدادات الإدارة.</p>
+            <div className="bg-slate-100 rounded-3xl border border-slate-200 p-10 text-center flex flex-col items-center justify-center w-full">
+              <Lock className="w-12 h-12 text-slate-300 mb-4" />
+              <h3 className="text-xl font-black text-slate-700 mb-2">هذا القسم للقراءة فقط</h3>
+              <p className="text-sm font-bold text-slate-500">لا يُسمح بإضافة ردود في هذا القسم.</p>
             </div>
           )
         ) : (
-          <div className="bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-300 p-16 text-center flex flex-col items-center justify-center w-full">
-            <Lock className="w-16 h-16 text-slate-300 mb-4" />
-            <h3 className="text-2xl font-black text-slate-700 mb-2">هذا الموضوع مغلق</h3>
-            <p className="text-base font-bold text-slate-500">تم إغلاق باب النقاش في هذا الموضوع من قِبل الإدارة.</p>
+          <div className="bg-slate-50 rounded-3xl border border-slate-200 p-10 text-center flex flex-col items-center justify-center w-full">
+            <Lock className="w-12 h-12 text-slate-300 mb-4" />
+            <h3 className="text-xl font-black text-slate-700 mb-2">هذا الموضوع مغلق</h3>
+            <p className="text-sm font-bold text-slate-500">تم إغلاق النقاش في هذا الموضوع من قِبل الإدارة.</p>
           </div>
         )}
         </div>
