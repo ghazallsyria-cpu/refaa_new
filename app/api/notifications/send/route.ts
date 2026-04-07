@@ -1,68 +1,82 @@
-import { NextResponse } from 'next/server';
-import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
+import webpush from 'web-push'; 
 
-// تهيئة مفاتيح الدفع (يجب إضافتها في ملف .env)
+// إعداد مفاتيح التشفير لإشعارات الدفع (تأكد من وجودها في Netlify)
 webpush.setVapidDetails(
-  'mailto:ehabg84@gmail.com',
+  'mailto:ehabg84@gmail.com', 
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '',
   process.env.VAPID_PRIVATE_KEY || ''
 );
 
-// يجب استخدام الـ Service Role لتخطي قواعد الأمان وجلب بيانات المشتركين
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function POST(req: Request) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
+
   try {
-    const { userId, title, body, url } = await req.json();
+    const body = await req.json();
+    
+    // توحيد البيانات لتصبح مصفوفة دائماً لتسهيل التعامل معها
+    const notificationsToProcess = Array.isArray(body) ? body : [body];
 
-    if (!userId || !title || !body) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+    // 1️⃣ حفظ الإشعارات في قاعدة البيانات (In-App Notifications)
+    const { error: dbError } = await adminSupabase
+      .from('notifications')
+      .insert(notificationsToProcess.map(n => ({
+        user_id: n.user_id || n.userId, 
+        title: n.title,
+        content: n.content || n.body,
+        type: n.type || 'system',
+        link: n.link || n.url || null,
+        is_read: false
+      })));
 
-    // جلب جميع الأجهزة المسجلة للطالب (قد يكون مسجلاً من هاتف وكمبيوتر معاً)
-    const { data: subscriptions, error } = await supabase
-      .from('push_subscriptions')
-      .eq('user_id', userId);
+    if (dbError) throw dbError;
 
-    if (error || !subscriptions || subscriptions.length === 0) {
-      return NextResponse.json({ message: 'User has no active push subscriptions' });
-    }
+    // 2️⃣ إرسال إشعارات الدفع (Push Notifications) لهواتف الطلاب
+    const pushPromises = notificationsToProcess.map(async (n) => {
+      const targetUserId = n.user_id || n.userId;
+      
+      // 🚀 تم الإصلاح هنا: إضافة .select('*') قبل .eq
+      const { data: subscriptions, error: subError } = await adminSupabase
+        .from('push_subscriptions')
+        .select('*') 
+        .eq('user_id', targetUserId);
 
-    const payload = JSON.stringify({
-      title: title,
-      body: body,
-      url: url || '/'
-    });
+      if (!subError && subscriptions && subscriptions.length > 0) {
+        const payload = JSON.stringify({
+          title: n.title,
+          body: n.content || n.body || '',
+          url: n.link || n.url || '/'
+        });
 
-    const sendPromises = subscriptions.map(async (sub) => {
-      const pushSubscription = {
-        endpoint: sub.endpoint,
-        keys: {
-          auth: sub.auth,
-          p256dh: sub.p256dh
-        }
-      };
-
-      try {
-        await webpush.sendNotification(pushSubscription, payload);
-      } catch (err: any) {
-        // إذا قام الطالب بمسح الكاش أو إغلاق الإشعارات من الإعدادات، نزيله من القاعدة
-        if (err.statusCode === 404 || err.statusCode === 410) {
-          await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
-        }
+        // إرسال الإشعار لكل جهاز يملكه هذا الطالب
+        const sendToDevices = subscriptions.map(async (sub) => {
+          try {
+            await webpush.sendNotification({
+              endpoint: sub.endpoint,
+              keys: { auth: sub.auth, p256dh: sub.p256dh }
+            }, payload);
+          } catch (err: any) {
+            // إذا قام الطالب بمسح بيانات المتصفح، نقوم بحذف الجهاز القديم
+            if (err.statusCode === 404 || err.statusCode === 410) {
+              await adminSupabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+            }
+          }
+        });
+        
+        await Promise.all(sendToDevices);
       }
     });
 
-    await Promise.all(sendPromises);
+    await Promise.all(pushPromises);
 
-    return NextResponse.json({ success: true, sentTo: subscriptions.length });
+    return NextResponse.json({ success: true });
 
-  } catch (error) {
-    console.error('Push API Error:', error);
-    return NextResponse.json({ error: 'Failed to send push notification' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Send Notification Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
