@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Bell, Info, AlertTriangle, CheckCircle2, MessageSquare, BookOpen, FileText } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion'; // إصلاح مسار framer-motion
 
 export type NotificationType = 'exam' | 'assignment' | 'attendance' | 'message' | 'announcement' | 'system' | 'success' | 'error';
 
@@ -165,6 +165,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         link,
       });
       if (error) throw error;
+
+      // 🚀 الإضافة السحرية هنا: إرسال الإشعار الفعلي لهاتف الطالب عبر الـ API
+      fetch('/api/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetUserId, title, body: content, url: link || '/' })
+      }).catch(err => console.error("Failed to trigger push:", err));
+
     } catch (error) {
       console.error('Error sending notification:', error);
     }
