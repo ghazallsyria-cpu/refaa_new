@@ -385,7 +385,7 @@ export default function SettingsPage() {
                             value={profileSettings.zoom_link}
                             onChange={(e) => setProfileSettings({...profileSettings, zoom_link: e.target.value})}
                             className="w-full pr-12 pl-4 py-4 rounded-2xl bg-indigo-50/30 border border-indigo-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-indigo-900 transition-all" 
-                            placeholder="https://zoom.us/j/..."
+                            placeholder="[https://zoom.us/j/](https://zoom.us/j/)..."
                             dir="ltr"
                           />
                         </div>
@@ -718,5 +718,6 @@ export default function SettingsPage() {
     </div>
   );
 }
+
 
 ```
