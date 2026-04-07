@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useRef } from 'react';
@@ -176,13 +174,17 @@ export default function ImageUpload({ initialImageUrl, onUploadSuccess, label = 
             </div>
           )}
           
-          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* 🚀 الإصلاح السحري: تم إزالة opacity-0 لكي يكون زر الإزالة ظاهراً بوضوح على أجهزة الهاتف */}
+          <div className="absolute top-3 right-3 flex gap-2 transition-opacity z-10">
             <button
-              onClick={handleRemove}
-              className="h-10 w-10 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700 shadow-sm transition-all hover:scale-105 active:scale-95"
-              title="إزالة الملف"
+              onClick={(e) => {
+                e.stopPropagation(); // منع أي تداخلات عند النقر
+                handleRemove();
+              }}
+              className="h-10 w-10 bg-white/90 backdrop-blur-sm border border-slate-200 rounded-xl flex items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700 shadow-md transition-all hover:scale-105 active:scale-95"
+              title="إزالة وتغيير الملف"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5 stroke-[3]" />
             </button>
           </div>
         </div>
