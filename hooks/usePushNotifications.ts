@@ -40,42 +40,61 @@ export function usePushNotifications() {
   const subscribe = async () => {
     setLoading(true);
     try {
-      if (!('serviceWorker' in navigator)) throw new Error('Service Worker غير مدعوم');
+      if (!('serviceWorker' in navigator)) throw new Error('Service Worker غير مدعوم في هذا المتصفح.');
       
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('يجب تسجيل الدخول أولاً لتفعيل الإشعارات');
+      if (!session?.user) throw new Error('يجب تسجيل الدخول أولاً لتفعيل الإشعارات.');
 
       const permissionResult = await Notification.requestPermission();
       setPermission(permissionResult);
-      if (permissionResult !== 'granted') throw new Error('تم رفض الإشعارات من قبل المستخدم');
+      if (permissionResult !== 'granted') throw new Error('تم رفض الإشعارات من قبلك، يجب السماح بها من إعدادات المتصفح.');
 
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
 
       const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!publicVapidKey) throw new Error('مفتاح VAPID غير موجود في إعدادات البيئة');
+      if (!publicVapidKey) throw new Error('مفتاح VAPID غير موجود (تأكد من إضافته في إعدادات البيئة باسم NEXT_PUBLIC_VAPID_PUBLIC_KEY).');
 
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-      });
+      let subscription;
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+        });
+      } catch (subError: any) {
+         console.warn("فشل الاشتراك الأولي، جاري تنظيف الاشتراك القديم والمحاولة مجدداً...", subError);
+         // إذا فشل بسبب وجود مفتاح قديم مخزن في المتصفح، نزيله ونجرب مرة أخرى
+         const existingSub = await registration.pushManager.getSubscription();
+         if (existingSub) {
+            await existingSub.unsubscribe();
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+            });
+         } else {
+            throw subError;
+         }
+      }
 
       const subData = JSON.parse(JSON.stringify(subscription));
 
-      // حفظ الاشتراك في قاعدة بيانات Supabase لكي نرسل له الإشعارات لاحقاً
-      const { error } = await supabase.from('push_subscriptions').upsert({
+      // 🚀 تم الإصلاح هنا: تغيير onConflict ليتطابق مع قيود جدولك
+      const { error: dbError } = await supabase.from('push_subscriptions').upsert({
         user_id: session.user.id,
         endpoint: subData.endpoint,
         auth: subData.keys.auth,
         p256dh: subData.keys.p256dh
-      }, { onConflict: 'endpoint' });
+      }, { onConflict: 'user_id,endpoint' });
 
-      if (error) throw error;
+      if (dbError) {
+         console.error("Supabase Insert Error:", dbError);
+         throw new Error(`قاعدة البيانات ترفض الحفظ: ${dbError.message} (تأكد من سياسات RLS للجدول)`);
+      }
 
       setSubscribed(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Push subscription failed:', error);
-      alert('لم نتمكن من تفعيل الإشعارات: تأكد من إعدادات المتصفح.');
+      alert(`لم نتمكن من تفعيل الإشعارات:\n\n${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -89,7 +108,6 @@ export function usePushNotifications() {
       if (subscription) {
         await subscription.unsubscribe();
         const subData = JSON.parse(JSON.stringify(subscription));
-        // مسح الاشتراك من قاعدة البيانات
         await supabase.from('push_subscriptions').delete().eq('endpoint', subData.endpoint);
       }
       setSubscribed(false);
