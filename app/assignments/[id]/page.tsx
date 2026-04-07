@@ -692,6 +692,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <AssignmentForm 
                 questions={questions} 
                 onSubmit={handleSubmitAnswers} 
+                onChange={(newAnswers) => setMyAnswers(newAnswers)} // 👈 أضف هذا السطر فقط
                 isSubmitting={isSubmitting}
                 initialAnswers={myAnswers}
                 readOnly={!!mySubmission}
