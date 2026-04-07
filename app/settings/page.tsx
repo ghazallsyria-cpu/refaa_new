@@ -1,6 +1,5 @@
+```tsx
 'use client';
-
-
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSettingsSystem, PlatformSettings, ProfileSettings } from '@/hooks/useSettingsSystem';
@@ -32,7 +31,6 @@ import { cn } from '@/lib/utils';
 
 type Tab = 'school' | 'profile' | 'notifications' | 'security' | 'platform';
 
-// توسيع النوع المحلي ليدعم الصورة الشخصية
 interface ExtendedProfileSettings extends ProfileSettings {
   avatar_url?: string;
 }
@@ -255,7 +253,6 @@ export default function SettingsPage() {
           <nav className="flex flex-col gap-2 sticky top-8">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
-              // تلوين خاص لزر المنصة إذا كانت مغلقة
               const isPlatformClosed = tab.id === 'platform' && !platformSettings.is_open;
 
               return (
