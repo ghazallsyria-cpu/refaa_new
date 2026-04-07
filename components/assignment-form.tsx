@@ -2,18 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Send, Columns } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 interface AssignmentFormProps {
   questions: any[];
   onSubmit: (answers: Record<string, any>) => void;
+  // 🚀 إضافة دالة onChange لإرسال الإجابات للصفحة الرئيسية فور تغييرها
+  onChange?: (answers: Record<string, any>) => void;
   isSubmitting?: boolean;
   initialAnswers?: Record<string, any>;
   readOnly?: boolean;
   children?: React.ReactNode;
 }
 
-export default function AssignmentForm({ questions, onSubmit, isSubmitting, initialAnswers = {}, readOnly = false, children }: AssignmentFormProps) {
+export default function AssignmentForm({ 
+  questions, 
+  onSubmit, 
+  onChange, // الدالة الجديدة
+  isSubmitting, 
+  initialAnswers = {}, 
+  readOnly = false, 
+  children 
+}: AssignmentFormProps) {
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -26,9 +36,16 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
     }
   }, [initialAnswers]);
 
+  // 🚀 إرسال الإجابات للصفحة الرئيسية في كل مرة يتم فيها تحديث الإجابة
   const handleAnswerChange = (questionId: string, value: any) => {
     if (readOnly) return;
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+    
+    setAnswers(prev => {
+      const newAnswers = { ...prev, [questionId]: value };
+      if (onChange) onChange(newAnswers); // تبليغ الصفحة الرئيسية للتخزين التلقائي
+      return newAnswers;
+    });
+
     if (errors[questionId]) setErrors(prev => { const n = {...prev}; delete n[questionId]; return n; });
   };
 
@@ -77,7 +94,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
       {questions.map((question, index) => {
         const isHeader = question.type === 'section_header';
         const isComparison = question.type === 'comparison';
-        // 🚀 التحصين: التأكد من وجود الخيارات دائماً
         const safeOptions = question.options && Array.isArray(question.options) ? question.options : [];
 
         return (
@@ -131,7 +147,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     />
                   )}
 
-                  {/* 🚀 جدول المقارنة المحصن ضد الأعطال */}
                   {isComparison && (
                     <div className="rounded-3xl border border-slate-300 overflow-hidden bg-white shadow-sm mt-4">
                        <div className="overflow-x-auto">
@@ -178,7 +193,6 @@ export default function AssignmentForm({ questions, onSubmit, isSubmitting, init
                     </div>
                   )}
 
-                  {/* 🚀 الخيارات المتعددة المحصنة */}
                   {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {safeOptions.map((option: string, optIndex: number) => {
