@@ -36,7 +36,9 @@ interface ExtendedProfileSettings extends ProfileSettings {
 }
 
 export default function SettingsPage() {
-  const { userRole } = useAuth();
+  // 🚀 الإصلاح 1: إضافة isAdminByEmail لضمان تعرف النظام عليك كمدير
+  const { userRole, isAdminByEmail } = useAuth();
+  
   const { 
     loading, 
     error: systemError, 
@@ -51,7 +53,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   
-  const isAdmin = userRole === 'admin' || userRole === 'management';
+  // 🚀 استخدام isAdminByEmail
+  const isAdmin = userRole === 'admin' || userRole === 'management' || isAdminByEmail === true;
   const isStudent = userRole === 'student';
   const isTeacher = userRole === 'teacher';
 
@@ -321,8 +324,8 @@ export default function SettingsPage() {
                         </div>
                         <div className="max-w-md mx-auto sm:mx-0">
                           <ImageUpload
-                            initialImageUrl={profileSettings.avatar_url}
-                            onUploadSuccess={(url) => setProfileSettings({...profileSettings, avatar_url: url})}
+                            initialImageUrl={profileSettings.avatar_url ?? undefined}
+                            onUploadSuccess={(url) => setProfileSettings({...profileSettings, avatar_url: url || undefined})}
                             label="تغيير الصورة الشخصية"
                           />
                         </div>
@@ -381,7 +384,7 @@ export default function SettingsPage() {
                             value={profileSettings.zoom_link}
                             onChange={(e) => setProfileSettings({...profileSettings, zoom_link: e.target.value})}
                             className="w-full pr-12 pl-4 py-4 rounded-2xl bg-indigo-50/30 border border-indigo-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-indigo-900 transition-all" 
-                            placeholder="https://zoom.us/j/..."
+                            placeholder="[https://zoom.us/j/](https://zoom.us/j/)..."
                             dir="ltr"
                           />
                         </div>
@@ -423,9 +426,10 @@ export default function SettingsPage() {
                         <p className="text-xs font-bold text-slate-500 mt-1">سيتم عرض هذا الشعار في صفحة تسجيل الدخول والواجهات الرئيسية للنظام.</p>
                       </div>
                       <div className="max-w-md mx-auto sm:mx-0">
+                        {/* 🚀 الإصلاح 2: التأكد من النوع بـ ?? undefined لتجنب الخطأ في Netlify */}
                         <ImageUpload
-                          initialImageUrl={schoolSettings.logo_url}
-                          onUploadSuccess={(url) => setSchoolSettings({...schoolSettings, logo_url: url})}
+                          initialImageUrl={schoolSettings.logo_url ?? undefined}
+                          onUploadSuccess={(url) => setSchoolSettings({...schoolSettings, logo_url: url || ''})}
                           label="رفع شعار جديد للمدرسة"
                         />
                       </div>
