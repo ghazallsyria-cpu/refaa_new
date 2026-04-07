@@ -199,12 +199,15 @@ export default function AttendancePage() {
           else if (r.status === 'late') sStats.late++;
           else if (r.status === 'excused') sStats.excused++;
 
-          enrichedRecords.push({
-            ...r,
-            displayClassName: fullClassName,
-            subjectName: subjName,
-            teacherName: teacherName
-          });
+          // 🚀 التعديل هنا: إضافة السجل للقائمة التفصيلية فقط إذا كان غياباً أو تأخيراً أو استئذاناً
+          if (r.status !== 'present') {
+            enrichedRecords.push({
+              ...r,
+              displayClassName: fullClassName,
+              subjectName: subjName,
+              teacherName: teacherName
+            });
+          }
         });
 
         calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
@@ -423,14 +426,14 @@ export default function AttendancePage() {
                السجل الزمني التفصيلي للحصص
             </h2>
             <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-              إجمالي السجلات: {studentAttendance.length}
+              إجمالي سجلات الغياب: {studentAttendance.length}
             </span>
           </div>
           <div className="p-4 sm:p-8">
             {studentAttendance.length === 0 ? (
               <div className="text-center py-12 sm:py-16 bg-slate-50 rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-slate-200">
                 <Calendar className="h-10 w-10 sm:h-12 sm:w-12 text-slate-300 mx-auto mb-3 sm:mb-4" />
-                <p className="text-slate-500 font-bold text-sm sm:text-lg">لا يوجد سجل حضور متاح لك حتى الآن.</p>
+                <p className="text-slate-500 font-bold text-sm sm:text-lg">لا توجد سجلات غياب أو تأخير مسجلة عليك حتى الآن.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
