@@ -1,274 +1,133 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  ArrowRight, Loader2, User, Clock, ShieldCheck, 
-  MessageSquare, Send, Reply, Eye, BadgeCheck, Lock,
-  Heart, MoreVertical, Pin, Trash2, CheckCircle, XCircle, Share2, Medal, BookOpen, Users,
-  Sparkles, Quote, Trophy, Crown, Image as ImageIcon
+  ArrowRight, MessageSquare, Plus, Search, Loader2, 
+  Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen, Layers, Hash,
+  Target, ShieldAlert, Image as ImageIcon, Save, Edit2, Trash2, Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
-import ForumEditor from '@/components/ForumEditor';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
 
-// 🚀 خريطة الأيقونات للهيدر الذكي
-const ICON_MAP: Record<string, any> = {
-  'Sparkles': Sparkles,
-  'Trophy': Trophy,
-  'Quote': Quote,
-  'Image': ImageIcon
-};
 
-const DEFAULT_SLIDE = {
-  id: 'default',
-  icon_name: 'Sparkles',
-  badge_text: 'القلب النابض للمنصة',
-  title: 'مجتمع النقاشات المفتوحة',
-  description: 'مساحة تفاعلية تجمع بين العقول المبدعة. شارك أفكارك، اطرح أسئلتك، وكن جزءاً من رحلة التعلم المستمرة.',
-  color_gradient: 'from-indigo-400 to-blue-500',
-  type: 'welcome'
-};
+ import { useParams, useRouter } from 'next/navigation';
+ import { useAuth } from '@/context/auth-context';
+ import { useTopics } from '@/hooks/useTopics';
+ import { useForums } from '@/hooks/useForums';
+ import { supabase } from '@/lib/supabase';
+ import { deleteFromCloudinary } from '@/lib/cloudinary';
+ import Link from 'next/link';
+ import ForumEditor from '@/components/ForumEditor';
 
-const extractUrlsFromHtml = (htmlStrings: string[]) => {
-  const urls: string[] = [];
-  const regex = /<img[^>]+src="([^">]+)"/g;
-  htmlStrings.forEach(html => {
-    if (!html) return;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      if (match[1].includes('cloudinary.com')) urls.push(match[1]);
-    }
-  });
-  return urls;
-};
 
-const renderContentWithMath = (content: string) => {
-   if (!content) return { __html: '' };
-   let html = content.replace(
-     /\$\$(.*?)\$\$/g, 
-     '<span class="math-tex text-indigo-700 bg-indigo-50 px-2 py-1 rounded font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
-   );
-   return { __html: html };
-};
-
-export default function TopicDetailsPage() {
+export default function CategoryPage() {
   const params = useParams();
   const router = useRouter();
-  const topicId = params.topicId as string;
+  const categoryId = params.id as string;
   
   const { user, userRole, authRole } = useAuth() as any;
   const currentRole = authRole || userRole;
-  const isStaff = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management';
+  const isAdmin = currentRole === 'admin' || currentRole === 'management';
+  const canUploadImage = currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management';
 
-  const [topic, setTopic] = useState<any>(null);
-  const [replies, setReplies] = useState<any[]>([]);
-  const [userVotes, setUserVotes] = useState<string[]>([]); 
-  const [replyLikesData, setReplyLikesData] = useState<Record<string, {count: number, names: string[]}>>({});
-  const [pollData, setPollData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [replyContent, setReplyContent] = useState('');
+  const { topics, categoryInfo, loading, fetchTopicsAndCategory } = useTopics(categoryId);
+  const { createCategory, updateCategory, schoolClasses, fetchCategoriesAndClasses } = useForums(); 
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newContent, setNewContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // 🚀 إضافات نظام الاستطلاعات
+  const [hasPoll, setHasPoll] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+  const [allowMultiple, setAllowMultiple] = useState(false);
+  
+  const [subcategories, setSubcategories] = useState<any[]>([]);
+  const [studentClassId, setStudentClassId] = useState<string | null>(null); // 🚀 حالة حفظ صف الطالب الحالي
+  
+  const [isSubCatModalOpen, setIsSubCatModalOpen] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [newSubCatName, setNewSubCatName] = useState('');
+  const [newSubCatDesc, setNewSubCatDesc] = useState('');
+  const [subTargetClasses, setSubTargetClasses] = useState<string[]>([]);
+  const [subPostPerm, setSubPostPerm] = useState('all');
+  const [subReplyPerm, setSubReplyPerm] = useState('all');
+  const [subCoverUrl, setSubCoverUrl] = useState('');
+  const [isSubUploading, setIsSubUploading] = useState(false);
+  const [isSubSubmitting, setIsSubSubmitting] = useState(false);
 
-  // 🚀 حالات السلايدر الديناميكي
-  const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
-  const [currentSlide, setCurrentSlide] = useState(0);
-
-  // 🚀 جلب شرائح الهيدر من قاعدة البيانات
   useEffect(() => {
-    const fetchHeroSlides = async () => {
-      const { data, error } = await supabase
-        .from('forum_hero_slides')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order', { ascending: false })
-        .order('created_at', { ascending: false });
-      
-      if (data && data.length > 0) setHeroSlides(data);
-    };
-    fetchHeroSlides();
-  }, []);
-
-  // 🚀 تأثير تقليب السلايدر تلقائياً
-  useEffect(() => {
-    if (heroSlides.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 7000); 
-    return () => clearInterval(timer);
-  }, [heroSlides.length]);
-
-  const fetchTopicData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: topicData, error: topicError } = await supabase
-        .from('forum_topics')
-        .select('*, category:forum_categories(name, reply_permission)')
-        .eq('id', topicId)
-        .single();
-        
-      if (topicError) throw topicError;
-
-      const viewedTopics = JSON.parse(sessionStorage.getItem('viewed_topics') || '[]');
-      if (!viewedTopics.includes(topicId)) {
-         const newViewsCount = (topicData.views_count || 0) + 1;
-         await supabase.from('forum_topics').update({ views_count: newViewsCount }).eq('id', topicId);
-         topicData.views_count = newViewsCount;
-         sessionStorage.setItem('viewed_topics', JSON.stringify([...viewedTopics, topicId]));
-      }
-
-      const { data: authorData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').eq('id', topicData.author_id).single();
-      let badgeText = authorData?.role === 'student' ? 'طالب' : (authorData?.role === 'teacher' ? 'معلم' : 'إدارة');
-      
-      let authorRoleDetail = '';
-      if (authorData?.role === 'teacher') {
-         try {
-            const { data: tsData } = await supabase.from('teacher_subjects').select('subjects(name)').eq('teacher_id', topicData.author_id).limit(1);
-            if (tsData && tsData.length > 0 && (tsData[0] as any).subjects) authorRoleDetail = (tsData[0] as any).subjects.name || '';
-            else {
-               const { data: tData } = await supabase.from('teachers').select('specialization').eq('id', topicData.author_id).single();
-               if (tData && tData.specialization) authorRoleDetail = tData.specialization;
-            }
-         } catch (e) {}
-      } else if (authorData?.role === 'student') {
-         try {
-            const { data: stData } = await supabase.from('students').select('sections(name, classes(name))').eq('id', topicData.author_id).single();
-            if (stData && stData.sections) {
-               const sec: any = stData.sections;
-               const className = sec.classes?.name || sec.class?.name || '';
-               const secName = sec.name || '';
-               authorRoleDetail = className ? `${className} - ${secName}` : secName;
-            }
-         } catch (e) {}
-      }
-
-      const { data: authorBadgesRaw } = await supabase
-        .from('student_badges')
-        .select(`badge_id, badges ( id, name, image_url )`)
-        .eq('student_id', topicData.author_id);
-      
-      const parsedBadges = authorBadgesRaw?.map((b: any) => b.badges).filter(Boolean) || [];
-
-      setTopic({ 
-        ...topicData, 
-        author: authorData, 
-        author_badge: badgeText, 
-        author_role_detail: authorRoleDetail,
-        author_earned_badges: parsedBadges 
-      });
-
-      const { data: poll } = await supabase.from('forum_polls').select('*').eq('topic_id', topicId).single();
-      if (poll) {
-         const { data: options } = await supabase.from('forum_poll_options').select('*').eq('poll_id', poll.id);
-         const { data: votes } = await supabase.from('forum_poll_votes').select('*').eq('poll_id', poll.id);
-         setPollData({ ...poll, options: options || [], votes: votes || [] });
-      }
-
-      const { data: repliesData } = await supabase.from('forum_replies').select('*').eq('topic_id', topicId).order('is_verified', { ascending: false }).order('created_at', { ascending: true });
-
-      let formattedReplies: any[] = [];
-      if (repliesData && repliesData.length > 0) {
-        const authorIds = [...new Set(repliesData.map((r: any) => r.author_id))];
-        const { data: usersData } = await supabase.from('users').select('id, full_name, role, avatar_url, created_at').in('id', authorIds);
-        
-        let userRoleDetailsMap = new Map();
-        
-        const teacherIds = usersData?.filter((u: any) => u.role === 'teacher').map((u: any) => u.id) || [];
-        if (teacherIds.length > 0) {
-           try {
-              const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
-              if (tsData) tsData.forEach((ts: any) => { if (ts.subjects?.name && !userRoleDetailsMap.has(ts.teacher_id)) userRoleDetailsMap.set(ts.teacher_id, ts.subjects.name); });
-              const missingTeacherIds = teacherIds.filter(id => !userRoleDetailsMap.has(id));
-              if (missingTeacherIds.length > 0) {
-                  const { data: tData } = await supabase.from('teachers').select('id, specialization').in('id', missingTeacherIds);
-                  tData?.forEach((t: any) => { if (t.specialization) userRoleDetailsMap.set(t.id, t.specialization); });
-              }
-           } catch (e) {}
-        }
-
-        const studentIds = usersData?.filter((u: any) => u.role === 'student').map((u: any) => u.id) || [];
-        if (studentIds.length > 0) {
-           try {
-              const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
-              if (stData) {
-                 stData.forEach((st: any) => {
-                    if (st.sections) {
-                       const className = st.sections.classes?.name || st.sections.class?.name || '';
-                       const secName = st.sections.name || '';
-                       const fullSec = className ? `${className} - ${secName}` : secName;
-                       if (fullSec) userRoleDetailsMap.set(st.id, fullSec);
-                    }
-                 });
-              }
-           } catch (e) {}
-        }
-
-        const { data: allReplyBadgesRaw } = await supabase
-          .from('student_badges')
-          .select(`student_id, badge_id, badges ( id, name, image_url )`)
-          .in('student_id', authorIds);
-
-        formattedReplies = repliesData.map((reply: any) => {
-          const author = usersData?.find((u: any) => u.id === reply.author_id);
-          const roleDetail = userRoleDetailsMap.get(reply.author_id) || '';
-          const userBadgeRows = allReplyBadgesRaw?.filter((b: any) => b.student_id === reply.author_id) || [];
-          const replyBadges = userBadgeRows.map((b: any) => b.badges).filter(Boolean);
-
-          return { 
-            ...reply, 
-            users: author || { full_name: 'مجهول', role: 'student' }, 
-            role_detail: roleDetail,
-            earned_badges: replyBadges 
-          };
-        });
-
-        const replyIds = repliesData.map((r: any) => r.id);
-        const { data: allVotes } = await supabase.from('forum_votes').select('reply_id, user_id').in('reply_id', replyIds);
-        
-        if (allVotes && allVotes.length > 0) {
-           const voterIds = [...new Set(allVotes.map((v: any) => v.user_id))];
-           const { data: votersData } = await supabase.from('users').select('id, full_name').in('id', voterIds);
-           const likesMap: Record<string, {count: number, names: string[]}> = {};
-           
-           replyIds.forEach((id: string) => {
-              const votesForReply = allVotes.filter((v: any) => v.reply_id === id);
-              const names = votesForReply.map((v: any) => {
-                 const usr = votersData?.find((u: any) => u.id === v.user_id);
-                 return usr ? usr.full_name : 'مستخدم';
-              });
-              likesMap[id] = { count: votesForReply.length, names };
-           });
-           setReplyLikesData(likesMap);
-        }
-      }
-      setReplies(formattedReplies);
-
-      if (user) {
-        const { data: votes } = await supabase.from('forum_votes').select('reply_id').eq('user_id', user.id);
-        setUserVotes(votes?.map((v: any) => v.reply_id) || []);
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [topicId, user]);
-
-  useEffect(() => { fetchTopicData(); }, [fetchTopicData]);
-
-  const checkReplyPermission = () => {
-    if (!currentRole || !topic?.category) return false;
-    const perm = topic.category.reply_permission;
+    fetchTopicsAndCategory();
+    fetchSubcategories();
+    fetchCategoriesAndClasses();
     
-    if (perm === 'none') return false;
+    // 🚀 جلب معرف صف الطالب للإخفاء الذكي (Smart Visibility)
+    if (currentRole === 'student' && user?.id) {
+      const fetchStudentClass = async () => {
+        try {
+          const { data } = await supabase
+            .from('students')
+            .select('sections(class_id)')
+            .eq('id', user.id)
+            .single();
+          
+          const sec = Array.isArray(data?.sections) ? data?.sections[0] : data?.sections;
+          if (sec?.class_id) setStudentClassId(sec.class_id);
+        } catch (e) {
+          console.error("Error fetching student class", e);
+        }
+      };
+      fetchStudentClass();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, currentRole, user?.id]);
+
+  const fetchSubcategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('forum_categories')
+        .select('*, forum_topics(count)')
+        .eq('parent_id', categoryId)
+        .order('created_at', { ascending: true });
+
+      if (data) {
+        const formatted = data.map((cat: any) => ({
+          ...cat,
+          topics_count: cat.forum_topics?.[0]?.count || 0
+        }));
+        setSubcategories(formatted);
+      }
+    } catch (err) {
+      console.error('Error fetching subcategories:', err);
+    }
+  };
+
+  // 🚀 الفلترة الذكية للأقسام (Smart Visibility)
+  const visibleSubcategories = subcategories.filter(subCat => {
+    // 1. الإدارة والمعلمين يرون كل الأقسام دائماً لإدارتها
+    if (['admin', 'management', 'teacher'].includes(currentRole)) return true;
+    
+    // 2. الأقسام العامة (بدون تخصيص فصول) تظهر للجميع
+    if (!subCat.target_classes || subCat.target_classes.length === 0) return true;
+    
+    // 3. مطابقة صف الطالب مع صفوف القسم الفرعي
+    if (currentRole === 'student' && studentClassId) {
+      return subCat.target_classes.includes(studentClassId);
+    }
+    
+    // 4. إخفاء القسم عن بقية الطلاب
+    return false;
+  });
+
+  const checkPostPermission = () => {
+    if (!currentRole || !categoryInfo) return false;
+    const perm = categoryInfo.post_permission;
+    
     if (perm === 'all' || !perm) return true;
     if (perm === 'admin_only' && (currentRole === 'admin' || currentRole === 'management')) return true;
     if (perm === 'teachers_admin' && (currentRole === 'admin' || currentRole === 'management' || currentRole === 'teacher')) return true;
@@ -276,455 +135,581 @@ export default function TopicDetailsPage() {
     return false;
   };
 
-  const canReply = checkReplyPermission();
+  const canPost = checkPostPermission();
 
-  const handleAddReply = async (e: React.FormEvent) => {
+  const handleCreateTopic = async (e: React.FormEvent) => {
     e.preventDefault();
-    const strippedContent = replyContent.replace(/<[^>]+>/g, '').trim();
-    if (!user || (!strippedContent && !replyContent.includes('<img'))) return;
-
+    const strippedContent = newContent.replace(/<[^>]+>/g, '').trim();
+    if (!newTitle.trim() || (!strippedContent && !newContent.includes('<img'))) {
+      alert("الرجاء كتابة عنوان ومحتوى للموضوع.");
+      return;
+    }
+    
     setIsSubmitting(true);
+    
     try {
-      const { error } = await supabase.from('forum_replies').insert([{ topic_id: topicId, author_id: user.id, content: replyContent }]);
-      if (error) throw error;
-      
-      setReplyContent('');
-      await fetchTopicData();
-    } catch (error) {
-      alert('حدث خطأ أثناء إضافة الرد.');
+      const { data: newTopicData, error: topicError } = await supabase
+        .from('forum_topics')
+        .insert([{
+          category_id: categoryId,
+          author_id: user.id,
+          title: newTitle,
+          content: newContent
+        }])
+        .select()
+        .single();
+
+      if (topicError) throw topicError;
+
+      if (hasPoll && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2) {
+        const { data: pollData, error: pollError } = await supabase
+          .from('forum_polls')
+          .insert([{
+            topic_id: newTopicData.id,
+            question: pollQuestion,
+            allow_multiple: allowMultiple
+          }])
+          .select()
+          .single();
+
+        if (!pollError) {
+          const validOptions = pollOptions.filter(o => o.trim()).map(opt => ({
+            poll_id: pollData.id,
+            option_text: opt
+          }));
+          if (validOptions.length > 0) {
+            await supabase.from('forum_poll_options').insert(validOptions);
+          }
+        }
+      }
+
+      setIsModalOpen(false);
+      setNewTitle('');
+      setNewContent('');
+      setHasPoll(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      await fetchTopicsAndCategory();
+    } catch (error: any) {
+      alert(`خطأ في النشر: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const toggleVote = async (replyId: string, currentCount: number) => {
-    if (!user) return;
-    const hasVoted = userVotes.includes(replyId);
-    setUserVotes((prev: string[]) => hasVoted ? prev.filter(id => id !== replyId) : [...prev, replyId]);
-    
-    setReplyLikesData((prev: any) => {
-       const currentNames = prev[replyId]?.names || [];
-       const myName = user.user_metadata?.full_name || 'مستخدم';
-       const newNames = hasVoted ? currentNames.filter((n: string) => n !== myName) : [...currentNames, myName];
-       return { ...prev, [replyId]: { count: (prev[replyId]?.count || currentCount) + (hasVoted ? -1 : 1), names: newNames } };
-    });
-    
-    setReplies((prev: any[]) => prev.map((r: any) => r.id === replyId ? { ...r, upvotes_count: r.upvotes_count + (hasVoted ? -1 : 1) } : r));
+  const openEditCategoryModal = (cat: any) => {
+    setEditingCatId(cat.id);
+    setNewSubCatName(cat.name);
+    setNewSubCatDesc(cat.description || '');
+    setSubTargetClasses(cat.target_classes || []);
+    setSubCoverUrl(cat.icon || '');
+    setSubPostPerm(cat.post_permission || 'all');
+    setSubReplyPerm(cat.reply_permission || 'all');
+    setIsSubCatModalOpen(true);
+  };
 
+  const resetSubCatForm = () => {
+    setEditingCatId(null);
+    setNewSubCatName(''); 
+    setNewSubCatDesc(''); 
+    setSubTargetClasses([]); 
+    setSubCoverUrl('');
+    setSubPostPerm('all');
+    setSubReplyPerm('all');
+  };
+
+  const toggleSubClass = (classId: string) => {
+    if (subTargetClasses.includes(classId)) setSubTargetClasses(subTargetClasses.filter(id => id !== classId));
+    else setSubTargetClasses([...subTargetClasses, classId]);
+  };
+
+  const handleSubCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsSubUploading(true);
     try {
-      if (hasVoted) {
-        await supabase.from('forum_votes').delete().eq('reply_id', replyId).eq('user_id', user.id);
-        await supabase.from('forum_replies').update({ upvotes_count: currentCount - 1 }).eq('id', replyId);
-      } else {
-        await supabase.from('forum_votes').insert([{ reply_id: replyId, user_id: user.id }]);
-        await supabase.from('forum_replies').update({ upvotes_count: currentCount + 1 }).eq('id', replyId);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.secure_url) setSubCoverUrl(data.secure_url);
+    } catch (error) { alert('خطأ في رفع الصورة'); } 
+    finally { setIsSubUploading(false); }
+  };
+
+  const handleCreateSubCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubCatName.trim()) return;
+    setIsSubSubmitting(true);
+    
+    const payload = {
+      name: newSubCatName,
+      description: newSubCatDesc,
+      target_classes: subTargetClasses.length === 0 ? null : subTargetClasses,
+      icon: subCoverUrl || null,
+      post_permission: subPostPerm as any, 
+      reply_permission: subReplyPerm as any 
+    };
+
+    let result;
+    if (editingCatId) {
+      result = await updateCategory(editingCatId, payload); 
+    } else {
+      result = await createCategory({ ...payload, parent_id: categoryId });
+    }
+
+    if (result.success) {
+      setIsSubCatModalOpen(false); 
+      resetSubCatForm();
+      
+      if (editingCatId === categoryId) {
+         fetchTopicsAndCategory(); 
       }
-    } catch (error) {}
+      fetchSubcategories(); 
+    } else {
+      alert(`خطأ: ${result?.error || 'حدث خطأ'}`);
+    }
+    setIsSubSubmitting(false);
   };
 
-  const handlePollVote = async (optionId: string) => {
-     if (!user || !pollData) return;
-     const hasVoted = pollData.votes.some((v: any) => v.user_id === user.id && (!pollData.allow_multiple || v.option_id === optionId));
-     
-     if (hasVoted && !pollData.allow_multiple) {
-        alert('لقد قمت بالتصويت مسبقاً في هذا الاستطلاع.');
-        return;
-     } else if (hasVoted && pollData.allow_multiple) {
-        try {
-           await supabase.from('forum_poll_votes').delete().eq('poll_id', pollData.id).eq('option_id', optionId).eq('user_id', user.id);
-           setPollData({ ...pollData, votes: pollData.votes.filter((v: any) => !(v.option_id === optionId && v.user_id === user.id)) });
-        } catch (error) {}
-        return;
-     }
-
-     try {
-        await supabase.from('forum_poll_votes').insert([{ poll_id: pollData.id, option_id: optionId, user_id: user.id }]);
-        setPollData({ ...pollData, votes: [...pollData.votes, { poll_id: pollData.id, option_id: optionId, user_id: user.id }] });
-     } catch (error) {}
+  const handleDeleteCategory = async (catId: string, catIcon: string | null) => {
+      if (!confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع المواضيع والردود بداخله. هذا الإجراء لا يمكن التراجع عنه.')) return;
+      try {
+          if (catIcon) await deleteFromCloudinary(catIcon);
+          await supabase.from('forum_categories').delete().eq('id', catId);
+          if (catId === categoryId) {
+              router.push('/forums');
+          } else {
+              fetchSubcategories();
+          }
+      } catch(e) {
+          alert("خطأ في الحذف");
+      }
   };
 
-  const toggleVerify = async (replyId: string, currentStatus: boolean) => {
-    try {
-      await supabase.from('forum_replies').update({ is_verified: !currentStatus }).eq('id', replyId);
-      fetchTopicData();
-    } catch (error) { console.error(error); }
-  };
-
-  const toggleTopicAttribute = async (field: 'is_pinned' | 'is_locked', currentValue: boolean) => {
-    try {
-      await supabase.from('forum_topics').update({ [field]: !currentValue }).eq('id', topicId);
-      setTopic((prev: any) => ({ ...prev, [field]: !currentValue }));
-    } catch (error) { console.error(error); }
-  };
-
-  const handleDeleteTopic = async () => {
-    if (!confirm('هل أنت متأكد من حذف هذا الموضوع نهائياً؟')) return;
-    try {
-      const urlsToDelete = extractUrlsFromHtml([topic.content, ...replies.map(r => r.content)]);
-      if (urlsToDelete.length > 0) await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
-      await supabase.from('forum_replies').delete().eq('topic_id', topicId);
-      await supabase.from('forum_topics').delete().eq('id', topicId);
-      router.push(`/forums/${topic.category_id}`);
-    } catch (error) {}
-  };
-
-  const handleDeleteReply = async (replyId: string, content: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا الرد؟')) return;
-    try {
-      const urlsToDelete = extractUrlsFromHtml([content]);
-      if (urlsToDelete.length > 0) await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
-      await supabase.from('forum_replies').delete().eq('id', replyId);
-      setReplies((prev: any[]) => prev.filter((r: any) => r.id !== replyId));
-    } catch (error) {}
-  };
-
-  const UserProfileColumn = ({ author, badgeText, badges, roleDetail, isTopicAuthor = false }: any) => (
-    <div className={`w-full md:w-64 shrink-0 flex flex-col items-center p-6 bg-slate-50/50 md:bg-transparent ${isTopicAuthor ? 'md:border-l' : 'md:border-l'} border-slate-100`}>
-      <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full p-1 bg-white shadow-sm border-2 ${author?.role !== 'student' ? 'border-amber-400' : 'border-slate-200'} mb-3`}>
-        {author?.avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={author.avatar_url} alt="avatar" className="w-full h-full rounded-full object-cover" />
-        ) : (
-          <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><User className="w-10 h-10" /></div>
-        )}
-      </div>
-      <h3 className="font-black text-base text-slate-900 text-center flex flex-col items-center gap-1">
-        {author?.full_name || 'مستخدم مجهول'}
-      </h3>
-      
-      <span className={`mt-2 text-[10px] font-black px-3 py-1 rounded-full border flex items-center gap-1 ${author?.role !== 'student' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-        {badgeText} 
-        {roleDetail ? (
-           <>
-             <span className="opacity-50 mx-0.5">•</span> 
-             {author?.role === 'teacher' ? <BookOpen className="w-3 h-3 inline"/> : <Users className="w-3 h-3 inline"/>} 
-             <span className="mr-0.5">{roleDetail}</span>
-           </>
-        ) : ''}
-      </span>
-      
-      {badges && badges.length > 0 && (
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {badges.map((badge: any, idx: number) => (
-             <div key={idx} className="relative group/userbadge cursor-help">
-               {/* eslint-disable-next-line @next/next/no-img-element */}
-               <img 
-                  src={badge.image_url} 
-                  alt={badge.name} 
-                  className="w-7 h-7 object-contain drop-shadow-sm hover:scale-110 transition-transform" 
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }} 
-               />
-               <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded-lg opacity-0 group-hover/userbadge:opacity-100 pointer-events-none whitespace-nowrap z-20">
-                 {badge.name}
-               </div>
-             </div>
-          ))}
-        </div>
-      )}
-      
-      <div className="mt-6 w-full text-xs font-bold text-slate-500 space-y-2 border-t border-slate-200/50 pt-4 hidden md:block">
-         <div className="flex justify-between"><span>تاريخ التسجيل:</span> <span className="text-slate-700" dir="ltr">{author?.created_at ? format(new Date(author.created_at), 'yyyy/MM') : 'غير معروف'}</span></div>
-         {isTopicAuthor && <div className="flex justify-between"><span>المشاهدات:</span> <span className="text-indigo-600 font-black">{topic.views_count}</span></div>}
-      </div>
-    </div>
+  const filteredTopics = topics.filter((t: any) => 
+    t.title.includes(searchQuery) || t.content.includes(searchQuery)
   );
 
-  if (loading) return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin" /></div>;
-  if (!topic) return <div className="text-center mt-20"><h2 className="text-xl font-bold">الموضوع غير موجود</h2></div>;
+  const getSnippet = (html: string) => {
+    if (typeof document === 'undefined') return '';
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    const text = tmp.textContent || tmp.innerText || "";
+    return text.length > 80 ? text.substring(0, 80) + '...' : text;
+  };
 
-  const canModerate = isStaff || user?.id === topic.author_id;
-  const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
-  const SlideIcon = ICON_MAP[currentSlideData.icon_name] || Sparkles;
+  if (loading && !categoryInfo) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50/50">
+        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-bold">جاري تحميل بيانات القسم والمواضيع...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans selection:bg-indigo-500 selection:text-white" dir="rtl">
+    <div className="min-h-screen bg-slate-50/50 pb-24" dir="rtl">
       
-      <style dangerouslySetInnerHTML={{__html: `
-        .prose-container .prose table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
-        .prose-container .prose img { max-width: 100%; height: auto; border-radius: 1rem; }
-      `}} />
-
-      {/* 🌟 الواجهة العلوية الفاخرة المتقلبة الديناميكية */}
-      <div className="relative pt-24 pb-40 overflow-hidden bg-[#0F172A] rounded-b-[3rem] sm:rounded-b-[4rem] z-10 shadow-2xl">
-        <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 mix-blend-screen pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-blue-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 mix-blend-screen pointer-events-none"></div>
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20 h-full min-h-[200px] flex items-center justify-center">
-          <AnimatePresence mode="wait">
-            <motion.div 
-              key={currentSlideData.id}
-              initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="flex flex-col items-center text-center w-full"
-            >
-              {currentSlideData.badge_text && (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white text-xs sm:text-sm font-black mb-4 backdrop-blur-md shadow-sm">
-                  <SlideIcon className="w-4 h-4" />
-                  {currentSlideData.badge_text}
-                </div>
-              )}
-
-              <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r ${currentSlideData.color_gradient || 'from-white to-slate-300'} tracking-tight mb-4 drop-shadow-lg line-clamp-2`}>
-                {currentSlideData.title}
-              </h1>
-
-              {currentSlideData.description && (
-                <p className="text-slate-300 text-sm sm:text-base font-bold max-w-2xl leading-relaxed mb-6 line-clamp-3">
-                  {currentSlideData.description}
-                </p>
-              )}
-
-              {/* صور المتفوقين */}
-              {currentSlideData.metadata?.students && (
-                <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
-                  {currentSlideData.metadata.students.map((student: any, i: number) => (
-                    <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-2 sm:p-3 flex items-center gap-3 pr-4 shadow-xl">
-                      <div className="relative">
-                        <Crown className="absolute -top-3 -right-2 w-5 h-5 text-amber-400 drop-shadow-md z-10 rotate-12" />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={student.img} alt={student.name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-white/50 shadow-inner bg-white/50 object-cover" />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs sm:text-sm font-black text-white">{student.name}</p>
-                        <p className="text-[9px] sm:text-[10px] font-bold text-slate-300">{student.grade}</p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {heroSlides.length > 1 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-30">
-            {heroSlides.map((_, i) => (
-              <button key={i} onClick={() => setCurrentSlide(i)} className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 ${currentSlide === i ? 'w-6 sm:w-8 bg-white' : 'w-1.5 sm:w-2 bg-white/30 hover:bg-white/50'}`} aria-label={`Go to slide ${i + 1}`} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 🌟 شريط التحكم الخاص بالموضوع (Glassmorphism & Sticky) */}
-      <div className="sticky top-4 z-40 max-w-6xl mx-auto px-4 sm:px-6 -mt-10 mb-8 transition-all">
-        <div className="bg-white/80 backdrop-blur-2xl border border-white/50 p-3 sm:p-4 rounded-[2rem] shadow-[0_10px_30px_rgb(0,0,0,0.08)] flex justify-between items-center gap-4">
-          <div className="flex items-center gap-3 w-full overflow-hidden">
-            <button onClick={() => router.push(`/forums/${topic.category_id}`)} className="p-2 sm:p-3 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl transition-colors shrink-0">
-              <ArrowRight className="w-5 h-5" />
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.push('/forums')} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+              <ArrowRight className="w-6 h-6 text-slate-600" />
             </button>
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 mb-1">
-                <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 truncate max-w-[120px] sm:max-w-none">{topic.category?.name || 'قسم المنتدى'}</span>
-                {topic.is_pinned && <span className="bg-rose-50 text-rose-600 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1 shrink-0"><Pin className="w-3 h-3" /> مثبت</span>}
-                {topic.is_locked && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 shrink-0"><Lock className="w-3 h-3" /> مغلق</span>}
-              </div>
-              <h1 className="text-sm sm:text-base md:text-lg font-black text-slate-900 truncate w-full">{topic.title}</h1>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900">{categoryInfo?.name || 'جاري التحميل...'}</h1>
+              <p className="text-xs sm:text-sm font-bold text-slate-500 hidden sm:block">{categoryInfo?.description}</p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button className="p-2 sm:p-3 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl transition-colors hidden sm:block" title="نسخ الرابط" onClick={() => navigator.clipboard.writeText(window.location.href)}><Share2 className="w-4 h-4" /></button>
-            {isStaff && (
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger className="p-2 sm:p-3 bg-slate-900 hover:bg-black text-white rounded-xl outline-none transition-colors shadow-md">
-                  <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content className="bg-white rounded-2xl shadow-xl border border-slate-100 p-2 min-w-[200px] z-50 text-sm font-bold animate-in fade-in zoom-in duration-200" align="end" sideOffset={5}>
-                    <DropdownMenu.Item onClick={() => toggleTopicAttribute('is_pinned', topic.is_pinned)} className="flex items-center gap-2 p-3 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-xl cursor-pointer outline-none transition-colors">
-                      <Pin className={`w-4 h-4 ${topic.is_pinned ? 'fill-current' : ''}`} /> {topic.is_pinned ? 'إلغاء التثبيت' : 'تثبيت الموضوع'}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onClick={() => toggleTopicAttribute('is_locked', topic.is_locked)} className="flex items-center gap-2 p-3 hover:bg-amber-50 text-slate-700 hover:text-amber-700 rounded-xl cursor-pointer outline-none transition-colors">
-                      <Lock className={`w-4 h-4 ${topic.is_locked ? 'fill-current' : ''}`} /> {topic.is_locked ? 'فتح الموضوع للمناقشة' : 'إغلاق الموضوع'}
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
-                    <DropdownMenu.Item onClick={handleDeleteTopic} className="flex items-center gap-2 p-3 hover:bg-rose-50 text-rose-600 rounded-xl cursor-pointer outline-none transition-colors">
-                      <Trash2 className="w-4 h-4" /> حذف الموضوع
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+          
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <>
+                <button 
+                  onClick={() => openEditCategoryModal({ ...categoryInfo, id: categoryId, target_classes: (categoryInfo as any)?.target_classes, icon: (categoryInfo as any)?.icon })}
+                  className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-black text-sm transition-all shadow-sm active:scale-95 whitespace-nowrap"
+                  title="تعديل هذا القسم"
+                >
+                  <Edit2 className="w-4 h-4" /> <span className="hidden sm:inline">إعدادات القسم</span>
+                </button>
+                <button 
+                  onClick={() => { resetSubCatForm(); setIsSubCatModalOpen(true); }}
+                  className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 whitespace-nowrap"
+                >
+                  <Layers className="w-4 h-4" /> <span className="hidden sm:inline">قسم فرعي</span>
+                </button>
+              </>
+            )}
+            
+            {canPost && (
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl font-black text-sm transition-all shadow-md active:scale-95 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" /> <span className="hidden sm:inline">موضوع جديد</span>
+              </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8 prose-container relative z-20">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         
-        {/* Main Topic Container */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row max-w-full w-full">
-          
-          <UserProfileColumn 
-            author={topic.author} 
-            badgeText={topic.author_badge} 
-            badges={topic.author_earned_badges} 
-            roleDetail={topic.author_role_detail} 
-            isTopicAuthor={true} 
-          />
-          
-          <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
-             <div className="p-6 md:p-10 flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-8 pb-4 border-b border-slate-100 text-xs font-bold text-slate-400">
-                   <Clock className="w-4 h-4" /> تم النشر: {formatDistanceToNow(new Date(topic.created_at), { addSuffix: true, locale: arSA })}
-                </div>
-                
-                <div 
-                  className="prose prose-slate prose-indigo max-w-none text-slate-800 leading-loose font-medium w-full break-words overflow-x-auto overflow-y-hidden prose-p:text-lg prose-headings:font-black" 
-                  style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-                  dangerouslySetInnerHTML={renderContentWithMath(topic.content)} 
-                />
-                
-                {pollData && (
-                  <div className="mt-12 p-8 bg-slate-50 border border-slate-200 rounded-[2rem] w-full">
-                     <h3 className="text-xl font-black text-slate-900 mb-2 flex items-center gap-3">📊 {pollData.question}</h3>
-                     <p className="text-xs font-bold text-slate-500 mb-8 bg-white inline-block px-3 py-1.5 rounded-lg border border-slate-200">إجمالي الأصوات: {pollData.votes.length} {pollData.allow_multiple && ' • يسمح باختيارات متعددة'}</p>
-                     
-                     <div className="space-y-4">
-                       {pollData.options.map((opt: any) => {
-                          const votesForOption = pollData.votes.filter((v: any) => v.option_id === opt.id).length;
-                          const percentage = pollData.votes.length > 0 ? Math.round((votesForOption / pollData.votes.length) * 100) : 0;
-                          const isMyVote = pollData.votes.some((v: any) => v.option_id === opt.id && v.user_id === user?.id);
+        {/* 🚀 يتم الآن عرض الأقسام المرئية فقط حسب صلاحيات الطالب (visibleSubcategories) */}
+        {visibleSubcategories.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+              <Layers className="w-5 h-5 text-indigo-600" /> الأقسام الفرعية
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleSubcategories.map(subCat => {
+                const targetNames = subCat.target_classes && subCat.target_classes.length > 0 
+                  ? subCat.target_classes.map((id: string) => schoolClasses.find((c: any) => c.id === id)?.name || 'غير معروف').join('، ') 
+                  : null;
 
-                          return (
-                            <div key={opt.id} className="relative w-full group/poll">
-                              <button onClick={() => handlePollVote(opt.id)} className={`w-full relative z-10 flex items-center justify-between p-5 rounded-2xl border-2 transition-all text-right overflow-hidden ${isMyVote ? 'border-indigo-500 bg-indigo-50/30' : 'border-slate-200 bg-white hover:border-indigo-300 shadow-sm'}`}>
-                                 <span className={`font-black z-20 relative text-sm sm:text-base ${isMyVote ? 'text-indigo-800' : 'text-slate-700'}`}>
-                                   {isMyVote && <CheckCircle className="w-5 h-5 inline-block ml-3 text-indigo-600" />}{opt.option_text}
-                                 </span>
-                                 <span className="font-black text-slate-500 text-sm z-20 relative bg-white/80 px-2 py-1 rounded-lg backdrop-blur-sm">{percentage}% ({votesForOption})</span>
-                                 <div className="absolute top-0 right-0 h-full bg-indigo-100/50 rounded-xl transition-all duration-700 ease-out z-0" style={{ width: `${percentage}%` }}></div>
-                              </button>
-                            </div>
-                          );
-                       })}
-                     </div>
-                  </div>
-                )}
-             </div>
-             
-             <div className="bg-slate-50/50 border-t border-slate-100 px-8 py-5 flex items-center justify-end gap-3 w-full">
-                <button onClick={() => { document.getElementById('replyEditor')?.scrollIntoView({ behavior: 'smooth' }); }} className="flex items-center gap-2 text-sm font-black text-slate-600 hover:text-indigo-600 px-6 py-3 rounded-xl hover:bg-indigo-50 transition-colors border border-transparent hover:border-indigo-100 active:scale-95">
-                   <Reply className="w-5 h-5" /> أضف ردك الآن
-                </button>
-             </div>
-          </div>
-        </motion.div>
-
-        {/* Replies Section */}
-        {replies.length > 0 && (
-          <div className="space-y-8 pt-8 w-full">
-            <h3 className="font-black text-2xl text-slate-900 flex items-center gap-3 px-4"><MessageSquare className="w-7 h-7 text-indigo-500" /> المشاركات والردود ({replies.length})</h3>
-            
-            {replies.map((reply) => {
-              const isLiked = userVotes.includes(reply.id);
-              const badgeText = reply.users?.role === 'student' ? 'طالب' : (reply.users?.role === 'teacher' ? 'معلم' : 'إدارة');
-
-              return (
-                <motion.div key={reply.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className={`bg-white rounded-[2.5rem] shadow-sm border ${reply.is_verified ? 'border-emerald-400 ring-4 ring-emerald-50' : 'border-slate-200'} overflow-hidden flex flex-col md:flex-row relative max-w-full w-full`}>
-                  
-                  {reply.is_verified && (
-                    <div className="absolute top-4 left-4 z-20 bg-emerald-500 text-white text-xs font-black px-4 py-2 rounded-full flex items-center gap-1.5 shadow-lg border border-emerald-400">
-                      <CheckCircle className="w-4 h-4" /> إجابة معتمدة كحل
-                    </div>
+                return (
+                <div key={subCat.id} className="relative group h-full">
+                  {isAdmin && (
+                      <div className="absolute top-2 left-2 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditCategoryModal(subCat); }} className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-100 shadow-sm border border-indigo-100" title="تعديل القسم الفرعي">
+                              <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteCategory(subCat.id, subCat.icon); }} className="bg-white/90 backdrop-blur-sm p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 shadow-sm border border-rose-100" title="حذف القسم الفرعي">
+                              <Trash2 className="w-4 h-4" />
+                          </button>
+                      </div>
                   )}
-
-                  <UserProfileColumn 
-                     author={reply.users} 
-                     badgeText={badgeText} 
-                     badges={reply.earned_badges} 
-                     roleDetail={reply.role_detail} 
-                  />
-                  
-                  <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-hidden">
-                    <div className="p-6 md:p-8 flex-1 min-w-0">
-                      <div className="text-xs font-bold text-slate-400 mb-6 pb-4 border-b border-slate-100 flex justify-between items-center">
-                         <span>{formatDistanceToNow(new Date(reply.created_at), { addSuffix: true, locale: arSA })}</span>
-                         {reply.is_verified && <span className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg"><Medal className="w-4 h-4" /> أفضل إجابة</span>}
+                  <Link href={`/forums/${subCat.id}`} className="block h-full">
+                    <motion.div whileHover={{ y: -4 }} className="bg-white rounded-2xl shadow-sm hover:shadow-md border border-slate-200 transition-all p-4 flex items-start gap-4 h-full relative overflow-hidden">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 border border-indigo-100 overflow-hidden">
+                         {subCat.icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={subCat.icon} alt={subCat.name} className="w-full h-full object-contain p-1 bg-white" />
+                         ) : (
+                            <Hash className="w-6 h-6" />
+                         )}
                       </div>
-                      
-                      <div 
-                        className="prose prose-slate max-w-none text-slate-700 leading-loose w-full break-words overflow-x-auto overflow-y-hidden prose-p:text-base" 
-                        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-                        dangerouslySetInnerHTML={renderContentWithMath(reply.content)} 
-                      />
-                    </div>
-                    
-                    <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-4 flex items-center gap-4 w-full">
-                      <div className="relative group/like">
-                        <button onClick={() => toggleVote(reply.id, reply.upvotes_count)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-sm active:scale-95 ${isLiked ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}>
-                          <Heart className={`w-5 h-5 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} /> 
-                          <span dir="ltr">{replyLikesData[reply.id]?.count !== undefined ? replyLikesData[reply.id].count : reply.upvotes_count}</span>
-                        </button>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1 text-sm">{subCat.name}</h3>
+                        <p className="text-[11px] font-bold text-slate-500 mt-1 line-clamp-2">{subCat.description || 'قسم فرعي'}</p>
                         
-                        {replyLikesData[reply.id] && replyLikesData[reply.id].names.length > 0 && (
-                           <div className="absolute bottom-full right-0 mb-3 hidden group-hover/like:block w-max max-w-xs bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold p-3 rounded-xl shadow-xl z-10 pointer-events-none transition-opacity duration-200 border border-slate-700">
-                              أعجب بهذا: {replyLikesData[reply.id].names.slice(0, 5).join('، ')}
-                              {replyLikesData[reply.id].names.length > 5 && ` و ${replyLikesData[reply.id].names.length - 5} آخرين`}
-                           </div>
-                        )}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                           <span className="text-[10px] font-black bg-slate-50 border border-slate-100 text-slate-500 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                             <MessageSquare className="w-3 h-3" /> {subCat.topics_count || 0}
+                           </span>
+                           {targetNames ? (
+                             <span className="text-[10px] font-black bg-amber-50 border border-amber-100 text-amber-700 px-2 py-1 rounded-lg flex items-center gap-1 truncate max-w-[120px]" title={targetNames}>
+                               <Target className="w-3 h-3 shrink-0" /> {targetNames}
+                             </span>
+                           ) : (
+                             <span className="text-[10px] font-black bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                               <Globe className="w-3 h-3" /> عام
+                             </span>
+                           )}
+                           {subCat.post_permission === 'admin_only' && (
+                              <span className="text-[10px] font-black bg-red-50 border border-red-100 text-red-700 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                                <ShieldAlert className="w-3 h-3" /> رسمي
+                              </span>
+                           )}
+                           {subCat.reply_permission === 'none' && (
+                              <span className="text-[10px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                                <Lock className="w-3 h-3" /> للقراءة
+                              </span>
+                           )}
+                        </div>
                       </div>
-
-                      {canModerate && (
-                        <button onClick={() => toggleVerify(reply.id, reply.is_verified)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all border shadow-sm active:scale-95 ${reply.is_verified ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'}`}>
-                          {reply.is_verified ? <><XCircle className="w-5 h-5" /> إلغاء الاعتماد</> : <><CheckCircle className="w-5 h-5" /> اعتماد كحل</>}
-                        </button>
-                      )}
-
-                      {(isStaff || user?.id === reply.author_id) && (
-                        <button onClick={() => handleDeleteReply(reply.id, reply.content)} className="p-3 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors mr-auto active:scale-95" title="حذف الرد">
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                    </motion.div>
+                  </Link>
+                </div>
+              )})}
+            </div>
           </div>
         )}
 
-        {/* Reply Box */}
-        <div id="replyEditor" className="pt-10 w-full">
-        {!topic.is_locked ? (
-          canReply ? (
-            <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden w-full max-w-full">
-               <div className="bg-gradient-to-l from-indigo-50 to-white border-b border-slate-100 p-6 flex items-center gap-4">
-                <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl shadow-sm border border-indigo-200"><Reply className="w-6 h-6" /></div>
+        {!canPost && !loading && (
+           <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 flex items-center gap-3 text-slate-600 text-sm font-bold">
+              <Lock className="w-5 h-5 text-slate-400" /> لا تملك صلاحية لإنشاء مواضيع في هذا القسم.
+           </div>
+        )}
+
+        <div className="relative w-full max-w-md">
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="ابحث في مواضيع القسم..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pr-12 pl-4 focus:ring-2 focus:ring-indigo-400 outline-none transition-all font-bold text-sm shadow-sm"
+          />
+        </div>
+
+        {loading ? (
+          <div className="py-20 text-center"><Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto" /></div>
+        ) : filteredTopics.length === 0 ? (
+          <div className="text-center py-24 bg-white rounded-[2rem] shadow-sm border border-slate-100">
+            <MessageSquare className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+            <h3 className="text-xl font-black text-slate-800 mb-2">لا توجد مواضيع هنا</h3>
+            <p className="text-slate-500 font-bold text-sm mb-6">لم يتم نشر أي مواضيع في هذا القسم بعد.</p>
+            {canPost && (
+              <button onClick={() => setIsModalOpen(true)} className="text-indigo-600 font-black bg-indigo-50 px-6 py-2 rounded-xl hover:bg-indigo-100 transition-colors">
+                كتابة موضوع جديد
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden divide-y divide-slate-100">
+            {filteredTopics.map((topic: any) => {
+              const isStaff = topic.author_role === 'teacher' || topic.author_role === 'admin' || topic.author_role === 'management';
+              
+              return (
+              <Link key={topic.id} href={`/forums/topic/${topic.id}`} className="block hover:bg-slate-50 transition-colors group p-5 sm:p-6">
+                <div className="flex items-start gap-4">
+                  <div className="shrink-0">
+                    {topic.author_avatar ? (
+                      <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden shadow-sm border-2 ${isStaff ? 'border-amber-400' : 'border-slate-200'}`}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={topic.author_avatar} alt="avatar" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-sm border-2 ${isStaff ? 'bg-amber-50 text-amber-500 border-amber-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                        {isStaff ? <ShieldCheck className="w-6 h-6" /> : <User className="w-6 h-6" />}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {topic.is_pinned && <Pin className="w-4 h-4 text-rose-500 shrink-0" fill="currentColor" />}
+                      {topic.is_locked && <Lock className="w-4 h-4 text-slate-400 shrink-0" />}
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                        {topic.title}
+                      </h3>
+                    </div>
+                    
+                    <p className="text-xs sm:text-sm font-bold text-slate-500 line-clamp-1 mb-3">
+                      {getSnippet(topic.content)}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs">
+                      <span className="flex items-center gap-1 font-black text-slate-700">
+                         {isStaff && <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />}
+                         {topic.author_name}
+                      </span>
+                      
+                      <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md font-bold border ${isStaff ? 'bg-amber-50/50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                        {isStaff ? <BookOpen className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
+                        {topic.author_badge}
+                      </span>
+
+                      {topic.author_gamification_badges && topic.author_gamification_badges.length > 0 && (
+                        <div className="flex items-center gap-1 border-r-2 border-indigo-100 pr-2">
+                          {topic.author_gamification_badges.map((badge: any, idx: number) => (
+                            <div key={idx} className="relative group/badge flex items-center justify-center">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img 
+                                src={badge.image_url} 
+                                alt={badge.name} 
+                                className="w-5 h-5 sm:w-6 sm:h-6 object-contain drop-shadow-sm hover:scale-110 hover:-translate-y-1 transition-all cursor-help" 
+                              />
+                              <div className="absolute bottom-full mb-1 px-2 py-1 bg-slate-900 text-white text-[9px] font-bold rounded-lg opacity-0 group-hover/badge:opacity-100 whitespace-nowrap pointer-events-none transition-opacity z-10 shadow-lg border border-slate-700">
+                                {badge.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <span className="flex items-center gap-1 text-slate-400 font-bold sm:border-r border-slate-300 sm:pr-2 ml-auto">
+                        <Clock className="w-3.5 h-3.5" /> 
+                        {formatDistanceToNow(new Date(topic.created_at), { addSuffix: true, locale: arSA })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="hidden sm:flex flex-col items-end gap-2 shrink-0 text-slate-400">
+                    <div className="flex items-center gap-1.5 text-sm font-black bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                      <span>{topic.replies_count}</span> <MessageSquare className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            )})}
+          </div>
+        )}
+      </div>
+
+      {/* 🚀 نافذة إضافة موضوع جديد */}
+      <AnimatePresence>
+        {isModalOpen && canPost && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-100 my-auto"
+            >
+              <div className="bg-slate-50 p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between">
                 <div>
-                    <h3 className="font-black text-xl text-slate-900 mb-1">أضف ردك للمناقشة</h3>
-                    <p className="text-xs font-bold text-slate-500">شارك رأيك، ارفع صوراً، أو أضف معادلات رياضية (استخدم $$ حول المعادلة).</p>
+                  <h2 className="text-xl font-black text-slate-900">كتابة موضوع جديد</h2>
+                  <p className="text-xs font-bold text-slate-500 mt-1">أنت تنشر في: <span className="text-indigo-600">{categoryInfo?.name}</span></p>
                 </div>
+                <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+                  <XCircle className="w-6 h-6" />
+                </button>
               </div>
-              <form onSubmit={handleAddReply} className="p-6 md:p-8 space-y-6">
-                <div className="max-w-full w-full overflow-hidden border border-slate-200 rounded-2xl focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50 transition-all">
-                  <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} />
+              
+              <form onSubmit={handleCreateTopic} className="p-5 sm:p-8 space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">عنوان الموضوع</label>
+                  <input 
+                    type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)}
+                    placeholder="اكتب عنواناً واضحاً ومختصراً..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-base font-black focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+                  />
                 </div>
-                <div className="flex justify-end">
-                  <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-slate-900 hover:bg-black text-white px-10 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-slate-900/20 active:scale-95 flex justify-center items-center gap-2">
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} نشر الرد الآن
+                
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">التفاصيل والمحتوى</label>
+                  <ForumEditor 
+                    content={newContent} 
+                    setContent={setNewContent} 
+                    canUploadImage={canUploadImage} 
+                  />
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                     <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={hasPoll} onChange={(e) => setHasPoll(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+                        <span className="font-bold text-slate-700">إرفاق استطلاع رأي (تصويت) مع الموضوع</span>
+                     </label>
+                  </div>
+                  
+                  {hasPoll && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                      <div>
+                        <input type="text" placeholder="اكتب سؤال الاستطلاع هنا..." value={pollQuestion} onChange={e => setPollQuestion(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold focus:border-indigo-500 outline-none" />
+                      </div>
+                      <div className="space-y-2">
+                        {pollOptions.map((opt, i) => (
+                          <div key={i} className="flex gap-2">
+                            <input type="text" placeholder={`الخيار رقم ${i + 1}`} value={opt} onChange={e => { const newOpts = [...pollOptions]; newOpts[i] = e.target.value; setPollOptions(newOpts); }} className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm font-bold focus:border-indigo-500 outline-none" />
+                            {pollOptions.length > 2 && (
+                              <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))} className="p-2.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg"><XCircle className="w-4 h-4" /></button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <button type="button" onClick={() => setPollOptions([...pollOptions, ''])} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100">+ إضافة خيار آخر</button>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600">
+                           <input type="checkbox" checked={allowMultiple} onChange={e => setAllowMultiple(e.target.checked)} className="rounded text-indigo-600" />
+                           يسمح باختيار أكثر من إجابة
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-end pt-4 border-t border-slate-100">
+                  <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-xl font-black text-sm transition-all shadow-lg shadow-indigo-200 active:scale-95 flex justify-center items-center gap-2">
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />} نشر الموضوع
                   </button>
                 </div>
               </form>
-            </div>
-          ) : (
-            <div className="bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-300 p-16 text-center flex flex-col items-center justify-center w-full">
-              <Lock className="w-16 h-16 text-slate-300 mb-4" />
-              <h3 className="text-2xl font-black text-slate-700 mb-2">هذا القسم للقراءة فقط</h3>
-              <p className="text-base font-bold text-slate-500">لا يُسمح بإضافة ردود في هذا القسم حسب إعدادات الإدارة.</p>
-            </div>
-          )
-        ) : (
-          <div className="bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-300 p-16 text-center flex flex-col items-center justify-center w-full">
-            <Lock className="w-16 h-16 text-slate-300 mb-4" />
-            <h3 className="text-2xl font-black text-slate-700 mb-2">هذا الموضوع مغلق</h3>
-            <p className="text-base font-bold text-slate-500">تم إغلاق باب النقاش في هذا الموضوع من قِبل الإدارة.</p>
+            </motion.div>
           </div>
         )}
-        </div>
-      </div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSubCatModalOpen && isAdmin && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl border border-slate-100 my-auto">
+              <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between">
+                <div>
+                    <h2 className="text-xl font-black text-slate-900">{editingCatId ? 'تعديل بيانات القسم' : 'إضافة قسم فرعي جديد'}</h2>
+                    <p className="text-xs font-bold text-slate-500 mt-1">
+                        {editingCatId ? 'قم بتحديث الإعدادات والصلاحيات.' : <>هذا القسم سيتبع مباشرة لـ: <span className="text-indigo-600 font-black">{categoryInfo?.name}</span></>}
+                    </p>
+                </div>
+                <button onClick={() => setIsSubCatModalOpen(false)} className="text-slate-400 hover:text-rose-500"><XCircle className="w-6 h-6" /></button>
+              </div>
+              
+              <form onSubmit={handleCreateSubCategory} className="p-6 space-y-5">
+                
+                <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden shrink-0">
+                        {subCoverUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={subCoverUrl} alt="cover" className="w-full h-full object-contain p-1" />
+                        ) : (
+                            <ImageIcon className="w-8 h-8 text-slate-300" />
+                        )}
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">صورة غلاف القسم (اختياري)</label>
+                        <label className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-colors border ${isSubUploading ? 'bg-indigo-50 text-indigo-400 border-indigo-100' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'}`}>
+                            {isSubUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                            {isSubUploading ? 'جاري الرفع...' : 'اختر صورة للغلاف'}
+                            <input type="file" accept="image/*" className="hidden" onChange={handleSubCoverUpload} disabled={isSubUploading} />
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">اسم القسم</label>
+                  <input type="text" required value={newSubCatName} onChange={e => setNewSubCatName(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black focus:ring-indigo-500 outline-none" />
+                </div>
+
+                <div className="bg-indigo-50/50 p-4 rounded-[1.5rem] border border-indigo-100">
+                  <label className="flex items-center gap-2 text-xs font-black text-indigo-700 mb-3"><Target className="w-4 h-4" /> الفئة المستهدفة</label>
+                  <button type="button" onClick={() => setSubTargetClasses([])} className={`w-full py-2 mb-2 rounded-xl text-sm font-black border-2 ${subTargetClasses.length === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-500' : 'bg-white'}`}>🌍 عام للجميع</button>
+                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                    {schoolClasses.map((cls: any) => (
+                      <button key={cls.id} type="button" onClick={() => toggleSubClass(cls.id)} className={`py-2 rounded-xl text-xs font-black border-2 ${subTargetClasses.includes(cls.id) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white'}`}>{cls.name}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-amber-50/50 p-4 rounded-[1.5rem] border border-amber-100">
+                  <label className="flex items-center gap-2 text-xs font-black text-amber-700 mb-3"><ShieldAlert className="w-4 h-4" /> صلاحيات القسم الفرعي (مهم)</label>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">من يمكنه كتابة مواضيع؟</label>
+                      <select value={subPostPerm} onChange={e => setSubPostPerm(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-400">
+                        <option value="all">الجميع (طلاب، معلمون، إدارة)</option>
+                        <option value="teachers_admin">المعلمون والإدارة فقط</option>
+                        <option value="admin_only">الإدارة فقط (قسم رسمي)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">من يمكنه الرد؟</label>
+                      <select value={subReplyPerm} onChange={e => setSubReplyPerm(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-400">
+                        <option value="all">الجميع</option>
+                        <option value="teachers_admin">المعلمون والإدارة فقط</option>
+                        <option value="admin_only">الإدارة فقط</option>
+                        <option value="none">مغلق للجميع (للقراءة فقط)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">وصف القسم {editingCatId ? '' : 'الفرعي'}</label>
+                  <textarea rows={2} value={newSubCatDesc} onChange={e => setNewSubCatDesc(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none resize-none" />
+                </div>
+                
+                <div className="flex gap-3 pt-2">
+                  <button type="submit" disabled={isSubSubmitting} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-black text-sm flex justify-center gap-2">{isSubSubmitting ? <Loader2 className="animate-spin" /> : <Save />} {editingCatId ? 'حفظ التعديلات' : 'إنشاء القسم الفرعي'}</button>
+                  <button type="button" onClick={() => setIsSubCatModalOpen(false)} className="px-6 py-3.5 rounded-xl font-black text-sm bg-slate-100">إلغاء</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
