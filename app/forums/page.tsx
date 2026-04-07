@@ -13,38 +13,24 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
-// 🚀 بيانات الهيدر المتقلب (تظهر في الواجهة)
-const HERO_SLIDES = [
-  {
-    id: 'welcome',
-    icon: Sparkles,
-    badge: 'القلب النابض للمنصة',
-    title: 'مجتمع النقاشات المفتوحة',
-    desc: 'مساحة تفاعلية تجمع بين العقول المبدعة. شارك أفكارك، اطرح أسئلتك، وكن جزءاً من رحلة التعلم المستمرة.',
-    color: 'from-indigo-400 to-blue-500'
-  },
-  {
-    id: 'honor-roll',
-    icon: Trophy,
-    badge: 'لوحة الشرف أبطال الأسبوع',
-    title: 'نجوم التميز والإبداع',
-    desc: 'نفخر بطلابنا المتفوقين الذين أضاءوا سماء مدرستنا بجهدهم واجتهادهم هذا الأسبوع.',
-    color: 'from-amber-400 to-orange-500',
-    students: [
-      { name: 'أحمد محمد', grade: 'الصف العاشر', img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed&backgroundColor=ffdfbf' },
-      { name: 'سارة خالد', grade: 'الصف الثاني عشر', img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sara&backgroundColor=c0aede' },
-      { name: 'عمر عبدالله', grade: 'الصف الحادي عشر', img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Omar&backgroundColor=b6e3f4' },
-    ]
-  },
-  {
-    id: 'quote',
-    icon: Quote,
-    badge: 'إضاءة اليوم',
-    title: '« اطلبوا العلم من المهد إلى اللحد »',
-    desc: 'لا تتوقف أبداً عن التعلم، فالحياة لا تتوقف أبداً عن إعطائك الدروس. اجعل من كل يوم فرصة لتصبح نسخة أفضل من نفسك.',
-    color: 'from-emerald-400 to-teal-500'
-  }
-];
+// 🚀 خريطة الأيقونات لتحويل النص القادم من قاعدة البيانات إلى أيقونة حقيقية
+const ICON_MAP: Record<string, any> = {
+  'Sparkles': Sparkles,
+  'Trophy': Trophy,
+  'Quote': Quote,
+  'Image': ImageIcon
+};
+
+// 🚀 شريحة افتراضية في حال كانت قاعدة البيانات فارغة
+const DEFAULT_SLIDE = {
+  id: 'default',
+  icon_name: 'Sparkles',
+  badge_text: 'القلب النابض للمنصة',
+  title: 'مجتمع النقاشات المفتوحة',
+  description: 'مساحة تفاعلية تجمع بين العقول المبدعة. شارك أفكارك، اطرح أسئلتك، وكن جزءاً من رحلة التعلم المستمرة.',
+  color_gradient: 'from-indigo-400 to-blue-500',
+  type: 'welcome'
+};
 
 export default function ForumsPage() {
   const { user, userRole, authRole } = useAuth() as any;
@@ -71,16 +57,35 @@ export default function ForumsPage() {
   const [studentClassIds, setStudentClassIds] = useState<string[]>([]);
   const [isStudentDataLoading, setIsStudentDataLoading] = useState(currentRole === 'student');
 
-  // 🚀 حالة السلايدر الخاص بالهيدر
+  // 🚀 حالات السلايدر الديناميكي
+  const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [currentSlide, setCurrentSlide] = useState(0);
+
+  // 🚀 جلب شرائح الهيدر من قاعدة البيانات
+  useEffect(() => {
+    const fetchHeroSlides = async () => {
+      const { data, error } = await supabase
+        .from('forum_hero_slides')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: false }) // المثبت أولاً
+        .order('created_at', { ascending: false });
+      
+      if (data && data.length > 0) {
+        setHeroSlides(data);
+      }
+    };
+    fetchHeroSlides();
+  }, []);
 
   // 🚀 تأثير لتقليب السلايدر تلقائياً
   useEffect(() => {
+    if (heroSlides.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
     }, 7000); 
     return () => clearInterval(timer);
-  }, []);
+  }, [heroSlides.length]);
 
   useEffect(() => { fetchCategoriesAndClasses(); }, [fetchCategoriesAndClasses]);
 
@@ -286,10 +291,13 @@ export default function ForumsPage() {
     );
   };
 
+  const currentSlideData = heroSlides[currentSlide] || DEFAULT_SLIDE;
+  const SlideIcon = ICON_MAP[currentSlideData.icon_name] || Sparkles;
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans selection:bg-indigo-500 selection:text-white" dir="rtl">
       
-      {/* 🌟 الواجهة العلوية الفاخرة المتقلبة (Dynamic Hero Section) */}
+      {/* 🌟 الواجهة العلوية الفاخرة المتقلبة الديناميكية */}
       <div className="relative pt-24 pb-48 overflow-hidden bg-[#0F172A] rounded-b-[3rem] sm:rounded-b-[4rem] z-10 shadow-2xl">
         <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 mix-blend-screen pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-blue-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 mix-blend-screen pointer-events-none"></div>
@@ -298,41 +306,43 @@ export default function ForumsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20 h-full min-h-[220px] flex items-center justify-center">
           <AnimatePresence mode="wait">
             <motion.div 
-              key={currentSlide}
+              key={currentSlideData.id}
               initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
               exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
               className="flex flex-col items-center text-center w-full"
             >
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white text-xs sm:text-sm font-black mb-6 backdrop-blur-md">
-                {(() => {
-                  const Icon = HERO_SLIDES[currentSlide].icon;
-                  return <Icon className="w-4 h-4" />;
-                })()}
-                {HERO_SLIDES[currentSlide].badge}
-              </div>
+              {currentSlideData.badge_text && (
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white text-xs sm:text-sm font-black mb-6 backdrop-blur-md shadow-sm">
+                  <SlideIcon className="w-4 h-4" />
+                  {currentSlideData.badge_text}
+                </div>
+              )}
 
-              <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r ${HERO_SLIDES[currentSlide].color} tracking-tight mb-6 drop-shadow-lg`}>
-                {HERO_SLIDES[currentSlide].title}
+              <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r ${currentSlideData.color_gradient || 'from-white to-slate-300'} tracking-tight mb-6 drop-shadow-lg`}>
+                {currentSlideData.title}
               </h1>
 
-              <p className="text-slate-300 text-sm sm:text-lg font-bold max-w-2xl leading-relaxed mb-8">
-                {HERO_SLIDES[currentSlide].desc}
-              </p>
+              {currentSlideData.description && (
+                <p className="text-slate-300 text-sm sm:text-lg font-bold max-w-2xl leading-relaxed mb-8">
+                  {currentSlideData.description}
+                </p>
+              )}
 
-              {HERO_SLIDES[currentSlide].students && (
+              {/* 🚀 قسم إظهار صور المتفوقين */}
+              {currentSlideData.metadata?.students && (
                 <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-2">
-                  {HERO_SLIDES[currentSlide].students.map((student, i) => (
+                  {currentSlideData.metadata.students.map((student: any, i: number) => (
                     <motion.div 
                       key={i} 
                       initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }}
-                      className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 flex items-center gap-3 pr-4"
+                      className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-3 flex items-center gap-3 pr-4 shadow-xl"
                     >
                       <div className="relative">
                         <Crown className="absolute -top-3 -right-2 w-5 h-5 text-amber-400 drop-shadow-md z-10 rotate-12" />
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={student.img} alt={student.name} className="w-12 h-12 rounded-full border-2 border-white/50 shadow-inner bg-white/50" />
+                        <img src={student.img} alt={student.name} className="w-12 h-12 rounded-full border-2 border-white/50 shadow-inner bg-white/50 object-cover" />
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-black text-white">{student.name}</p>
@@ -342,20 +352,36 @@ export default function ForumsPage() {
                   ))}
                 </div>
               )}
+
+              {/* 🚀 قسم إظهار الصورة الترويجية إذا كانت موجودة */}
+              {currentSlideData.type === 'media' && currentSlideData.media_url && (
+                 <motion.div 
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }} 
+                    animate={{ opacity: 1, scale: 1, y: 0 }} 
+                    className="mt-6 w-full max-w-2xl mx-auto rounded-[2rem] overflow-hidden shadow-2xl border border-white/20"
+                 >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={currentSlideData.media_url} alt="Media" className="w-full h-auto max-h-80 object-cover" />
+                 </motion.div>
+              )}
+
             </motion.div>
           </AnimatePresence>
         </div>
 
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-30">
-          {HERO_SLIDES.map((_, i) => (
-            <button 
-              key={i} 
-              onClick={() => setCurrentSlide(i)}
-              className={`h-2 rounded-full transition-all duration-300 ${currentSlide === i ? 'w-8 bg-white' : 'w-2 bg-white/30 hover:bg-white/50'}`}
-              aria-label={`Go to slide ${i + 1}`}
-            />
-          ))}
-        </div>
+        {/* مؤشرات التبديل السفلية */}
+        {heroSlides.length > 1 && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-30">
+            {heroSlides.map((_, i) => (
+              <button 
+                key={i} 
+                onClick={() => setCurrentSlide(i)}
+                className={`h-2 rounded-full transition-all duration-300 ${currentSlide === i ? 'w-8 bg-white' : 'w-2 bg-white/30 hover:bg-white/50'}`}
+                aria-label={`Go to slide ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 🌟 شريط البحث والإجراءات */}
