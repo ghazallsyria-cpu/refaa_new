@@ -5,12 +5,12 @@ import { supabase } from '@/lib/supabase';
 import { 
   Plus, Trash2, Save, XCircle, Sparkles, Trophy, Quote, 
   Image as ImageIcon, Loader2, Eye, EyeOff, LayoutTemplate,
-  UserPlus, X
+  UserPlus, X, Camera, Pin, PinOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-// 🚀 الإصلاح هنا: أضفنا خاصية iconName كنص صريح لتجنب خطأ TypeScript
+// الأنواع المتاحة للشاشات
 const SLIDE_TYPES = [
   { id: 'welcome', label: 'ترحيب وإعلان عام', icon: Sparkles, iconName: 'Sparkles', color: 'from-indigo-400 to-blue-500' },
   { id: 'honor_roll', label: 'لوحة شرف (طلاب متميزون)', icon: Trophy, iconName: 'Trophy', color: 'from-amber-400 to-orange-500' },
@@ -24,7 +24,10 @@ export default function ForumHeroAdminPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 حالات النموذج (Form)
+  // حالة رفع صورة الطالب
+  const [uploadingStudentIdx, setUploadingStudentIdx] = useState<number | null>(null);
+
+  // حالات النموذج (Form)
   const [type, setType] = useState('welcome');
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -37,7 +40,8 @@ export default function ForumHeroAdminPage() {
     const { data, error } = await supabase
       .from('forum_hero_slides')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('sort_order', { ascending: false }) // 🚀 المثبت يظهر أولاً
+      .order('created_at', { ascending: false }); // ثم الأحدث
     
     if (data) setSlides(data);
     setLoading(false);
@@ -48,7 +52,32 @@ export default function ForumHeroAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // إضافة طالب للوحة الشرف
+  // 🚀 رفع صورة حقيقية للطالب
+  const handleStudentImageUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploadingStudentIdx(index);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.secure_url) {
+        const updated = [...students];
+        updated[index].img = data.secure_url;
+        setStudents(updated);
+      }
+    } catch (error) { 
+      alert('خطأ في رفع صورة الطالب'); 
+    } finally {
+      setUploadingStudentIdx(null);
+    }
+  };
+
+  // إدارة بيانات الطلاب
   const addStudent = () => {
     setStudents([...students, { name: '', grade: '', img: '' }]);
   };
@@ -56,8 +85,8 @@ export default function ForumHeroAdminPage() {
   const updateStudent = (index: number, field: string, value: string) => {
     const updated = [...students];
     (updated[index] as any)[field] = value;
-    // توليد صورة افتراضية ذكية بناءً على الاسم إذا تم إدخاله
-    if (field === 'name' && value.trim() !== '') {
+    // توليد صورة افتراضية فقط إذا لم يقم المدير برفع صورة حقيقية
+    if (field === 'name' && value.trim() !== '' && !updated[index].img.includes('cloudinary')) {
       updated[index].img = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(value)}&backgroundColor=b6e3f4`;
     }
     setStudents(updated);
@@ -67,7 +96,7 @@ export default function ForumHeroAdminPage() {
     setStudents(students.filter((_, i) => i !== index));
   };
 
-  // حفظ الشريحة الجديدة
+  // 🚀 حفظ الشريحة الجديدة
   const handleSaveSlide = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return alert('الرجاء إدخال عنوان الشريحة');
@@ -80,12 +109,12 @@ export default function ForumHeroAdminPage() {
       title,
       description: desc,
       badge_text: badge,
-      // 🚀 الإصلاح هنا: استخدام الاسم النصي مباشرة
       icon_name: selectedType?.iconName || 'Sparkles',
       color_gradient: selectedType?.color,
       media_url: mediaUrl || null,
       metadata: type === 'honor_roll' ? { students } : null,
-      is_active: true
+      is_active: true,
+      sort_order: 0 // افتراضياً غير مثبت
     };
 
     const { error } = await supabase.from('forum_hero_slides').insert([payload]);
@@ -102,10 +131,14 @@ export default function ForumHeroAdminPage() {
 
   // تفعيل/إيقاف الشريحة
   const toggleActive = async (id: string, currentStatus: boolean) => {
-    const { error } = await supabase
-      .from('forum_hero_slides')
-      .update({ is_active: !currentStatus })
-      .eq('id', id);
+    const { error } = await supabase.from('forum_hero_slides').update({ is_active: !currentStatus }).eq('id', id);
+    if (!error) fetchSlides();
+  };
+
+  // 🚀 تثبيت/إلغاء تثبيت الشريحة (Pinning)
+  const togglePin = async (id: string, currentSortOrder: number) => {
+    const newSortOrder = currentSortOrder > 0 ? 0 : 100; // 100 يعني مثبت في الأعلى
+    const { error } = await supabase.from('forum_hero_slides').update({ sort_order: newSortOrder }).eq('id', id);
     if (!error) fetchSlides();
   };
 
@@ -161,16 +194,32 @@ export default function ForumHeroAdminPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {slides.map((slide) => {
             const SlideIcon = SLIDE_TYPES.find(t => t.id === slide.type)?.icon || Sparkles;
+            const isPinned = slide.sort_order > 0;
+
             return (
-              <div key={slide.id} className={`bg-white rounded-[2rem] p-6 border shadow-sm transition-all flex flex-col ${slide.is_active ? 'border-slate-200 hover:shadow-lg hover:border-indigo-200' : 'border-slate-200 opacity-60 bg-slate-50'}`}>
-                <div className="flex justify-between items-start mb-4">
+              <div key={slide.id} className={`relative bg-white rounded-[2rem] p-6 border shadow-sm transition-all flex flex-col ${slide.is_active ? 'border-slate-200 hover:shadow-lg hover:border-indigo-200' : 'border-slate-200 opacity-60 bg-slate-50'}`}>
+                
+                {/* 🚀 شريط التثبيت الجمالي */}
+                {isPinned && (
+                   <div className="absolute -top-3 left-6 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                     <Pin className="w-3 h-3" /> مثبت كشريحة أولى
+                   </div>
+                )}
+
+                <div className="flex justify-between items-start mb-4 mt-2">
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br ${slide.color_gradient} text-white shadow-md`}>
                     <SlideIcon className="w-6 h-6" />
                   </div>
                   <div className="flex gap-2">
+                    {/* 🚀 زر التثبيت */}
+                    <button onClick={() => togglePin(slide.id, slide.sort_order)} className={`p-2 rounded-xl transition-colors ${isPinned ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`} title={isPinned ? 'إلغاء التثبيت' : 'تثبيت في الواجهة'}>
+                      {isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                    </button>
+
                     <button onClick={() => toggleActive(slide.id, slide.is_active)} className={`p-2 rounded-xl transition-colors ${slide.is_active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`} title={slide.is_active ? 'إخفاء' : 'إظهار'}>
                       {slide.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                     </button>
+                    
                     <button onClick={() => deleteSlide(slide.id)} className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors" title="حذف">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -186,7 +235,7 @@ export default function ForumHeroAdminPage() {
                     <div className="mt-4 flex -space-x-2 rtl:space-x-reverse">
                       {slide.metadata.students.slice(0, 4).map((s: any, i: number) => (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img key={i} src={s.img} alt={s.name} className="w-8 h-8 rounded-full border-2 border-white bg-slate-100" title={s.name} />
+                        <img key={i} src={s.img} alt={s.name} className="w-8 h-8 rounded-full border-2 border-white bg-slate-100 object-cover" title={s.name} />
                       ))}
                       {slide.metadata.students.length > 4 && (
                         <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-600">
@@ -263,15 +312,40 @@ export default function ForumHeroAdminPage() {
                         <button type="button" onClick={addStudent} className="bg-amber-400 hover:bg-amber-500 text-amber-950 text-xs font-black px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"><UserPlus className="w-3 h-3"/> طالب جديد</button>
                       </div>
                       
-                      <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                         {students.length === 0 && <p className="text-xs font-bold text-amber-700/60 text-center py-4">لم تقم بإضافة أي طالب بعد.</p>}
                         {students.map((student, index) => (
-                          <div key={index} className="flex gap-2 items-center bg-white p-2 rounded-xl border border-amber-200/50">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={student.img || 'https://api.dicebear.com/7.x/avataaars/svg?seed=new'} alt="avatar" className="w-10 h-10 rounded-full bg-slate-100 shrink-0" />
-                            <input type="text" placeholder="اسم الطالب" value={student.name} onChange={e => updateStudent(index, 'name', e.target.value)} className="w-full bg-transparent text-sm font-bold outline-none placeholder-slate-400" />
-                            <input type="text" placeholder="الصف" value={student.grade} onChange={e => updateStudent(index, 'grade', e.target.value)} className="w-24 bg-slate-50 rounded-lg px-2 py-2 text-xs font-bold outline-none text-center border border-slate-100" />
-                            <button type="button" onClick={() => removeStudent(index)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><X className="w-4 h-4"/></button>
+                          <div key={index} className="flex gap-3 items-center bg-white p-3 rounded-xl border border-amber-200/50 shadow-sm">
+                            
+                            {/* 🚀 زر رفع صورة الطالب المخصص */}
+                            <div className="relative group cursor-pointer shrink-0">
+                               <input 
+                                 type="file" 
+                                 id={`student-upload-${index}`} 
+                                 accept="image/*" 
+                                 className="hidden" 
+                                 onChange={(e) => handleStudentImageUpload(index, e)} 
+                               />
+                               <label htmlFor={`student-upload-${index}`} className="cursor-pointer block relative rounded-full overflow-hidden w-12 h-12 border-2 border-amber-100 bg-slate-50 shadow-inner">
+                                  {uploadingStudentIdx === index ? (
+                                     <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 className="w-5 h-5 text-white animate-spin" /></div>
+                                  ) : (
+                                     <>
+                                       {/* eslint-disable-next-line @next/next/no-img-element */}
+                                       <img src={student.img || `https://api.dicebear.com/7.x/avataaars/svg?seed=new`} alt="avatar" className="w-full h-full object-cover" />
+                                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <Camera className="w-5 h-5 text-white" />
+                                       </div>
+                                     </>
+                                  )}
+                               </label>
+                            </div>
+
+                            <div className="flex-1 space-y-2">
+                              <input type="text" placeholder="اسم الطالب" value={student.name} onChange={e => updateStudent(index, 'name', e.target.value)} className="w-full bg-slate-50 text-sm font-black outline-none placeholder-slate-400 px-3 py-2 rounded-lg border border-slate-100 focus:border-amber-300" />
+                              <input type="text" placeholder="الصف (مثال: العاشر)" value={student.grade} onChange={e => updateStudent(index, 'grade', e.target.value)} className="w-full bg-slate-50 rounded-lg px-3 py-2 text-xs font-bold outline-none border border-slate-100 focus:border-amber-300" />
+                            </div>
+                            <button type="button" onClick={() => removeStudent(index)} className="p-3 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"><X className="w-5 h-5"/></button>
                           </div>
                         ))}
                       </div>
