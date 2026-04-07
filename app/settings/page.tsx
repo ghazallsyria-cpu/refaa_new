@@ -37,9 +37,8 @@ interface ExtendedProfileSettings extends ProfileSettings {
 }
 
 export default function SettingsPage() {
-  // 🚀 الإصلاح هنا: المتغير الصحيح في السياق هو authRole
   const { authRole } = useAuth(); 
-  const userRole = authRole; // تمريره للمتغير القديم حتى لا نغير أي حرف آخر في كودك
+  const userRole = authRole; 
 
   const { 
     loading, 
