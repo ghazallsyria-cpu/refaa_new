@@ -10,12 +10,12 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-// الأنواع المتاحة للشاشات
+// 🚀 الإصلاح هنا: أضفنا خاصية iconName كنص صريح لتجنب خطأ TypeScript
 const SLIDE_TYPES = [
-  { id: 'welcome', label: 'ترحيب وإعلان عام', icon: Sparkles, color: 'from-indigo-400 to-blue-500' },
-  { id: 'honor_roll', label: 'لوحة شرف (طلاب متميزون)', icon: Trophy, color: 'from-amber-400 to-orange-500' },
-  { id: 'quote', label: 'إضاءة وحكمة اليوم', icon: Quote, color: 'from-emerald-400 to-teal-500' },
-  { id: 'media', label: 'صورة أو فيديو ترويجي', icon: ImageIcon, color: 'from-purple-400 to-pink-500' },
+  { id: 'welcome', label: 'ترحيب وإعلان عام', icon: Sparkles, iconName: 'Sparkles', color: 'from-indigo-400 to-blue-500' },
+  { id: 'honor_roll', label: 'لوحة شرف (طلاب متميزون)', icon: Trophy, iconName: 'Trophy', color: 'from-amber-400 to-orange-500' },
+  { id: 'quote', label: 'إضاءة وحكمة اليوم', icon: Quote, iconName: 'Quote', color: 'from-emerald-400 to-teal-500' },
+  { id: 'media', label: 'صورة أو فيديو ترويجي', icon: ImageIcon, iconName: 'Image', color: 'from-purple-400 to-pink-500' },
 ];
 
 export default function ForumHeroAdminPage() {
@@ -34,7 +34,6 @@ export default function ForumHeroAdminPage() {
 
   // جلب الشرائح من قاعدة البيانات
   const fetchSlides = async () => {
-    // 🚀 تم إزالة setLoading(true) من هنا لتجنب خطأ Netlify الصارم
     const { data, error } = await supabase
       .from('forum_hero_slides')
       .select('*')
@@ -81,7 +80,8 @@ export default function ForumHeroAdminPage() {
       title,
       description: desc,
       badge_text: badge,
-      icon_name: selectedType?.icon.render.name || 'Sparkles', // حفظ اسم الأيقونة
+      // 🚀 الإصلاح هنا: استخدام الاسم النصي مباشرة
+      icon_name: selectedType?.iconName || 'Sparkles',
       color_gradient: selectedType?.color,
       media_url: mediaUrl || null,
       metadata: type === 'honor_roll' ? { students } : null,
