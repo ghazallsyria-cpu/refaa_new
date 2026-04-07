@@ -1,17 +1,17 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Sidebar } from '@/components/sidebar';
-import { Header } from '@/components/header';
-import { Footer } from '@/components/footer';
+import { Sidebar } from './sidebar';
+import { Header } from './header';
+import { Footer } from './footer';
 import { useEffect, useState } from 'react';
 import { School, AlertTriangle } from 'lucide-react';
-import { useAuth } from '@/context/auth-context';
-import { cn } from '@/lib/utils';
+import { useAuth } from '../context/auth-context';
+import { cn } from '../lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../lib/supabase';
 // 🚀 استيراد محرك تسجيل الأخطاء
-import { systemLogger } from '@/lib/logger';
+import { systemLogger } from '../lib/logger';
 
 /**
  * 🛠️ الإطار الرئيسي للمنصة (النسخة النهائية الكاملة)
@@ -40,8 +40,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
-  // 1️⃣ تفعيل مستشعرات الأخطاء العالمية (Global Error Sensors)
+  // 1️⃣ تفعيل مستشعرات الأخطاء العالمية وتسجيل PWA
   useEffect(() => {
+    // 🚀 تسجيل Service Worker ليتمكن المتصفح من عرض زر "تثبيت التطبيق"
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.error('Service Worker registration failed: ', err);
+        });
+      });
+    }
+
     const handleGlobalError = (event: ErrorEvent) => {
       systemLogger.log(event.error, 'critical', 'RUNTIME_EXCEPTION');
     };
