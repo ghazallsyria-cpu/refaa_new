@@ -1,15 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, Bug, RefreshCw, Calculator, Layers, PieChart } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, Bug, RefreshCw, Calculator, Layers, PieChart, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase'; 
-import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
-import { useAuth } from '@/context/auth-context';
-import TeacherCheckInButton from '@/components/TeacherCheckInButton';
 
-// 🚀 تعريف كلاسات الألوان بشكل كامل وصريح لمنع Tailwind من حذفها (Purging)
+// تم تعديل مسارات الاستيراد لحل مشكلة البناء
+import { supabase } from '../../lib/supabase'; 
+import { useAttendanceSystem, AttendanceStatus } from '../../hooks/useAttendanceSystem';
+import { useAuth } from '../../context/auth-context';
+import TeacherCheckInButton from '../../components/TeacherCheckInButton';
+
+// تعريف كلاسات الألوان بشكل كامل وصريح لمنع Tailwind من حذفها (Purging)
 const ATTENDANCE_OPTIONS = [
   { 
     status: 'present', 
@@ -78,6 +80,9 @@ export default function AttendancePage() {
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
   const [isStudentLoading, setIsStudentLoading] = useState(false);
   const [studentDbError, setStudentDbError] = useState<string | null>(null);
+
+  // 🚀 حالة التبويب النشط للمواد
+  const [activeSubjectTab, setActiveSubjectTab] = useState<string | null>(null);
 
   useEffect(() => {
     setDate(new Date().toISOString().split('T')[0]);
@@ -199,7 +204,7 @@ export default function AttendancePage() {
           else if (r.status === 'late') sStats.late++;
           else if (r.status === 'excused') sStats.excused++;
 
-          // 🚀 التعديل هنا: إضافة السجل للقائمة التفصيلية فقط إذا كان غياباً أو تأخيراً أو استئذاناً
+          // إضافة السجل للقائمة التفصيلية فقط إذا كان غياباً أو تأخيراً أو استئذاناً
           if (r.status !== 'present') {
             enrichedRecords.push({
               ...r,
@@ -227,6 +232,22 @@ export default function AttendancePage() {
   useEffect(() => {
     fetchStudentDataDirectly();
   }, [fetchStudentDataDirectly]);
+
+  // تجميع سجلات الغياب حسب المادة لإنشاء التبويبات
+  const groupedAttendanceRecords = useMemo(() => {
+    return studentAttendance.reduce((acc, record) => {
+      if (!acc[record.subjectName]) acc[record.subjectName] = [];
+      acc[record.subjectName].push(record);
+      return acc;
+    }, {} as Record<string, any[]>);
+  }, [studentAttendance]);
+
+  // تحديد المادة النشطة افتراضياً عند تحميل البيانات
+  useEffect(() => {
+    if (Object.keys(groupedAttendanceRecords).length > 0 && !activeSubjectTab) {
+      setActiveSubjectTab(Object.keys(groupedAttendanceRecords)[0]);
+    }
+  }, [groupedAttendanceRecords, activeSubjectTab]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
     setAttendance(prev => ({ ...prev, [studentId]: status }));
@@ -420,13 +441,16 @@ export default function AttendancePage() {
         )}
 
         <div className="bg-white/90 backdrop-blur-xl rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-5 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-slate-50/30">
-            <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
-               <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6"/></div>
-               السجل الزمني التفصيلي للحصص
-            </h2>
-            <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-              إجمالي سجلات الغياب: {studentAttendance.length}
+          <div className="p-5 sm:p-8 border-b border-slate-100/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-50/30">
+            <div>
+              <h2 className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
+                 <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6"/></div>
+                 سجل الغياب والتأخير حسب المادة
+              </h2>
+              <p className="text-sm font-bold text-slate-500 mt-2">اختر المادة لعرض تواريخ الغياب أو التأخير بالتفصيل.</p>
+            </div>
+            <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm shrink-0">
+              إجمالي السجلات: {studentAttendance.length}
             </span>
           </div>
           <div className="p-4 sm:p-8">
@@ -436,42 +460,78 @@ export default function AttendancePage() {
                 <p className="text-slate-500 font-bold text-sm sm:text-lg">لا توجد سجلات غياب أو تأخير مسجلة عليك حتى الآن.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {studentAttendance.map((record) => {
-                  return (
-                  <div key={record.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 rounded-2xl border border-slate-100 bg-white shadow-sm hover:border-indigo-100 transition-colors gap-4 group">
-                    <div>
-                      <span className="text-sm font-black text-slate-800 block mb-2" dir="ltr">
-                        {new Date(record.date || record.created_at).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+              <div className="flex flex-col lg:flex-row gap-6">
+                
+                {/* 🚀 قائمة التبويبات (المواد) */}
+                <div className="w-full lg:w-1/4 shrink-0 flex flex-col gap-2">
+                  {Object.keys(groupedAttendanceRecords).map((subject) => (
+                    <button
+                      key={subject}
+                      onClick={() => setActiveSubjectTab(subject)}
+                      className={`flex items-center justify-between w-full p-4 rounded-2xl text-right transition-all font-black border-2 ${
+                        activeSubjectTab === subject 
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm' 
+                          : 'bg-white text-slate-600 border-slate-100 hover:border-indigo-100 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <BookOpen className={`w-5 h-5 ${activeSubjectTab === subject ? 'text-indigo-500' : 'text-slate-400'}`} />
+                        {subject}
                       </span>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 inline-flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> الحصة {record.period}
-                        </span>
-                        <span className="text-[10px] sm:text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 inline-flex items-center gap-1">
-                          <BookOpen className="w-3 h-3" /> {record.subjectName}
-                        </span>
-                        <span className="text-[10px] sm:text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100 inline-flex items-center gap-1">
-                          <Users className="w-3 h-3" /> {record.teacherName}
-                        </span>
-                      </div>
-                    </div>
-                    <span className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 w-full sm:w-auto border ${
-                      record.status === 'present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                      record.status === 'absent' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                      record.status === 'late' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                      'bg-blue-50 text-blue-600 border-blue-100'
-                    }`}>
-                      {record.status === 'present' ? <CheckCircle2 className="w-4 h-4"/> :
-                       record.status === 'absent' ? <XCircle className="w-4 h-4"/> :
-                       record.status === 'late' ? <Clock className="w-4 h-4"/> :
-                       <AlertCircle className="w-4 h-4"/>}
-                      {record.status === 'present' ? 'حاضر' :
-                       record.status === 'absent' ? 'غائب' :
-                       record.status === 'late' ? 'متأخر' : 'مستأذن'}
-                    </span>
-                  </div>
-                )})}
+                      <span className={`text-xs px-2 py-1 rounded-lg ${activeSubjectTab === subject ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {groupedAttendanceRecords[subject].length}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* 🚀 محتوى التبويب المختار (تواريخ الغياب للمادة) */}
+                <div className="w-full lg:w-3/4">
+                  <AnimatePresence mode="wait">
+                    {activeSubjectTab && groupedAttendanceRecords[activeSubjectTab] && (
+                      <motion.div
+                        key={activeSubjectTab}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.2 }}
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"
+                      >
+                        {groupedAttendanceRecords[activeSubjectTab].map((record: any) => (
+                          <div key={record.id} className="flex flex-col p-4 rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                            <div className="flex justify-between items-start mb-3">
+                              <span className="text-sm font-black text-slate-800 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100" dir="ltr">
+                                {new Date(record.date || record.created_at).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+                              </span>
+                              <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black flex items-center gap-1.5 border ${
+                                record.status === 'absent' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                record.status === 'late' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                'bg-blue-50 text-blue-600 border-blue-100'
+                              }`}>
+                                {record.status === 'absent' ? <XCircle className="w-3.5 h-3.5"/> :
+                                 record.status === 'late' ? <Clock className="w-3.5 h-3.5"/> :
+                                 <AlertCircle className="w-3.5 h-3.5"/>}
+                                {record.status === 'absent' ? 'غائب' :
+                                 record.status === 'late' ? 'متأخر' : 'مستأذن'}
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-2 mt-auto pt-3 border-t border-slate-100">
+                              <span className="text-xs font-bold text-slate-600 inline-flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" /> الحصة {record.period}
+                              </span>
+                              <span className="text-slate-300">|</span>
+                              <span className="text-xs font-bold text-slate-600 inline-flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-slate-400" /> {record.teacherName}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                
               </div>
             )}
           </div>
