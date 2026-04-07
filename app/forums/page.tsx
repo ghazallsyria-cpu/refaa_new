@@ -8,7 +8,7 @@ import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
   Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle, Image as ImageIcon, Trash2, Lock, ShieldAlert,
-  Compass, LayoutGrid, Users, ArrowUpRight, Quote, Trophy, Crown
+  Compass, LayoutGrid, Users, ArrowUpRight, Quote, Trophy, Crown, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
