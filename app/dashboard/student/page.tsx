@@ -38,7 +38,7 @@ const checkIsLocked = (examData: any) => {
 
 export default function StudentDashboard() {
   const [studentData, setStudentData] = useState<any>(null);
-  const [attendanceStats, setAttendanceStats] = useState<any>(null);
+  const [attendanceStats, setAttendanceStats] = useState<any>({ rate: 100 });
   const [recentGrades, setRecentGrades] = useState<any[]>([]);
   const [upcomingExams, setUpcomingExams] = useState<any[]>([]);
   const [upcomingAssignments, setUpcomingAssignments] = useState<any[]>([]);
@@ -71,7 +71,6 @@ export default function StudentDashboard() {
       
       if (data) {
         setStudentData(data.student);
-        setAttendanceStats({ rate: data.attendanceRate });
         setUpcomingExams(data.exams);
         setUpcomingAssignments(data.assignments);
         setTodaysSchedule(data.todaysSchedule);
@@ -111,16 +110,29 @@ export default function StudentDashboard() {
                     setRecentGrades(data.grades || []);
                 }
 
-                // 2. 🚀 جلب وحساب حصص الغياب لتفعيل الإنذار الإداري
+                // 2. 🚀 جلب وحساب حصص الغياب لتفعيل الإنذار الإداري ولحساب نسبة الحضور الدقيقة
                 const { count: absentCount, error: absErr } = await supabase
                   .from('attendance_records')
                   .select('id', { count: 'exact' })
                   .eq('student_id', studentId)
                   .eq('status', 'absent');
 
+                const { count: totalCount } = await supabase
+                  .from('attendance_records')
+                  .select('id', { count: 'exact' })
+                  .eq('student_id', studentId);
+
                 if (!absErr && absentCount !== null) {
                   setAbsentPeriods(absentCount);
                   setFullDaysAbsent(Math.floor(absentCount / 5)); // المعادلة: 5 حصص = 1 يوم
+                  
+                  // حساب نسبة الحضور المباشرة من قاعدة البيانات بدلاً من الاعتماد على الهوك
+                  if (totalCount && totalCount > 0) {
+                    const calculatedRate = Math.round(((totalCount - absentCount) / totalCount) * 100);
+                    setAttendanceStats({ rate: calculatedRate });
+                  } else {
+                    setAttendanceStats({ rate: 100 });
+                  }
                 }
 
             } else {
