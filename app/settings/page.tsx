@@ -1,4 +1,4 @@
-
+```tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -17,7 +17,6 @@ import {
   MapPin,
   Clock,
   Video,
-  BookOpen,
   Settings,
   Power,
   Lock,
@@ -31,6 +30,7 @@ import { cn } from '@/lib/utils';
 
 type Tab = 'school' | 'profile' | 'notifications' | 'security' | 'platform';
 
+// توسيع النوع المحلي ليدعم الصورة الشخصية
 interface ExtendedProfileSettings extends ProfileSettings {
   avatar_url?: string;
 }
@@ -196,7 +196,6 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-24 p-4 sm:p-6 lg:p-8" dir="rtl">
-      
       <AnimatePresence>
         {message.text && (
           <motion.div 
@@ -248,7 +247,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
         <aside className="lg:col-span-3">
           <nav className="flex flex-col gap-2 sticky top-8">
             {tabs.map((tab) => {
@@ -291,7 +289,6 @@ export default function SettingsPage() {
               transition={{ duration: 0.2 }}
               className="bg-white shadow-sm ring-1 ring-slate-100 rounded-[2.5rem] p-8 sm:p-10 relative overflow-hidden"
             >
-              {/* Profile Settings */}
               {activeTab === 'profile' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
@@ -382,7 +379,7 @@ export default function SettingsPage() {
                             value={profileSettings.zoom_link}
                             onChange={(e) => setProfileSettings({...profileSettings, zoom_link: e.target.value})}
                             className="w-full pr-12 pl-4 py-4 rounded-2xl bg-indigo-50/30 border border-indigo-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-bold text-indigo-900 transition-all" 
-                            placeholder="[https://zoom.us/j/](https://zoom.us/j/)..."
+                            placeholder="https://zoom.us/j/..."
                             dir="ltr"
                           />
                         </div>
@@ -395,7 +392,6 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* School Settings */}
               {activeTab === 'school' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
@@ -515,7 +511,6 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Notifications Settings */}
               {activeTab === 'notifications' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
@@ -547,7 +542,6 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Security Settings */}
               {activeTab === 'security' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
@@ -593,7 +587,6 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* 🚀 Platform Status (Master Control Room) */}
               {activeTab === 'platform' && (
                 <div className="space-y-10">
                   <div className="border-b border-slate-100 pb-6 flex items-center gap-4">
@@ -604,7 +597,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* 🚀 Master Switch Card */}
                   <motion.div 
                     animate={{ 
                       background: platformSettings.is_open 
@@ -614,7 +606,6 @@ export default function SettingsPage() {
                     }}
                     className="relative overflow-hidden rounded-[2.5rem] border-2 p-8 sm:p-12 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] flex flex-col lg:flex-row items-center justify-between gap-8 transition-colors duration-500"
                   >
-                    {/* Background glowing orbs */}
                     <div className={cn(
                       "absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-50 pointer-events-none transition-colors duration-1000",
                       platformSettings.is_open ? "bg-emerald-400" : "bg-rose-500 animate-pulse"
@@ -645,7 +636,6 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="relative z-10 shrink-0 mt-4 lg:mt-0 bg-white/50 p-4 rounded-3xl border shadow-sm backdrop-blur-md">
-                       {/* 🚀 Huge Toggle */}
                        <label className="relative inline-flex items-center cursor-pointer group">
                          <input 
                            type="checkbox" 
@@ -661,9 +651,7 @@ export default function SettingsPage() {
                     </div>
                   </motion.div>
 
-                  {/* 🚀 Scheduling Area */}
                   <div className="grid grid-cols-1 gap-y-6 sm:grid-cols-2 sm:gap-x-8 bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
-                    
                     <div className="sm:col-span-2 border-b border-slate-200 pb-4 mb-2">
                        <h4 className="text-lg font-black text-slate-800 flex items-center gap-2"><Clock className="w-5 h-5 text-indigo-500"/> الجدولة التلقائية</h4>
                        <p className="text-xs font-bold text-slate-500">سيقوم النظام بتغيير حالة المنصة آلياً عند وصول هذا التوقيت.</p>
@@ -705,7 +693,6 @@ export default function SettingsPage() {
                       <p className="text-[10px] font-bold text-slate-400">هذه الرسالة ستظهر في منتصف شاشة المستخدمين أثناء إغلاق المنصة.</p>
                     </div>
                   </div>
-
                 </div>
               )}
             </motion.div>
@@ -714,3 +701,7 @@ export default function SettingsPage() {
       </div>
     </div>
   );
+}
+
+
+```
