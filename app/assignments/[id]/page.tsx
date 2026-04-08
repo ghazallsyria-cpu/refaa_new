@@ -18,6 +18,16 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 
+// 🚀 إضافة دالة معالجة المعادلات الكيميائية والرياضية للواجبات (مع دعم الأسطر المتعددة)
+const renderContentWithMath = (content: string) => {
+   if (!content) return { __html: '' };
+   let html = content.replace(
+     /\$\$([\s\S]*?)\$\$/g, 
+     '<span class="math-tex text-indigo-700 bg-indigo-50 px-2 py-1 rounded font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
+   );
+   return { __html: html };
+};
+
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const assignmentId = resolvedParams.id;
@@ -212,7 +222,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const fetchData = useCallback(async () => {
     if (!user) return;
     
-    // 🚀 الكاش السريع: جلب البيانات من الذاكرة لعدم تأخير فتح الصفحة
     const cacheKey = `assign_cache_${assignmentId}_${user.id}_${currentRole}`;
     const cachedData = sessionStorage.getItem(cacheKey);
     
@@ -241,17 +250,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
            setSubmissions(parsed.allSubmissions || []);
         }
-        setLoading(false); // إظهار الشاشة فوراً دون انتظار!
+        setLoading(false); 
       } catch (e) {}
     } else {
-      setLoading(true); // نظهر التحميل فقط إذا كانت هذه أول مرة نفتح فيها الواجب
+      setLoading(true); 
     }
 
     try {
       if (currentRole === 'student') setStudentId(user.id);
       const details = await fetchAssignmentDetails(assignmentId);
       
-      // 🚀 حفظ البيانات في الكاش للمرة القادمة
       sessionStorage.setItem(cacheKey, JSON.stringify(details));
 
       setAssignment(details.assignment);
@@ -276,7 +284,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             setFullAnswersMap(fullMap);
           }
         } else {
-          // 🚀 استرجاع المسودة (الحفظ التلقائي) إذا لم يقم الطالب بالتسليم بعد
           const draftKey = `draft_assign_${assignmentId}_${user.id}`;
           const draft = localStorage.getItem(draftKey);
           if (draft) {
@@ -302,7 +309,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     fetchData();
   }, [fetchData]);
 
-  // 🚀 حفظ تلقائي (Auto-Save) في المتصفح عند تغيير أي إجابة للطالب
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
       const draftData = { answers: myAnswers, content, fileUrl };
@@ -340,7 +346,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
       
-      // 🚀 مسح المسودة و الكاش بعد التسليم لكي تظهر النتيجة كـ "مُسلمة"
       localStorage.removeItem(`draft_assign_${assignmentId}_${user?.id}`);
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
@@ -366,7 +371,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       if (error) throw error;
       
-      // مسح الكاش لكي تظهر التعديلات الجديدة
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
       showNotification('success', 'تم تمديد/تحديث الواجب بنجاح');
@@ -396,7 +400,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     try {
       await deleteSubmission(submissionToDelete);
       
-      // مسح الكاش بعد الحذف
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
       showNotification('success', 'تم حذف تسليم الطالب بنجاح');
@@ -555,7 +558,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 {mySubmission.feedback && (
                   <div className="mt-6 p-5 bg-white/60 backdrop-blur-sm rounded-2xl border border-emerald-200/50">
                     <p className="text-xs font-black text-emerald-700 mb-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4"/> ملاحظة المعلم العامة:</p>
-                    <p className="text-slate-800 leading-relaxed font-bold text-lg">{mySubmission.feedback}</p>
+                    <div className="text-slate-800 leading-relaxed font-bold text-lg whitespace-pre-wrap" dangerouslySetInnerHTML={renderContentWithMath(mySubmission.feedback)} />
                   </div>
                 )}
               </div>
@@ -649,9 +652,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
                               <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك:</span>
                             </div>
-                            <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
-                                {isUnanswered ? 'لم تقم بتقديم إجابة لهذا السؤال.' : (studentAnswerText as string)}
-                            </p>
+                            {isUnanswered ? (
+                               <p className="text-lg font-bold whitespace-pre-wrap leading-relaxed text-slate-400 italic">لم تقم بتقديم إجابة لهذا السؤال.</p>
+                            ) : (
+                               <div className="text-lg font-bold whitespace-pre-wrap leading-relaxed text-slate-800" dangerouslySetInnerHTML={renderContentWithMath(studentAnswerText as string)} />
+                            )}
                           </div>
                         )}
 
@@ -661,7 +666,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                             <div className="text-xs font-black text-indigo-600 mb-2 flex items-center gap-1.5">
                                 <MessageSquare className="w-4 h-4"/> رسالة من المعلم:
                             </div>
-                            <p className="text-lg font-bold text-slate-800 leading-relaxed">{answerDetails.feedback}</p>
+                            <div className="text-lg font-bold text-slate-800 leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={renderContentWithMath(answerDetails.feedback)} />
                           </div>
                         )}
                       </div>
@@ -692,7 +697,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <AssignmentForm 
                 questions={questions} 
                 onSubmit={handleSubmitAnswers} 
-                onChange={(newAnswers) => setMyAnswers(newAnswers)} // 👈 أضف هذا السطر فقط
                 isSubmitting={isSubmitting}
                 initialAnswers={myAnswers}
                 readOnly={!!mySubmission}
