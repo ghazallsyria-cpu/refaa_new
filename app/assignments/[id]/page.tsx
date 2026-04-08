@@ -18,7 +18,7 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 
-// 🚀 إضافة دالة معالجة المعادلات الكيميائية والرياضية للواجبات (مع دعم الأسطر المتعددة)
+// دالة معالجة المعادلات الكيميائية والرياضية للواجبات
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = content.replace(
@@ -426,7 +426,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   }
 
   const dueDateObj = new Date(assignment.due_date);
-  const isOverdue = dueDateObj < new Date();
+  const isOverdue = dueDateObj < new Date(); // 🚀 التحقق من انتهاء وقت الواجب
   
   const firstSection = (assignment as any).assignment_sections?.[0]?.sections || (assignment as any).assignment_sections?.[0]?.section;
   const classObj = firstSection?.classes || firstSection?.class;
@@ -533,11 +533,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
                 {isGraded ? <Trophy className="h-6 w-6" /> : <Upload className="h-6 w-6" />}
               </div>
-              {isGraded ? 'نتيجة الواجب والتغذية الراجعة' : 'تسليم الإجابة'}
+              {isGraded ? 'نتيجة الواجب والتغذية الراجعة' : (isOverdue && !mySubmission ? 'انتهى وقت التسليم' : 'تسليم الإجابة')}
             </h2>
           </div>
           <div className="p-8">
             
+            {/* 🚀 إظهار رسالة انتهاء وقت التسليم ومنع الطالب من الرفع */}
+            {isOverdue && !mySubmission && (
+              <div className="mb-8 p-6 rounded-3xl bg-red-50 border border-red-100 shadow-sm flex items-center gap-4">
+                <AlertCircle className="w-8 h-8 text-red-500 shrink-0" />
+                <div>
+                  <h3 className="text-xl font-black text-red-800 mb-1">عذراً، لقد انتهى وقت تسليم هذا الواجب</h3>
+                  <p className="text-red-600 font-bold">لا يمكنك إرسال إجابات أو تعديلها لأن الموعد النهائي قد انقضى.</p>
+                </div>
+              </div>
+            )}
+
             {isGraded && (
               <div className="mb-10 p-8 rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 rounded-full blur-2xl -mr-10 -mt-10"></div>
@@ -699,7 +710,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 onSubmit={handleSubmitAnswers} 
                 isSubmitting={isSubmitting}
                 initialAnswers={myAnswers}
-                readOnly={!!mySubmission}
+                readOnly={!!mySubmission || isOverdue} // 🚀 تفعيل وضع القراءة إذا انتهى الوقت
               >
                 <div className="glass-card p-8 rounded-4xl border border-white/60 shadow-xl shadow-slate-200/50 mt-8">
                   <label className="block text-base font-black text-slate-800 mb-4">نص الإجابة (اختياري)</label>
@@ -709,11 +720,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     placeholder="إذا أردت إضافة ملاحظة نصية للمعلم..."
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    disabled={!!mySubmission}
+                    disabled={!!mySubmission || isOverdue}
                   />
 
                   <label className="block text-base font-black text-slate-800 mb-4">ملف الإجابة (ارفع صورة الحل هنا)</label>
-                  {!mySubmission ? (
+                  {(!mySubmission && !isOverdue) ? (
                     <ImageUpload
                       initialImageUrl={fileUrl}
                       onUploadSuccess={(url) => setFileUrl(url || '')}
@@ -739,13 +750,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       placeholder="اكتب إجابتك هنا بالتفصيل..."
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
-                      disabled={!!mySubmission}
+                      disabled={!!mySubmission || isOverdue} // 🚀 تعطيل النص إذا انتهى الوقت
                     />
                   </div>
                   
                   <div className="mt-8">
                     <label className="block text-base font-black text-slate-800 mb-4">صورة الواجب (ارفع حلك هنا إجباري إذا لم تكتب نصاً)</label>
-                    {!mySubmission ? (
+                    {(!mySubmission && !isOverdue) ? ( // 🚀 إخفاء زر الرفع إذا انتهى الوقت
                       <ImageUpload
                         initialImageUrl={fileUrl}
                         onUploadSuccess={(url) => setFileUrl(url || '')}
@@ -761,7 +772,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   </div>
                 </div>
 
-                {!mySubmission && (
+                {(!mySubmission && !isOverdue) && ( // 🚀 إخفاء زر التسليم النهائي إذا انتهى الوقت
                   <div className="pt-4">
                     <button
                       type="submit"
