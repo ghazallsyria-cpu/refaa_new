@@ -1,32 +1,48 @@
 // 🚀 الجزء الأول: متطلبات تطبيق الويب التقدمي (PWA)
 self.addEventListener('install', (event) => {
-  // تفعيل التحديث الفوري للتطبيق
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  // السيطرة على جميع الصفحات فوراً
   event.waitUntil(clients.claim());
 });
 
-// ⚠️ هذا الحدث (fetch) هو الشرط السري لجوجل كروم لكي يظهر زر "تثبيت التطبيق"
 self.addEventListener('fetch', (event) => {
-  // يمكن تركه فارغاً حالياً، وهو مجرد إثبات للمتصفح أن الموقع جاهز ليكون تطبيقاً
+  // إثبات للمتصفح أن الموقع جاهز PWA
 });
 
-// 🚀 الجزء الثاني: إشعارات الدفع (الكود الاحترافي الخاص بك)
+// 🚀 الجزء الثاني: استقبال إشعارات الدفع (تم التحصين ضد الانهيار)
 self.addEventListener('push', function(event) {
-  if (!event.data) return;
-  const data = event.data.json();
+  console.log('[Service Worker] تم استلام إشعار دفع (Push Received)');
+  
+  let data = {};
+  
+  // 🛡️ استخدام try-catch يمنع المتصفح من الانهيار إذا كان النص غير صالح
+  try {
+    if (event.data) {
+      data = event.data.json();
+    }
+  } catch (e) {
+    console.error('[Service Worker] خطأ في قراءة بيانات الإشعار:', e);
+    // إشعار طوارئ في حال فشل قراءة البيانات
+    data = { 
+      title: 'إشعار من منصة الرفعة', 
+      body: 'لديك تحديث جديد في المنصة.',
+      url: '/'
+    };
+  }
+
   const options = {
-    body: data.body || '',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png', // أيقونة شفافة تظهر في شريط الإشعارات العلوي
+    body: data.body || 'لديك رسالة جديدة',
+    icon: '/icon-192.png', // تأكد أن هذه الأيقونة موجودة فعلاً في مجلد public
+    badge: '/icon-192.png', 
     dir: 'rtl',
     lang: 'ar',
-    vibrate: [200, 100, 200],
+    vibrate: [200, 100, 200, 100, 200], // نمط اهتزاز مميز
     data: { url: data.url || '/' },
+    requireInteraction: true // يبقى الإشعار ظاهراً حتى يغلقه المستخدم
   };
+
   event.waitUntil(
     self.registration.showNotification(data.title || 'مدرسة الرفعة', options)
   );
@@ -35,6 +51,7 @@ self.addEventListener('push', function(event) {
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   const url = event.notification.data?.url || '/';
+  
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
