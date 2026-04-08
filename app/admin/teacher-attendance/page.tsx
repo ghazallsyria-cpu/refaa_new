@@ -5,10 +5,11 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   Printer, Calendar, Clock, ShieldAlert, ArrowLeft, RefreshCw, CheckCircle2,
-  XCircle, Hourglass, Minus, AlertTriangle, Database, School
+  XCircle, Hourglass, Minus, Database
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { motion } from 'framer-motion';
+// 🚀 استيراد دوال الوقت الذكية لمعرفة تاريخ اليوم المحدد بدقة
+import { format, startOfWeek, addDays } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -16,12 +17,8 @@ import * as XLSX from 'xlsx';
 // دالة تحويل الأيام لتتناسب مع قاعدة بياناتك (الأحد = 1)
 const getDbDay = () => {
   const jsDay = new Date().getDay(); // 0 = الأحد
-  if (jsDay === 0) return 1; 
-  if (jsDay === 1) return 2; 
-  if (jsDay === 2) return 3; 
-  if (jsDay === 3) return 4; 
-  if (jsDay === 4) return 5; 
-  return 1; 
+  if (jsDay >= 0 && jsDay <= 4) return jsDay + 1; 
+  return 1; // الافتراضي يوم الأحد في عطلة الجمعة والسبت
 };
 
 export default function TeacherAttendanceMatrix() {
@@ -33,6 +30,7 @@ export default function TeacherAttendanceMatrix() {
   
   const currentDbDay = getDbDay();
   const [selectedDay, setSelectedDay] = useState<number>(currentDbDay);
+  const [displayDate, setDisplayDate] = useState<string>(''); // 🚀 لعرض التاريخ الفعلي لليوم المختار
   
   const [stats, setStats] = useState({ totalAbsences: 0, totalPresents: 0 });
   const [debugInfo, setDebugInfo] = useState({ schedulesCount: -1, periodsCount: -1, error: null as string | null });
@@ -40,9 +38,13 @@ export default function TeacherAttendanceMatrix() {
   const fetchMatrixData = useCallback(async () => {
     setLoading(true);
     try {
-      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      // 🚀 الحل الذكي: حساب التاريخ الفعلي لليوم الذي اختاره المدير في هذا الأسبوع
+      const sundayOfThisWeek = startOfWeek(new Date(), { weekStartsOn: 0 }); // الأحد هو بداية الأسبوع (0)
+      const targetDateObj = addDays(sundayOfThisWeek, selectedDay - 1);
+      const targetDateStr = format(targetDateObj, 'yyyy-MM-dd'); // التاريخ الموجه لقاعدة البيانات
       
-      // 🚀 سحب البيانات مع استخدام الجدول الصحيح class_periods
+      setDisplayDate(format(targetDateObj, 'yyyy/MM/dd')); // التاريخ المعروض للمدير
+      
       const [
         schRes, 
         perRes, 
@@ -56,7 +58,8 @@ export default function TeacherAttendanceMatrix() {
         supabase.from('sections').select('id, name, class_id'), 
         supabase.from('classes').select('id, name'), 
         supabase.from('users').select('id, full_name'),
-        supabase.from('teacher_attendance_records').select('*').eq('date', todayStr)
+        // 🚀 الآن نبحث عن الحضور بناءً على التاريخ الصحيح وليس تاريخ اليوم دائماً!
+        supabase.from('teacher_attendance_records').select('*').eq('date', targetDateStr)
       ]);
 
       setDebugInfo({
@@ -81,8 +84,10 @@ export default function TeacherAttendanceMatrix() {
 
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const isToday = currentDbDay === selectedDay;
-      const isPastDay = selectedDay < currentDbDay;
+      
+      // 🚀 تحسين منطق التأكد من أن اليوم المختار هو اليوم الحالي أو في الماضي
+      const isToday = targetDateStr === format(now, 'yyyy-MM-dd');
+      const isPastDay = targetDateObj < new Date(new Date().setHours(0,0,0,0));
 
       let absencesCount = 0;
       let presentsCount = 0;
@@ -101,11 +106,12 @@ export default function TeacherAttendanceMatrix() {
 
         const row = teacherMap.get(sch.teacher_id);
         
-        // جلب اسم الصف والشعبة بدلاً من المادة
+        // جلب اسم الصف والشعبة
         const section = sections.find(s => s.id === sch.section_id);
         const cls = section ? classes.find(c => c.id === section.class_id) : null;
         const classNameToDisplay = cls && section ? `${cls.name} - ${section.name}` : 'صف غير محدد';
         
+        // 🚀 تحقق الحضور من المصفوفة التي جلبناها بالتاريخ الصحيح
         const hasAttended = attendance.some(a => a.teacher_id === sch.teacher_id && Number(a.period_number) === Number(sch.period));
         const periodInfo = sortedPeriods.find(p => Number(p.period_number) === Number(sch.period));
 
@@ -154,13 +160,11 @@ export default function TeacherAttendanceMatrix() {
     } finally {
       setLoading(false);
     }
-  }, [selectedDay, currentDbDay]);
+  }, [selectedDay]);
 
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'management') {
       fetchMatrixData();
-      // 🚀 تم تغيير التحديث التلقائي إلى 5 دقائق (300,000 ملي ثانية) بدلاً من دقيقة 
-      // لحل مشكلة الـ Disk IO في Supabase بشكل نهائي!
       const interval = setInterval(fetchMatrixData, 300000);
       return () => clearInterval(interval);
     }
@@ -187,7 +191,8 @@ export default function TeacherAttendanceMatrix() {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "الحضور");
-    XLSX.writeFile(workbook, `سجل_الدوام_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    // 🚀 استخدام التاريخ الفعلي المختار في اسم الملف
+    XLSX.writeFile(workbook, `سجل_الدوام_${displayDate.replace(/\//g, '-')}.xlsx`);
   };
 
   if (userRole !== 'admin' && userRole !== 'management') return null;
@@ -228,7 +233,7 @@ export default function TeacherAttendanceMatrix() {
               </div>
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3">مصفوفة دوام المعلمين</h1>
               <p className="text-indigo-200 font-bold text-base max-w-2xl leading-relaxed">
-                يتم جلب أوقات الحصص الآن من جدول <code className="bg-black/20 px-2 rounded">class_periods</code> المعتمد في نظامك.
+                متابعة الحضور المباشر للمعلمين حسب جدول الحصص اليومي بكل دقة وموثوقية.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -238,7 +243,6 @@ export default function TeacherAttendanceMatrix() {
               <button onClick={handlePrint} className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 rounded-xl font-black hover:bg-emerald-600 transition-colors shadow-lg active:scale-95">
                 <Printer className="w-5 h-5" /> طباعة / PDF
               </button>
-              {/* 🚀 زر التحديث اليدوي (يستخدمه المدير متى ما أراد) */}
               <button onClick={fetchMatrixData} className="p-3 bg-indigo-500/50 hover:bg-indigo-500/80 text-white rounded-xl transition-all border border-indigo-400/50" title="تحديث البيانات الآن">
                 <RefreshCw className={loading ? 'animate-spin' : ''} />
               </button>
@@ -259,9 +263,10 @@ export default function TeacherAttendanceMatrix() {
             <div>
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
                 <Calendar className="w-8 h-8 text-indigo-600" />
-                سجل الحضور اليومي - {daysOfWeek.find(d => d.id === selectedDay)?.name}
+                سجل الحضور - {daysOfWeek.find(d => d.id === selectedDay)?.name}
               </h2>
-              <p className="text-slate-500 font-bold mt-1">تاريخ اليوم: <span dir="ltr">{format(new Date(), 'yyyy/MM/dd')}</span></p>
+              {/* 🚀 إظهار التاريخ الفعلي ليوم الرصد بوضوح */}
+              <p className="text-slate-500 font-bold mt-2 flex items-center gap-2">تاريخ السجل: <span className="bg-white px-3 py-1 rounded-lg border border-slate-200 text-indigo-700 shadow-sm" dir="ltr">{displayDate}</span></p>
             </div>
             <div className="flex gap-4">
               <div className="bg-white px-5 py-2 rounded-xl border border-slate-200 text-center shadow-sm">
@@ -275,7 +280,7 @@ export default function TeacherAttendanceMatrix() {
             </div>
           </div>
 
-          <div className="overflow-x-auto p-4 md:p-6">
+          <div className="overflow-x-auto p-4 md:p-6 custom-scrollbar">
             {loading ? (
               <div className="py-20 flex justify-center no-print"><RefreshCw className="w-10 h-10 text-indigo-500 animate-spin" /></div>
             ) : debugInfo.periodsCount === 0 ? (
@@ -283,11 +288,6 @@ export default function TeacherAttendanceMatrix() {
                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-rose-100 text-rose-500"><Database className="w-10 h-10" /></div>
                 <h3 className="font-black text-xl text-rose-700 mb-2">جدول الأوقات غير متاح!</h3>
                 <p className="font-bold text-slate-600 text-sm mb-6">يرجى التأكد من وجود بيانات في جدول <code>class_periods</code> وفتح صلاحية القراءة RLS.</p>
-                <div className="bg-slate-900 rounded-2xl p-4 text-left" dir="ltr">
-                  <pre className="text-emerald-400 font-mono text-xs whitespace-pre-wrap">
-                    {`DROP POLICY IF EXISTS "Allow read class_periods" ON public.class_periods;\nCREATE POLICY "Allow read class_periods" ON public.class_periods FOR SELECT USING (auth.role() = 'authenticated');`}
-                  </pre>
-                </div>
               </div>
             ) : matrixData.length === 0 ? (
               <div className="py-20 text-center flex flex-col items-center gap-4">
@@ -351,6 +351,13 @@ export default function TeacherAttendanceMatrix() {
           </div>
         </div>
       </motion.div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
     </>
   );
 }
