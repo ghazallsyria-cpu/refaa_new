@@ -272,7 +272,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         let finalSubmissions = details.allSubmissions || [];
 
-        // 🚀 المحرك الذكي المحدث
+        // 🚀 المحرك الذكي المحدث والمعالج (إصلاح مشكلة تكرار الطلاب وتضارب الحالات)
         const dueDate = new Date(details.assignment.due_date);
         if (dueDate < new Date()) { 
            const sectionsData = details.assignment.assignment_sections || [];
@@ -285,10 +285,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                  .in('section_id', sectionIds);
 
               if (expectedStudents) {
-                 const submittedStudentIds = finalSubmissions.map((s: any) => s.student_id);
-                 const missingStudents = expectedStudents.filter((st: any) => !submittedStudentIds.includes(st.id));
+                 // 1. استخراج آمن 100% لمعرفات الطلاب الذين سلموا الواجب بالفعل
+                 const submittedStudentIds = finalSubmissions.map((s: any) => String(s.student_id || s.student?.id || '')).filter(Boolean);
+                 
+                 // 2. تصفية الطلاب المتوقعين لاكتشاف من لم يسلم فعلياً
+                 const missingStudents = expectedStudents.filter((st: any) => !submittedStudentIds.includes(String(st.id)));
 
-                 // 🚀 إضافة الحقول المفقودة لتوافق TypeScript
+                 // 3. إنشاء تسليمات وهمية للطلاب المتأخرين فقط
                  const missingVirtualSubs = missingStudents.map((st: any) => ({
                     id: `missing_${st.id}`,
                     assignment_id: assignmentId,
@@ -304,12 +307,27 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     student: st
                  } as unknown as SubmissionWithStudent));
 
+                 // دمج القائمتين مع وضع التسليمات الحقيقية أولاً
                  finalSubmissions = [...finalSubmissions, ...missingVirtualSubs];
               }
            }
         }
         
-        setSubmissions(finalSubmissions);
+        // 🛡️ طبقة حماية إضافية ومطلقة: فلترة المصفوفة من أي تكرار
+        // (إذا كان الطالب قد سلم بالفعل، سيتم اعتماد تسليمه الحقيقي وحذف أي تسليم وهمي له فوراً)
+        const uniqueSubmissions = [];
+        const seenIds = new Set();
+        
+        for (const sub of finalSubmissions) {
+           const sId = String(sub.student_id || sub.student?.id || '');
+           if (sId) {
+              if (seenIds.has(sId)) continue; // الطالب موجود مسبقاً، تجاهل النسخة المكررة
+              seenIds.add(sId);
+           }
+           uniqueSubmissions.push(sub);
+        }
+        
+        setSubmissions(uniqueSubmissions);
       }
     } catch (error: any) {
       console.error('Error fetching data:', error);
