@@ -49,6 +49,7 @@ const navigation = [
   { name: 'أولياء الأمور', href: '/parents', icon: Users },
   { name: 'الفصول', href: '/classes', icon: School },
   { name: 'المواد الدراسية', href: '/subjects', icon: BookOpen },
+  { name: 'إدارة المنتديات', href: '/admin/forums-management', icon: LayoutGrid },
   { name: 'المنتديات', href: '/forums', icon: Compass }, // 🚀 تم إضافة المنتديات هنا
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
