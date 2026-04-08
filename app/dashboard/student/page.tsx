@@ -616,7 +616,7 @@ export default function StudentDashboard() {
                 </div>
                 آخر النتائج
               </h2>
-              <Link href="/dashboard/student/performance" className="text-[10px] sm:text-xs font-bold text-emerald-600 hover:text-white flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm border border-emerald-100">
+              <Link href="/student/performance" className="text-[10px] sm:text-xs font-bold text-emerald-600 hover:text-white flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm border border-emerald-100">
                 السجل الكامل <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
               </Link>
             </div>
