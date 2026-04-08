@@ -57,8 +57,8 @@ export default function TeacherAttendanceMatrix() {
         supabase.from('class_periods').select('*').order('period_number'), 
         supabase.from('sections').select('id, name, class_id'), 
         supabase.from('classes').select('id, name'), 
-        supabase.from('users').select('id, full_name'),
-        // 🚀 الآن نبحث عن الحضور بناءً على التاريخ الصحيح وليس تاريخ اليوم دائماً!
+        // 🚀 الحل هنا: جلب أسماء المعلمين والإدارة فقط لتجنب مشكلة حد الـ 1000 مستخدم
+        supabase.from('users').select('id, full_name').in('role', ['teacher', 'admin', 'management']),
         supabase.from('teacher_attendance_records').select('*').eq('date', targetDateStr)
       ]);
 
@@ -97,9 +97,16 @@ export default function TeacherAttendanceMatrix() {
       todaysSchedule.forEach(sch => {
         if (!teacherMap.has(sch.teacher_id)) {
           const userRecord = users.find(u => u.id === sch.teacher_id);
+          
+          // تأمين إضافي في حال كان الاسم المسجل فارغاً بالخطأ
+          let finalName = `معلم (${sch.teacher_id.substring(0, 4)})`;
+          if (userRecord && userRecord.full_name && userRecord.full_name.trim() !== '') {
+             finalName = userRecord.full_name;
+          }
+
           teacherMap.set(sch.teacher_id, {
             teacher_id: sch.teacher_id,
-            teacher_name: userRecord?.full_name || `معلم (${sch.teacher_id.substring(0, 4)})`,
+            teacher_name: finalName,
             periodsData: {}
           });
         }
