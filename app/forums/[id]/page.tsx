@@ -168,8 +168,9 @@ export default function CategoryPage() {
     
     // الطالب يحق له النشر إذا كان القسم مفتوحاً (all) وكان ضمن الفئة المستهدفة
     if (currentRole === 'student') {
-       if (!categoryInfo.target_classes || categoryInfo.target_classes.length === 0) return true; // متاح للكل
-       if (studentClassId && categoryInfo.target_classes.includes(studentClassId)) return true; // الطالب ينتمي للفصل
+       const targetClasses = (categoryInfo as any).target_classes;
+       if (!targetClasses || targetClasses.length === 0) return true; // متاح للكل
+       if (studentClassId && targetClasses.includes(studentClassId)) return true; // الطالب ينتمي للفصل
        return false; // الطالب لا ينتمي للفصل المستهدف (سيظل قادراً على القراءة فقط)
     }
     
