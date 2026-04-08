@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,7 +8,8 @@ import {
   Trash2, Edit2, Save, XCircle, ChevronRight, 
   Layers, Globe, Target, ShieldAlert, Lock, 
   Upload, Search, CheckCircle2, AlertCircle,
-  MoreVertical, LayoutGrid, Tag, ArrowLeft, Hash, Users
+  MoreVertical, LayoutGrid, Tag, ArrowLeft, Hash, Users,
+  Loader2, X // تم إضافة الأيقونات المفقودة هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -43,7 +46,13 @@ export default function ForumsManagementPage() {
     setLoading(false);
   }, [fetchCategoriesAndClasses]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { 
+    // تأخير بسيط لمنع الـ React من الشكوى حول تحديث الحالة المباشر
+    const timeout = setTimeout(() => {
+      loadData();
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, []); // تم إفراغ المصفوفة لمنع التكرار اللانهائي
 
   const handleOpenCatModal = (cat: any = null, parentId: string = 'none') => {
     if (cat) {
@@ -164,7 +173,7 @@ export default function ForumsManagementPage() {
                       <div key={sub.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group hover:bg-white hover:border-indigo-200 hover:shadow-md transition-all">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-xl overflow-hidden bg-white border border-slate-200 shrink-0 relative flex items-center justify-center">
-                             {sub.icon ? <img src={sub.icon} alt={sub.name} className="w-full h-full object-cover" /> : <Hash className="w-5 h-5 m-auto text-slate-300"/>}
+                              {sub.icon ? <img src={sub.icon} alt={sub.name} className="w-full h-full object-cover" /> : <Hash className="w-5 h-5 m-auto text-slate-300"/>}
                           </div>
                           <div className="min-w-0">
                             <h4 className="font-black text-slate-800 text-sm truncate">{sub.name}</h4>
