@@ -54,9 +54,6 @@ export default function ForumsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [studentClassIds, setStudentClassIds] = useState<string[]>([]);
-  const [isStudentDataLoading, setIsStudentDataLoading] = useState(currentRole === 'student');
-
   // 🚀 حالات السلايدر الديناميكي
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -88,30 +85,6 @@ export default function ForumsPage() {
   }, [heroSlides.length]);
 
   useEffect(() => { fetchCategoriesAndClasses(); }, [fetchCategoriesAndClasses]);
-
-  useEffect(() => {
-    const fetchStudentClass = async () => {
-      if (currentRole === 'student' && user?.id) {
-        try {
-          const { data } = await supabase
-            .from('students')
-            .select('sections(class_id)')
-            .eq('id', user.id)
-            .single();
-            
-          if (data && data.sections) {
-            const classId = (data.sections as any).class_id;
-            if (classId) setStudentClassIds([classId]);
-          }
-        } catch (error) {
-          console.error('Error fetching student class for forum visibility', error);
-        }
-      }
-      setIsStudentDataLoading(false);
-    };
-    
-    fetchStudentClass();
-  }, [currentRole, user]);
 
   const toggleClass = (classId: string) => {
     if (targetClasses.includes(classId)) setTargetClasses(targetClasses.filter(id => id !== classId));
@@ -175,28 +148,17 @@ export default function ForumsPage() {
       }
   }
 
+  // 🚀 التعديل الجوهري: إظهار جميع الأقسام للجميع (للقراءة)، والبحث يتم عليها كلها
   const getDisplayedCategories = () => {
-    const permissionFiltered = structuredCategories.map(mainCat => {
-      if (isAdmin || isTeacher) return mainCat;
-
-      const isMainAllowed = !mainCat.target_classes || mainCat.target_classes.length === 0 || mainCat.target_classes.some(id => studentClassIds.includes(id));
-
-      const allowedSubs = (mainCat.subcategories || []).filter(sub => {
-        return !sub.target_classes || sub.target_classes.length === 0 || sub.target_classes.some(id => studentClassIds.includes(id));
-      });
-
-      if (isMainAllowed || allowedSubs.length > 0) {
-        return { ...mainCat, subcategories: allowedSubs };
-      }
-      return null;
-    }).filter(Boolean) as StructuredCategory[];
-
-    if (!searchQuery) return permissionFiltered;
+    if (!searchQuery) return structuredCategories;
     
-    return permissionFiltered.map(main => {
+    return structuredCategories.map(main => {
       const mainMatches = main.name.includes(searchQuery) || (main.description && main.description.includes(searchQuery));
       const matchingSubs = (main.subcategories || []).filter(sub => sub.name.includes(searchQuery) || (sub.description && sub.description.includes(searchQuery)));
-      if (mainMatches || matchingSubs.length > 0) return { ...main, subcategories: matchingSubs.length > 0 ? matchingSubs : main.subcategories };
+      
+      if (mainMatches || matchingSubs.length > 0) {
+        return { ...main, subcategories: matchingSubs.length > 0 ? matchingSubs : main.subcategories };
+      }
       return null;
     }).filter(Boolean) as StructuredCategory[];
   };
@@ -330,7 +292,6 @@ export default function ForumsPage() {
                 </p>
               )}
 
-              {/* 🚀 قسم إظهار صور المتفوقين */}
               {currentSlideData.metadata?.students && (
                 <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-2">
                   {currentSlideData.metadata.students.map((student: any, i: number) => (
@@ -353,7 +314,6 @@ export default function ForumsPage() {
                 </div>
               )}
 
-              {/* 🚀 قسم إظهار الصورة الترويجية إذا كانت موجودة */}
               {currentSlideData.type === 'media' && currentSlideData.media_url && (
                  <motion.div 
                     initial={{ opacity: 0, scale: 0.9, y: 20 }} 
@@ -408,13 +368,13 @@ export default function ForumsPage() {
 
       {/* 🌟 محتوى الأقسام */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20 space-y-12">
-        {loading || isStudentDataLoading ? (
+        {loading ? (
           <div className="flex flex-col items-center justify-center py-32"><Loader2 className="w-12 h-12 text-indigo-500 animate-spin" /></div>
         ) : displayedCategories.length === 0 ? (
           <div className="text-center py-32 bg-white/50 backdrop-blur-md rounded-[3rem] border border-slate-200/50 shadow-sm">
              <Compass className="w-16 h-16 text-slate-300 mx-auto mb-6" />
             <h3 className="text-2xl font-black text-slate-800 mb-2">لا توجد أقسام حالياً</h3>
-            <p className="text-slate-500 font-bold">لم يتم العثور على أي منتديات تطابق بحثك أو صلاحياتك.</p>
+            <p className="text-slate-500 font-bold">لم يتم العثور على أي منتديات تطابق بحثك.</p>
           </div>
         ) : (
           displayedCategories.map((mainCat, index) => (
