@@ -145,7 +145,7 @@ export default function CategoryPage() {
     }
   };
 
-  // 🚀 إظهار جميع الأقسام الفرعية للجميع (للقراءة)
+  // 🚀 إظهار جميع الأقسام الفرعية للجميع (للقراءة) - تم التعديل هنا ليعمل دائماً!
   const visibleSubcategories = subcategories;
 
   // 🚀 فحص ذكي جداً لـ (من يحق له كتابة مواضيع؟)
@@ -170,7 +170,7 @@ export default function CategoryPage() {
     if (currentRole === 'student') {
        if (!categoryInfo.target_classes || categoryInfo.target_classes.length === 0) return true; // متاح للكل
        if (studentClassId && categoryInfo.target_classes.includes(studentClassId)) return true; // الطالب ينتمي للفصل
-       return false; // الطالب لا ينتمي للفصل المستهدف
+       return false; // الطالب لا ينتمي للفصل المستهدف (سيظل قادراً على القراءة فقط)
     }
     
     return false;
