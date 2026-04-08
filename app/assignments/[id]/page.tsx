@@ -18,16 +18,6 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 
-// دالة معالجة المعادلات الكيميائية والرياضية للواجبات
-const renderContentWithMath = (content: string) => {
-   if (!content) return { __html: '' };
-   let html = content.replace(
-     /\$\$([\s\S]*?)\$\$/g, 
-     '<span class="math-tex text-indigo-700 bg-indigo-50 px-2 py-1 rounded font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
-   );
-   return { __html: html };
-};
-
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const assignmentId = resolvedParams.id;
@@ -95,20 +85,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
      ? submissions 
      : submissions.filter(sub => getStudentSectionName(sub.student) === selectedSection);
 
-  // 🚀 تصدير إكسل
   const exportToExcel = () => {
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
     
     const csvData = filteredSubmissions.map(sub => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
-       
-       const isMissing = (sub.status as string) === 'missing';
-       const isGraded = sub.status === 'graded' || (sub.status as string) === 'completed';
-       
-       const score = isMissing ? 0 : (isGraded ? (sub.grade || 0) : 'قيد المراجعة');
-       const status = isMissing ? 'لم يقدم الواجب (تجاوز الوقت)' : (isGraded ? 'مقيّم' : 'يحتاج تصحيح');
-       const date = isMissing ? '-' : new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
+       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
+       const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
+       const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
+       const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
        
        return {
          'اسم الطالب': name,
@@ -126,7 +112,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     XLSX.writeFile(workbook, `تسليمات_${assignment?.title || 'الواجب'}_${selectedSection}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // 🚀 تصدير PDF
   const exportToPDF = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -135,26 +120,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
 
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
-    const gradedSubs = filteredSubmissions.filter(s => s.status === 'graded' || (s.status as string) === 'completed');
+    const gradedSubs = filteredSubmissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
     const avgScore = gradedSubs.length > 0 ? Math.round(gradedSubs.reduce((sum, s) => sum + (Number(s.grade) || 0), 0) / gradedSubs.length) : 0;
 
     const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
-       
-       const isMissing = (sub.status as string) === 'missing';
-       const isGraded = sub.status === 'graded' || (sub.status as string) === 'completed';
-       
-       const score = isMissing ? '0' : (isGraded ? (sub.grade || 0) : 'قيد المراجعة');
-       const color = isMissing ? '#ef4444' : (isGraded ? '#4f46e5' : '#94a3b8');
-       const date = isMissing ? '<span style="color:#ef4444;">تجاوز الوقت</span>' : new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
+       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
+       const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
+       const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
        
        return `
         <tr>
           <td>${index + 1}</td>
           <td><strong>${name}</strong></td>
           <td>${section}</td>
-          <td style="text-align: center; font-weight: bold; color: ${color}">${score} ${isGraded || isMissing ? `/ ${maxScore}` : ''}</td>
+          <td style="text-align: center; font-weight: bold; color: ${isGraded ? '#4f46e5' : '#94a3b8'}">${score} ${isGraded ? `/ ${maxScore}` : ''}</td>
           <td style="text-align: center;">${date}</td>
         </tr>`;
     }).join('');
@@ -193,10 +174,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
           
           <div class="info-grid">
-            <div><strong>إجمالي الطلاب في الكشف:</strong> ${filteredSubmissions.length}</div>
+            <div><strong>إجمالي الطلاب المٌسلمين:</strong> ${filteredSubmissions.length}</div>
             <div><strong>تم التقييم:</strong> ${gradedSubs.length}</div>
             <div><strong>العلامة الكاملة للواجب:</strong> ${maxScore}</div>
-            <div><strong>متوسط الدرجات (للمقيمين):</strong> ${avgScore}</div>
+            <div><strong>متوسط درجات الطلاب:</strong> ${avgScore}</div>
           </div>
 
           <table>
@@ -230,12 +211,49 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    setLoading(true); 
     
+    // 🚀 الكاش السريع: جلب البيانات من الذاكرة لعدم تأخير فتح الصفحة
+    const cacheKey = `assign_cache_${assignmentId}_${user.id}_${currentRole}`;
+    const cachedData = sessionStorage.getItem(cacheKey);
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (currentRole === 'student') setStudentId(user.id);
+        setAssignment(parsed.assignment);
+        setEditData(parsed.assignment);
+        if (parsed.questions) setQuestions(parsed.questions);
+
+        if (currentRole === 'student' && parsed.submission) {
+           setMySubmission(parsed.submission);
+           setContent(parsed.submission.content || '');
+           setFileUrl(parsed.submission.file_url || '');
+           if (parsed.answers) {
+             const answersMap: Record<string, any> = {};
+             const fullMap: Record<string, any> = {};
+             parsed.answers.forEach((a: any) => {
+               answersMap[a.question_id] = a.selected_options || a.answer_text;
+               fullMap[a.question_id] = a;
+             });
+             setMyAnswers(answersMap);
+             setFullAnswersMap(fullMap);
+           }
+        } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+           setSubmissions(parsed.allSubmissions || []);
+        }
+        setLoading(false); // إظهار الشاشة فوراً دون انتظار!
+      } catch (e) {}
+    } else {
+      setLoading(true); // نظهر التحميل فقط إذا كانت هذه أول مرة نفتح فيها الواجب
+    }
+
     try {
       if (currentRole === 'student') setStudentId(user.id);
       const details = await fetchAssignmentDetails(assignmentId);
       
+      // 🚀 حفظ البيانات في الكاش للمرة القادمة
+      sessionStorage.setItem(cacheKey, JSON.stringify(details));
+
       setAssignment(details.assignment);
       setEditData(details.assignment);
       if (details.questions) setQuestions(details.questions);
@@ -258,6 +276,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             setFullAnswersMap(fullMap);
           }
         } else {
+          // 🚀 استرجاع المسودة (الحفظ التلقائي) إذا لم يقم الطالب بالتسليم بعد
           const draftKey = `draft_assign_${assignmentId}_${user.id}`;
           const draft = localStorage.getItem(draftKey);
           if (draft) {
@@ -270,64 +289,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           }
         }
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        let finalSubmissions = details.allSubmissions || [];
-
-        // 🚀 المحرك الذكي المحدث والمعالج (إصلاح مشكلة تكرار الطلاب وتضارب الحالات)
-        const dueDate = new Date(details.assignment.due_date);
-        if (dueDate < new Date()) { 
-           const sectionsData = details.assignment.assignment_sections || [];
-           const sectionIds = sectionsData.map((s: any) => s.section_id || s.sections?.id).filter(Boolean);
-
-           if (sectionIds.length > 0) {
-              const { data: expectedStudents } = await supabase
-                 .from('students')
-                 .select('id, users(full_name), sections(name, classes(name))')
-                 .in('section_id', sectionIds);
-
-              if (expectedStudents) {
-                 // 1. استخراج آمن 100% لمعرفات الطلاب الذين سلموا الواجب بالفعل
-                 const submittedStudentIds = finalSubmissions.map((s: any) => String(s.student_id || s.student?.id || '')).filter(Boolean);
-                 
-                 // 2. تصفية الطلاب المتوقعين لاكتشاف من لم يسلم فعلياً
-                 const missingStudents = expectedStudents.filter((st: any) => !submittedStudentIds.includes(String(st.id)));
-
-                 // 3. إنشاء تسليمات وهمية للطلاب المتأخرين فقط
-                 const missingVirtualSubs = missingStudents.map((st: any) => ({
-                    id: `missing_${st.id}`,
-                    assignment_id: assignmentId,
-                    student_id: st.id,
-                    status: 'missing' as any, 
-                    grade: 0,
-                    content: null,
-                    file_url: null,
-                    feedback: null,
-                    submitted_at: null,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                    student: st
-                 } as unknown as SubmissionWithStudent));
-
-                 // دمج القائمتين مع وضع التسليمات الحقيقية أولاً
-                 finalSubmissions = [...finalSubmissions, ...missingVirtualSubs];
-              }
-           }
-        }
-        
-        // 🛡️ طبقة حماية إضافية ومطلقة: فلترة المصفوفة من أي تكرار
-        // (إذا كان الطالب قد سلم بالفعل، سيتم اعتماد تسليمه الحقيقي وحذف أي تسليم وهمي له فوراً)
-        const uniqueSubmissions = [];
-        const seenIds = new Set();
-        
-        for (const sub of finalSubmissions) {
-           const sId = String(sub.student_id || sub.student?.id || '');
-           if (sId) {
-              if (seenIds.has(sId)) continue; // الطالب موجود مسبقاً، تجاهل النسخة المكررة
-              seenIds.add(sId);
-           }
-           uniqueSubmissions.push(sub);
-        }
-        
-        setSubmissions(uniqueSubmissions);
+        setSubmissions(details.allSubmissions);
       }
     } catch (error: any) {
       console.error('Error fetching data:', error);
@@ -340,6 +302,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     fetchData();
   }, [fetchData]);
 
+  // 🚀 حفظ تلقائي (Auto-Save) في المتصفح عند تغيير أي إجابة للطالب
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
       const draftData = { answers: myAnswers, content, fileUrl };
@@ -377,6 +340,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
       
+      // 🚀 مسح المسودة و الكاش بعد التسليم لكي تظهر النتيجة كـ "مُسلمة"
       localStorage.removeItem(`draft_assign_${assignmentId}_${user?.id}`);
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
@@ -402,6 +366,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       if (error) throw error;
       
+      // مسح الكاش لكي تظهر التعديلات الجديدة
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
       showNotification('success', 'تم تمديد/تحديث الواجب بنجاح');
@@ -431,6 +396,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     try {
       await deleteSubmission(submissionToDelete);
       
+      // مسح الكاش بعد الحذف
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
       showNotification('success', 'تم حذف تسليم الطالب بنجاح');
@@ -457,7 +423,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   }
 
   const dueDateObj = new Date(assignment.due_date);
-  const isOverdue = dueDateObj < new Date(); 
+  const isOverdue = dueDateObj < new Date();
   
   const firstSection = (assignment as any).assignment_sections?.[0]?.sections || (assignment as any).assignment_sections?.[0]?.section;
   const classObj = firstSection?.classes || firstSection?.class;
@@ -564,22 +530,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
                 {isGraded ? <Trophy className="h-6 w-6" /> : <Upload className="h-6 w-6" />}
               </div>
-              {isGraded ? 'نتيجة الواجب والتغذية الراجعة' : (isOverdue && !mySubmission ? 'انتهى وقت التسليم' : 'تسليم الإجابة')}
+              {isGraded ? 'نتيجة الواجب والتغذية الراجعة' : 'تسليم الإجابة'}
             </h2>
           </div>
           <div className="p-8">
             
-            {/* إظهار رسالة انتهاء وقت التسليم ومنع الطالب من الرفع */}
-            {isOverdue && !mySubmission && (
-              <div className="mb-8 p-6 rounded-3xl bg-red-50 border border-red-100 shadow-sm flex items-center gap-4">
-                <AlertCircle className="w-8 h-8 text-red-500 shrink-0" />
-                <div>
-                  <h3 className="text-xl font-black text-red-800 mb-1">عذراً، لقد انتهى وقت تسليم هذا الواجب</h3>
-                  <p className="text-red-600 font-bold">لا يمكنك إرسال إجابات أو تعديلها لأن الموعد النهائي قد انقضى. لقد تم رصد درجة (صفر) في هذا الواجب.</p>
-                </div>
-              </div>
-            )}
-
             {isGraded && (
               <div className="mb-10 p-8 rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 rounded-full blur-2xl -mr-10 -mt-10"></div>
@@ -600,7 +555,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 {mySubmission.feedback && (
                   <div className="mt-6 p-5 bg-white/60 backdrop-blur-sm rounded-2xl border border-emerald-200/50">
                     <p className="text-xs font-black text-emerald-700 mb-2 flex items-center gap-1.5"><MessageSquare className="w-4 h-4"/> ملاحظة المعلم العامة:</p>
-                    <div className="text-slate-800 leading-relaxed font-bold text-lg whitespace-pre-wrap" dangerouslySetInnerHTML={renderContentWithMath(mySubmission.feedback)} />
+                    <p className="text-slate-800 leading-relaxed font-bold text-lg">{mySubmission.feedback}</p>
                   </div>
                 )}
               </div>
@@ -648,7 +603,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               {idx + 1}
                           </div>
                           <div className="pt-2">
-                             <h3 className="font-bold text-xl text-slate-800 leading-relaxed">{q.content || (q as any).text}</h3>
+                             <h3 className="font-bold text-xl text-slate-800 leading-relaxed">{(q as any).text || q.content}</h3>
                              {q.media_url && <img src={q.media_url} className="mt-4 max-h-48 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
                           </div>
                         </div>
@@ -694,11 +649,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
                               <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابتك:</span>
                             </div>
-                            {isUnanswered ? (
-                               <p className="text-lg font-bold whitespace-pre-wrap leading-relaxed text-slate-400 italic">لم تقم بتقديم إجابة لهذا السؤال.</p>
-                            ) : (
-                               <div className="text-lg font-bold whitespace-pre-wrap leading-relaxed text-slate-800" dangerouslySetInnerHTML={renderContentWithMath(studentAnswerText as string)} />
-                            )}
+                            <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
+                                {isUnanswered ? 'لم تقم بتقديم إجابة لهذا السؤال.' : (studentAnswerText as string)}
+                            </p>
                           </div>
                         )}
 
@@ -708,7 +661,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                             <div className="text-xs font-black text-indigo-600 mb-2 flex items-center gap-1.5">
                                 <MessageSquare className="w-4 h-4"/> رسالة من المعلم:
                             </div>
-                            <div className="text-lg font-bold text-slate-800 leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={renderContentWithMath(answerDetails.feedback)} />
+                            <p className="text-lg font-bold text-slate-800 leading-relaxed">{answerDetails.feedback}</p>
                           </div>
                         )}
                       </div>
@@ -739,9 +692,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <AssignmentForm 
                 questions={questions} 
                 onSubmit={handleSubmitAnswers} 
+                onChange={(newAnswers) => setMyAnswers(newAnswers)} // 👈 أضف هذا السطر فقط
                 isSubmitting={isSubmitting}
                 initialAnswers={myAnswers}
-                readOnly={!!mySubmission || isOverdue}
+                readOnly={!!mySubmission}
               >
                 <div className="glass-card p-8 rounded-4xl border border-white/60 shadow-xl shadow-slate-200/50 mt-8">
                   <label className="block text-base font-black text-slate-800 mb-4">نص الإجابة (اختياري)</label>
@@ -751,11 +705,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     placeholder="إذا أردت إضافة ملاحظة نصية للمعلم..."
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    disabled={!!mySubmission || isOverdue}
+                    disabled={!!mySubmission}
                   />
 
                   <label className="block text-base font-black text-slate-800 mb-4">ملف الإجابة (ارفع صورة الحل هنا)</label>
-                  {(!mySubmission && !isOverdue) ? (
+                  {!mySubmission ? (
                     <ImageUpload
                       initialImageUrl={fileUrl}
                       onUploadSuccess={(url) => setFileUrl(url || '')}
@@ -781,13 +735,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       placeholder="اكتب إجابتك هنا بالتفصيل..."
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
-                      disabled={!!mySubmission || isOverdue} 
+                      disabled={!!mySubmission}
                     />
                   </div>
                   
                   <div className="mt-8">
                     <label className="block text-base font-black text-slate-800 mb-4">صورة الواجب (ارفع حلك هنا إجباري إذا لم تكتب نصاً)</label>
-                    {(!mySubmission && !isOverdue) ? ( 
+                    {!mySubmission ? (
                       <ImageUpload
                         initialImageUrl={fileUrl}
                         onUploadSuccess={(url) => setFileUrl(url || '')}
@@ -803,7 +757,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   </div>
                 </div>
 
-                {(!mySubmission && !isOverdue) && (
+                {!mySubmission && (
                   <div className="pt-4">
                     <button
                       type="submit"
@@ -890,47 +844,34 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                       <FileText className="h-8 w-8 text-slate-300" />
                     </div>
-                    <p className="text-slate-500 font-medium text-lg">لا توجد بيانات متاحة في هذا التصنيف.</p>
+                    <p className="text-slate-500 font-medium text-lg">لا توجد تسليمات متاحة في هذا التصنيف.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {filteredSubmissions.map((sub) => {
                        const st = sub.student as any;
-                       const isMissing = (sub.status as string) === 'missing';
-                       const isGraded = sub.status === 'graded' || (sub.status as string) === 'completed';
+                       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
 
                        return (
-                         <div key={sub.id} className={`p-6 hover:bg-slate-50/50 transition-colors ${isMissing ? 'bg-red-50/30' : ''}`}>
+                         <div key={sub.id} className="p-6 hover:bg-slate-50/50 transition-colors">
                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                              <div className="flex items-center gap-4">
-                               <div className={`h-14 w-14 rounded-2xl flex items-center justify-center border ${isMissing ? 'bg-red-50 text-red-500 border-red-100' : 'bg-indigo-50 text-indigo-500 border-indigo-100'}`}>
+                               <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-500 border border-indigo-100">
                                  <User className="h-7 w-7" />
                                </div>
                                <div>
                                  <h3 className="font-black text-slate-900 text-lg">{st?.users?.full_name || st?.user?.full_name || 'طالب غير معروف'}</h3>
-                                 
-                                 {isMissing ? (
-                                    <p className="text-sm font-bold text-red-500 mt-1 flex items-center gap-1.5">
-                                      <AlertCircle className="w-4 h-4" /> لم يقم بالتسليم (انتهى الوقت)
-                                    </p>
-                                 ) : (
-                                    <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
-                                      <Clock className="h-4 w-4" />
-                                      <span dir="ltr">{new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
-                                    </p>
-                                 )}
-
+                                 <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
+                                   <Clock className="h-4 w-4" />
+                                   <span dir="ltr">{new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' })}</span>
+                                 </p>
                                  <p className="text-[10px] font-black text-indigo-600 mt-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block">
                                     {getStudentSectionName(st)}
                                  </p>
                                </div>
                              </div>
                              <div className="flex items-center gap-3 justify-end border-t md:border-0 pt-4 md:pt-0 mt-2 md:mt-0 border-slate-100 w-full md:w-auto">
-                               {isMissing ? (
-                                 <div className="px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-xl text-sm font-black flex items-center gap-2">
-                                   <XCircle className="w-4 h-4" /> الدرجة: 0
-                                 </div>
-                               ) : isGraded ? (
+                               {isGraded ? (
                                  <div className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-black flex items-center gap-2">
                                    <CheckCircle2 className="w-4 h-4" /> الدرجة: {sub.grade}
                                  </div>
@@ -940,24 +881,20 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                  </span>
                                )}
                                
-                               {!isMissing && (
-                                 <>
-                                   <button
-                                     onClick={() => setSubmissionToDelete(sub.id)}
-                                     className="h-11 w-11 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100 active:scale-95"
-                                     title="حذف هذا التسليم لإتاحة الفرصة للطالب"
-                                   >
-                                     <Trash2 className="h-5 w-5" />
-                                   </button>
+                               <button
+                                 onClick={() => setSubmissionToDelete(sub.id)}
+                                 className="h-11 w-11 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100 active:scale-95"
+                                 title="حذف هذا التسليم لإتاحة الفرصة للطالب"
+                               >
+                                 <Trash2 className="h-5 w-5" />
+                               </button>
 
-                                   <Link 
-                                     href={`/assignments/${assignmentId}/submissions/${sub.id}`}
-                                     className="h-11 px-6 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-indigo-600 transition-all flex items-center shadow-md active:scale-95"
-                                   >
-                                     تصحيح وتقييم
-                                   </Link>
-                                 </>
-                               )}
+                               <Link 
+                                 href={`/assignments/${assignmentId}/submissions/${sub.id}`}
+                                 className="h-11 px-6 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-indigo-600 transition-all flex items-center shadow-md active:scale-95"
+                               >
+                                 تصحيح وتقييم
+                               </Link>
                              </div>
                            </div>
                          </div>
