@@ -7,6 +7,16 @@ import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 
+// 🚀 إضافة دالة معالجة المعادلات الكيميائية والرياضية للواجبات
+const renderContentWithMath = (content: string) => {
+   if (!content) return { __html: '' };
+   let html = content.replace(
+     /\$\$([\s\S]*?)\$\$/g, 
+     '<span class="math-tex text-indigo-700 bg-indigo-50 px-2 py-1 rounded font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
+   );
+   return { __html: html };
+};
+
 export default function GradingPage({ params }: { params: Promise<{ id: string, submissionId: string }> }) {
   const { id: assignmentId, submissionId } = use(params);
   const router = useRouter();
@@ -150,7 +160,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                  if (isHeader) {
                    return (
                      <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100">
-                        <h3 className="text-2xl font-black text-indigo-900 leading-relaxed">{q.content || q.text}</h3>
+                        <h3 className="text-2xl font-black text-indigo-900 leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text)} />
                         {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200" alt="مرفق" />}
                      </div>
                    );
@@ -200,7 +210,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      <div className="p-5 sm:p-8 bg-slate-50/80 border-b border-slate-100 flex items-start gap-4">
                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm shrink-0">{idx + 1}</div>
                        <div className="flex-1 pt-1">
-                          <h4 className="text-lg font-bold text-slate-800 leading-relaxed">{q.content || q.text}</h4>
+                          <h4 className="text-lg font-bold text-slate-800 leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text)} />
                           {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
                        </div>
                      </div>
@@ -228,9 +238,13 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                     } catch(e){}
                                     return (
                                       <tr key={rIdx} className="hover:bg-slate-50 transition-colors">
-                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top">{aspect}</td>
-                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[0] || <span className="text-slate-300 italic">فارغ</span>}</td>
-                                        <td className="p-4 border-b border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[1] || <span className="text-slate-300 italic">فارغ</span>}</td>
+                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top" dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
+                                        <td className="p-4 border-b border-l border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">
+                                          {parsedAns[rIdx]?.[0] ? <span dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-300 italic">فارغ</span>}
+                                        </td>
+                                        <td className="p-4 border-b border-slate-200 font-bold text-indigo-900 align-top whitespace-pre-wrap">
+                                          {parsedAns[rIdx]?.[1] ? <span dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-300 italic">فارغ</span>}
+                                        </td>
                                       </tr>
                                     );
                                   })}
@@ -242,9 +256,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                           <div className={`p-5 rounded-2xl border font-bold text-lg leading-relaxed ${!isUnanswered ? 'bg-indigo-50/50 border-indigo-100 text-indigo-900 shadow-inner' : 'bg-slate-50 border-dashed border-slate-300 text-slate-400 italic'}`}>
                             {isUnanswered 
                                ? 'لم يجب الطالب على هذا السؤال.' 
-                               : (typeof studentAnswerText === 'object' && studentAnswerText !== null) 
-                                   ? JSON.stringify(studentAnswerText) 
-                                   : String(studentAnswerText)}
+                               : <div dangerouslySetInnerHTML={renderContentWithMath(typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : String(studentAnswerText))} />
+                            }
                           </div>
                         )}
                      </div>
@@ -285,7 +298,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
               
               {submission?.content && (
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-6">
-                  <p className="text-slate-800 whitespace-pre-wrap font-bold text-lg leading-relaxed">{submission.content}</p>
+                  <div className="text-slate-800 whitespace-pre-wrap font-bold text-lg leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(submission.content)} />
                 </div>
               )}
               
