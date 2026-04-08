@@ -8,12 +8,12 @@ import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { 
   MessageSquare, Plus, Hash, ChevronLeft, Search, 
   Loader2, Sparkles, BookOpen, Layers, Globe, Target, Save, XCircle, Image as ImageIcon, Trash2, Lock, ShieldAlert,
-  Compass, LayoutGrid, Users, ArrowUpRight, Quote, Trophy, Crown, Upload
+  Compass, LayoutGrid, Users, ArrowUpRight, Quote, Trophy, Crown, Upload, Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 
-// 🚀 خريطة الأيقونات لتحويل النص القادم من قاعدة البيانات إلى أيقونة حقيقية
+// خريطة الأيقونات
 const ICON_MAP: Record<string, any> = {
   'Sparkles': Sparkles,
   'Trophy': Trophy,
@@ -21,7 +21,6 @@ const ICON_MAP: Record<string, any> = {
   'Image': ImageIcon
 };
 
-// 🚀 شريحة افتراضية في حال كانت قاعدة البيانات فارغة
 const DEFAULT_SLIDE = {
   id: 'default',
   icon_name: 'Sparkles',
@@ -38,10 +37,11 @@ export default function ForumsPage() {
   const isAdmin = currentRole === 'admin' || currentRole === 'management';
   const isTeacher = currentRole === 'teacher';
 
-  const { categories, structuredCategories, schoolClasses, loading, fetchCategoriesAndClasses, createCategory } = useForums();
+  const { categories, structuredCategories, schoolClasses, loading, fetchCategoriesAndClasses, createCategory, updateCategory } = useForums();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [parentId, setParentId] = useState<string | 'none'>('none');
@@ -51,40 +51,59 @@ export default function ForumsPage() {
   const [replyPerm, setReplyPerm] = useState('all');
 
   const [coverUrl, setCoverUrl] = useState('');
+  const [removeIcon, setRemoveIcon] = useState(false); // 🚀 للتحكم الذكي بحذف الصورة القديمة
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚀 حالات السلايدر الديناميكي
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // 🚀 جلب شرائح الهيدر من قاعدة البيانات
   useEffect(() => {
     const fetchHeroSlides = async () => {
       const { data, error } = await supabase
         .from('forum_hero_slides')
         .select('*')
         .eq('is_active', true)
-        .order('sort_order', { ascending: false }) // المثبت أولاً
+        .order('sort_order', { ascending: false }) 
         .order('created_at', { ascending: false });
       
-      if (data && data.length > 0) {
-        setHeroSlides(data);
-      }
+      if (data && data.length > 0) setHeroSlides(data);
     };
     fetchHeroSlides();
   }, []);
 
-  // 🚀 تأثير لتقليب السلايدر تلقائياً
   useEffect(() => {
     if (heroSlides.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 7000); 
+    const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % heroSlides.length), 7000); 
     return () => clearInterval(timer);
   }, [heroSlides.length]);
 
   useEffect(() => { fetchCategoriesAndClasses(); }, [fetchCategoriesAndClasses]);
+
+  const openEditCategoryModal = (cat: any) => {
+    setEditingCatId(cat.id);
+    setNewCatName(cat.name);
+    setNewCatDesc(cat.description || '');
+    setTargetClasses(cat.target_classes || []);
+    setCoverUrl(cat.icon || '');
+    setPostPerm(cat.post_permission || 'all');
+    setReplyPerm(cat.reply_permission || 'all');
+    setParentId(cat.parent_id || 'none');
+    setRemoveIcon(false);
+    setIsModalOpen(true);
+  };
+
+  const resetForm = () => {
+    setEditingCatId(null);
+    setNewCatName(''); 
+    setNewCatDesc(''); 
+    setParentId('none'); 
+    setTargetClasses([]); 
+    setCoverUrl('');
+    setRemoveIcon(false);
+    setPostPerm('all');
+    setReplyPerm('all');
+  };
 
   const toggleClass = (classId: string) => {
     if (targetClasses.includes(classId)) setTargetClasses(targetClasses.filter(id => id !== classId));
@@ -101,7 +120,10 @@ export default function ForumsPage() {
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.secure_url) setCoverUrl(data.secure_url);
+      if (data.secure_url) {
+         setCoverUrl(data.secure_url);
+         setRemoveIcon(false);
+      }
     } catch (error) { alert('خطأ في رفع الصورة'); } 
     finally { setIsUploading(false); }
   };
@@ -111,26 +133,33 @@ export default function ForumsPage() {
     if (!newCatName.trim()) return;
     setIsSubmitting(true);
     
-    const payload = {
+    const payload: any = {
       name: newCatName,
       description: newCatDesc,
       parent_id: parentId === 'none' ? null : parentId,
       target_classes: targetClasses.length === 0 ? null : targetClasses,
-      icon: coverUrl || null,
       post_permission: postPerm as any, 
       reply_permission: replyPerm as any 
     };
 
-    const result = await createCategory(payload);
+    // 🚀 السر الذكي: لا نرسل `icon` إذا لم يرفع المدير صورة جديدة، ليحتفظ النظام بالصورة القديمة
+    if (coverUrl) {
+       payload.icon = coverUrl;
+    } else if (removeIcon || !editingCatId) {
+       payload.icon = null;
+    }
+
+    let result;
+    if (editingCatId) {
+      result = await updateCategory(editingCatId, payload);
+    } else {
+      result = await createCategory(payload);
+    }
+
     if (result.success) {
       setIsModalOpen(false); 
-      setNewCatName(''); 
-      setNewCatDesc(''); 
-      setParentId('none'); 
-      setTargetClasses([]); 
-      setCoverUrl('');
-      setPostPerm('all');
-      setReplyPerm('all');
+      resetForm();
+      fetchCategoriesAndClasses();
     } else {
       alert(`خطأ: ${result.error}`);
     }
@@ -148,7 +177,6 @@ export default function ForumsPage() {
       }
   }
 
-  // 🚀 التعديل الجوهري: إظهار جميع الأقسام للجميع (للقراءة)، والبحث يتم عليها كلها
   const getDisplayedCategories = () => {
     if (!searchQuery) return structuredCategories;
     
@@ -173,9 +201,14 @@ export default function ForumsPage() {
     return (
       <div className="relative group h-full">
         {isAdmin && (
-            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteCategory(cat.id, cat.icon); }} className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-sm p-2.5 rounded-full text-rose-500 opacity-0 group-hover:opacity-100 hover:bg-rose-500 hover:text-white transition-all shadow-lg hover:scale-110">
-                <Trash2 className="w-4 h-4" />
-            </button>
+            <div className="absolute top-4 left-4 z-20 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditCategoryModal(cat); }} className="bg-white/90 backdrop-blur-sm p-2.5 rounded-full text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all shadow-lg hover:scale-110" title="تعديل">
+                    <Edit2 className="w-4 h-4" />
+                </button>
+                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteCategory(cat.id, cat.icon); }} className="bg-white/90 backdrop-blur-sm p-2.5 rounded-full text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-lg hover:scale-110" title="حذف">
+                    <Trash2 className="w-4 h-4" />
+                </button>
+            </div>
         )}
         <Link href={`/forums/${cat.id}`} className="block h-full outline-none focus:ring-4 focus:ring-indigo-500/50 rounded-[2.5rem]">
             <motion.div 
@@ -209,7 +242,7 @@ export default function ForumsPage() {
                       </div>
                     ) : (
                       <div className="bg-emerald-400/90 backdrop-blur-md text-emerald-950 text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg border border-emerald-300/50">
-                          <Globe className="w-3.5 h-3.5" /> عام للجميع
+                          <Globe className="w-3.5 h-3.5" /> مشاركة للجميع
                       </div>
                     )}
                     
@@ -259,7 +292,7 @@ export default function ForumsPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans selection:bg-indigo-500 selection:text-white" dir="rtl">
       
-      {/* 🌟 الواجهة العلوية الفاخرة المتقلبة الديناميكية */}
+      {/* الواجهة العلوية الديناميكية */}
       <div className="relative pt-24 pb-48 overflow-hidden bg-[#0F172A] rounded-b-[3rem] sm:rounded-b-[4rem] z-10 shadow-2xl">
         <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 mix-blend-screen pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-blue-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 mix-blend-screen pointer-events-none"></div>
@@ -344,7 +377,7 @@ export default function ForumsPage() {
         )}
       </div>
 
-      {/* 🌟 شريط البحث والإجراءات */}
+      {/* شريط البحث والإجراءات */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 -mt-16 relative z-30 mb-16">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white/80 backdrop-blur-2xl border border-white p-3 rounded-[2rem] sm:rounded-[3rem] shadow-[0_20px_40px_rgb(0,0,0,0.08)] flex flex-col md:flex-row gap-3 items-center justify-between">
           <div className="relative w-full flex-1">
@@ -359,14 +392,14 @@ export default function ForumsPage() {
           </div>
           
           {isAdmin && (
-            <button onClick={() => setIsModalOpen(true)} className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 sm:py-5 rounded-[1.5rem] sm:rounded-[2.5rem] font-black shadow-lg shadow-indigo-600/30 transition-all active:scale-95 text-sm sm:text-base">
+            <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 sm:py-5 rounded-[1.5rem] sm:rounded-[2.5rem] font-black shadow-lg shadow-indigo-600/30 transition-all active:scale-95 text-sm sm:text-base">
               <Plus className="w-5 h-5" /> إنشاء قسم جديد
             </button>
           )}
         </motion.div>
       </div>
 
-      {/* 🌟 محتوى الأقسام */}
+      {/* محتوى الأقسام */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-20 space-y-12">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32"><Loader2 className="w-12 h-12 text-indigo-500 animate-spin" /></div>
@@ -400,9 +433,14 @@ export default function ForumsPage() {
                 </div>
 
                 {isAdmin && (
-                    <button onClick={() => handleDeleteCategory(mainCat.id, mainCat.icon)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl font-black text-xs sm:text-sm transition-colors shadow-sm" title="حذف القسم الرئيسي بالكامل">
-                        <Trash2 className="w-4 h-4" /> حذف القسم
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => openEditCategoryModal(mainCat)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl font-black text-xs sm:text-sm transition-colors shadow-sm" title="تعديل القسم الرئيسي">
+                            <Edit2 className="w-4 h-4" /> <span className="hidden sm:inline">تعديل</span>
+                        </button>
+                        <button onClick={() => handleDeleteCategory(mainCat.id, mainCat.icon)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl font-black text-xs sm:text-sm transition-colors shadow-sm" title="حذف القسم الرئيسي بالكامل">
+                            <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">حذف</span>
+                        </button>
+                    </div>
                 )}
               </div>
 
@@ -422,7 +460,7 @@ export default function ForumsPage() {
         )}
       </div>
 
-      {/* 🌟 Modal */}
+      {/* نافذة الإضافة/التعديل */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
@@ -431,7 +469,7 @@ export default function ForumsPage() {
               <div className="bg-gradient-to-l from-slate-50 to-white p-6 sm:p-8 border-b border-slate-100 flex justify-between items-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
                 <div className="relative z-10">
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">بناء قسم جديد</h2>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">{editingCatId ? 'تعديل بيانات القسم' : 'بناء قسم جديد'}</h2>
                     <p className="text-sm font-bold text-slate-500">صمم مساحة نقاش تناسب احتياجات المنصة.</p>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="relative z-10 w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 shadow-sm border border-slate-100 transition-all active:scale-95"><XCircle className="w-6 h-6" /></button>
@@ -441,7 +479,7 @@ export default function ForumsPage() {
                 
                 <div className="flex flex-col sm:flex-row items-center gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                     <div className="w-24 h-24 sm:w-28 sm:h-28 bg-slate-50 rounded-[1.5rem] border-2 border-dashed border-indigo-200 flex items-center justify-center overflow-hidden shrink-0 relative group">
-                        {coverUrl ? (
+                        {coverUrl && !removeIcon ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={coverUrl} alt="cover" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                         ) : (
@@ -452,11 +490,18 @@ export default function ForumsPage() {
                     <div className="flex-1 text-center sm:text-right w-full">
                         <label className="block text-sm font-black text-slate-800 mb-1">أيقونة أو غلاف القسم</label>
                         <p className="text-xs font-bold text-slate-500 mb-4">صورة تعبر عن محتوى القسم وتجذب الانتباه.</p>
-                        <label className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-sm font-black cursor-pointer transition-all border w-full sm:w-auto shadow-sm active:scale-95 ${isUploading ? 'bg-indigo-50 text-indigo-400 border-indigo-100' : 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent'}`}>
-                            {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                            {isUploading ? 'جاري الرفع...' : 'تصفح الملفات'}
-                            <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={isUploading} />
-                        </label>
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                            <label className={`inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-sm font-black cursor-pointer transition-all border shadow-sm active:scale-95 ${isUploading ? 'bg-indigo-50 text-indigo-400 border-indigo-100' : 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent'}`}>
+                                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                {isUploading ? 'جاري الرفع...' : 'تصفح الملفات'}
+                                <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={isUploading} />
+                            </label>
+                            {coverUrl && !removeIcon && (
+                                <button type="button" onClick={() => { setCoverUrl(''); setRemoveIcon(true); }} className="px-4 py-3 bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white rounded-2xl text-sm font-black transition-colors border border-rose-100">
+                                    إزالة الصورة
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -482,7 +527,7 @@ export default function ForumsPage() {
                       className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-2xl px-4 py-4 text-sm font-black outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer appearance-none"
                     >
                       <option value="none">🌟 إنشاء كقسم رئيسي ضخم (مستقل)</option>
-                      {structuredCategories.map(main => (
+                      {structuredCategories.filter(main => main.id !== editingCatId).map(main => (
                         <option key={main.id} value={main.id}>
                           ↳ إدراجه كقسم فرعي داخل: {main.name}
                         </option>
@@ -493,8 +538,10 @@ export default function ForumsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100 shadow-sm">
-                      <label className="flex items-center gap-2 text-sm font-black text-indigo-900 mb-4"><Users className="w-5 h-5 text-indigo-600" /> الفئة المستهدفة</label>
-                      <button type="button" onClick={() => setTargetClasses([])} className={`w-full py-3 mb-3 rounded-2xl text-sm font-black border-2 transition-all active:scale-95 ${targetClasses.length === 0 ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>🌍 متاح للجميع</button>
+                      <label className="flex items-center gap-2 text-sm font-black text-indigo-900 mb-1"><Users className="w-5 h-5 text-indigo-600" /> الفصول المصرح لها بالمشاركة</label>
+                      <p className="text-[10px] font-bold text-indigo-700/70 mb-4 leading-relaxed">ملاحظة: الأقسام مرئية للجميع. التحديد هنا يسمح للطلاب المحددين فقط بكتابة المواضيع والردود (المعلمون والإدارة يتمتعون بصلاحية كاملة دائماً).</p>
+                      
+                      <button type="button" onClick={() => setTargetClasses([])} className={`w-full py-3 mb-3 rounded-2xl text-sm font-black border-2 transition-all active:scale-95 ${targetClasses.length === 0 ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>🌍 فتح المشاركة لجميع الطلاب</button>
                       <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
                         {schoolClasses.map(cls => (
                           <button key={cls.id} type="button" onClick={() => toggleClass(cls.id)} className={`px-4 py-2 rounded-xl text-xs font-black border transition-all active:scale-95 ${targetClasses.includes(cls.id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>{cls.name}</button>
@@ -503,12 +550,12 @@ export default function ForumsPage() {
                     </div>
 
                     <div className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100 shadow-sm flex flex-col justify-between">
-                      <label className="flex items-center gap-2 text-sm font-black text-amber-900 mb-4"><ShieldAlert className="w-5 h-5 text-amber-600" /> الصلاحيات والقيود</label>
+                      <label className="flex items-center gap-2 text-sm font-black text-amber-900 mb-4"><ShieldAlert className="w-5 h-5 text-amber-600" /> الصلاحيات والقيود العامة</label>
                       <div className="space-y-4">
                         <div>
                           <label className="block text-xs font-bold text-amber-800/70 mb-1.5">من يملك حق نشر مواضيع؟</label>
                           <select value={postPerm} onChange={e => setPostPerm(e.target.value)} className="w-full bg-white border border-amber-200/50 text-amber-950 rounded-xl px-4 py-3 text-sm font-black outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400 transition-all cursor-pointer appearance-none">
-                            <option value="all">الجميع (مفتوح)</option>
+                            <option value="all">الجميع (حسب الفصول المحددة أعلاه)</option>
                             <option value="teachers_admin">المعلمون والإدارة فقط</option>
                             <option value="admin_only">الإدارة فقط (إعلانات)</option>
                           </select>
@@ -516,7 +563,7 @@ export default function ForumsPage() {
                         <div>
                           <label className="block text-xs font-bold text-amber-800/70 mb-1.5">من يملك حق الرد والمشاركة؟</label>
                           <select value={replyPerm} onChange={e => setReplyPerm(e.target.value)} className="w-full bg-white border border-amber-200/50 text-amber-950 rounded-xl px-4 py-3 text-sm font-black outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400 transition-all cursor-pointer appearance-none">
-                            <option value="all">الجميع (مفتوح)</option>
+                            <option value="all">الجميع (حسب الفصول المحددة أعلاه)</option>
                             <option value="teachers_admin">المعلمون والإدارة فقط</option>
                             <option value="admin_only">الإدارة فقط</option>
                             <option value="none">مغلق للجميع (للقراءة فقط)</option>
@@ -528,7 +575,7 @@ export default function ForumsPage() {
                 
                 <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200">
                   <button type="submit" disabled={isSubmitting} className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-sm sm:text-base flex justify-center items-center gap-2 shadow-xl shadow-slate-900/20 transition-all active:scale-95">
-                      {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} اعتماد وبناء القسم
+                      {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} {editingCatId ? 'حفظ التعديلات' : 'اعتماد وبناء القسم'}
                   </button>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="w-full sm:w-1/3 py-4 rounded-2xl font-black text-sm sm:text-base bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95">إلغاء الأمر</button>
                 </div>
