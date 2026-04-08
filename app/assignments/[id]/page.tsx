@@ -95,7 +95,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
      ? submissions 
      : submissions.filter(sub => getStudentSectionName(sub.student) === selectedSection);
 
-  // 🚀 تصدير إكسل (مع دعم الطلاب المتخلفين عن التسليم)
+  // 🚀 تصدير إكسل
   const exportToExcel = () => {
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
     
@@ -103,8 +103,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
        
-       const isMissing = String(sub.status) === 'missing';
-       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
+       const isMissing = (sub.status as string) === 'missing';
+       const isGraded = sub.status === 'graded' || (sub.status as string) === 'completed';
        
        const score = isMissing ? 0 : (isGraded ? (sub.grade || 0) : 'قيد المراجعة');
        const status = isMissing ? 'لم يقدم الواجب (تجاوز الوقت)' : (isGraded ? 'مقيّم' : 'يحتاج تصحيح');
@@ -126,7 +126,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     XLSX.writeFile(workbook, `تسليمات_${assignment?.title || 'الواجب'}_${selectedSection}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // 🚀 تصدير PDF (مع دعم الطلاب المتخلفين عن التسليم)
+  // 🚀 تصدير PDF
   const exportToPDF = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -135,17 +135,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
 
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
-    
-    // حساب المتوسط فقط لمن تم تقييمهم (لا يشمل المفقودين)
-    const gradedSubs = filteredSubmissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
+    const gradedSubs = filteredSubmissions.filter(s => s.status === 'graded' || (s.status as string) === 'completed');
     const avgScore = gradedSubs.length > 0 ? Math.round(gradedSubs.reduce((sum, s) => sum + (Number(s.grade) || 0), 0) / gradedSubs.length) : 0;
 
     const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
        
-       const isMissing = String(sub.status) === 'missing';
-       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
+       const isMissing = (sub.status as string) === 'missing';
+       const isGraded = sub.status === 'graded' || (sub.status as string) === 'completed';
        
        const score = isMissing ? '0' : (isGraded ? (sub.grade || 0) : 'قيد المراجعة');
        const color = isMissing ? '#ef4444' : (isGraded ? '#4f46e5' : '#94a3b8');
@@ -274,15 +272,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         let finalSubmissions = details.allSubmissions || [];
 
-        // 🚀 المحرك الذكي: جلب الطلاب الذين لم يسلموا الواجب وإعطائهم صفراً (وهمياً في العرض)
+        // 🚀 المحرك الذكي المحدث
         const dueDate = new Date(details.assignment.due_date);
-        if (dueDate < new Date()) { // إذا انتهى الوقت
+        if (dueDate < new Date()) { 
            const sectionsData = details.assignment.assignment_sections || [];
-           // استخراج معرفات الفصول المخصصة للواجب
            const sectionIds = sectionsData.map((s: any) => s.section_id || s.sections?.id).filter(Boolean);
 
            if (sectionIds.length > 0) {
-              // جلب كل الطلاب في هذه الفصول
               const { data: expectedStudents } = await supabase
                  .from('students')
                  .select('id, users(full_name), sections(name, classes(name))')
@@ -290,18 +286,23 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
               if (expectedStudents) {
                  const submittedStudentIds = finalSubmissions.map((s: any) => s.student_id);
-                 // تصفية الطلاب الذين لم يرسلوا
                  const missingStudents = expectedStudents.filter((st: any) => !submittedStudentIds.includes(st.id));
 
-                 // إنشاء تسليمات وهمية بدرجة صفر
+                 // 🚀 إضافة الحقول المفقودة لتوافق TypeScript
                  const missingVirtualSubs = missingStudents.map((st: any) => ({
                     id: `missing_${st.id}`,
+                    assignment_id: assignmentId,
                     student_id: st.id,
-                    status: 'missing', // حالة خاصة لمعرفتها في العرض
+                    status: 'missing' as any, 
                     grade: 0,
+                    content: null,
+                    file_url: null,
+                    feedback: null,
                     submitted_at: null,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
                     student: st
-                 }));
+                 } as unknown as SubmissionWithStudent));
 
                  finalSubmissions = [...finalSubmissions, ...missingVirtualSubs];
               }
@@ -629,7 +630,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               {idx + 1}
                           </div>
                           <div className="pt-2">
-                             <h3 className="font-bold text-xl text-slate-800 leading-relaxed">{(q as any).text || q.content}</h3>
+                             <h3 className="font-bold text-xl text-slate-800 leading-relaxed">{q.content || (q as any).text}</h3>
                              {q.media_url && <img src={q.media_url} className="mt-4 max-h-48 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
                           </div>
                         </div>
@@ -877,8 +878,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="divide-y divide-slate-100">
                     {filteredSubmissions.map((sub) => {
                        const st = sub.student as any;
-                       const isMissing = String(sub.status) === 'missing';
-                       const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
+                       const isMissing = (sub.status as string) === 'missing';
+                       const isGraded = sub.status === 'graded' || (sub.status as string) === 'completed';
 
                        return (
                          <div key={sub.id} className={`p-6 hover:bg-slate-50/50 transition-colors ${isMissing ? 'bg-red-50/30' : ''}`}>
