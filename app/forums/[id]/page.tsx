@@ -5,7 +5,7 @@ import {
   ArrowRight, MessageSquare, Plus, Search, Loader2, 
   Pin, Lock, User, Clock, Send, XCircle, ShieldCheck, GraduationCap, BookOpen, Layers, Hash,
   Target, ShieldAlert, Image as ImageIcon, Save, Edit2, Trash2, Globe,
-  Sparkles, Quote, Trophy, Crown, Upload
+  Sparkles, Quote, Trophy, Crown, Upload, Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
@@ -20,7 +20,6 @@ import { deleteFromCloudinary } from '@/lib/cloudinary';
 import Link from 'next/link';
 import ForumEditor from '@/components/ForumEditor';
 
-// 🚀 خريطة الأيقونات للهيدر الذكي
 const ICON_MAP: Record<string, any> = {
   'Sparkles': Sparkles,
   'Trophy': Trophy,
@@ -57,7 +56,6 @@ export default function CategoryPage() {
   const [newContent, setNewContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // 🚀 إضافات نظام الاستطلاعات
   const [hasPoll, setHasPoll] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
@@ -77,11 +75,9 @@ export default function CategoryPage() {
   const [isSubUploading, setIsSubUploading] = useState(false);
   const [isSubSubmitting, setIsSubSubmitting] = useState(false);
 
-  // 🚀 حالات السلايدر الديناميكي
   const [heroSlides, setHeroSlides] = useState<any[]>([DEFAULT_SLIDE]);
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  // 🚀 جلب شرائح الهيدر من قاعدة البيانات
   useEffect(() => {
     const fetchHeroSlides = async () => {
       const { data, error } = await supabase
@@ -96,7 +92,6 @@ export default function CategoryPage() {
     fetchHeroSlides();
   }, []);
 
-  // 🚀 تأثير تقليب السلايدر تلقائياً
   useEffect(() => {
     if (heroSlides.length <= 1) return;
     const timer = setInterval(() => {
@@ -150,22 +145,33 @@ export default function CategoryPage() {
     }
   };
 
-  const visibleSubcategories = subcategories.filter(subCat => {
-    if (['admin', 'management', 'teacher'].includes(currentRole)) return true;
-    if (!subCat.target_classes || subCat.target_classes.length === 0) return true;
-    if (currentRole === 'student' && studentClassId) {
-      return subCat.target_classes.includes(studentClassId);
-    }
-    return false;
-  });
+  // 🚀 إظهار جميع الأقسام الفرعية للجميع (للقراءة)
+  const visibleSubcategories = subcategories;
 
+  // 🚀 فحص ذكي جداً لـ (من يحق له كتابة مواضيع؟)
   const checkPostPermission = () => {
     if (!currentRole || !categoryInfo) return false;
+    
+    // الإدارة يحق لها النشر دائماً
+    if (currentRole === 'admin' || currentRole === 'management') return true;
+    
     const perm = categoryInfo.post_permission;
     
-    if (perm === 'all' || !perm) return true;
-    if (perm === 'admin_only' && (currentRole === 'admin' || currentRole === 'management')) return true;
-    if (perm === 'teachers_admin' && (currentRole === 'admin' || currentRole === 'management' || currentRole === 'teacher')) return true;
+    // إذا كان القسم للإدارة فقط، يمنع الباقين
+    if (perm === 'admin_only') return false;
+    
+    // المعلم يحق له النشر في أي قسم ليس للإدارة فقط
+    if (currentRole === 'teacher') return true;
+    
+    // إذا كان القسم للمعلمين والإدارة، يمنع الطلاب
+    if (perm === 'teachers_admin') return false;
+    
+    // الطالب يحق له النشر إذا كان القسم مفتوحاً (all) وكان ضمن الفئة المستهدفة
+    if (currentRole === 'student') {
+       if (!categoryInfo.target_classes || categoryInfo.target_classes.length === 0) return true; // متاح للكل
+       if (studentClassId && categoryInfo.target_classes.includes(studentClassId)) return true; // الطالب ينتمي للفصل
+       return false; // الطالب لا ينتمي للفصل المستهدف
+    }
     
     return false;
   };
@@ -349,7 +355,7 @@ export default function CategoryPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans selection:bg-indigo-500 selection:text-white" dir="rtl">
       
-      {/* 🌟 الواجهة العلوية الفاخرة المتقلبة الديناميكية */}
+      {/* الواجهة العلوية الديناميكية */}
       <div className="relative pt-24 pb-40 overflow-hidden bg-[#0F172A] rounded-b-[3rem] sm:rounded-b-[4rem] z-10 shadow-2xl">
         <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-indigo-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 mix-blend-screen pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-blue-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3 mix-blend-screen pointer-events-none"></div>
@@ -388,7 +394,6 @@ export default function CategoryPage() {
                     <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-2 sm:p-3 flex items-center gap-3 pr-4 shadow-xl">
                       <div className="relative">
                         <Crown className="absolute -top-3 -right-2 w-5 h-5 text-amber-400 drop-shadow-md z-10 rotate-12" />
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={student.img} alt={student.name} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-white/50 shadow-inner bg-white/50 object-cover" />
                       </div>
                       <div className="text-right">
@@ -402,7 +407,6 @@ export default function CategoryPage() {
 
               {currentSlideData.type === 'media' && currentSlideData.media_url && (
                  <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="mt-6 w-full max-w-2xl mx-auto rounded-[2rem] overflow-hidden shadow-2xl border border-white/20">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={currentSlideData.media_url} alt="Media" className="w-full h-auto max-h-80 object-cover" />
                  </motion.div>
               )}
@@ -419,7 +423,7 @@ export default function CategoryPage() {
         )}
       </div>
 
-      {/* 🌟 شريط أدوات القسم (Glassmorphism & Sticky) */}
+      {/* شريط أدوات القسم (Glassmorphism & Sticky) */}
       <div className="sticky top-4 z-40 max-w-6xl mx-auto px-4 sm:px-6 -mt-10 mb-8 transition-all">
         <div className="bg-white/80 backdrop-blur-2xl border border-white/50 p-3 sm:p-4 rounded-[2rem] shadow-[0_10px_30px_rgb(0,0,0,0.08)] flex justify-between items-center gap-4">
           <div className="flex items-center gap-3 w-full overflow-hidden">
@@ -495,7 +499,6 @@ export default function CategoryPage() {
                     <motion.div whileHover={{ y: -6, scale: 1.02 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(99,102,241,0.12)] border border-slate-200 hover:border-indigo-200 transition-all flex items-start gap-4 h-full relative overflow-hidden group/card p-5 sm:p-6">
                       <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-[1.5rem] bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 border border-indigo-100 overflow-hidden relative">
                          {subCat.icon ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={subCat.icon} alt={subCat.name} className="w-full h-full object-cover group-hover/card:scale-110 transition-transform duration-500" />
                          ) : (
                             <Hash className="w-6 h-6 sm:w-7 sm:h-7 group-hover/card:scale-110 transition-transform" />
@@ -541,7 +544,7 @@ export default function CategoryPage() {
 
         {!canPost && !loading && (
            <div className="bg-slate-100 border border-slate-200 rounded-2xl p-5 flex items-center gap-3 text-slate-600 text-sm font-bold shadow-sm">
-              <Lock className="w-5 h-5 text-slate-400 shrink-0" /> لا تملك صلاحية لإنشاء مواضيع في هذا القسم.
+              <Lock className="w-5 h-5 text-slate-400 shrink-0" /> لا تملك صلاحية لكتابة مواضيع جديدة في هذا القسم، لكن يمكنك القراءة.
            </div>
         )}
 
@@ -581,7 +584,6 @@ export default function CategoryPage() {
                   <div className="shrink-0 pt-1">
                     {topic.author_avatar ? (
                       <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-[1.5rem] overflow-hidden shadow-sm border-2 ${isStaff ? 'border-amber-400' : 'border-slate-200'}`}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={topic.author_avatar} alt="avatar" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                       </div>
                     ) : (
@@ -619,7 +621,6 @@ export default function CategoryPage() {
                         <div className="flex items-center gap-1 border-r-2 border-slate-200 pr-3 ml-1">
                           {topic.author_gamification_badges.map((badge: any, idx: number) => (
                             <div key={idx} className="relative group/badge flex items-center justify-center">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img 
                                 src={badge.image_url} 
                                 alt={badge.name} 
@@ -708,7 +709,7 @@ export default function CategoryPage() {
                       <div className="space-y-3">
                         {pollOptions.map((opt, i) => (
                           <div key={i} className="flex gap-2">
-                            <input type="text" placeholder={`الخيار رقم ${i + 1}`} value={opt} onChange={e => { const newOpts = [...pollOptions]; newOpts[i] = e.target.value; setPollOptions(newOpts); }} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm font-bold focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-50 outline-none transition-all" />
+                            <input type="text" placeholder={`ال الخيار رقم ${i + 1}`} value={opt} onChange={e => { const newOpts = [...pollOptions]; newOpts[i] = e.target.value; setPollOptions(newOpts); }} className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm font-bold focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-50 outline-none transition-all" />
                             {pollOptions.length > 2 && (
                               <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, idx) => idx !== i))} className="w-12 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white rounded-xl flex items-center justify-center transition-colors"><Trash2 className="w-4 h-4" /></button>
                             )}
@@ -760,7 +761,6 @@ export default function CategoryPage() {
                 <div className="flex flex-col sm:flex-row items-center gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                     <div className="w-24 h-24 sm:w-28 sm:h-28 bg-slate-50 rounded-[1.5rem] border-2 border-dashed border-indigo-200 flex items-center justify-center overflow-hidden shrink-0 relative group">
                         {subCoverUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={subCoverUrl} alt="cover" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                         ) : (
                             <ImageIcon className="w-8 h-8 text-indigo-300" />
@@ -795,8 +795,10 @@ export default function CategoryPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100 shadow-sm">
-                      <label className="flex items-center gap-2 text-sm font-black text-indigo-900 mb-4"><Target className="w-5 h-5 text-indigo-600" /> الفئة المستهدفة</label>
-                      <button type="button" onClick={() => setSubTargetClasses([])} className={`w-full py-3 mb-3 rounded-2xl text-sm font-black border-2 transition-all active:scale-95 ${subTargetClasses.length === 0 ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>🌍 متاح للجميع</button>
+                      <label className="flex items-center gap-2 text-sm font-black text-indigo-900 mb-1"><Users className="w-5 h-5 text-indigo-600" /> الفصول المصرح لها بالمشاركة</label>
+                      <p className="text-[10px] font-bold text-indigo-700/70 mb-4 leading-relaxed">ملاحظة: الأقسام مرئية للجميع. التحديد هنا يسمح للطلاب المحددين فقط بكتابة المواضيع والردود.</p>
+                      
+                      <button type="button" onClick={() => setSubTargetClasses([])} className={`w-full py-3 mb-3 rounded-2xl text-sm font-black border-2 transition-all active:scale-95 ${subTargetClasses.length === 0 ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>🌍 فتح المشاركة لجميع الطلاب</button>
                       <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
                         {schoolClasses.map((cls: any) => (
                           <button key={cls.id} type="button" onClick={() => toggleSubClass(cls.id)} className={`px-4 py-2 rounded-xl text-xs font-black border transition-all active:scale-95 ${subTargetClasses.includes(cls.id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>{cls.name}</button>
@@ -805,12 +807,12 @@ export default function CategoryPage() {
                     </div>
 
                     <div className="bg-amber-50/50 p-6 rounded-[2rem] border border-amber-100 shadow-sm flex flex-col justify-between">
-                      <label className="flex items-center gap-2 text-sm font-black text-amber-900 mb-4"><ShieldAlert className="w-5 h-5 text-amber-600" /> صلاحيات القسم الفرعي (مهم)</label>
+                      <label className="flex items-center gap-2 text-sm font-black text-amber-900 mb-4"><ShieldAlert className="w-5 h-5 text-amber-600" /> الصلاحيات والقيود العامة</label>
                       <div className="space-y-4">
                         <div>
                           <label className="block text-xs font-bold text-amber-800/70 mb-1.5">من يمكنه كتابة مواضيع؟</label>
                           <select value={subPostPerm} onChange={e => setSubPostPerm(e.target.value)} className="w-full bg-white border border-amber-200/50 text-amber-950 rounded-xl px-4 py-3 text-sm font-black outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400 transition-all cursor-pointer appearance-none">
-                            <option value="all">الجميع (طلاب، معلمون، إدارة)</option>
+                            <option value="all">الجميع (حسب الفصول المحددة أعلاه)</option>
                             <option value="teachers_admin">المعلمون والإدارة فقط</option>
                             <option value="admin_only">الإدارة فقط (قسم رسمي)</option>
                           </select>
@@ -818,7 +820,7 @@ export default function CategoryPage() {
                         <div>
                           <label className="block text-xs font-bold text-amber-800/70 mb-1.5">من يمكنه الرد؟</label>
                           <select value={subReplyPerm} onChange={e => setSubReplyPerm(e.target.value)} className="w-full bg-white border border-amber-200/50 text-amber-950 rounded-xl px-4 py-3 text-sm font-black outline-none focus:ring-2 focus:ring-amber-400/20 focus:border-amber-400 transition-all cursor-pointer appearance-none">
-                            <option value="all">الجميع</option>
+                            <option value="all">الجميع (حسب الفصول المحددة أعلاه)</option>
                             <option value="teachers_admin">المعلمون والإدارة فقط</option>
                             <option value="admin_only">الإدارة فقط</option>
                             <option value="none">مغلق للجميع (للقراءة فقط)</option>
@@ -829,10 +831,10 @@ export default function CategoryPage() {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-200">
-                  <button type="button" onClick={() => setIsSubCatModalOpen(false)} className="w-full sm:w-1/3 py-4 rounded-2xl font-black text-sm sm:text-base bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95">إلغاء</button>
                   <button type="submit" disabled={isSubSubmitting} className="flex-1 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-sm sm:text-base flex justify-center items-center gap-2 shadow-xl shadow-slate-900/20 transition-all active:scale-95">
                       {isSubSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} {editingCatId ? 'حفظ التعديلات' : 'إنشاء القسم الفرعي'}
                   </button>
+                  <button type="button" onClick={() => setIsSubCatModalOpen(false)} className="w-full sm:w-1/3 py-4 rounded-2xl font-black text-sm sm:text-base bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95">إلغاء</button>
                 </div>
               </form>
             </motion.div>
