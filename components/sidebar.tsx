@@ -32,6 +32,7 @@ import {
   Activity,
   Medal,
   ShieldAlert,
+  LayoutGrid,
   Compass // 🚀 تمت إضافة أيقونة المنتديات
 } from 'lucide-react';
 
