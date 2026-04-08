@@ -6,7 +6,8 @@ import {
   Trash2, Edit2, Save, XCircle, ChevronRight, 
   Layers, Globe, Target, ShieldAlert, Lock, 
   Upload, Search, CheckCircle2, AlertCircle,
-  MoreVertical, LayoutGrid, Tag, ArrowLeft, Hash, Users
+  MoreVertical, LayoutGrid, Tag, ArrowLeft, Hash, Users,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -45,8 +46,12 @@ export default function ForumsManagementPage() {
     setLoading(false);
   }, [fetchCategoriesAndClasses]);
 
-  useEffect(() => { loadData(); }, [loadData]);
-
+useEffect(() => {
+  const init = async () => {
+    await loadData();
+  };
+  init();
+}, []);
   // إدارة الأقسام
   const handleOpenCatModal = (cat: any = null, parentId: string = 'none') => {
     if (cat) {
@@ -387,7 +392,9 @@ export default function ForumsManagementPage() {
                    </div>
                 </div>
                 <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-                   <p className="text-xs font-bold text-slate-400">هل تحتاج صورة غير موجودة؟ ارفعها أولاً في تبويب "مكتبة الوسائط".</p>
+                  <p className="text-xs font-bold text-slate-400">
+  هل تحتاج صورة غير موجودة؟ ارفعها أولاً في تبويب &quot;مكتبة الوسائط&quot;.
+</p>
                 </div>
              </motion.div>
           </div>
