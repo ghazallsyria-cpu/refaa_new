@@ -103,7 +103,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
        
-       const isMissing = sub.status === 'missing';
+       const isMissing = String(sub.status) === 'missing';
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        
        const score = isMissing ? 0 : (isGraded ? (sub.grade || 0) : 'قيد المراجعة');
@@ -144,7 +144,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
        
-       const isMissing = sub.status === 'missing';
+       const isMissing = String(sub.status) === 'missing';
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        
        const score = isMissing ? '0' : (isGraded ? (sub.grade || 0) : 'قيد المراجعة');
@@ -877,7 +877,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="divide-y divide-slate-100">
                     {filteredSubmissions.map((sub) => {
                        const st = sub.student as any;
-                       const isMissing = sub.status === 'missing';
+                       const isMissing = String(sub.status) === 'missing';
                        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
 
                        return (
