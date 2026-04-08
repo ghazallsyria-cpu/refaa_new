@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 
-// 🚀 إضافة دالة معالجة المعادلات الكيميائية والرياضية للواجبات
+// 🚀 معالجة المعادلات الكيميائية والرياضية للواجبات
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = content.replace(
@@ -46,17 +46,17 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         setGrade(details.submission.grade?.toString() || '');
         setFeedback(details.submission.feedback || '');
 
-        if (details.answers) {
+        if (details.answers && details.questions) {
           const answersMap: Record<string, any> = {};
           const gradesMap: Record<string, any> = {};
           
-          details.answers.forEach((a: any) => {
+          // 🚀 خوارزمية ذكية لحل مشكلة تغير الـ IDs بعد تحديث الواجب
+          // 1. معالجة وتجهيز جميع الإجابات القادمة من قاعدة البيانات
+          const processedAnswers = details.answers.map((a: any) => {
             let finalAns = a.answer_text;
-            if (a.selected_options !== null && a.selected_options !== undefined) {
+            if (a.selected_options && (!Array.isArray(a.selected_options) || a.selected_options.length > 0)) {
                finalAns = a.selected_options;
             }
-            
-            answersMap[a.question_id] = finalAns;
             
             let isCorrectVal = null;
             if (a.is_correct === true || a.is_correct === false) {
@@ -65,12 +65,35 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                 isCorrectVal = true;
             }
 
-            gradesMap[a.question_id] = { 
-               isCorrect: isCorrectVal, 
-               pointsEarned: Number(a.points_earned) || 0, 
-               feedback: a.feedback || '' 
+            return {
+               originalId: a.question_id,
+               finalAns,
+               gradeData: { 
+                  isCorrect: isCorrectVal, 
+                  pointsEarned: Number(a.points_earned) || 0, 
+                  feedback: a.feedback || '' 
+               }
             };
           });
+
+          // 2. ربط الإجابات بالأسئلة (بالمعرف الأساسي أولاً، ثم بالترتيب كبديل احتياطي)
+          const actualQuestions = details.questions.filter((q:any) => q.type !== 'section_header'); // استبعاد العناوين من الترتيب
+          
+          actualQuestions.forEach((q: any, index: number) => {
+             // المحاولة الأولى: التطابق الحرفي للـ ID
+             let matchedAns = processedAnswers.find((pa: any) => pa.originalId === q.id);
+             
+             // المحاولة الثانية (المنقذة): التطابق بالترتيب في حال تم تغيير الأسئلة واختلاف الـ IDs
+             if (!matchedAns && processedAnswers[index]) {
+                matchedAns = processedAnswers[index];
+             }
+
+             if (matchedAns) {
+                answersMap[q.id] = matchedAns.finalAns;
+                gradesMap[q.id] = matchedAns.gradeData;
+             }
+          });
+
           setAnswers(answersMap);
           setQuestionGrades(gradesMap);
         }
