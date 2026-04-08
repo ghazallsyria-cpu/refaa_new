@@ -9,7 +9,7 @@ import {
   Layers, Globe, Target, ShieldAlert, Lock, 
   Upload, Search, CheckCircle2, AlertCircle,
   MoreVertical, LayoutGrid, Tag, ArrowLeft, Hash, Users,
-  Loader2, X // تم إضافة الأيقونات المفقودة هنا
+  Loader2, X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -47,12 +47,11 @@ export default function ForumsManagementPage() {
   }, [fetchCategoriesAndClasses]);
 
   useEffect(() => { 
-    // تأخير بسيط لمنع الـ React من الشكوى حول تحديث الحالة المباشر
     const timeout = setTimeout(() => {
       loadData();
     }, 0);
     return () => clearTimeout(timeout);
-  }, []); // تم إفراغ المصفوفة لمنع التكرار اللانهائي
+  }, []); 
 
   const handleOpenCatModal = (cat: any = null, parentId: string = 'none') => {
     if (cat) {
@@ -178,9 +177,10 @@ export default function ForumsManagementPage() {
                           <div className="min-w-0">
                             <h4 className="font-black text-slate-800 text-sm truncate">{sub.name}</h4>
                             <div className="flex gap-1.5 mt-1">
-                               {sub.target_classes?.length > 0 ? <Target className="w-3 h-3 text-amber-500" /> : <Globe className="w-3 h-3 text-emerald-500" />}
+                               {/* تم حل المشكلة هنا بإضافة (sub.target_classes?.length || 0) */}
+                               {(sub.target_classes?.length || 0) > 0 ? <Target className="w-3 h-3 text-amber-500" /> : <Globe className="w-3 h-3 text-emerald-500" />}
                                <span className="text-[9px] font-bold text-slate-400">
-                                 {sub.target_classes?.length > 0 ? 'فصول محددة' : 'متاح للجميع'}
+                                 {(sub.target_classes?.length || 0) > 0 ? 'فصول محددة' : 'متاح للجميع'}
                                </span>
                             </div>
                           </div>
