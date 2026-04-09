@@ -23,7 +23,7 @@ export default function AITestSandbox() {
   const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
   
-  // 🚀 إضافة حقل لإدخال مفتاح API مباشرة من الشاشة لتسهيل التجارب
+  // حقل لإدخال مفتاح API مباشرة من الشاشة لتسهيل التجارب
   const [customApiKey, setCustomApiKey] = useState('');
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,7 +52,6 @@ export default function AITestSandbox() {
   };
 
   const callGeminiWithRetry = async (payload: any, retries = 5) => {
-    // 🚀 يعطي الأولوية للمفتاح المكتوب في الشاشة، ثم يبحث في متغيرات البيئة
     const finalApiKey = customApiKey.trim() || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     
     if (!finalApiKey) {
@@ -62,7 +61,8 @@ export default function AITestSandbox() {
     const delays = [1000, 2000, 4000, 8000, 16000];
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${finalApiKey}`, {
+        // 🚀 تم تصحيح اسم النموذج إلى gemini-1.5-flash المتاح للجميع
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${finalApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -178,7 +178,6 @@ export default function AITestSandbox() {
           </p>
         </div>
 
-        {/* 🚀 إدخال مفتاح API */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
             <Key className="w-6 h-6 text-amber-500" />
