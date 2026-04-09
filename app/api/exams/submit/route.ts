@@ -8,7 +8,10 @@ export async function POST(req: Request) {
     if (!supabaseUrl || !serviceKey) throw new Error('مفاتيح السيرفر مفقودة');
 
     const adminSupabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-    const { examId, answers, score, status, userId, timeTaken } = await req.json(); // 🚀 استلام الوقت
+    
+    // 🚀 استلام الوقت timeTaken من الفرونت إند
+    const { examId, answers, score, status, userId, timeTaken } = await req.json(); 
+
     // 1. تحديد الطالب
     let realStudentId = userId;
     const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
@@ -20,7 +23,7 @@ export async function POST(req: Request) {
 
     const validStatus = (status === 'graded' || status === 'completed') ? status : 'completed';
 
-    // 🚀 2. السحر هنا: فصل الأسئلة عن الخيارات لمنع انهيار Supabase عند أخذ اللقطة (Snapshot)
+    // 2. فصل الأسئلة عن الخيارات لمنع انهيار Supabase
     const { data: rawQuestions } = await adminSupabase.from('questions').select('*').eq('exam_id', examId).order('order_index');
     const qIds = (rawQuestions || []).map(q => q.id);
     
@@ -44,15 +47,25 @@ export async function POST(req: Request) {
     if (existing) {
       attemptId = existing.id;
       const { error: updErr } = await adminSupabase.from('exam_attempts').update({
-        score: score || 0, status: validStatus, completed_at: new Date().toISOString(), questions_snapshot: currentQuestions
+        score: score || 0, 
+        status: validStatus, 
+        completed_at: new Date().toISOString(), 
+        questions_snapshot: currentQuestions,
+        time_taken: timeTaken || 0 // 🚀 حفظ الوقت للمحاولة المُحدثة
       }).eq('id', attemptId);
       
       if (updErr) throw new Error("Update Error: " + updErr.message);
       await adminSupabase.from('student_answers').delete().eq('attempt_id', attemptId);
     } else {
       const { data: newAtt, error: insErr } = await adminSupabase.from('exam_attempts').insert([{
-        exam_id: examId, student_id: realStudentId, score: score || 0, status: validStatus,
-        started_at: new Date().toISOString(), completed_at: new Date().toISOString(), questions_snapshot: currentQuestions
+        exam_id: examId, 
+        student_id: realStudentId, 
+        score: score || 0, 
+        status: validStatus,
+        started_at: new Date().toISOString(), 
+        completed_at: new Date().toISOString(), 
+        questions_snapshot: currentQuestions,
+        time_taken: timeTaken || 0 // 🚀 حفظ الوقت للمحاولة الجديدة
       }]).select('id').single();
       
       if (insErr) throw new Error("Insert Error: " + insErr.message);
@@ -63,7 +76,6 @@ export async function POST(req: Request) {
     if (answers && Object.keys(answers).length > 0) {
       const formattedAnswers = Object.entries(answers).map(([qId, ans]: any) => {
         let finalOptionId = null;
-        // التأكد من أن الـ ID صالح تماماً قبل إرساله لقاعدة البيانات
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (ans.optionId && typeof ans.optionId === 'string' && uuidRegex.test(ans.optionId)) finalOptionId = ans.optionId;
 
@@ -90,5 +102,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-
