@@ -15,6 +15,9 @@ interface ForumEditorProps {
   placeholder?: string;
 }
 
+// 🚀 نص العلامة المائية الافتراضي (يمكنك تغييره لاسم المنصة أو المدرسة)
+const WATERMARK_TEXT = "منصة الرفعة الرقمية";
+
 export default function ForumEditor({ 
   content, 
   setContent, 
@@ -23,11 +26,10 @@ export default function ForumEditor({
 }: ForumEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null); // 🚀 مرجع ملف الـ PDF
+  const pdfInputRef = useRef<HTMLInputElement>(null); 
   
   const [isUploading, setIsUploading] = useState(false);
   
-  // 🚀 حالات معالجة الـ PDF
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [pdfProgressText, setPdfProgressText] = useState('');
 
@@ -39,7 +41,6 @@ export default function ForumEditor({
 
   const savedSelection = useRef<Range | null>(null);
 
-  // 🚀 تحميل مكتبة PDF.js في الخلفية لتجنب أخطاء بناء Next.js
   useEffect(() => {
     if (!document.getElementById('pdfjs-script')) {
       const script = document.createElement('script');
@@ -94,7 +95,6 @@ export default function ForumEditor({
     }
   };
 
-  // 🚀 رفع صورة عادية
   const uploadImageFile = async (file: File) => {
     setIsUploading(true);
     try {
@@ -111,7 +111,14 @@ export default function ForumEditor({
         editorRef.current?.focus();
         restoreSelection(); 
         const imgHTML = `<br/><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; height: auto; border-radius: 12px; margin: 15px 0; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" /><br/>`;
-        document.execCommand('insertHTML', false, imgHTML);
+        
+        let inserted = false;
+        try { inserted = document.execCommand('insertHTML', false, imgHTML); } catch(e) {}
+        
+        if (!inserted && editorRef.current) {
+           editorRef.current.innerHTML += imgHTML;
+        }
+        
         if (editorRef.current) setContent(editorRef.current.innerHTML);
       }
     } catch (error) {
@@ -121,7 +128,6 @@ export default function ForumEditor({
     }
   };
 
-  // 🚀 السحر يبدأ هنا: استخراج الصفحات من الـ PDF ورفعها كصور
   const processAndUploadPdf = async (file: File) => {
     const pdfjsLib = (window as any).pdfjsLib;
     if (!pdfjsLib) {
@@ -138,27 +144,44 @@ export default function ForumEditor({
       const totalPages = pdf.numPages;
       const imageUrls: string[] = [];
 
-      // 1. تحويل صفحات الـ PDF إلى صور (Blobs) في المتصفح
       const blobs: Blob[] = [];
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} إلى صورة...`);
+        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} وطباعة العلامة المائية...`);
         const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 }); // دقة عالية (2.0)
+        const viewport = page.getViewport({ scale: 2.0 }); 
         
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
-        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8)); // ضغط 80% لسرعة الرفع
+        ctx.save();
+        ctx.globalAlpha = 0.15; 
+        ctx.font = "bold 60px Arial, sans-serif"; 
+        ctx.fillStyle = "#4f46e5"; 
+        
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(-Math.PI / 4); 
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        for (let x = -canvas.width; x < canvas.width * 2; x += 500) {
+            for (let y = -canvas.height; y < canvas.height * 2; y += 400) {
+                ctx.fillText(WATERMARK_TEXT, x, y);
+            }
+        }
+        ctx.restore(); 
+
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8)); 
         if (blob) blobs.push(blob);
       }
 
-      // 2. رفع الصور إلى Cloudinary
       for (let i = 0; i < blobs.length; i++) {
-         setPdfProgressText(`جاري رفع الصورة ${i + 1} من ${blobs.length} إلى السحابة...`);
+         setPdfProgressText(`جاري الرفع الآمن للصفحة ${i + 1} من ${blobs.length}...`);
          const formData = new FormData();
          formData.append('file', blobs[i]);
          formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
@@ -172,21 +195,34 @@ export default function ForumEditor({
          }
       }
 
-      // 3. إدراج الصور بالترتيب داخل المحرر
-      setPdfProgressText("جاري ترتيب وإدراج الصفحات في المحرر...");
-      editorRef.current?.focus();
-      restoreSelection();
+      setPdfProgressText("جاري الترتيب النهائي وإدراج الصفحات...");
       
       let htmlToInsert = '<br/>';
       imageUrls.forEach((url, idx) => {
          htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;">
-            <img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
+            <img src="${url}" alt="صفحة ${idx + 1} مع الحقوق" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
          </div>`;
       });
       htmlToInsert += '<br/>';
 
-      document.execCommand('insertHTML', false, htmlToInsert);
-      if (editorRef.current) setContent(editorRef.current.innerHTML);
+      // 🚀 الإصلاح: إجبار المتصفح على إضافة المحتوى حتى لو فقد المؤشر
+      if (editorRef.current) {
+        editorRef.current.focus();
+        let inserted = false;
+        
+        try {
+          if (savedSelection.current) {
+            restoreSelection();
+            inserted = document.execCommand('insertHTML', false, htmlToInsert);
+          }
+        } catch(e) {}
+        
+        if (!inserted) {
+           editorRef.current.innerHTML += htmlToInsert;
+        }
+        
+        setContent(editorRef.current.innerHTML);
+      }
 
     } catch (error) {
       console.error(error);
@@ -319,7 +355,6 @@ export default function ForumEditor({
 
         <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
 
-        {/* 🚀 أدوات إدراج الصور وملفات الـ PDF */}
         {canUploadImage && (
           <div className="mr-auto flex flex-wrap items-center gap-2">
              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
@@ -330,7 +365,7 @@ export default function ForumEditor({
                <span className="hidden sm:inline">صورة</span>
              </button>
 
-             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور وإدراجها">
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور مع علامة مائية">
                <Files className="w-4 h-4 text-indigo-600" />
                <span className="hidden sm:inline">إدراج من PDF</span>
              </button>
@@ -339,7 +374,6 @@ export default function ForumEditor({
       </div>
 
       <div className="relative">
-        {/* 🚀 شاشة التحميل لعمليات الرفع والمعالجة */}
         {(isUploading || isProcessingPdf) && (
           <div className="absolute inset-0 bg-white/70 backdrop-blur-[4px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
              <div className="bg-white px-6 py-4 rounded-[2rem] shadow-xl border border-indigo-100 flex flex-col items-center justify-center gap-3 font-bold text-sm text-indigo-700 max-w-[80%] text-center">
