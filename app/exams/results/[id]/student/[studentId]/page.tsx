@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target, Timer } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target, Timer, FileText } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
 const isAutoGradedType = (type: string) => {
@@ -44,8 +44,6 @@ export default function StudentExamResult() {
       const result = await res.json();
       
       if (result.success) {
-          
-          // 🚀 خوارزمية الإنقاذ الذكية: استعادة الإجابات إذا تم تعديل الاختبار وتغيرت معرفات الأسئلة
           if (result.answers && result.questions) {
              const actualQuestions = result.questions.filter((q: any) => q.type !== 'section_header');
              const sortedAnswers = [...result.answers].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -135,14 +133,12 @@ export default function StudentExamResult() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
-      {/* Header Actions */}
       <div className="flex items-center justify-between">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-3 rounded-xl shadow-sm border border-slate-200 transition-all hover:shadow-md">
           <ArrowRight className="h-5 w-5" /> العودة للنتائج
         </button>
       </div>
 
-      {/* Lock Screen Alert for Students */}
       {isLockedForStudent && (
         <div className="bg-slate-50 border border-slate-200 p-8 rounded-3xl flex flex-col sm:flex-row items-center gap-6 shadow-sm">
            <div className="bg-white p-4 rounded-full shadow-sm border border-slate-100 shrink-0"><Lock className="w-10 h-10 text-slate-400" /></div>
@@ -153,7 +149,6 @@ export default function StudentExamResult() {
         </div>
       )}
 
-      {/* Main Hero Card */}
       <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden relative">
           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-60 -mr-20 -mt-20"></div>
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-60 -ml-20 -mb-20"></div>
@@ -183,7 +178,6 @@ export default function StudentExamResult() {
                         )
                       )}
 
-                      {/* 🚀 إظهار الوقت المستغرق هنا */}
                       {!isLockedForStudent && attempt?.time_taken > 0 && (
                           <div className="flex items-center gap-2 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-700">
                               <Timer className="h-5 w-5" /> 
@@ -193,7 +187,6 @@ export default function StudentExamResult() {
                   </div>
               </div>
 
-              {/* 🚨 Score Widget */}
               <div className={`shrink-0 w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center text-white shadow-xl ${isLockedForStudent ? 'bg-slate-400 shadow-slate-200' : isPendingGrading ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-200' : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-200'}`}>
                   {isLockedForStudent ? <Lock className="h-10 w-10 text-white/90 mb-2" /> : <Trophy className="h-10 w-10 text-white/90 mb-2" />}
                   <div className="text-sm font-bold text-white/80 uppercase tracking-widest mb-1">الدرجة المكتسبة</div>
@@ -211,7 +204,6 @@ export default function StudentExamResult() {
           </div>
       </div>
 
-      {/* Teacher Alerts */}
       {isTeacherOrAdmin && (
           <div className="space-y-4">
               {hasManualQuestions && (
@@ -229,7 +221,6 @@ export default function StudentExamResult() {
           </div>
       )}
 
-      {/* 🚨 Answers Detail Section */}
       {!isLockedForStudent && (
         <div className="space-y-8 mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
@@ -284,7 +275,6 @@ export default function StudentExamResult() {
 
             return (
               <div key={question.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
-                {/* Question Header */}
                 <div className="p-6 sm:p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                   <div className="flex gap-4 items-start">
                     <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${isUnanswered ? 'bg-slate-200 text-slate-600' : isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
@@ -301,7 +291,6 @@ export default function StudentExamResult() {
                   </div>
                 </div>
 
-                {/* Media Attachment */}
                 {(question?.mediaUrl || question?.media_url) && (
                   <div className="px-6 pt-6">
                       <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2 flex justify-center">
@@ -310,27 +299,41 @@ export default function StudentExamResult() {
                   </div>
                 )}
 
-                {/* Answers Section */}
                 <div className="p-6 sm:p-8 space-y-5">
-                  
                   <div className={`p-5 rounded-2xl border ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed' : isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
                     <div className="text-sm font-black mb-3 flex items-center gap-2">
                       {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
                       <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابة الطالب</span>
                     </div>
-                    <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
-                        {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : studentAnswerText}
-                    </p>
+                    
+                    {/* 🚀 إظهار إجابة الطالب كصورة إذا كان نوع السؤال إرفاق ملف */}
+                    {qType === 'file_upload' && !isUnanswered ? (
+                       <div className="mt-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm inline-block">
+                          {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
+                             <img src={String(studentAnswerText)} alt="صورة إجابة الطالب" className="max-h-96 w-auto rounded-lg object-contain" />
+                          ) : (
+                             <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-bold hover:underline p-4">
+                                <FileText className="w-5 h-5" /> تحميل إجابة الطالب
+                             </a>
+                          )}
+                       </div>
+                    ) : (
+                       <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
+                          {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : studentAnswerText}
+                       </p>
+                    )}
                   </div>
 
-                  <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
-                    <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
-                        <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
+                  {/* لا نعرض الإجابة النموذجية لو كان رفع ملف لأنه يعتمد كلياً على تصحيح المعلم */}
+                  {qType !== 'file_upload' && (
+                    <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
+                      <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
+                          <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
+                      </div>
+                      <p className="text-lg font-bold text-slate-800 leading-relaxed">{correctAnswerText}</p>
                     </div>
-                    <p className="text-lg font-bold text-slate-800 leading-relaxed">{correctAnswerText}</p>
-                  </div>
+                  )}
 
-                  {/* Teacher Grading Tool */}
                   {isTeacherOrAdmin && (
                     <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-3 w-full sm:w-auto">
