@@ -352,7 +352,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     e.preventDefault();
     setIsSubmittingEdit(true);
     try {
-      const payload = { title: editData.title!, description: editData.description || null, due_date: new Date(editData.due_date!).toISOString() };
+      // 🚀 إزالة الوصف من الإرسال لكي لا يتدمر الـ HTML الملون عند التعديل السريع
+      const payload = { title: editData.title!, due_date: new Date(editData.due_date!).toISOString() };
       
       const { error } = await supabase
         .from('assignments')
@@ -486,7 +487,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           <div className="mb-8">
             <h3 className="text-xl font-bold text-slate-900 mb-4">وصف الواجب</h3>
             {assignment.description ? (
-               <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed text-lg" dangerouslySetInnerHTML={{ __html: assignment.description }} />
+               // 🚀 السماح للوصف بإظهار التنسيقات والألوان بأمان
+               <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed text-lg" dangerouslySetInnerHTML={{ __html: assignment.description }} />
             ) : (
                <p className="text-slate-500 font-medium">لا يوجد وصف إضافي.</p>
             )}
@@ -575,7 +577,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   if (isHeader) {
                      return (
                        <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100 mt-8">
-                          <h3 className="text-2xl font-black text-indigo-900 leading-relaxed">{q.content || (q as any).text}</h3>
+                          {/* 🚀 دعم الألوان والتنسيقات للعنوان الرئيسي */}
+                          <div className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed" dangerouslySetInnerHTML={{ __html: q.content || (q as any).text || '' }} />
                           {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200" alt="مرفق" />}
                        </div>
                      );
@@ -600,7 +603,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               {idx + 1}
                           </div>
                           <div className="pt-2">
-                             <h3 className="font-bold text-xl text-slate-800 leading-relaxed">{(q as any).text || q.content}</h3>
+                             {/* 🚀 دعم الألوان والتنسيقات في نص السؤال هنا */}
+                             <div className="prose max-w-none font-bold text-xl text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: (q as any).text || q.content || '' }} />
                              {q.media_url && <img src={q.media_url} className="mt-4 max-h-48 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
                           </div>
                         </div>
@@ -630,7 +634,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                     try { parsedAns = JSON.parse((studentAns as string) || '[]'); } catch(e){}
                                     return (
                                       <tr key={rIdx} className="hover:bg-white/50 transition-colors">
-                                        <td className="p-4 border-b border-l border-white/50 font-bold text-slate-700 bg-white/30 align-top">{aspect}</td>
+                                        <td className="p-4 border-b border-l border-white/50 font-bold text-slate-700 bg-white/30 align-top">
+                                          <div dangerouslySetInnerHTML={{ __html: aspect }} />
+                                        </td>
                                         <td className="p-4 border-b border-l border-white/50 font-bold text-slate-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[0] || <span className="text-slate-400 italic">فارغ</span>}</td>
                                         <td className="p-4 border-b border-white/50 font-bold text-slate-900 align-top whitespace-pre-wrap">{parsedAns[rIdx]?.[1] || <span className="text-slate-400 italic">فارغ</span>}</td>
                                       </tr>
@@ -639,6 +645,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 </tbody>
                               </table>
                             </div>
+                          </div>
+                        ) : q.type === 'file_upload' && !isUnanswered ? (
+                          <div className="mt-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 inline-block shadow-sm">
+                            {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
+                               <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-96 w-auto object-contain rounded-xl border border-slate-200" />
+                            ) : (
+                               <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-bold hover:underline">
+                                  <FileText className="w-5 h-5" /> تحميل إجابة الطالب المرفقة
+                               </a>
+                            )}
                           </div>
                         ) : (
                           <div className={`p-5 rounded-2xl border mb-4 ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed' : isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
@@ -1000,10 +1016,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 <div>
                   <label className="block text-sm font-black text-slate-700 mb-2">عنوان الواجب <span className="text-red-500">*</span></label>
                   <input type="text" required className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold" value={editData.title || ''} onChange={(e) => setEditData({...editData, title: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2">الوصف والتفاصيل</label>
-                  <textarea rows={4} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold resize-none" value={editData.description || ''} onChange={(e) => setEditData({...editData, description: e.target.value})} />
                 </div>
                 <div>
                   <label className="block text-sm font-black text-slate-700 mb-2">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
