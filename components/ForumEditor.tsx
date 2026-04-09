@@ -5,7 +5,7 @@ import {
   Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, 
   List, ListOrdered, RemoveFormatting, Loader2, Table, 
   Heading1, Heading2, TerminalSquare, AlignRight, AlignCenter, AlignLeft, AlignJustify,
-  Palette, Type, X, Calculator, BarChart3, FileText, Files
+  Palette, Type, X, Calculator, BarChart3, FileText, Files, Check, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
 interface ForumEditorProps {
@@ -14,9 +14,6 @@ interface ForumEditorProps {
   canUploadImage: boolean;
   placeholder?: string;
 }
-
-// 🚀 نص العلامة المائية الافتراضي (يمكنك تغييره لاسم المنصة أو المدرسة)
-const WATERMARK_TEXT = "منصة الرفعة الرقمية";
 
 export default function ForumEditor({ 
   content, 
@@ -30,8 +27,14 @@ export default function ForumEditor({
   
   const [isUploading, setIsUploading] = useState(false);
   
+  // 🚀 حالات معالجة الـ PDF والعلامة المائية
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [pdfProgressText, setPdfProgressText] = useState('');
+  
+  const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
+  const [showWatermarkModal, setShowWatermarkModal] = useState(false);
+  const [applyWatermark, setApplyWatermark] = useState(false);
+  const [watermarkText, setWatermarkText] = useState('منصة الرفعة الرقمية');
 
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -128,7 +131,13 @@ export default function ForumEditor({
     }
   };
 
-  const processAndUploadPdf = async (file: File) => {
+  // 🚀 السحر يبدأ هنا: استخراج الصفحات من الـ PDF
+  const executePdfProcessing = async () => {
+    if (!pendingPdfFile) return;
+    
+    setShowWatermarkModal(false); // إغلاق النافذة
+    const file = pendingPdfFile;
+
     const pdfjsLib = (window as any).pdfjsLib;
     if (!pdfjsLib) {
       alert("جاري تحميل مكتبة قراءة الملفات، يرجى المحاولة بعد قليل...");
@@ -146,7 +155,7 @@ export default function ForumEditor({
 
       const blobs: Blob[] = [];
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} وطباعة العلامة المائية...`);
+        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} ${applyWatermark ? 'وطباعة العلامة المائية' : ''}...`);
         const page = await pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale: 2.0 }); 
         
@@ -159,22 +168,26 @@ export default function ForumEditor({
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
-        ctx.save();
-        ctx.globalAlpha = 0.15; 
-        ctx.font = "bold 60px Arial, sans-serif"; 
-        ctx.fillStyle = "#4f46e5"; 
-        
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate(-Math.PI / 4); 
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+        // 🚀 رسم العلامة المائية في المنتصف فقط إذا طلب المستخدم
+        if (applyWatermark && watermarkText.trim() !== '') {
+          ctx.save();
+          // شفافية 20% لتكون خفيفة جداً ولا تزعج القراءة
+          ctx.globalAlpha = 0.20; 
+          
+          // حساب حجم خط متناسب مع عرض الصفحة
+          const fontSize = Math.floor(canvas.width / 12);
+          ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
+          ctx.fillStyle = "#4f46e5"; // لون نيلي
+          
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate(-Math.PI / 4); 
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
 
-        for (let x = -canvas.width; x < canvas.width * 2; x += 500) {
-            for (let y = -canvas.height; y < canvas.height * 2; y += 400) {
-                ctx.fillText(WATERMARK_TEXT, x, y);
-            }
+          // رسم النص مرة واحدة في منتصف اللوحة
+          ctx.fillText(watermarkText, 0, 0);
+          ctx.restore(); 
         }
-        ctx.restore(); 
 
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8)); 
         if (blob) blobs.push(blob);
@@ -200,27 +213,21 @@ export default function ForumEditor({
       let htmlToInsert = '<br/>';
       imageUrls.forEach((url, idx) => {
          htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;">
-            <img src="${url}" alt="صفحة ${idx + 1} مع الحقوق" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
+            <img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
          </div>`;
       });
       htmlToInsert += '<br/>';
 
-      // 🚀 الإصلاح: إجبار المتصفح على إضافة المحتوى حتى لو فقد المؤشر
       if (editorRef.current) {
         editorRef.current.focus();
         let inserted = false;
-        
         try {
           if (savedSelection.current) {
             restoreSelection();
             inserted = document.execCommand('insertHTML', false, htmlToInsert);
           }
         } catch(e) {}
-        
-        if (!inserted) {
-           editorRef.current.innerHTML += htmlToInsert;
-        }
-        
+        if (!inserted) editorRef.current.innerHTML += htmlToInsert;
         setContent(editorRef.current.innerHTML);
       }
 
@@ -230,7 +237,15 @@ export default function ForumEditor({
     } finally {
       setIsProcessingPdf(false);
       setPdfProgressText("");
+      setPendingPdfFile(null); // مسح الملف المؤقت
     }
+  };
+
+  // 🚀 التعامل مع إغلاق النافذة
+  const handleCancelPdf = () => {
+    setShowWatermarkModal(false);
+    setPendingPdfFile(null);
+    if (pdfInputRef.current) pdfInputRef.current.value = '';
   };
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -271,6 +286,55 @@ export default function ForumEditor({
   return (
     <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative" dir="rtl">
       
+      {/* 🚀 نافذة خيارات العلامة المائية */}
+      {showWatermarkModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+           <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full animate-in zoom-in-95 duration-200 border border-slate-100">
+              <div className="flex items-center gap-3 mb-6">
+                 <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShieldCheck className="h-6 w-6" /></div>
+                 <div>
+                   <h3 className="text-xl font-black text-slate-900">حماية الملف (اختياري)</h3>
+                   <p className="text-xs font-bold text-slate-500">هل تريد إضافة علامة مائية لصور الـ PDF؟</p>
+                 </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex gap-3">
+                  <button onClick={() => setApplyWatermark(true)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-2 ${applyWatermark ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-indigo-300'}`}>
+                    <Check className="w-4 h-4" /> نعم، أضف علامة
+                  </button>
+                  <button onClick={() => setApplyWatermark(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-2 ${!applyWatermark ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-500 hover:border-rose-300'}`}>
+                    <X className="w-4 h-4" /> لا، بدون علامة
+                  </button>
+                </div>
+
+                {applyWatermark && (
+                  <div className="animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">اكتب نص العلامة المائية:</label>
+                    <input 
+                      type="text" 
+                      value={watermarkText} 
+                      onChange={(e) => setWatermarkText(e.target.value)} 
+                      placeholder="أ. محمد (فيزياء)" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all text-center"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-2 text-center font-bold">ستتم طباعتها بشكل شفاف ومائل في منتصف كل صفحة لضمان عدم تشويه المسائل.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-8 pt-6 border-t border-slate-100">
+                <button onClick={handleCancelPdf} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all text-sm">
+                  إلغاء الأمر
+                </button>
+                <button onClick={executePdfProcessing} className="flex-1 px-6 py-3 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95 text-sm flex items-center justify-center gap-2">
+                  <Files className="w-4 h-4" /> ابدأ معالجة الملف
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sticky top-0 z-20 rounded-t-[1.5rem]">
         
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
@@ -358,14 +422,22 @@ export default function ForumEditor({
         {canUploadImage && (
           <div className="mr-auto flex flex-wrap items-center gap-2">
              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
-             <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await processAndUploadPdf(file); if(pdfInputRef.current) pdfInputRef.current.value = ''; }} />
+             
+             {/* 🚀 إيقاف المعالجة التلقائية وفتح نافذة الخيارات */}
+             <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={(e) => { 
+                const file = e.target.files?.[0]; 
+                if(file) {
+                  setPendingPdfFile(file);
+                  setShowWatermarkModal(true);
+                }
+             }} />
              
              <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); fileInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 font-bold text-sm border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50">
                <ImageIcon className="w-4 h-4 text-indigo-500" />
                <span className="hidden sm:inline">صورة</span>
              </button>
 
-             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور مع علامة مائية">
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور">
                <Files className="w-4 h-4 text-indigo-600" />
                <span className="hidden sm:inline">إدراج من PDF</span>
              </button>
