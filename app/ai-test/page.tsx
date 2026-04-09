@@ -20,7 +20,6 @@ interface ExtractedExam {
 }
 
 export default function AITestSandbox() {
-  // 🚀 الآن نستخدم الوظائف الحقيقية المرتبطة بقاعدة بياناتك
   const router = useRouter();
   const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
@@ -184,7 +183,6 @@ export default function AITestSandbox() {
     }
   };
 
-  // 🚀 هذه هي الدالة الحقيقية الآن، ستحفظ في قاعدة بياناتك!
   const saveToRealDatabase = async () => {
     if (!result) return;
     if (!selectedSubject) {
@@ -201,14 +199,14 @@ export default function AITestSandbox() {
         description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي من صورة ورقة عمل.',
         subject_id: selectedSubject,
         section_ids: selectedSection ? [selectedSection] : [],
-        teacher_id: user?.id, // معرف المعلم الحقيقي
+        teacher_id: user?.id,
         duration: 45, 
         max_attempts: 1,
         max_score: totalScore,
         exam_date: new Date().toISOString().split('T')[0],
         start_time: '08:00',
         end_time: '23:59',
-        status: 'draft', // 🚀 حفظ كمسودة لكي تقوم بمراجعته قبل النشر للطلاب
+        status: 'draft', 
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
@@ -222,18 +220,18 @@ export default function AITestSandbox() {
         content: q.content,
         type: q.type,
         points: q.points || 1,
+        isRequired: true, 
         is_required: true,
         options: q.options?.map(opt => ({
           id: crypto.randomUUID(),
           content: opt.content,
+          isCorrect: opt.is_correct,
           is_correct: opt.is_correct
         })) || []
       }));
 
-      // إرسال الطلب الفعلي لقاعدة بيانات Supabase عبر الـ Hook الخاص بك
-      await saveExam(examPayload as any, formattedQuestions, true); 
+      await saveExam(examPayload as any, formattedQuestions as any, true); 
       
-      // بعد الحفظ الناجح، توجيه المستخدم لصفحة الاختبارات الحقيقية
       router.push('/exams'); 
 
     } catch (error: any) {
@@ -410,7 +408,6 @@ export default function AITestSandbox() {
                     ))}
                   </div>
 
-                  {/* 🚀 قسم الدمج مع قاعدة البيانات الحقيقية */}
                   <div className="pt-8 border-t-2 border-indigo-100 mt-8">
                     <div className="bg-indigo-50/50 p-8 rounded-3xl border border-indigo-100">
                       <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
