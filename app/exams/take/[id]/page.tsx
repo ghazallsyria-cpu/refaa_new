@@ -2,19 +2,19 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, Circle, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase'; // 🚀 أضفنا استدعاء قاعدة البيانات للتحقق من المحاولات
+import { supabase } from '@/lib/supabase';
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; max_attempts?: number; };
 
 const isAutoGradedType = (type: string) => {
   if (!type) return false;
   const t = type.toLowerCase();
-  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
+  return t === 'multiple_choice' || t === 'true_false' || t === 'multi_select' || t === 'checkbox' || t === 'radio';
 };
 
 export default function TakeQuiz() {
@@ -31,7 +31,7 @@ export default function TakeQuiz() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
-  const [alreadySubmitted, setAlreadySubmitted] = useState(false); // 🚀 حالة جديدة للتحقق من التقديم المسبق
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   // 🚨 رادار الغش (Anti-Cheat State)
   const [cheatWarnings, setCheatWarnings] = useState(0);
@@ -40,10 +40,9 @@ export default function TakeQuiz() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchQuiz = useCallback(async () => {
-    if (!user) return; // ننتظر حتى يتم تحميل بيانات المستخدم
+    if (!user) return;
 
     try {
-      // 🚀 1. طبقة الحماية: التحقق من عدد المحاولات السابقة للطالب
       const studentId = user.id || user.user_id;
       const { count, error: attemptsError } = await supabase
         .from('exam_attempts')
@@ -54,7 +53,6 @@ export default function TakeQuiz() {
       const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
       const maxAttempts = examData.max_attempts || 1;
 
-      // إذا كان عدد المحاولات السابقة أكبر من أو يساوي الحد الأقصى، يتم المنع
       if (count !== null && count >= maxAttempts) {
         setAlreadySubmitted(true);
         setLoading(false);
@@ -77,8 +75,27 @@ export default function TakeQuiz() {
         return;
       }
 
-      setExam({ ...examData, description: examData.description ?? "", settings: {} });
-      setQuestions(questionsData || []);
+      // 🚀 إصلاح حفظ الإعدادات لضمان عمل العشوائية
+      setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
+      
+      // 🚀 تطبيق خوارزمية العشوائية (Shuffle) بناءً على إعدادات المعلم
+      let finalQuestions = [...(questionsData || [])];
+      
+      if (examData.settings?.shuffle_questions) {
+         finalQuestions.sort(() => Math.random() - 0.5);
+      }
+      
+      if (examData.settings?.shuffle_options) {
+         finalQuestions = finalQuestions.map(q => {
+            // لا نبعثر خيارات الصح والخطأ لأن ترتيبها منطقي وثابت
+            if (q.options && q.options.length > 0 && q.type !== 'true_false') {
+               return { ...q, options: [...q.options].sort(() => Math.random() - 0.5) };
+            }
+            return q;
+         });
+      }
+
+      setQuestions(finalQuestions);
 
       if (examData.duration) {
         const finalTimeLeft = Math.min(examData.duration * 60, Math.floor((endDateTime.getTime() - now.getTime()) / 1000));
@@ -184,7 +201,6 @@ export default function TakeQuiz() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timeLeft, isFinished, alreadySubmitted, handleSubmit]);
 
-  // 🚨 تفعيل رادار الغش (يُراقب خروج الطالب من التبويب)
   useEffect(() => {
     if (isFinished || loading || !exam || alreadySubmitted) return;
 
@@ -193,10 +209,8 @@ export default function TakeQuiz() {
         setCheatWarnings(prev => {
           const newCount = prev + 1;
           if (newCount === 1) {
-            // الإنذار الأول: عرض شاشة حمراء
             setShowCheatModal(true);
           } else if (newCount >= 2) {
-            // الإنذار الثاني: سحب الورقة بالقوة
             handleSubmit();
           }
           return newCount;
@@ -211,9 +225,8 @@ export default function TakeQuiz() {
   const handleAnswerChange = (questionId: string, value: any) => setAnswers(prev => ({ ...prev, [questionId]: value }));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div></div>;
 
-  // 🚀 شاشة التنبيه في حال تم تقديم الاختبار مسبقاً
   if (alreadySubmitted) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
@@ -270,13 +283,15 @@ export default function TakeQuiz() {
 
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
+  
+  // 🚀 استنتاج نوع السؤال بدقة
   const currentQType = (currentQuestion?.type as string || '').toLowerCase();
   const isAutoCurrent = isAutoGradedType(currentQType);
+  const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
+  const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
-      
-      {/* 🚨 شاشة إنذار الغش (تغطي الشاشة بالكامل) 🚨 */}
       <AnimatePresence>
         {showCheatModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-sm">
@@ -335,14 +350,16 @@ export default function TakeQuiz() {
             </div>
 
             <div className="space-y-3">
-              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('choice') && currentQuestion.options?.map((option: any) => (
+              {/* 🚀 عرض الخيارات المفردة (بما فيها الصح والخطأ) */}
+              {isAutoCurrent && isSingleChoice && currentQuestion.options?.map((option: any) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
                   <span className="text-lg font-medium">{option.content}</span>
                 </button>
               ))}
 
-              {isAutoCurrent && (currentQuestion.type as string).toLowerCase().includes('select') && currentQuestion.options?.map((option: any) => {
+              {/* 🚀 عرض خيارات التحديد المتعدد */}
+              {isAutoCurrent && isMultiChoice && currentQuestion.options?.map((option: any) => {
                 const isSelected = (answers[currentQuestion.id] || []).map(String).includes(String(option.id));
                 return (
                   <button key={option.id} onClick={() => {
