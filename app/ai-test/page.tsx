@@ -76,6 +76,7 @@ export default function AITestSandbox() {
       throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
+    // ترتيب النماذج لضمان تخطي أي نموذج غير متاح أو حصته صفر
     const modelsToTry = [
       'gemini-1.5-flash',
       'gemini-1.5-pro',
@@ -97,16 +98,23 @@ export default function AITestSandbox() {
         
         if (!response.ok) {
           const errMsg = data.error?.message || '';
-          if (errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('not supported')) {
+          const shouldSkip = 
+            errMsg.toLowerCase().includes('not found') || 
+            errMsg.toLowerCase().includes('not supported') ||
+            errMsg.toLowerCase().includes('quota') ||
+            errMsg.toLowerCase().includes('limit') ||
+            response.status === 429;
+
+          if (shouldSkip) {
             lastErrorMsg = errMsg;
             continue; 
           }
           throw new Error(errMsg || 'فشل الاتصال بالذكاء الاصطناعي');
         }
-        
         return data; 
       } catch (err: any) {
-        if (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('not supported')) {
+        const errMsg = err.message.toLowerCase();
+        if (errMsg.includes('not found') || errMsg.includes('not supported') || errMsg.includes('quota') || errMsg.includes('limit')) {
           lastErrorMsg = err.message;
           continue;
         }
@@ -114,7 +122,7 @@ export default function AITestSandbox() {
       }
     }
 
-    throw new Error(`لم يتم العثور على نموذج مدعوم. تفاصيل الخطأ: ${lastErrorMsg}`);
+    throw new Error(`تعذر الوصول إلى أي نموذج متاح. تأكد من حصة API الخاصة بك. آخر خطأ: ${lastErrorMsg}`);
   };
 
   const analyzeImage = async () => {
@@ -215,21 +223,23 @@ export default function AITestSandbox() {
         }
       };
 
+      // إصلاح: مطابقة هيكل البيانات المطلوب من دالة saveExam
       const formattedQuestions = result.questions.map((q) => ({
         id: crypto.randomUUID(), 
         content: q.content,
         type: q.type,
         points: q.points || 1,
-        isRequired: true, 
+        isRequired: true, // الحقل المطلوب في نظامك
         is_required: true,
         options: q.options?.map(opt => ({
           id: crypto.randomUUID(),
           content: opt.content,
-          isCorrect: opt.is_correct,
+          isCorrect: opt.is_correct, // الحقل المطلوب في نظامك
           is_correct: opt.is_correct
         })) || []
       }));
 
+      // إرسال الطلب الفعلي لقاعدة بيانات Supabase
       await saveExam(examPayload as any, formattedQuestions as any, true); 
       
       router.push('/exams'); 
