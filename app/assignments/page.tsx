@@ -474,7 +474,12 @@ export default function AssignmentsPage() {
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 scrollbar-hide" dir="rtl">
+          <Dialog.Content 
+            onInteractOutside={(e) => e.preventDefault()} 
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            className="fixed left-[50%] top-[50%] z-50 w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 scrollbar-hide" 
+            dir="rtl"
+          >
             <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
               <div className="flex items-center gap-4">
                 <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center">
