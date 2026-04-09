@@ -33,6 +33,10 @@ export default function TakeQuiz() {
   const [isFinished, setIsFinished] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
+  // 🚀 حالة تتبع الوقت المستغرق
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [timeTakenInfo, setTimeTakenInfo] = useState<number>(0);
+
   // 🚨 رادار الغش (Anti-Cheat State)
   const [cheatWarnings, setCheatWarnings] = useState(0);
   const [showCheatModal, setShowCheatModal] = useState(false);
@@ -75,10 +79,8 @@ export default function TakeQuiz() {
         return;
       }
 
-      // 🚀 إصلاح حفظ الإعدادات لضمان عمل العشوائية
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
-      // 🚀 تطبيق خوارزمية العشوائية (Shuffle) بناءً على إعدادات المعلم
       let finalQuestions = [...(questionsData || [])];
       
       if (examData.settings?.shuffle_questions) {
@@ -87,7 +89,6 @@ export default function TakeQuiz() {
       
       if (examData.settings?.shuffle_options) {
          finalQuestions = finalQuestions.map(q => {
-            // لا نبعثر خيارات الصح والخطأ لأن ترتيبها منطقي وثابت
             if (q.options && q.options.length > 0 && q.type !== 'true_false') {
                return { ...q, options: [...q.options].sort(() => Math.random() - 0.5) };
             }
@@ -101,6 +102,10 @@ export default function TakeQuiz() {
         const finalTimeLeft = Math.min(examData.duration * 60, Math.floor((endDateTime.getTime() - now.getTime()) / 1000));
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
       }
+
+      // 🚀 تسجيل لحظة بداية الاختبار الفعلية
+      setStartTime(Date.now());
+
     } catch (err) {
       alert("حدث خطأ في تحميل الاختبار.");
       window.location.href = '/exams';
@@ -116,6 +121,10 @@ export default function TakeQuiz() {
     setIsSubmitting(true);
 
     try {
+      // 🚀 حساب الوقت المستغرق بالثواني
+      const calculatedTimeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+      setTimeTakenInfo(calculatedTimeTaken);
+
       let totalScore = 0;
       const formattedAnswers: Record<string, any> = {};
       let hasManual = false; 
@@ -173,7 +182,8 @@ export default function TakeQuiz() {
             answers: formattedAnswers,
             score: totalScore,
             status: attemptStatus,
-            userId: user.id || user.user_id 
+            userId: user.id || user.user_id,
+            timeTaken: calculatedTimeTaken // 🚀 إرسال الوقت المستغرق للسيرفر
         })
       });
 
@@ -190,7 +200,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, exam, user]);
+  }, [isSubmitting, questions, answers, params.id, exam, user, startTime]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
@@ -273,7 +283,16 @@ export default function TakeQuiz() {
                </span>
              )}
           </p>
-          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
+          
+          {/* 🚀 إظهار الوقت المستغرق للطالب */}
+          {timeTakenInfo > 0 && (
+            <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-3 rounded-2xl font-bold mt-2 border border-slate-200">
+               <Clock className="w-5 h-5 text-slate-400" />
+               <span>أنهيت الاختبار في: <span dir="ltr">{formatTime(timeTakenInfo)}</span></span>
+            </div>
+          )}
+
+          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
             العودة للرئيسية
           </button>
         </motion.div>
@@ -284,7 +303,6 @@ export default function TakeQuiz() {
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
   
-  // 🚀 استنتاج نوع السؤال بدقة
   const currentQType = (currentQuestion?.type as string || '').toLowerCase();
   const isAutoCurrent = isAutoGradedType(currentQType);
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
@@ -350,7 +368,6 @@ export default function TakeQuiz() {
             </div>
 
             <div className="space-y-3">
-              {/* 🚀 عرض الخيارات المفردة (بما فيها الصح والخطأ) */}
               {isAutoCurrent && isSingleChoice && currentQuestion.options?.map((option: any) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
@@ -358,7 +375,6 @@ export default function TakeQuiz() {
                 </button>
               ))}
 
-              {/* 🚀 عرض خيارات التحديد المتعدد */}
               {isAutoCurrent && isMultiChoice && currentQuestion.options?.map((option: any) => {
                 const isSelected = (answers[currentQuestion.id] || []).map(String).includes(String(option.id));
                 return (
