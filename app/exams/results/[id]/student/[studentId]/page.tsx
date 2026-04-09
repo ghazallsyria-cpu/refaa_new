@@ -226,7 +226,19 @@ export default function StudentExamResult() {
             let pointsEarned = answer ? Number(answer.points_earned) || 0 : 0;
 
             if (answer) {
-                let rawVal = answer.selected_option_id || answer.text_answer || answer.answer || answer.option_id;
+                // 🚀 التصحيح: جلب الإجابة من جميع الأعمدة المحتملة حسب قاعدة بياناتك للاختبارات
+                let rawVal = answer.text_answer || answer.selected_option_id || answer.answer || answer.option_id;
+                
+                // محاولة معالجة الإجابات المخزنة كـ JSON Array (مثل ["id_here"])
+                if (rawVal && typeof rawVal === 'string' && rawVal.startsWith('[')) {
+                   try {
+                     const parsed = JSON.parse(rawVal);
+                     if (Array.isArray(parsed) && parsed.length > 0) {
+                        rawVal = parsed[0]; // نأخذ أول خيار مبدئياً
+                     }
+                   } catch(e) {}
+                }
+
                 if (rawVal && rawVal !== 'null' && String(rawVal).trim() !== '') {
                     const selectedOpt = question.options?.find((o:any) => String(o.id) === String(rawVal) || String(o.content) === String(rawVal));
                     if (selectedOpt) {
@@ -330,5 +342,3 @@ export default function StudentExamResult() {
     </div>
   );
 }
-
-
