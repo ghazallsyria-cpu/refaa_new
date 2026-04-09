@@ -96,16 +96,15 @@ export default function QuizBuilder() {
   };
 
   const addQuestion = useCallback((type: QuestionType) => {
-    const newQuestion = {
+    const newQuestion: any = {
       ...createQuestion(type),
-      is_required: true // إضافة القيمة الافتراضية للأسئلة الجديدة
+      is_required: true 
     };
 
-    // 🚀 تهيئة ذكية لخيارات الصح والخطأ
     if (type === 'true_false') {
         newQuestion.options = [
-            { id: crypto.randomUUID(), content: 'صح', is_correct: true, order_index: 0 },
-            { id: crypto.randomUUID(), content: 'خطأ', is_correct: false, order_index: 1 }
+            { id: crypto.randomUUID(), content: 'صح', is_correct: true }, // تمت إزالة order_index لتجنب الخطأ
+            { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
         ];
     }
     setQuestions(prev => [...prev, newQuestion]);
@@ -131,7 +130,6 @@ export default function QuizBuilder() {
           }
         });
 
-        // التأكد من جلب is_required
         setQuestions((questionsData || []).map((q: any) => ({...q, is_required: q.is_required ?? true})));
       } else {
         addQuestion('multiple_choice');
@@ -457,11 +455,11 @@ export default function QuizBuilder() {
                            const updates: Partial<any> = { type };
                            // 🚀 توليد ذكي للخيارات عند تغيير نوع السؤال
                            if ((type === 'multiple_choice' || type === 'checkbox') && (!q.options || q.options.length === 0)) {
-                              updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false, order_index: 0 }];
+                              updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
                            } else if (type === 'true_false') {
                               updates.options = [
-                                { id: crypto.randomUUID(), content: 'صح', is_correct: true, order_index: 0 },
-                                { id: crypto.randomUUID(), content: 'خطأ', is_correct: false, order_index: 1 }
+                                { id: crypto.randomUUID(), content: 'صح', is_correct: true },
+                                { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
                               ];
                            }
                            updateQuestion(q.id, updates);
