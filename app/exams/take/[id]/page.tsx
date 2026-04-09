@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase'; // 🚀 أضفنا استدعاء قاعدة البيانات للتحقق من المحاولات
 
-type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; };
+type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; max_attempts?: number; };
 
 const isAutoGradedType = (type: string) => {
   if (!type) return false;
@@ -30,6 +31,7 @@ export default function TakeQuiz() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false); // 🚀 حالة جديدة للتحقق من التقديم المسبق
 
   // 🚨 رادار الغش (Anti-Cheat State)
   const [cheatWarnings, setCheatWarnings] = useState(0);
@@ -38,8 +40,26 @@ export default function TakeQuiz() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchQuiz = useCallback(async () => {
+    if (!user) return; // ننتظر حتى يتم تحميل بيانات المستخدم
+
     try {
+      // 🚀 1. طبقة الحماية: التحقق من عدد المحاولات السابقة للطالب
+      const studentId = user.id || user.user_id;
+      const { count, error: attemptsError } = await supabase
+        .from('exam_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('exam_id', params.id)
+        .eq('student_id', studentId);
+
       const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
+      const maxAttempts = examData.max_attempts || 1;
+
+      // إذا كان عدد المحاولات السابقة أكبر من أو يساوي الحد الأقصى، يتم المنع
+      if (count !== null && count >= maxAttempts) {
+        setAlreadySubmitted(true);
+        setLoading(false);
+        return;
+      }
       
       const now = new Date();
       const examDate = new Date(examData.exam_date);
@@ -70,7 +90,7 @@ export default function TakeQuiz() {
     } finally {
       setLoading(false);
     }
-  }, [params.id, fetchExamForStudent]);
+  }, [params.id, fetchExamForStudent, user]);
 
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
@@ -156,17 +176,17 @@ export default function TakeQuiz() {
   }, [isSubmitting, questions, answers, params.id, exam, user]);
 
   useEffect(() => {
-    if (timeLeft !== null && timeLeft > 0 && !isFinished) {
+    if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
       timerRef.current = setInterval(() => setTimeLeft(prev => (prev !== null ? prev - 1 : null)), 1000);
-    } else if (timeLeft === 0 && !isFinished) {
+    } else if (timeLeft === 0 && !isFinished && !alreadySubmitted) {
       handleSubmit();
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [timeLeft, isFinished, handleSubmit]);
+  }, [timeLeft, isFinished, alreadySubmitted, handleSubmit]);
 
   // 🚨 تفعيل رادار الغش (يُراقب خروج الطالب من التبويب)
   useEffect(() => {
-    if (isFinished || loading || !exam) return;
+    if (isFinished || loading || !exam || alreadySubmitted) return;
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -186,12 +206,26 @@ export default function TakeQuiz() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [isFinished, loading, exam, handleSubmit]);
+  }, [isFinished, loading, exam, alreadySubmitted, handleSubmit]);
 
   const handleAnswerChange = (questionId: string, value: any) => setAnswers(prev => ({ ...prev, [questionId]: value }));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+
+  // 🚀 شاشة التنبيه في حال تم تقديم الاختبار مسبقاً
+  if (alreadySubmitted) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-indigo-600">
+          <div className="inline-flex p-4 rounded-full bg-indigo-50 text-indigo-600"><Lock className="h-12 w-12" /></div>
+          <h2 className="text-2xl font-black text-slate-900">لقد قمت بتقديم هذا الاختبار مسبقاً</h2>
+          <p className="text-slate-600 font-medium">لقد استنفدت الحد الأقصى للمحاولات المسموحة. لا يمكنك إعادة الدخول وتغيير الإجابات.</p>
+          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">العودة لقائمة الاختبارات</button>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (!questions || questions.length === 0) {
     return (
@@ -211,7 +245,7 @@ export default function TakeQuiz() {
   if (isFinished) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-emerald-500">
           <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
@@ -344,5 +378,3 @@ export default function TakeQuiz() {
     </div>
   );
 }
-
-
