@@ -65,7 +65,6 @@ export default function ForumEditor({
     if (editorRef.current) setContent(editorRef.current.innerHTML);
   };
 
-  // الدالة التي كانت مفقودة وتسببت بالخطأ
   const addLink = () => {
     if (linkUrl) {
       execCommand('createLink', linkUrl);
@@ -136,9 +135,10 @@ export default function ForumEditor({
   );
 
   return (
-    <div className="border border-slate-200 rounded-[1.5rem] overflow-hidden bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans" dir="rtl">
+    // 🚀 تم إزالة overflow-hidden للسماح للقوائم المنسدلة بالظهور بسلاسة
+    <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative" dir="rtl">
       
-      <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sticky top-0 z-10">
+      <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sticky top-0 z-20 rounded-t-[1.5rem]">
         
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
           <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} title="عريض" />
@@ -151,7 +151,6 @@ export default function ForumEditor({
           <ToolbarButton icon={Heading2} onClick={() => execCommand('formatBlock', 'H4')} title="عنوان متوسط" />
         </div>
 
-        {/* المحاذاة */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
           <ToolbarButton icon={AlignRight} onClick={() => execCommand('justifyRight')} title="يمين" />
           <ToolbarButton icon={AlignCenter} onClick={() => execCommand('justifyCenter')} title="وسط" />
@@ -159,7 +158,6 @@ export default function ForumEditor({
           <ToolbarButton icon={AlignJustify} onClick={() => execCommand('justifyFull')} title="ضبط النص" />
         </div>
 
-        {/* الألوان والخطوط */}
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1 relative">
           <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowColorPicker(!showColorPicker); setShowFontSize(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-2 rounded-lg ${showColorPicker ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="لون النص">
             <Palette className="w-4.5 h-4.5" />
@@ -250,7 +248,7 @@ export default function ForumEditor({
           onInput={handleInput}
           onPaste={handlePaste}
           onBlur={saveSelection} 
-          className="w-full min-h-[250px] max-h-[600px] overflow-y-auto p-6 outline-none prose prose-slate max-w-none text-slate-800 leading-loose text-base"
+          className="w-full min-h-[150px] max-h-[600px] overflow-y-auto p-6 outline-none prose prose-slate max-w-none text-slate-800 leading-loose text-base rounded-b-[1.5rem]"
           data-placeholder={placeholder}
           dir="auto"
           style={{ WebkitUserModify: 'read-write' } as any}
