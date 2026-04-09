@@ -130,7 +130,7 @@ export default function AssignmentForm({
                 <input type="checkbox" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => {
                    if (readOnly) return;
                    const newArr = isSelected ? selectedArray.filter((i: string) => i !== optId && i !== optContent) : [...selectedArray, optId];
-                   handleChange(q.id, newArr);
+                   handleAnswerChange(q.id, newArr);
                 }} />
                 <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{optContent}</span>
               </label>
