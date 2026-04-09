@@ -51,34 +51,57 @@ export default function AITestSandbox() {
     });
   };
 
-  const callGeminiWithRetry = async (payload: any, retries = 5) => {
+  // 🚀 خوارزمية الذكاء البديل (Smart Fallback) لحل مشاكل النماذج
+  const callGeminiWithFallback = async (payload: any) => {
     const finalApiKey = customApiKey.trim() || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     
     if (!finalApiKey) {
       throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
-    const delays = [1000, 2000, 4000, 8000, 16000];
-    for (let i = 0; i < retries; i++) {
+    // قائمة بأحدث النماذج مرتبة من الأفضل للصور والسرعة إلى الأقدم
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash-latest'
+    ];
+
+    let lastErrorMsg = '';
+
+    for (const model of modelsToTry) {
       try {
-        // 🚀 تم تصحيح اسم النموذج إلى gemini-1.5-flash المتاح للجميع
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${finalApiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${finalApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         
+        const data = await response.json();
+        
         if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error?.message || 'فشل الاتصال بالذكاء الاصطناعي');
+          const errMsg = data.error?.message || '';
+          // إذا كان النموذج غير موجود في الحساب، نجرب النموذج الذي يليه
+          if (errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('not supported')) {
+            console.log(`النموذج ${model} غير مدعوم، جاري تجربة النموذج التالي...`);
+            lastErrorMsg = errMsg;
+            continue; 
+          }
+          // إذا كان خطأ مختلف (مثل مفتاح خاطئ)، نوقف العملية فوراً
+          throw new Error(errMsg || 'فشل الاتصال بالذكاء الاصطناعي');
         }
         
-        return await response.json();
-      } catch (err) {
-        if (i === retries - 1) throw err;
-        await new Promise(resolve => setTimeout(resolve, delays[i]));
+        return data; // نجح الاتصال!
+      } catch (err: any) {
+        if (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('not supported')) {
+          lastErrorMsg = err.message;
+          continue;
+        }
+        throw err;
       }
     }
+
+    throw new Error(`لم يتم العثور على أي نموذج مدعوم في حسابك. تفاصيل الخطأ: ${lastErrorMsg}`);
   };
 
   const analyzeImage = async () => {
@@ -129,7 +152,7 @@ export default function AITestSandbox() {
         }
       };
 
-      const aiResponse = await callGeminiWithRetry(payload);
+      const aiResponse = await callGeminiWithFallback(payload);
       
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         const jsonText = aiResponse.candidates[0].content.parts[0].text;
