@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
+import { useSchoolFormData } from '@/hooks/useSchoolFormData';
+import { useAuth } from '@/context/auth-context';
 
 interface ExtractedQuestion {
   content: string;
@@ -16,6 +20,15 @@ interface ExtractedExam {
 }
 
 export default function AITestSandbox() {
+  // 🚀 الآن نستخدم الوظائف الحقيقية المرتبطة بقاعدة بياناتك
+  const router = useRouter();
+  const { user } = useAuth() as any;
+  const { saveExam } = useExamsSystem();
+  const { data: formData } = useSchoolFormData();
+  
+  const subjects = formData?.subjects || [];
+  const sections = formData?.sections || [];
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,8 +36,11 @@ export default function AITestSandbox() {
   const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
   
-  // حقل لإدخال مفتاح API مباشرة من الشاشة لتسهيل التجارب
   const [customApiKey, setCustomApiKey] = useState('');
+  
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
+  const [isSavingDB, setIsSavingDB] = useState(false);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -51,20 +67,21 @@ export default function AITestSandbox() {
     });
   };
 
-  // 🚀 خوارزمية الذكاء البديل (Smart Fallback) لحل مشاكل النماذج
   const callGeminiWithFallback = async (payload: any) => {
-    const finalApiKey = customApiKey.trim() || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    let finalApiKey = customApiKey.trim();
+    if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+       finalApiKey = finalApiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    }
     
     if (!finalApiKey) {
       throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
-    // قائمة بأحدث النماذج مرتبة من الأفضل للصور والسرعة إلى الأقدم
     const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
+      'gemini-1.5-flash',
       'gemini-1.5-pro',
-      'gemini-1.5-flash-latest'
+      'gemini-2.0-flash',
+      'gemini-2.5-flash'
     ];
 
     let lastErrorMsg = '';
@@ -81,17 +98,14 @@ export default function AITestSandbox() {
         
         if (!response.ok) {
           const errMsg = data.error?.message || '';
-          // إذا كان النموذج غير موجود في الحساب، نجرب النموذج الذي يليه
           if (errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('not supported')) {
-            console.log(`النموذج ${model} غير مدعوم، جاري تجربة النموذج التالي...`);
             lastErrorMsg = errMsg;
             continue; 
           }
-          // إذا كان خطأ مختلف (مثل مفتاح خاطئ)، نوقف العملية فوراً
           throw new Error(errMsg || 'فشل الاتصال بالذكاء الاصطناعي');
         }
         
-        return data; // نجح الاتصال!
+        return data; 
       } catch (err: any) {
         if (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('not supported')) {
           lastErrorMsg = err.message;
@@ -101,7 +115,7 @@ export default function AITestSandbox() {
       }
     }
 
-    throw new Error(`لم يتم العثور على أي نموذج مدعوم في حسابك. تفاصيل الخطأ: ${lastErrorMsg}`);
+    throw new Error(`لم يتم العثور على نموذج مدعوم. تفاصيل الخطأ: ${lastErrorMsg}`);
   };
 
   const analyzeImage = async () => {
@@ -170,6 +184,66 @@ export default function AITestSandbox() {
     }
   };
 
+  // 🚀 هذه هي الدالة الحقيقية الآن، ستحفظ في قاعدة بياناتك!
+  const saveToRealDatabase = async () => {
+    if (!result) return;
+    if (!selectedSubject) {
+      alert('يرجى اختيار المادة الدراسية أولاً.');
+      return;
+    }
+
+    setIsSavingDB(true);
+    try {
+      const totalScore = result.questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
+      
+      const examPayload = {
+        title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
+        description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي من صورة ورقة عمل.',
+        subject_id: selectedSubject,
+        section_ids: selectedSection ? [selectedSection] : [],
+        teacher_id: user?.id, // معرف المعلم الحقيقي
+        duration: 45, 
+        max_attempts: 1,
+        max_score: totalScore,
+        exam_date: new Date().toISOString().split('T')[0],
+        start_time: '08:00',
+        end_time: '23:59',
+        status: 'draft', // 🚀 حفظ كمسودة لكي تقوم بمراجعته قبل النشر للطلاب
+        settings: {
+          shuffle_questions: false,
+          shuffle_options: false,
+          show_results_immediately: true,
+          allow_backtracking: true
+        }
+      };
+
+      const formattedQuestions = result.questions.map((q) => ({
+        id: crypto.randomUUID(), 
+        content: q.content,
+        type: q.type,
+        points: q.points || 1,
+        is_required: true,
+        options: q.options?.map(opt => ({
+          id: crypto.randomUUID(),
+          content: opt.content,
+          is_correct: opt.is_correct
+        })) || []
+      }));
+
+      // إرسال الطلب الفعلي لقاعدة بيانات Supabase عبر الـ Hook الخاص بك
+      await saveExam(examPayload as any, formattedQuestions, true); 
+      
+      // بعد الحفظ الناجح، توجيه المستخدم لصفحة الاختبارات الحقيقية
+      router.push('/exams'); 
+
+    } catch (error: any) {
+      console.error(error);
+      alert('حدث خطأ أثناء الحفظ في قاعدة البيانات: ' + error.message);
+    } finally {
+      setIsSavingDB(false);
+    }
+  };
+
   const getQuestionIcon = (type: string) => {
     switch (type) {
       case 'multiple_choice': return <List className="w-5 h-5 text-indigo-500" />;
@@ -197,7 +271,7 @@ export default function AITestSandbox() {
           </div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">مختبر الذكاء الاصطناعي</h1>
           <p className="text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">
-            بيئة معزولة لتجربة استخراج الأسئلة من أوراق العمل والاختبارات المصورة وتحويلها إلى شكل تفاعلي آلياً.
+            بيئة ذكية لاستخراج الأسئلة من أوراق العمل والاختبارات المصورة وتحويلها إلى شكل تفاعلي آلياً.
           </p>
         </div>
 
@@ -263,7 +337,7 @@ export default function AITestSandbox() {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px]">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px] flex flex-col">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
                 <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                   <FileText className="w-6 h-6 text-emerald-500" />
@@ -277,14 +351,14 @@ export default function AITestSandbox() {
               </div>
 
               {!result && !loading && (
-                <div className="h-full flex flex-col items-center justify-center text-center py-20 opacity-50">
+                <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50">
                   <Sparkles className="w-16 h-16 text-slate-300 mb-4" />
                   <p className="text-xl font-bold text-slate-400">ستظهر الأسئلة هنا بعد التحليل</p>
                 </div>
               )}
 
               {loading && (
-                <div className="h-full flex flex-col items-center justify-center py-20">
+                <div className="flex-1 flex flex-col items-center justify-center py-20">
                   <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4" />
                   <p className="text-lg font-bold text-indigo-600 animate-pulse">يتم الآن قراءة الورقة وتحليلها...</p>
                   <p className="text-sm font-medium text-slate-500 mt-2">قد يستغرق الأمر بضع ثوانٍ</p>
@@ -292,7 +366,7 @@ export default function AITestSandbox() {
               )}
 
               {result && (
-                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1">
                   
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">عنوان الاختبار المكتشف</p>
@@ -334,6 +408,48 @@ export default function AITestSandbox() {
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* 🚀 قسم الدمج مع قاعدة البيانات الحقيقية */}
+                  <div className="pt-8 border-t-2 border-indigo-100 mt-8">
+                    <div className="bg-indigo-50/50 p-8 rounded-3xl border border-indigo-100">
+                      <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
+                        <Database className="w-6 h-6 text-indigo-600" /> حفظ النتيجة كاختبار حقيقي!
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 mb-2">اختر المادة <span className="text-red-500">*</span></label>
+                          <select 
+                            value={selectedSubject} 
+                            onChange={(e) => setSelectedSubject(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
+                          >
+                            <option value="">-- اختر مادة --</option>
+                            {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 mb-2">الفصل (اختياري)</label>
+                          <select 
+                            value={selectedSection} 
+                            onChange={(e) => setSelectedSection(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
+                          >
+                            <option value="">-- للجميع --</option>
+                            {sections.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={saveToRealDatabase} 
+                        disabled={isSavingDB || !selectedSubject}
+                        className="w-full bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
+                      >
+                        {isSavingDB ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
+                        {isSavingDB ? 'جاري إنشاء الاختبار...' : 'إنشاء الاختبار في المنصة (كمسودة)'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="pt-8 border-t border-slate-100">
