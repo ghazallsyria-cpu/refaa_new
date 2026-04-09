@@ -16,6 +16,7 @@ import * as Switch from '@radix-ui/react-switch';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
+import ForumEditor from '@/components/ForumEditor'; // 🚀 استدعاء المحرر الذكي للاختبارات
 
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
 
@@ -98,7 +99,7 @@ export default function QuizBuilder() {
   const addQuestion = useCallback((type: QuestionType | 'file_upload') => {
     const newQuestion: any = {
       ...createQuestion(type as QuestionType),
-      type: type, // Ensure type is set correctly including our new custom type
+      type: type, 
       is_required: true 
     };
 
@@ -442,18 +443,19 @@ export default function QuizBuilder() {
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 p-2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"><GripVertical className="h-6 w-6 text-slate-300" /></div>
                 <div className="p-10 space-y-10">
                   <div className="flex flex-col md:flex-row gap-8">
-                    <div className="flex-1 space-y-3">
+                    
+                    {/* 🚀 إستخدام ForumEditor لكتابة الأسئلة */}
+                    <div className="flex-1 w-full space-y-4">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
-                      {/* 🚀 تم التعديل إلى مساحة نصية كبيرة textarea */}
-                      <textarea 
-                        placeholder="اكتب سؤالك أو مسألتك هنا بالتفصيل..." 
-                        value={q.content} 
-                        rows={3}
-                        onChange={(e) => updateQuestion(q.id, { content: e.target.value })} 
-                        className="w-full bg-slate-50/50 px-6 py-5 rounded-3xl border-0 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 text-xl font-black text-slate-900 placeholder:text-slate-200 transition-all outline-none resize-y min-h-[120px] leading-relaxed" 
+                      <ForumEditor 
+                        content={q.content || ''}
+                        setContent={(val) => updateQuestion(q.id, { content: val })}
+                        canUploadImage={true}
+                        placeholder="اكتب نص السؤال، أو المسألة بالتفصيل هنا..."
                       />
-                      <div className="pt-2"><ImageUpload initialImageUrl={q.media_url} onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url || undefined, media_type: url ? 'image' : undefined })} label="إرفاق صورة للسؤال (اختياري)" /></div>
+                      <div className="pt-2"><ImageUpload initialImageUrl={q.media_url} onUploadSuccess={(url) => updateQuestion(q.id, { media_url: url || undefined, media_type: url ? 'image' : undefined })} label="إرفاق صورة إضافية للسؤال (اختياري)" /></div>
                     </div>
+
                     <div className="w-full md:w-64 space-y-3">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نوع السؤال</label>
                       <select 
@@ -478,7 +480,7 @@ export default function QuizBuilder() {
                         <option value="multi_select">اختيار متعدد</option>
                         <option value="essay">سؤال مقالي</option>
                         <option value="fill_in_blank">ملء الفراغ</option>
-                        <option value="file_upload">رفع صورة / ملف (مهم)</option> {/* 🚀 إضافة خيار رفع الصورة */}
+                        <option value="file_upload">رفع صورة / ملف (مهم)</option>
                       </select>
                     </div>
                   </div>
@@ -507,12 +509,11 @@ export default function QuizBuilder() {
                         )}
                       </div>
                     ) : q.type === 'file_upload' ? (
-                       // 🚀 تصميم حالة نوع الإجابة رفع صورة
-                      <div className="p-8 bg-indigo-50/50 rounded-[32px] border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center text-center gap-3">
+                       <div className="p-8 bg-indigo-50/50 rounded-[32px] border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center text-center gap-3">
                          <UploadCloud className="h-10 w-10 text-indigo-400" />
                          <p className="text-indigo-900 font-bold text-lg">سؤال إرفاق ملف / حل مصور</p>
-                         <p className="text-indigo-500 text-sm font-medium">سيظهر للطالب زر خاص لرفع صورة للحل (ورقة الحل مثلاً) للإجابة على هذا السؤال.</p>
-                      </div>
+                         <p className="text-indigo-500 text-sm font-medium">سيظهر للطالب زر خاص لرفع صورة لحله للإجابة على هذا السؤال.</p>
+                       </div>
                     ) : q.type === 'essay' ? (
                       <div className="p-8 bg-slate-50/50 rounded-[32px] border-2 border-dashed border-slate-200 text-slate-400 font-bold italic text-center">سيقوم الطالب بكتابة إجابته المقالية هنا...</div>
                     ) : (
@@ -562,11 +563,11 @@ export default function QuizBuilder() {
                   { type: 'multiple_choice', label: 'اختيار من متعدد', icon: List, desc: 'سؤال مع خيارات إجابة واحدة صحيحة' },
                   { type: 'true_false', label: 'صح أو خطأ', icon: CheckSquare, desc: 'سؤال بإجابة منطقية بسيطة' },
                   { type: 'multi_select', label: 'اختيار متعدد', icon: CheckSquare, desc: 'سؤال مع عدة إجابات صحيحة محتملة' },
-                  { type: 'file_upload', label: 'رفع صورة / ملف', icon: UploadCloud, desc: 'يطلب من الطالب تصوير حله ورفعه' }, // 🚀 خيار رفع صورة
+                  { type: 'file_upload', label: 'رفع صورة / ملف', icon: UploadCloud, desc: 'يطلب من الطالب تصوير حله ورفعه' },
                   { type: 'essay', label: 'سؤال مقالي', icon: AlignLeft, desc: 'سؤال يتطلب كتابة نصية من الطالب' },
                   { type: 'fill_in_blank', label: 'ملء الفراغ', icon: Type, desc: 'سؤال يتطلب إكمال جملة ناقصة' },
                 ].map((item) => (
-                  <DropdownMenu.Item key={item.type} onClick={() => addQuestion(item.type as any)} className="flex items-center gap-4 px-4 py-3 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 rounded-2xl outline-none cursor-pointer transition-all group">
+                  <DropdownMenu.Item key={item.type} onClick={() => addQuestion(item.type as QuestionType)} className="flex items-center gap-4 px-4 py-3 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 rounded-2xl outline-none cursor-pointer transition-all group">
                     <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center group-hover:bg-white transition-colors"><item.icon className="h-5 w-5" /></div>
                     <div><p className="text-sm font-black tracking-tight">{item.label}</p><p className="text-[10px] font-bold text-slate-400 group-hover:text-indigo-400">{item.desc}</p></div>
                   </DropdownMenu.Item>
