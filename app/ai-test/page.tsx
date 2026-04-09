@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key } from 'lucide-react';
 
 interface ExtractedQuestion {
   content: string;
@@ -22,6 +22,9 @@ export default function AITestSandbox() {
   const [result, setResult] = useState<ExtractedExam | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
+  
+  // 🚀 إضافة حقل لإدخال مفتاح API مباشرة من الشاشة لتسهيل التجارب
+  const [customApiKey, setCustomApiKey] = useState('');
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,17 +52,17 @@ export default function AITestSandbox() {
   };
 
   const callGeminiWithRetry = async (payload: any, retries = 5) => {
-    // 🚀 جلب المفتاح بأمان من متغيرات البيئة بدلاً من كتابته في الكود
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    // 🚀 يعطي الأولوية للمفتاح المكتوب في الشاشة، ثم يبحث في متغيرات البيئة
+    const finalApiKey = customApiKey.trim() || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     
-    if (!apiKey) {
-      throw new Error('مفتاح API غير موجود! يرجى إضافته في إعدادات البيئة (Netlify أو ملف .env).');
+    if (!finalApiKey) {
+      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
     const delays = [1000, 2000, 4000, 8000, 16000];
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${finalApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -128,7 +131,7 @@ export default function AITestSandbox() {
 
       const aiResponse = await callGeminiWithRetry(payload);
       
-      if (aiResponse.candidates && aiResponse.candidates[0].content.parts[0].text) {
+      if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         const jsonText = aiResponse.candidates[0].content.parts[0].text;
         const parsedData = JSON.parse(jsonText);
         setResult(parsedData);
@@ -173,6 +176,23 @@ export default function AITestSandbox() {
           <p className="text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">
             بيئة معزولة لتجربة استخراج الأسئلة من أوراق العمل والاختبارات المصورة وتحويلها إلى شكل تفاعلي آلياً.
           </p>
+        </div>
+
+        {/* 🚀 إدخال مفتاح API */}
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
+          <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+            <Key className="w-6 h-6 text-amber-500" />
+          </div>
+          <div className="flex-1 w-full">
+            <input 
+              type="password" 
+              placeholder="الصق مفتاح Google Gemini API هنا..." 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-left"
+              dir="ltr"
+              value={customApiKey}
+              onChange={(e) => setCustomApiKey(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
