@@ -1,38 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud, Calculator } from 'lucide-react';
+import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
 import ImageUpload from '@/components/ImageUpload';
+import ForumEditor from '@/components/ForumEditor'; // 🚀 استدعاء المحرر الذكي
 
 interface AssignmentBuilderProps {
   questions: any[];
   onChange: (questions: any[]) => void;
 }
 
-// 🚀 أزرار الرياضيات السريعة للمعلم
-const MATH_SYMBOLS = [
-  { label: 'x²', value: '²' },
-  { label: 'x³', value: '³' },
-  { label: '½', value: '½' },
-  { label: '¼', value: '¼' },
-  { label: '¾', value: '¾' },
-  { label: '√', value: '√' },
-  { label: '∞', value: '∞' },
-  { label: '≈', value: '≈' },
-  { label: '≠', value: '≠' },
-  { label: '±', value: '±' },
-  { label: '÷', value: '÷' },
-  { label: '×', value: '×' },
-  { label: '°', value: '°' },
-  { label: 'π', value: 'π' },
-  { label: 'θ', value: 'θ' },
-  { label: 'Δ', value: 'Δ' },
-  { label: 'Ω', value: 'Ω' },
-];
-
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
-  
   const addQuestion = (type: string = 'text') => {
     const newQuestion = {
       id: crypto.randomUUID(),
@@ -81,12 +60,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     }
   };
 
-  // 🚀 دالة إضافة الرمز الرياضي إلى النص
-  const insertMathSymbol = (questionId: string, symbol: string, currentText: string) => {
-    const newText = (currentText || '') + symbol;
-    updateQuestion(questionId, { text: newText, content: newText });
-  };
-
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 rounded-3xl border border-slate-200">
@@ -107,7 +80,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
         </div>
       </div>
 
-      <Reorder.Group axis="y" values={questions} onReorder={onChange} className="space-y-6">
+      <Reorder.Group axis="y" values={questions} onReorder={onChange} className="space-y-8">
         {questions.map((question, index) => {
           const isHeader = question.type === 'section_header';
           const isComparison = question.type === 'comparison';
@@ -116,7 +89,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
             <Reorder.Item
               key={question.id}
               value={question}
-              className={`p-6 sm:p-8 rounded-[2rem] border-2 shadow-sm relative group transition-all bg-white
+              className={`p-6 sm:p-8 rounded-[2rem] border-2 shadow-sm relative group transition-all bg-slate-50/30
                 ${isHeader ? 'border-amber-200 hover:border-amber-400' : 'border-slate-100 hover:border-indigo-200 hover:shadow-md'}
               `}
             >
@@ -125,53 +98,32 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
               </div>
 
               <div className="flex flex-col gap-6 pt-4">
-                <div className="flex flex-col md:flex-row gap-4 items-start">
-                  <div className="flex-1 w-full space-y-3">
-                    
-                    {/* 🚀 شريط أدوات الرياضيات يظهر فوق السؤال */}
-                    {!isHeader && (
-                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
-                        <Calculator className="h-4 w-4 text-indigo-500 ml-1" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">رموز سريعة:</span>
-                        {MATH_SYMBOLS.map((sym, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => insertMathSymbol(question.id, sym.value, question.text || question.content)}
-                            className="px-2 py-1 bg-white hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 text-xs font-black rounded-lg border border-slate-200 transition-colors shadow-sm"
-                            title={sym.label}
-                          >
-                            {sym.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <textarea
-                      dir="auto"
-                      rows={3}
-                      placeholder={isHeader ? "اكتب العنوان الرئيسي هنا (مثال: أجب عن الأسئلة التالية مع التعليل)..." : "اكتب نص السؤال، أو المسألة بالتفصيل هنا..."}
-                      className={`block w-full border-0 focus:ring-0 sm:text-sm transition-all font-bold placeholder:text-slate-300 outline-none resize-y min-h-[80px]
-                        ${isHeader ? 'text-2xl text-amber-900 bg-amber-50 p-4 rounded-2xl' : 'rounded-2xl py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600'}
-                      `}
-                      value={question.text || question.content || ''}
-                      onChange={(e) => updateQuestion(question.id, { text: e.target.value, content: e.target.value })}
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  
+                  {/* 🚀 مساحة السؤال باستخدام ForumEditor */}
+                  <div className="flex-1 w-full space-y-4">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
+                    <ForumEditor 
+                      content={question.text || question.content || ''}
+                      setContent={(val) => updateQuestion(question.id, { text: val, content: val })}
+                      canUploadImage={true}
+                      placeholder={isHeader ? "اكتب العنوان الرئيسي هنا..." : "اكتب نص السؤال، أو المسألة الرياضية بالتفصيل هنا..."}
                     />
                     
-                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 mt-4">
                       <ImageUpload 
                         initialImageUrl={question.media_url}
                         onUploadSuccess={(url) => updateQuestion(question.id, { media_url: url })}
-                        label="إرفاق صورة توضيحية لهذا السؤال (اختياري)"
+                        label="إرفاق صورة إضافية للسؤال (اختياري)"
                       />
                     </div>
                   </div>
 
                   {!isHeader && (
-                    <div className="w-full md:w-56 shrink-0">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">نوع الإجابة المطلوبة</label>
+                    <div className="w-full md:w-56 shrink-0 space-y-3">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">نوع الإجابة المطلوبة</label>
                       <select
-                        className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
+                        className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-white shadow-sm ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
                         value={question.type}
                         onChange={(e) => {
                           const type = e.target.value;
@@ -258,7 +210,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                 {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                   <div className="space-y-3 pr-4 border-r-2 border-indigo-100">
                     {question.options?.map((option: string, optIndex: number) => (
-                      <div key={optIndex} className="flex items-center gap-3 group/option bg-slate-50 p-2 rounded-xl">
+                      <div key={optIndex} className="flex items-center gap-3 group/option bg-white p-2 rounded-xl shadow-sm border border-slate-100">
                         {question.type === 'multiple_choice' ? <Circle className="h-4 w-4 text-indigo-300" /> : <Square className="h-4 w-4 text-indigo-300" />}
                         <input
                           type="text" dir="auto"
@@ -273,14 +225,14 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
-                <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 gap-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-200 gap-4 mt-4">
                   {!isHeader ? (
-                    <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-6 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-black text-slate-500">النقاط:</span>
                         <input
                           type="number" min="0"
-                          className="w-16 rounded-lg border border-slate-200 py-1.5 px-2 text-slate-900 focus:ring-2 focus:ring-indigo-600 text-sm font-black text-center outline-none"
+                          className="w-16 rounded-lg border border-slate-200 py-1.5 px-2 text-slate-900 focus:ring-2 focus:ring-indigo-600 text-sm font-black text-center outline-none bg-slate-50"
                           value={question.points}
                           onChange={(e) => updateQuestion(question.id, { points: parseInt(e.target.value) || 0 })}
                         />
@@ -296,8 +248,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     </div>
                   ) : <div></div>}
                   
-                  <button type="button" onClick={() => removeQuestion(question.id)} className="flex items-center gap-2 px-4 py-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all font-bold text-sm">
-                    <Trash2 className="h-4 w-4" /> حذف
+                  <button type="button" onClick={() => removeQuestion(question.id)} className="flex items-center gap-2 px-4 py-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all font-bold text-sm bg-white border border-red-100">
+                    <Trash2 className="h-4 w-4" /> حذف السؤال
                   </button>
                 </div>
               </div>
@@ -307,7 +259,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
       </Reorder.Group>
 
       {questions.length === 0 && (
-        <div className="text-center py-16 border-2 border-dashed border-slate-300 rounded-[3rem] bg-slate-50">
+        <div className="text-center py-16 border-2 border-dashed border-slate-300 rounded-[3rem] bg-white shadow-sm">
           <Type className="h-16 w-16 text-indigo-200 mx-auto mb-4" />
           <p className="text-slate-500 font-bold text-lg mb-6">الواجب لا يحتوي على أي أسئلة حالياً</p>
           <button type="button" onClick={() => addQuestion('text')} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-200">
