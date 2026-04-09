@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, Circle, Square } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, Circle, Square, UploadCloud } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
+import ImageUpload from '@/components/ImageUpload'; // 🚀 استدعاء رافع الصور
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; max_attempts?: number; };
 
@@ -33,11 +34,9 @@ export default function TakeQuiz() {
   const [isFinished, setIsFinished] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
-  // 🚀 حالة تتبع الوقت المستغرق
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timeTakenInfo, setTimeTakenInfo] = useState<number>(0);
 
-  // 🚨 رادار الغش (Anti-Cheat State)
   const [cheatWarnings, setCheatWarnings] = useState(0);
   const [showCheatModal, setShowCheatModal] = useState(false);
 
@@ -48,7 +47,7 @@ export default function TakeQuiz() {
 
     try {
       const studentId = user.id || user.user_id;
-      const { count, error: attemptsError } = await supabase
+      const { count } = await supabase
         .from('exam_attempts')
         .select('id', { count: 'exact', head: true })
         .eq('exam_id', params.id)
@@ -103,7 +102,6 @@ export default function TakeQuiz() {
         setTimeLeft(finalTimeLeft > 0 ? finalTimeLeft : 0);
       }
 
-      // 🚀 تسجيل لحظة بداية الاختبار الفعلية
       setStartTime(Date.now());
 
     } catch (err) {
@@ -121,7 +119,6 @@ export default function TakeQuiz() {
     setIsSubmitting(true);
 
     try {
-      // 🚀 حساب الوقت المستغرق بالثواني
       const calculatedTimeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
       setTimeTakenInfo(calculatedTimeTaken);
 
@@ -183,15 +180,12 @@ export default function TakeQuiz() {
             score: totalScore,
             status: attemptStatus,
             userId: user.id || user.user_id,
-            timeTaken: calculatedTimeTaken // 🚀 إرسال الوقت المستغرق للسيرفر
+            timeTaken: calculatedTimeTaken
         })
       });
 
       const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-          throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر");
-      }
+      if (!response.ok || !data.success) throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر");
 
       setIsFinished(true); 
       
@@ -218,11 +212,8 @@ export default function TakeQuiz() {
       if (document.hidden) {
         setCheatWarnings(prev => {
           const newCount = prev + 1;
-          if (newCount === 1) {
-            setShowCheatModal(true);
-          } else if (newCount >= 2) {
-            handleSubmit();
-          }
+          if (newCount === 1) setShowCheatModal(true);
+          else if (newCount >= 2) handleSubmit();
           return newCount;
         });
       }
@@ -283,15 +274,12 @@ export default function TakeQuiz() {
                </span>
              )}
           </p>
-          
-          {/* 🚀 إظهار الوقت المستغرق للطالب */}
           {timeTakenInfo > 0 && (
             <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-3 rounded-2xl font-bold mt-2 border border-slate-200">
                <Clock className="w-5 h-5 text-slate-400" />
                <span>أنهيت الاختبار في: <span dir="ltr">{formatTime(timeTakenInfo)}</span></span>
             </div>
           )}
-
           <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
             العودة للرئيسية
           </button>
@@ -388,8 +376,24 @@ export default function TakeQuiz() {
                 );
               })}
 
-              {!isAutoCurrent && (
-                <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed" />
+              {/* 🚀 إظهار مربع رفع الصورة لو كان نوع السؤال رفع ملف */}
+              {currentQType === 'file_upload' && (
+                <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
+                  <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2">
+                     <UploadCloud className="h-5 w-5" /> قم برفع صورة حلك لهذه المسألة هنا:
+                  </label>
+                  <div className="bg-white rounded-xl overflow-hidden p-2 shadow-sm border border-slate-200">
+                    <ImageUpload
+                      initialImageUrl={answers[currentQuestion.id] || ''}
+                      onUploadSuccess={(url) => handleAnswerChange(currentQuestion.id, url)}
+                      label="انقر هنا لإرفاق الحل (صورة)"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!isAutoCurrent && currentQType !== 'file_upload' && (
+                <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed font-bold" />
               )}
             </div>
           </motion.div>
