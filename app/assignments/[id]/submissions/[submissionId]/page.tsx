@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context';
 
-// 🚀 معالجة المعادلات الكيميائية والرياضية للواجبات
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = content.replace(
@@ -50,8 +49,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
           const answersMap: Record<string, any> = {};
           const gradesMap: Record<string, any> = {};
           
-          // 🚀 خوارزمية ذكية لحل مشكلة تغير الـ IDs بعد تحديث الواجب
-          // 1. معالجة وتجهيز جميع الإجابات القادمة من قاعدة البيانات
           const processedAnswers = details.answers.map((a: any) => {
             let finalAns = a.answer_text;
             if (a.selected_options && (!Array.isArray(a.selected_options) || a.selected_options.length > 0)) {
@@ -76,14 +73,11 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
             };
           });
 
-          // 2. ربط الإجابات بالأسئلة (بالمعرف الأساسي أولاً، ثم بالترتيب كبديل احتياطي)
-          const actualQuestions = details.questions.filter((q:any) => q.type !== 'section_header'); // استبعاد العناوين من الترتيب
+          const actualQuestions = details.questions.filter((q:any) => q.type !== 'section_header'); 
           
           actualQuestions.forEach((q: any, index: number) => {
-             // المحاولة الأولى: التطابق الحرفي للـ ID
              let matchedAns = processedAnswers.find((pa: any) => pa.originalId === q.id);
              
-             // المحاولة الثانية (المنقذة): التطابق بالترتيب في حال تم تغيير الأسئلة واختلاف الـ IDs
              if (!matchedAns && processedAnswers[index]) {
                 matchedAns = processedAnswers[index];
              }
@@ -183,7 +177,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                  if (isHeader) {
                    return (
                      <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100">
-                        <h3 className="text-2xl font-black text-indigo-900 leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text)} />
+                        <h3 className="text-2xl font-black text-indigo-900 leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text || q.question_text)} />
                         {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200" alt="مرفق" />}
                      </div>
                    );
@@ -233,7 +227,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      <div className="p-5 sm:p-8 bg-slate-50/80 border-b border-slate-100 flex items-start gap-4">
                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm shrink-0">{idx + 1}</div>
                        <div className="flex-1 pt-1">
-                          <h4 className="text-lg font-bold text-slate-800 leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text)} />
+                          <h4 className="text-lg font-bold text-slate-800 leading-relaxed" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text || q.question_text)} />
                           {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
                        </div>
                      </div>
@@ -275,12 +269,33 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                               </table>
                             </div>
                           </div>
+                        ) : q.type === 'file_upload' && !isUnanswered ? (
+                          // 🚀 عرض الصورة المرفوعة من الطالب
+                          <div className="mt-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 inline-block shadow-sm">
+                            {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
+                               <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-96 w-auto object-contain rounded-xl border border-slate-200" />
+                            ) : (
+                               <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-bold hover:underline">
+                                  <FileText className="w-5 h-5" /> تحميل إجابة الطالب المرفقة
+                               </a>
+                            )}
+                          </div>
                         ) : (
                           <div className={`p-5 rounded-2xl border font-bold text-lg leading-relaxed ${!isUnanswered ? 'bg-indigo-50/50 border-indigo-100 text-indigo-900 shadow-inner' : 'bg-slate-50 border-dashed border-slate-300 text-slate-400 italic'}`}>
                             {isUnanswered 
                                ? 'لم يجب الطالب على هذا السؤال.' 
-                               : <div dangerouslySetInnerHTML={renderContentWithMath(typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : String(studentAnswerText))} />
+                               : <span dangerouslySetInnerHTML={renderContentWithMath(typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : String(studentAnswerText))} />
                             }
+                          </div>
+                        )}
+
+                        {qGrade.feedback && (
+                          <div className="mt-4 p-5 rounded-2xl bg-indigo-50/80 border border-indigo-200/50 relative overflow-hidden">
+                            <div className="absolute right-0 top-0 w-1 h-full bg-indigo-500"></div>
+                            <div className="text-xs font-black text-indigo-600 mb-2 flex items-center gap-1.5">
+                                <MessageSquare className="w-4 h-4"/> رسالة التقييم:
+                            </div>
+                            <p className="text-lg font-bold text-slate-800 leading-relaxed">{qGrade.feedback}</p>
                           </div>
                         )}
                      </div>
@@ -289,10 +304,10 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-4">
                            <div className="sm:col-span-7 flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200">
                               <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: true, pointsEarned: Number(q.points) || 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
-                                <CheckCircle2 className="w-4 h-4" /> صحيح
+                                <CheckCircle2 className="w-4 h-4" /> إجابة صحيحة
                               </button>
                               <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: false, pointsEarned: 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === false ? 'bg-red-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
-                                <XCircle className="w-4 h-4" /> خاطئ
+                                <XCircle className="w-4 h-4" /> إجابة خاطئة
                               </button>
                            </div>
                            <div className="sm:col-span-5 flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200">
@@ -316,7 +331,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
           {(submission?.content || submission?.file_url) && (
             <div className="glass-card p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm bg-white mt-8">
               <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
-                 <FileText className="h-6 w-6 text-indigo-500" /> المرفقات والنصوص الإضافية
+                 <FileText className="h-6 w-6 text-indigo-500" /> المرفقات العامة للواجب
               </h3>
               
               {submission?.content && (
@@ -342,7 +357,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
         </div>
 
-        {/* Right Column: Final Grading Panel */}
         <div className="space-y-6">
           <div className="glass-card p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 shadow-xl shadow-slate-200/50 sticky top-28 bg-white">
             <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
