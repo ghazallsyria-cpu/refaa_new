@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
-import ImageUpload from '@/components/ImageUpload'; // 🚀 استدعاء رافع الصور
+import ImageUpload from '@/components/ImageUpload'; 
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; max_attempts?: number; };
 
@@ -347,7 +347,11 @@ export default function TakeQuiz() {
               <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm tracking-wider">
                 <span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed">{currentQuestion?.content}</h2>
+              {/* 🚀 السطر المعدل ليعرض ألوان HTML بأمان للاختبارات */}
+              <div 
+                 className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed" 
+                 dangerouslySetInnerHTML={{ __html: currentQuestion?.content || currentQuestion?.text || '' }} 
+              />
               {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (
                 <div className="relative w-full flex justify-center bg-slate-50 rounded-2xl border border-slate-100 p-2 mt-4">
                   <img src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} alt="صورة السؤال" className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm" />
@@ -376,11 +380,10 @@ export default function TakeQuiz() {
                 );
               })}
 
-              {/* 🚀 إظهار مربع رفع الصورة لو كان نوع السؤال رفع ملف */}
               {currentQType === 'file_upload' && (
                 <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
                   <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2">
-                     <UploadCloud className="h-5 w-5" /> قم برفع صورة حلك لهذه المسألة هنا:
+                     <UploadCloud className="h-5 w-5 text-indigo-600" /> قم برفع صورة حلك لهذه المسألة هنا:
                   </label>
                   <div className="bg-white rounded-xl overflow-hidden p-2 shadow-sm border border-slate-200">
                     <ImageUpload
