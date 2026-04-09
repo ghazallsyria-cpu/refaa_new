@@ -2,12 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target, Timer } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
   return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
+};
+
+const formatTimeTaken = (seconds: number) => {
+  if (!seconds) return '00:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
 export default function StudentExamResult() {
@@ -37,6 +44,20 @@ export default function StudentExamResult() {
       const result = await res.json();
       
       if (result.success) {
+          
+          // 🚀 خوارزمية الإنقاذ الذكية: استعادة الإجابات إذا تم تعديل الاختبار وتغيرت معرفات الأسئلة
+          if (result.answers && result.questions) {
+             const actualQuestions = result.questions.filter((q: any) => q.type !== 'section_header');
+             const sortedAnswers = [...result.answers].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+             result.answers = sortedAnswers.map((ans: any, index: number) => {
+                 const exists = actualQuestions.find((q: any) => String(q.id) === String(ans.question_id));
+                 if (!exists && actualQuestions[index]) {
+                     return { ...ans, question_id: actualQuestions[index].id };
+                 }
+                 return ans;
+             });
+          }
+
           setData(result);
 
           if (result.exam?.exam_date) {
@@ -44,7 +65,6 @@ export default function StudentExamResult() {
               const examDate = new Date(result.exam.exam_date);
               const endTimeParts = (result.exam.end_time || '23:59').split(':');
               examDate.setHours(parseInt(endTimeParts[0]), parseInt(endTimeParts[1]), 0);
-              // التحقق الدقيق من انتهاء الوقت
               setIsExamTimeFinished(now > examDate);
           }
 
@@ -98,7 +118,7 @@ export default function StudentExamResult() {
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4">
         <div className="animate-spin rounded-full h-14 w-14 border-b-4 border-indigo-600"></div>
-        <p className="font-bold text-slate-500 animate-pulse">جاري تحميل النتائج...</p>
+        <p className="font-bold text-slate-500 animate-pulse">جاري تحميل النتائج وإحضار الإجابات...</p>
     </div>
   );
 
@@ -110,7 +130,6 @@ export default function StudentExamResult() {
   const calculatedMax = questions.reduce((sum: number, q: any) => sum + (Number(q.points) || 1), 0);
   let displayMaxScore = Number(exam?.total_marks) || Number(exam?.max_score) || calculatedMax || 100;
 
-  // 🚨 تفعيل القفل الصارم: إذا كان طالباً والوقت لم ينتهِ، نقفل النتيجة بالكامل
   const isLockedForStudent = !isTeacherOrAdmin && !isExamTimeFinished;
   const hasManualQuestions = questions.some((q: any) => !isAutoGradedType(q.type));
 
@@ -155,7 +174,7 @@ export default function StudentExamResult() {
                       {!isLockedForStudent && (
                         isPendingGrading ? (
                             <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 rounded-xl border border-amber-200 text-amber-700">
-                                <Clock className="h-5 w-5" /> <span className="font-bold">بانتظار تصحيح المعلم</span>
+                                <Clock className="h-5 w-5" /> <span className="font-bold">بانتظار التصحيح</span>
                             </div>
                         ) : (
                             <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-700">
@@ -163,10 +182,18 @@ export default function StudentExamResult() {
                             </div>
                         )
                       )}
+
+                      {/* 🚀 إظهار الوقت المستغرق هنا */}
+                      {!isLockedForStudent && attempt?.time_taken > 0 && (
+                          <div className="flex items-center gap-2 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-200 text-indigo-700">
+                              <Timer className="h-5 w-5" /> 
+                              <span className="font-bold">الوقت المستغرق: <span dir="ltr">{formatTimeTaken(attempt.time_taken)}</span></span>
+                          </div>
+                      )}
                   </div>
               </div>
 
-              {/* 🚨 Score Widget (Hides Score if Locked) */}
+              {/* 🚨 Score Widget */}
               <div className={`shrink-0 w-48 h-48 rounded-[2rem] flex flex-col items-center justify-center text-white shadow-xl ${isLockedForStudent ? 'bg-slate-400 shadow-slate-200' : isPendingGrading ? 'bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-200' : 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-200'}`}>
                   {isLockedForStudent ? <Lock className="h-10 w-10 text-white/90 mb-2" /> : <Trophy className="h-10 w-10 text-white/90 mb-2" />}
                   <div className="text-sm font-bold text-white/80 uppercase tracking-widest mb-1">الدرجة المكتسبة</div>
@@ -202,7 +229,7 @@ export default function StudentExamResult() {
           </div>
       )}
 
-      {/* 🚨 Answers Detail Section (Hides entirely if Locked for Student) */}
+      {/* 🚨 Answers Detail Section */}
       {!isLockedForStudent && (
         <div className="space-y-8 mt-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
@@ -226,15 +253,13 @@ export default function StudentExamResult() {
             let pointsEarned = answer ? Number(answer.points_earned) || 0 : 0;
 
             if (answer) {
-                // 🚀 التصحيح: جلب الإجابة من جميع الأعمدة المحتملة حسب قاعدة بياناتك للاختبارات
                 let rawVal = answer.text_answer || answer.selected_option_id || answer.answer || answer.option_id;
                 
-                // محاولة معالجة الإجابات المخزنة كـ JSON Array (مثل ["id_here"])
                 if (rawVal && typeof rawVal === 'string' && rawVal.startsWith('[')) {
                    try {
                      const parsed = JSON.parse(rawVal);
                      if (Array.isArray(parsed) && parsed.length > 0) {
-                        rawVal = parsed[0]; // نأخذ أول خيار مبدئياً
+                        rawVal = parsed[0];
                      }
                    } catch(e) {}
                 }
@@ -288,7 +313,6 @@ export default function StudentExamResult() {
                 {/* Answers Section */}
                 <div className="p-6 sm:p-8 space-y-5">
                   
-                  {/* Student Answer Box */}
                   <div className={`p-5 rounded-2xl border ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed' : isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-rose-50/50 border-rose-100'}`}>
                     <div className="text-sm font-black mb-3 flex items-center gap-2">
                       {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-400" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-500"/> : <XCircle className="w-5 h-5 text-rose-500"/>}
@@ -299,7 +323,6 @@ export default function StudentExamResult() {
                     </p>
                   </div>
 
-                  {/* Correct Answer Box */}
                   <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
                     <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
                         <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
