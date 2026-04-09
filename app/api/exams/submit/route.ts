@@ -8,8 +8,7 @@ export async function POST(req: Request) {
     if (!supabaseUrl || !serviceKey) throw new Error('مفاتيح السيرفر مفقودة');
 
     const adminSupabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-    const { examId, answers, score, status, userId } = await req.json();
-
+    const { examId, answers, score, status, userId, timeTaken } = await req.json(); // 🚀 استلام الوقت
     // 1. تحديد الطالب
     let realStudentId = userId;
     const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
