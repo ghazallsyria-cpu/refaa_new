@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter } from 'lucide-react';
+import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
-import { Question, QuestionType } from '@/types/question';
 import ImageUpload from '@/components/ImageUpload';
 
 interface AssignmentBuilderProps {
@@ -19,7 +18,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
       type: type,
       points: type === 'section_header' ? 0 : 5,
       isRequired: type !== 'section_header',
-      // 🚀 تهيئة مصفوفة الخيارات لجدول المقارنة: [طرف 1, طرف 2, وجه مقارنة 1]
       options: type === 'comparison' ? ['الطرف الأول', 'الطرف الثاني', 'وجه المقارنة الأول'] : undefined,
       media_url: null
     };
@@ -76,7 +74,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
             <Columns className="h-4 w-4" /> سؤال مقارنة
           </button>
           <button type="button" onClick={() => addQuestion('text')} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
-            <Plus className="h-4 w-4" /> سؤال عادي
+            <Plus className="h-4 w-4" /> إضافة سؤال
           </button>
         </div>
       </div>
@@ -101,11 +99,12 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
               <div className="flex flex-col gap-6 pt-4">
                 <div className="flex flex-col md:flex-row gap-4 items-start">
                   <div className="flex-1 w-full space-y-4">
-                    <input
-                      type="text"
+                    {/* 🚀 تعديل حقل السؤال ليكون Textarea للمسائل الطويلة */}
+                    <textarea
                       dir="auto"
-                      placeholder={isHeader ? "اكتب العنوان الرئيسي هنا (مثال: أجب عن الأسئلة التالية مع التعليل)..." : "نص السؤال..."}
-                      className={`block w-full border-0 focus:ring-0 sm:text-sm transition-all font-bold placeholder:text-slate-300 outline-none
+                      rows={3}
+                      placeholder={isHeader ? "اكتب العنوان الرئيسي هنا (مثال: أجب عن الأسئلة التالية مع التعليل)..." : "اكتب نص السؤال، أو المسألة بالتفصيل هنا..."}
+                      className={`block w-full border-0 focus:ring-0 sm:text-sm transition-all font-bold placeholder:text-slate-300 outline-none resize-y min-h-[80px]
                         ${isHeader ? 'text-2xl text-amber-900 bg-amber-50 p-4 rounded-2xl' : 'rounded-2xl py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600'}
                       `}
                       value={question.text || question.content || ''}
@@ -123,7 +122,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
 
                   {!isHeader && (
                     <div className="w-full md:w-56 shrink-0">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">نوع السؤال</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">نوع الإجابة المطلوبة</label>
                       <select
                         className="block w-full rounded-2xl border-0 py-3 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
                         value={question.type}
@@ -138,8 +137,9 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                           updateQuestion(question.id, updates);
                         }}
                       >
-                        <option value="text">إجابة قصيرة</option>
-                        <option value="paragraph">فقرة</option>
+                        <option value="text">إجابة نصية قصيرة</option>
+                        <option value="paragraph">إجابة نصية فقرة</option>
+                        <option value="file_upload">إرفاق صورة / ملف (مهم)</option> {/* 🚀 خيار رفع صورة */}
                         <option value="multiple_choice">خيارات متعددة</option>
                         <option value="checkbox">مربعات اختيار</option>
                         <option value="comparison">جدول مقارنة احترافي</option>
@@ -148,7 +148,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   )}
                 </div>
 
-                {/* 🚀 إعدادات جدول المقارنة الاحترافي */}
                 {isComparison && (
                   <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -201,7 +200,15 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
-                {/* الخيارات المتعددة وصح وخطأ */}
+                {/* 🚀 إظهار توضيح للمعلم عند اختيار "رفع ملف" */}
+                {question.type === 'file_upload' && (
+                  <div className="p-6 bg-indigo-50/50 rounded-[24px] border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center text-center gap-3">
+                     <UploadCloud className="h-8 w-8 text-indigo-400" />
+                     <p className="text-indigo-900 font-bold">إجابة بمرفق</p>
+                     <p className="text-indigo-500 text-xs font-medium">سيظهر للطالب زر خاص لرفع صورة لحله (مثل تصوير ورقة الحل) للإجابة على هذه المسألة.</p>
+                  </div>
+                )}
+
                 {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
                   <div className="space-y-3 pr-4 border-r-2 border-indigo-100">
                     {question.options?.map((option: string, optIndex: number) => (
@@ -220,7 +227,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
-                {/* شريط الإعدادات السفلي */}
                 <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-100 gap-4">
                   {!isHeader ? (
                     <div className="flex items-center gap-6 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
