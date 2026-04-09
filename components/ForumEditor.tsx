@@ -5,7 +5,7 @@ import {
   Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, 
   List, ListOrdered, RemoveFormatting, Loader2, Table, 
   Heading1, Heading2, TerminalSquare, AlignRight, AlignCenter, AlignLeft, AlignJustify,
-  Palette, Type, X, Calculator, BarChart3
+  Palette, Type, X, Calculator, BarChart3, FileText, Files
 } from 'lucide-react';
 
 interface ForumEditorProps {
@@ -23,8 +23,14 @@ export default function ForumEditor({
 }: ForumEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null); // 🚀 مرجع ملف الـ PDF
+  
   const [isUploading, setIsUploading] = useState(false);
   
+  // 🚀 حالات معالجة الـ PDF
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  const [pdfProgressText, setPdfProgressText] = useState('');
+
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontSize, setShowFontSize] = useState(false);
@@ -32,6 +38,21 @@ export default function ForumEditor({
   const [linkUrl, setLinkUrl] = useState('');
 
   const savedSelection = useRef<Range | null>(null);
+
+  // 🚀 تحميل مكتبة PDF.js في الخلفية لتجنب أخطاء بناء Next.js
+  useEffect(() => {
+    if (!document.getElementById('pdfjs-script')) {
+      const script = document.createElement('script');
+      script.id = 'pdfjs-script';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        if ((window as any).pdfjsLib) {
+          (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+      };
+      document.head.appendChild(script);
+    }
+  }, []);
 
   const saveSelection = useCallback(() => {
     const selection = window.getSelection();
@@ -73,6 +94,7 @@ export default function ForumEditor({
     }
   };
 
+  // 🚀 رفع صورة عادية
   const uploadImageFile = async (file: File) => {
     setIsUploading(true);
     try {
@@ -96,6 +118,82 @@ export default function ForumEditor({
       alert('حدث خطأ أثناء رفع الصورة.');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // 🚀 السحر يبدأ هنا: استخراج الصفحات من الـ PDF ورفعها كصور
+  const processAndUploadPdf = async (file: File) => {
+    const pdfjsLib = (window as any).pdfjsLib;
+    if (!pdfjsLib) {
+      alert("جاري تحميل مكتبة قراءة الملفات، يرجى المحاولة بعد قليل...");
+      return;
+    }
+
+    setIsProcessingPdf(true);
+    setPdfProgressText("جاري تهيئة الملف وقراءة الصفحات...");
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      const imageUrls: string[] = [];
+
+      // 1. تحويل صفحات الـ PDF إلى صور (Blobs) في المتصفح
+      const blobs: Blob[] = [];
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} إلى صورة...`);
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 }); // دقة عالية (2.0)
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+        
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8)); // ضغط 80% لسرعة الرفع
+        if (blob) blobs.push(blob);
+      }
+
+      // 2. رفع الصور إلى Cloudinary
+      for (let i = 0; i < blobs.length; i++) {
+         setPdfProgressText(`جاري رفع الصورة ${i + 1} من ${blobs.length} إلى السحابة...`);
+         const formData = new FormData();
+         formData.append('file', blobs[i]);
+         formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+         
+         const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+           method: 'POST', body: formData
+         });
+         const data = await res.json();
+         if (data.secure_url) {
+           imageUrls.push(data.secure_url);
+         }
+      }
+
+      // 3. إدراج الصور بالترتيب داخل المحرر
+      setPdfProgressText("جاري ترتيب وإدراج الصفحات في المحرر...");
+      editorRef.current?.focus();
+      restoreSelection();
+      
+      let htmlToInsert = '<br/>';
+      imageUrls.forEach((url, idx) => {
+         htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;">
+            <img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
+         </div>`;
+      });
+      htmlToInsert += '<br/>';
+
+      document.execCommand('insertHTML', false, htmlToInsert);
+      if (editorRef.current) setContent(editorRef.current.innerHTML);
+
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء معالجة ملف الـ PDF. يرجى التأكد من أن الملف سليم.");
+    } finally {
+      setIsProcessingPdf(false);
+      setPdfProgressText("");
     }
   };
 
@@ -135,7 +233,6 @@ export default function ForumEditor({
   );
 
   return (
-    // 🚀 تم إزالة overflow-hidden للسماح للقوائم المنسدلة بالظهور بسلاسة
     <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative" dir="rtl">
       
       <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sticky top-0 z-20 rounded-t-[1.5rem]">
@@ -222,22 +319,32 @@ export default function ForumEditor({
 
         <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
 
+        {/* 🚀 أدوات إدراج الصور وملفات الـ PDF */}
         {canUploadImage && (
-          <div className="mr-auto flex items-center">
+          <div className="mr-auto flex flex-wrap items-center gap-2">
              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
-             <button type="button" disabled={isUploading} onMouseDown={(e) => { e.preventDefault(); saveSelection(); fileInputRef.current?.click(); }} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50">
-               {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-               <span className="hidden sm:inline">{isUploading ? 'جاري الرفع...' : 'إدراج صورة'}</span>
+             <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await processAndUploadPdf(file); if(pdfInputRef.current) pdfInputRef.current.value = ''; }} />
+             
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); fileInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 font-bold text-sm border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50">
+               <ImageIcon className="w-4 h-4 text-indigo-500" />
+               <span className="hidden sm:inline">صورة</span>
+             </button>
+
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور وإدراجها">
+               <Files className="w-4 h-4 text-indigo-600" />
+               <span className="hidden sm:inline">إدراج من PDF</span>
              </button>
           </div>
         )}
       </div>
 
       <div className="relative">
-        {isUploading && (
-          <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
-             <div className="bg-white px-5 py-3 rounded-full shadow-lg border border-slate-100 flex items-center gap-3 font-bold text-sm text-indigo-600">
-               <Loader2 className="w-5 h-5 animate-spin" /> جاري معالجة ورفع الصورة...
+        {/* 🚀 شاشة التحميل لعمليات الرفع والمعالجة */}
+        {(isUploading || isProcessingPdf) && (
+          <div className="absolute inset-0 bg-white/70 backdrop-blur-[4px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
+             <div className="bg-white px-6 py-4 rounded-[2rem] shadow-xl border border-indigo-100 flex flex-col items-center justify-center gap-3 font-bold text-sm text-indigo-700 max-w-[80%] text-center">
+               <Loader2 className="w-8 h-8 animate-spin text-indigo-500" /> 
+               <span>{isProcessingPdf ? pdfProgressText : 'جاري معالجة ورفع الصورة...'}</span>
              </div>
           </div>
         )}
