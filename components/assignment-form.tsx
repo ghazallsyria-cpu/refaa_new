@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, Send, Columns } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud } from 'lucide-react';
 import { motion } from 'framer-motion';
+import ImageUpload from '@/components/ImageUpload'; // 🚀 إضافة أداة رفع الصور
 
 interface AssignmentFormProps {
   questions: any[];
@@ -147,6 +148,30 @@ export default function AssignmentForm({
                     />
                   )}
 
+                  {/* 🚀 خيار رفع صورة جديد */}
+                  {question.type === 'file_upload' && (
+                    <div className="mt-4 bg-indigo-50/40 p-6 rounded-2xl border border-indigo-100">
+                      <label className="block text-sm font-black text-indigo-800 mb-3 flex items-center gap-2">
+                        <UploadCloud className="h-5 w-5 text-indigo-600" /> يرجى إرفاق صورة الحل الخاص بك هنا:
+                      </label>
+                      <div className="bg-white p-2 rounded-xl border border-slate-200">
+                        {readOnly ? (
+                          answers[question.id] ? (
+                             <img src={answers[question.id]} className="max-h-80 rounded-lg object-contain mx-auto border border-slate-200 shadow-sm" alt="مرفق الطالب" />
+                          ) : (
+                             <p className="text-slate-400 italic text-center py-4 font-bold">لم تقم بإرفاق ملف</p>
+                          )
+                        ) : (
+                          <ImageUpload 
+                            initialImageUrl={answers[question.id] || ''} 
+                            onUploadSuccess={(url) => handleAnswerChange(question.id, url)} 
+                            label="انقر أو اسحب صورة ورقة الحل هنا" 
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {isComparison && (
                     <div className="rounded-3xl border border-slate-300 overflow-hidden bg-white shadow-sm mt-4">
                        <div className="overflow-x-auto">
@@ -193,28 +218,33 @@ export default function AssignmentForm({
                     </div>
                   )}
 
-                  {(question.type === 'multiple_choice' || question.type === 'checkbox') && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {safeOptions.map((option: string, optIndex: number) => {
-                        const isChecked = question.type === 'checkbox' 
-                            ? (answers[question.id] || []).includes(option) 
-                            : answers[question.id] === option;
-                        
-                        return (
-                          <label key={optIndex} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${isChecked ? 'bg-indigo-50 border-indigo-500 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'} ${readOnly ? 'cursor-default pointer-events-none' : ''}`}>
-                            <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${isChecked ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'}`}>
-                                {isChecked && <CheckCircle2 className="h-4 w-4" />}
-                            </div>
-                            <input
-                              type={question.type === 'checkbox' ? 'checkbox' : 'radio'}
-                              className="hidden"
-                              checked={isChecked}
-                              onChange={(e) => question.type === 'checkbox' ? handleCheckboxChange(question.id, option, e.target.checked) : handleAnswerChange(question.id, option)}
-                              disabled={readOnly}
-                            />
-                            <span dir="auto" className={`text-sm font-bold transition-colors ${isChecked ? 'text-indigo-900' : 'text-slate-700'}`}>{option}</span>
-                          </label>
-                        );
+                  {/* 🚀 تعديل شرط أسئلة الخيارات ليدعم الصح والخطأ والتحديد المتعدد */}
+                  {(question.type === 'multiple_choice' || question.type === 'checkbox' || question.type === 'true_false' || question.type === 'multi_select') && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      {safeOptions.map((opt: any, optIndex: number) => {
+                         // 🚀 دعم الخيارات إذا كانت نصوص (في الواجبات) أو كائنات (في الاختبارات)
+                         const optionText = typeof opt === 'string' ? opt : opt.content;
+                         const optionId = typeof opt === 'string' ? opt : opt.id;
+                         
+                         const isChecked = (question.type === 'checkbox' || question.type === 'multi_select')
+                             ? (answers[question.id] || []).includes(optionId) || (answers[question.id] || []).includes(optionText)
+                             : answers[question.id] === optionId || answers[question.id] === optionText;
+
+                         return (
+                           <label key={optIndex} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${isChecked ? 'bg-indigo-50 border-indigo-500 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'} ${readOnly ? 'cursor-default pointer-events-none' : ''}`}>
+                             <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${isChecked ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'}`}>
+                                 {isChecked && <CheckCircle2 className="h-4 w-4" />}
+                             </div>
+                             <input
+                               type={(question.type === 'checkbox' || question.type === 'multi_select') ? 'checkbox' : 'radio'}
+                               className="hidden"
+                               checked={isChecked}
+                               onChange={(e) => (question.type === 'checkbox' || question.type === 'multi_select') ? handleCheckboxChange(question.id, optionId, e.target.checked) : handleAnswerChange(question.id, optionId)}
+                               disabled={readOnly}
+                             />
+                             <span dir="auto" className={`text-sm font-bold transition-colors ${isChecked ? 'text-indigo-900' : 'text-slate-700'}`}>{optionText}</span>
+                           </label>
+                         );
                       })}
                     </div>
                   )}
