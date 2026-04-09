@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare } from 'lucide-react';
 
 interface ExtractedQuestion {
   content: string;
@@ -23,9 +23,7 @@ export default function AITestSandbox() {
   const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
 
-  // 🚀 عند نقل الكود إلى مشروعك، قم بوضع مفتاحك هنا بدلاً من النص الفارغ
-  // const apiKey = "AIzaSyBJ6pXCGS59CFTshbA-OCLkqCSGem5IaoE";
-  const apiKey = "AIzaSyBJ6pXCGS59CFTshbA-OCLkqCSGem5IaoE";
+  const apiKey = ""; 
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -162,7 +160,6 @@ export default function AITestSandbox() {
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8 font-sans" dir="rtl">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* Header */}
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-4 bg-indigo-100 text-indigo-600 rounded-[2rem] shadow-sm mb-2">
             <Sparkles className="w-10 h-10" />
@@ -175,7 +172,6 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* Left Column: Upload & Preview */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
@@ -219,7 +215,6 @@ export default function AITestSandbox() {
             </div>
           </div>
 
-          {/* Right Column: AI Results */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px]">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
@@ -252,13 +247,11 @@ export default function AITestSandbox() {
               {result && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   
-                  {/* Exam Title */}
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">عنوان الاختبار المكتشف</p>
                     <h3 className="text-2xl font-black text-indigo-900">{result.title || 'بدون عنوان'}</h3>
                   </div>
 
-                  {/* Extracted Questions */}
                   <div className="space-y-4">
                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">الأسئلة ({result.questions?.length || 0})</p>
                     
@@ -296,7 +289,6 @@ export default function AITestSandbox() {
                     ))}
                   </div>
 
-                  {/* JSON Output Viewer */}
                   <div className="pt-8 border-t border-slate-100">
                     <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 hover:bg-slate-100 transition-all">
                       <span className="flex items-center gap-2"><TerminalSquare className="w-5 h-5" /> عرض كود الـ JSON الناتج</span>
