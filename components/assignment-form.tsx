@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
@@ -129,7 +129,7 @@ export default function AssignmentForm({
                 </div>
                 <input type="checkbox" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => {
                    if (readOnly) return;
-                   const newArr = isSelected ? selectedArray.filter(i => i !== optId && i !== optContent) : [...selectedArray, optId];
+                   const newArr = isSelected ? selectedArray.filter((i: string) => i !== optId && i !== optContent) : [...selectedArray, optId];
                    handleChange(q.id, newArr);
                 }} />
                 <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{optContent}</span>
@@ -244,7 +244,6 @@ export default function AssignmentForm({
       {questions.map((q, idx) => {
         const isHeader = q.type === 'section_header';
         
-        // 🚀 هنا السحر! استخدام dangerouslySetInnerHTML لفهم التنسيقات والألوان
         if (isHeader) {
           return (
             <div key={q.id} className="pt-8 pb-2 border-b-2 border-indigo-100">
