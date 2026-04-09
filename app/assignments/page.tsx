@@ -6,13 +6,14 @@ import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
+import ForumEditor from '@/components/ForumEditor'; // 🚀 استدعاء المحرر الاحترافي
 import { Question } from '@/types/question';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
-import { supabase } from '@/lib/supabase'; // 🚀 إضافة الاتصال بقاعدة البيانات لجلب المرفقات
+import { supabase } from '@/lib/supabase';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -56,6 +57,9 @@ export default function AssignmentsPage() {
   const [notification, setNotification] = useState<{type: 'success' | 'message', message: string} | null>(null);
   const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editData, setEditData] = useState<any>({});
 
   useEffect(() => {
     setMounted(true);
@@ -116,19 +120,16 @@ export default function AssignmentsPage() {
     }
   };
 
-  // 🚀 التنظيف العميق (Deep Cleanup) للصور قبل حذف الواجب
   const handleDeleteAssignment = async () => {
     if (!assignmentToDelete) return;
     setLoading(true);
     try {
       const assignment = assignments.find(a => a.id === assignmentToDelete);
       
-      // 1. حذف صورة/مرفق المعلم
       if (assignment?.file_url) {
         try { await deleteFromCloudinary(assignment.file_url); } catch (e) { console.error('Teacher file delete error:', e); }
       }
 
-      // 2. جلب جميع تسليمات الطلاب لهذا الواجب وحذف صور إجاباتهم
       const { data: subs } = await supabase
         .from('assignment_submissions')
         .select('file_url')
@@ -142,7 +143,6 @@ export default function AssignmentsPage() {
         }
       }
 
-      // 3. مسح الواجب من قاعدة البيانات
       await deleteAssignment(assignmentToDelete);
       showNotification('success', 'تم حذف الواجب وجميع مرفقاته بنجاح');
       setAssignmentToDelete(null);
@@ -154,7 +154,7 @@ export default function AssignmentsPage() {
     }
   };
 
-  const openEditModal = async (assignment: any) => {
+  const openFullEditModal = async (assignment: any) => {
     setEditingAssignment(assignment);
     const dateObj = new Date(assignment.due_date);
     const formattedDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
@@ -315,9 +315,9 @@ export default function AssignmentsPage() {
                           <Eye className="h-5 w-5" />
                         </Link>
                         <button 
-                          onClick={() => openEditModal(assignment)}
+                          onClick={() => openFullEditModal(assignment)}
                           className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
-                          title="تعديل الواجب"
+                          title="تعديل الواجب بالكامل"
                         >
                           <Edit2 className="h-5 w-5" />
                         </button>
@@ -334,8 +334,10 @@ export default function AssignmentsPage() {
                     <h3 className="text-3xl font-black text-slate-900 mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight">
                       {assignment.title}
                     </h3>
-                    <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-lg leading-relaxed">
-                      {assignment.description || 'لا يوجد وصف لهذا الواجب'}
+                    
+                    {/* 🚀 إخفاء الوصف لأنه قد يحتوي على HTML غير مرتب في البطاقة الصغيرة */}
+                    <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-sm leading-relaxed">
+                      يرجى فتح الواجب لرؤية التعليمات التفصيلية...
                     </p>
 
                     <div className="grid grid-cols-2 gap-5">
@@ -470,7 +472,7 @@ export default function AssignmentsPage() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Add/Edit Assignment Modal */}
+      {/* Add/Edit Assignment Full Modal */}
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -514,102 +516,100 @@ export default function AssignmentsPage() {
                       </select>
                     </div>
                   
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">عنوان الواجب <span className="text-red-500">*</span></label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="مثال: حل مسائل الفيزياء صفحة 40" 
-                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
-                      value={currentAssignment.title || ''}
-                      onChange={(e) => setCurrentAssignment({...currentAssignment, title: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الوصف والتفاصيل</label>
-                    <textarea 
-                      rows={5}
-                      placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)" 
-                      className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold resize-none"
-                      value={currentAssignment.description || ''}
-                      onChange={(e) => setCurrentAssignment({...currentAssignment, description: e.target.value})}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المادة <span className="text-red-500">*</span></label>
-                      <select 
-                        required
-                        className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
-                        value={currentAssignment.subject_id || ''}
-                        onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
-                      >
-                        <option value="">اختر المادة...</option>
-                        {subjects.map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-black text-slate-700 mb-2 mr-1">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-black text-slate-700 mb-2 mr-1">عنوان الواجب <span className="text-red-500">*</span></label>
                       <input 
-                        type="datetime-local" 
+                        type="text" 
                         required
-                        className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
-                        dir="ltr"
-                        value={currentAssignment.due_date || ''}
-                        onChange={(e) => setCurrentAssignment({...currentAssignment, due_date: e.target.value})}
+                        placeholder="مثال: حل مسائل الفيزياء صفحة 40" 
+                        className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold"
+                        value={currentAssignment.title || ''}
+                        onChange={(e) => setCurrentAssignment({...currentAssignment, title: e.target.value})}
+                      />
+                    </div>
+                  
+                    {/* 🚀 إستخدام ForumEditor للوصف العام للواجب */}
+                    <div>
+                      <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الوصف والتعليمات التفصيلية</label>
+                      <ForumEditor 
+                        content={currentAssignment.description || ''}
+                        setContent={(content) => setCurrentAssignment({...currentAssignment, description: content})}
+                        canUploadImage={true}
+                        placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المادة <span className="text-red-500">*</span></label>
+                        <select 
+                          required
+                          className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
+                          value={currentAssignment.subject_id || ''}
+                          onChange={(e) => setCurrentAssignment({...currentAssignment, subject_id: e.target.value})}
+                        >
+                          <option value="">اختر المادة...</option>
+                          {subjects.map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-black text-slate-700 mb-2 mr-1">تاريخ ووقت التسليم <span className="text-red-500">*</span></label>
+                        <input 
+                          type="datetime-local" 
+                          required
+                          className="block w-full rounded-2xl border-0 py-4 px-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold text-left"
+                          dir="ltr"
+                          value={currentAssignment.due_date || ''}
+                          onChange={(e) => setCurrentAssignment({...currentAssignment, due_date: e.target.value})}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+                      <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
+                        <Users className="w-5 h-5 text-indigo-500" />
+                        الشعب المستهدفة <span className="text-red-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-2 scrollbar-hide">
+                        {sections.map((s: any) => {
+                          const classObj = s.classes || s.class;
+                          const cName = Array.isArray(classObj) ? classObj[0]?.name : classObj?.name;
+                          return (
+                            <label key={s.id} className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all">
+                              <input
+                                type="checkbox"
+                                className="h-5 w-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
+                                checked={currentAssignment.section_ids?.includes(s.id)}
+                                onChange={(e) => {
+                                  const newSectionIds = e.target.checked
+                                    ? [...(currentAssignment.section_ids || []), s.id]
+                                    : (currentAssignment.section_ids || []).filter((id: string) => id !== s.id);
+                                  setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
+                                }}
+                              />
+                              <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-900 transition-colors">
+                                {cName ? `${cName} - ${s.name}` : s.name}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
+                      <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
+                        <ImageIcon className="w-5 h-5 text-indigo-500" />
+                        إرفاق مسألة أو صورة (اختياري)
+                      </label>
+                      <ImageUpload
+                        initialImageUrl={currentAssignment.file_url}
+                        onUploadSuccess={(url) => setCurrentAssignment({...currentAssignment, file_url: url})}
+                        label="ارفع صورة أو ملف للواجب"
                       />
                     </div>
                   </div>
-
-<div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-                    <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
-                      <Users className="w-5 h-5 text-indigo-500" />
-                      الشعب المستهدفة <span className="text-red-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-2 scrollbar-hide">
-                      {sections.map((s: any) => {
-                        // 🚀 تعديل الاسم ليظهر كاملاً
-                        const classObj = s.classes || s.class;
-                        const cName = Array.isArray(classObj) ? classObj[0]?.name : classObj?.name;
-                        return (
-                          <label key={s.id} className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all">
-                            <input
-                              type="checkbox"
-                              className="h-5 w-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
-                              checked={currentAssignment.section_ids?.includes(s.id)}
-                              onChange={(e) => {
-                                const newSectionIds = e.target.checked
-                                  ? [...(currentAssignment.section_ids || []), s.id]
-                                  : (currentAssignment.section_ids || []).filter((id: string) => id !== s.id);
-                                setCurrentAssignment({...currentAssignment, section_ids: newSectionIds});
-                              }}
-                            />
-                            <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-900 transition-colors">
-                              {cName ? `${cName} - ${s.name}` : s.name}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-
-                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
-                    <label className="flex items-center gap-2 text-sm font-black text-slate-900 mb-4">
-                      <ImageIcon className="w-5 h-5 text-indigo-500" />
-                      إرفاق مسألة أو صورة (اختياري)
-                    </label>
-                    <ImageUpload
-                      initialImageUrl={currentAssignment.file_url}
-                      onUploadSuccess={(url) => setCurrentAssignment({...currentAssignment, file_url: url})}
-                      label="ارفع صورة أو ملف للواجب"
-                    />
-                  </div>
-                </div>
                 </div>
 
                 <div className="bg-slate-50/50 rounded-[2rem] p-6 sm:p-8 border border-slate-100">
