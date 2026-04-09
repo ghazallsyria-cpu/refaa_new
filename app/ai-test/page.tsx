@@ -23,8 +23,6 @@ export default function AITestSandbox() {
   const [error, setError] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
 
-  const apiKey = ""; 
-
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -51,10 +49,17 @@ export default function AITestSandbox() {
   };
 
   const callGeminiWithRetry = async (payload: any, retries = 5) => {
+    // 🚀 جلب المفتاح بأمان من متغيرات البيئة بدلاً من كتابته في الكود
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('مفتاح API غير موجود! يرجى إضافته في إعدادات البيئة (Netlify أو ملف .env).');
+    }
+
     const delays = [1000, 2000, 4000, 8000, 16000];
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
