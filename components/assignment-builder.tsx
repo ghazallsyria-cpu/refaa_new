@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud } from 'lucide-react';
+import { Plus, Trash2, GripVertical, CheckCircle2, Circle, Square, Type, AlignLeft, X, Heading, Columns, ListFilter, UploadCloud, Calculator } from 'lucide-react';
 import { motion, Reorder } from 'motion/react';
 import ImageUpload from '@/components/ImageUpload';
 
@@ -10,7 +10,29 @@ interface AssignmentBuilderProps {
   onChange: (questions: any[]) => void;
 }
 
+// 🚀 أزرار الرياضيات السريعة للمعلم
+const MATH_SYMBOLS = [
+  { label: 'x²', value: '²' },
+  { label: 'x³', value: '³' },
+  { label: '½', value: '½' },
+  { label: '¼', value: '¼' },
+  { label: '¾', value: '¾' },
+  { label: '√', value: '√' },
+  { label: '∞', value: '∞' },
+  { label: '≈', value: '≈' },
+  { label: '≠', value: '≠' },
+  { label: '±', value: '±' },
+  { label: '÷', value: '÷' },
+  { label: '×', value: '×' },
+  { label: '°', value: '°' },
+  { label: 'π', value: 'π' },
+  { label: 'θ', value: 'θ' },
+  { label: 'Δ', value: 'Δ' },
+  { label: 'Ω', value: 'Ω' },
+];
+
 export default function AssignmentBuilder({ questions, onChange }: AssignmentBuilderProps) {
+  
   const addQuestion = (type: string = 'text') => {
     const newQuestion = {
       id: crypto.randomUUID(),
@@ -59,6 +81,12 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     }
   };
 
+  // 🚀 دالة إضافة الرمز الرياضي إلى النص
+  const insertMathSymbol = (questionId: string, symbol: string, currentText: string) => {
+    const newText = (currentText || '') + symbol;
+    updateQuestion(questionId, { text: newText, content: newText });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 rounded-3xl border border-slate-200">
@@ -92,14 +120,33 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                 ${isHeader ? 'border-amber-200 hover:border-amber-400' : 'border-slate-100 hover:border-indigo-200 hover:shadow-md'}
               `}
             >
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200 z-10">
                 <GripVertical className="h-5 w-5 text-slate-400" />
               </div>
 
               <div className="flex flex-col gap-6 pt-4">
                 <div className="flex flex-col md:flex-row gap-4 items-start">
-                  <div className="flex-1 w-full space-y-4">
-                    {/* 🚀 تعديل حقل السؤال ليكون Textarea للمسائل الطويلة */}
+                  <div className="flex-1 w-full space-y-3">
+                    
+                    {/* 🚀 شريط أدوات الرياضيات يظهر فوق السؤال */}
+                    {!isHeader && (
+                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                        <Calculator className="h-4 w-4 text-indigo-500 ml-1" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">رموز سريعة:</span>
+                        {MATH_SYMBOLS.map((sym, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => insertMathSymbol(question.id, sym.value, question.text || question.content)}
+                            className="px-2 py-1 bg-white hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 text-xs font-black rounded-lg border border-slate-200 transition-colors shadow-sm"
+                            title={sym.label}
+                          >
+                            {sym.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <textarea
                       dir="auto"
                       rows={3}
@@ -139,7 +186,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                       >
                         <option value="text">إجابة نصية قصيرة</option>
                         <option value="paragraph">إجابة نصية فقرة</option>
-                        <option value="file_upload">إرفاق صورة / ملف (مهم)</option> {/* 🚀 خيار رفع صورة */}
+                        <option value="file_upload">إرفاق صورة / ملف (مهم)</option>
                         <option value="multiple_choice">خيارات متعددة</option>
                         <option value="checkbox">مربعات اختيار</option>
                         <option value="comparison">جدول مقارنة احترافي</option>
@@ -200,7 +247,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                   </div>
                 )}
 
-                {/* 🚀 إظهار توضيح للمعلم عند اختيار "رفع ملف" */}
                 {question.type === 'file_upload' && (
                   <div className="p-6 bg-indigo-50/50 rounded-[24px] border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center text-center gap-3">
                      <UploadCloud className="h-8 w-8 text-indigo-400" />
