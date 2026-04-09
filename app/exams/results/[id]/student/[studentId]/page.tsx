@@ -280,7 +280,13 @@ export default function StudentExamResult() {
                     <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${isUnanswered ? 'bg-slate-200 text-slate-600' : isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                         {index + 1}
                     </div>
-                    <h3 className="font-bold text-lg text-slate-800 leading-relaxed mt-1">{question.content}</h3>
+                    <div className="pt-2">
+                       {/* 🚀 السطر المعدل ليعرض ألوان HTML بأمان للمعلم */}
+                       <div 
+                         className="prose max-w-none font-bold text-lg text-slate-800 leading-relaxed mt-1" 
+                         dangerouslySetInnerHTML={{ __html: question.content || question.text || '' }} 
+                       />
+                    </div>
                   </div>
                   
                   <div className="flex items-center gap-1.5 bg-white px-4 py-2 rounded-xl font-bold text-sm border border-slate-200 shrink-0 self-start sm:self-auto">
@@ -306,7 +312,6 @@ export default function StudentExamResult() {
                       <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابة الطالب</span>
                     </div>
                     
-                    {/* 🚀 إظهار إجابة الطالب كصورة إذا كان نوع السؤال إرفاق ملف */}
                     {qType === 'file_upload' && !isUnanswered ? (
                        <div className="mt-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm inline-block">
                           {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
@@ -324,7 +329,6 @@ export default function StudentExamResult() {
                     )}
                   </div>
 
-                  {/* لا نعرض الإجابة النموذجية لو كان رفع ملف لأنه يعتمد كلياً على تصحيح المعلم */}
                   {qType !== 'file_upload' && (
                     <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
                       <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
