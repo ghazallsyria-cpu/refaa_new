@@ -8,7 +8,7 @@ import { arSA } from 'date-fns/locale';
 import { RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
 
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
 import AssignmentForm from '@/components/assignment-form';
 import ImageUpload from '@/components/ImageUpload';
@@ -212,7 +212,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const fetchData = useCallback(async () => {
     if (!user) return;
     
-    // 🚀 الكاش السريع: جلب البيانات من الذاكرة لعدم تأخير فتح الصفحة
     const cacheKey = `assign_cache_${assignmentId}_${user.id}_${currentRole}`;
     const cachedData = sessionStorage.getItem(cacheKey);
     
@@ -241,17 +240,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
            setSubmissions(parsed.allSubmissions || []);
         }
-        setLoading(false); // إظهار الشاشة فوراً دون انتظار!
+        setLoading(false); 
       } catch (e) {}
     } else {
-      setLoading(true); // نظهر التحميل فقط إذا كانت هذه أول مرة نفتح فيها الواجب
+      setLoading(true); 
     }
 
     try {
       if (currentRole === 'student') setStudentId(user.id);
       const details = await fetchAssignmentDetails(assignmentId);
       
-      // 🚀 حفظ البيانات في الكاش للمرة القادمة
       sessionStorage.setItem(cacheKey, JSON.stringify(details));
 
       setAssignment(details.assignment);
@@ -276,7 +274,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             setFullAnswersMap(fullMap);
           }
         } else {
-          // 🚀 استرجاع المسودة (الحفظ التلقائي) إذا لم يقم الطالب بالتسليم بعد
           const draftKey = `draft_assign_${assignmentId}_${user.id}`;
           const draft = localStorage.getItem(draftKey);
           if (draft) {
@@ -302,7 +299,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     fetchData();
   }, [fetchData]);
 
-  // 🚀 حفظ تلقائي (Auto-Save) في المتصفح عند تغيير أي إجابة للطالب
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
       const draftData = { answers: myAnswers, content, fileUrl };
@@ -340,7 +336,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
       
-      // 🚀 مسح المسودة و الكاش بعد التسليم لكي تظهر النتيجة كـ "مُسلمة"
       localStorage.removeItem(`draft_assign_${assignmentId}_${user?.id}`);
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
@@ -366,7 +361,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
       if (error) throw error;
       
-      // مسح الكاش لكي تظهر التعديلات الجديدة
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
       showNotification('success', 'تم تمديد/تحديث الواجب بنجاح');
@@ -396,7 +390,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     try {
       await deleteSubmission(submissionToDelete);
       
-      // مسح الكاش بعد الحذف
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
 
       showNotification('success', 'تم حذف تسليم الطالب بنجاح');
@@ -490,9 +483,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             </div>
           </div>
 
-          <div className="prose prose-slate max-w-none mb-8">
+          <div className="mb-8">
             <h3 className="text-xl font-bold text-slate-900 mb-4">وصف الواجب</h3>
-            <p className="text-slate-600 leading-relaxed whitespace-pre-wrap text-lg">{assignment.description || 'لا يوجد وصف إضافي.'}</p>
+            {assignment.description ? (
+               <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed text-lg" dangerouslySetInnerHTML={{ __html: assignment.description }} />
+            ) : (
+               <p className="text-slate-500 font-medium">لا يوجد وصف إضافي.</p>
+            )}
           </div>
 
           {assignment.file_url && (
@@ -607,7 +604,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                              {q.media_url && <img src={q.media_url} className="mt-4 max-h-48 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 bg-white px-5 py-2.5 rounded-xl font-bold text-base border border-slate-200 shrink-0 shadow-sm">
+                        <div className="flex items-center gap-1.5 bg-white px-5 py-2.5 rounded-xl font-bold text-base border border-slate-200 shrink-0 self-start sm:self-auto">
                           <Award className="w-5 h-5 text-slate-400" />
                           <span className={isCorrect ? 'text-emerald-600' : 'text-slate-900'}>{answerDetails?.points_earned || 0}</span>
                           <span className="text-slate-300">/</span>
@@ -692,7 +689,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <AssignmentForm 
                 questions={questions} 
                 onSubmit={handleSubmitAnswers} 
-                onChange={(newAnswers) => setMyAnswers(newAnswers)} // 👈 أضف هذا السطر فقط
+                onChange={(newAnswers) => setMyAnswers(newAnswers)} 
                 isSubmitting={isSubmitting}
                 initialAnswers={myAnswers}
                 readOnly={!!mySubmission}
@@ -933,17 +930,27 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-4xl bg-white p-8 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300" dir="rtl">
             <div className="h-16 w-16 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
               <Trash2 className="h-8 w-8 text-red-500" />
             </div>
-            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2">تأكيد الحذف</Dialog.Title>
+            <Dialog.Title className="text-2xl font-black text-slate-900 mb-2 tracking-tight">
+              تأكيد الحذف
+            </Dialog.Title>
             <p className="text-slate-500 font-medium mb-8 leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا الواجب نهائياً؟ سيتم مسح إجابات الطلاب.</p>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col sm:flex-row justify-end gap-3">
               <Dialog.Close asChild>
-                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100">إلغاء</button>
+                <button className="flex-1 rounded-2xl bg-slate-50 px-6 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95">
+                  إلغاء
+                </button>
               </Dialog.Close>
-              <button onClick={handleDeleteAssignmentAction} className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl hover:bg-red-700">تأكيد الحذف</button>
+              <button
+                onClick={handleDeleteAssignmentAction}
+                disabled={loading}
+                className="flex-1 rounded-2xl bg-red-600 px-6 py-4 text-sm font-black text-white shadow-xl shadow-red-100 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {loading ? 'جاري الحذف...' : 'تأكيد الحذف'}
+              </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
