@@ -2,11 +2,59 @@
 
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck } from 'lucide-react';
+
+/* ========================================================================
+  🚀 ملاحظة هامة عند النقل لمشروعك الحقيقي:
+  لكي يعمل هذا الملف في بيئة العرض (Preview) هنا بدون أخطاء، قمت بوضع "محاكيات مؤقتة" للاستيرادات.
+  عندما تقوم بنسخ هذا الكود إلى مشروعك (Next.js)، قم بحذف هذه المحاكيات (Mocks) 
+  وألغِ التعليق عن الاستيرادات الحقيقية أسفلها.
+  ========================================================================
+*/
+
+// --- محاكيات بيئة العرض (احذفها في مشروعك) ---
+const useRouter = () => ({ push: (path: string) => alert(`تم التوجيه بنجاح إلى: ${path}`) });
+const useAuth = () => ({ user: { id: 'admin-123' } });
+const useExamsSystem = () => ({ saveExam: async () => { console.log('تم الحفظ في قاعدة البيانات'); } });
+const useSchoolFormData = () => ({
+  data: {
+    subjects: [
+      { id: 'sub1', name: 'الفيزياء' },
+      { id: 'sub2', name: 'الرياضيات' },
+      { id: 'sub3', name: 'الكيمياء' }
+    ],
+    sections: [
+      { id: 'sec1', name: 'الصف العاشر - أ' },
+      { id: 'sec2', name: 'الصف العاشر - ب' },
+      { id: 'sec3', name: 'الصف الحادي عشر - علمي' }
+    ]
+  },
+  loading: false
+});
+const supabase = {
+  from: () => ({
+    select: () => ({
+      in: () => ({
+        order: async () => ({
+          data: [
+            { id: 't1', full_name: 'أ. إيهاب (المدير/المعلم)' },
+            { id: 't2', full_name: 'أ. أحمد (فيزياء)' },
+            { id: 't3', full_name: 'أ. محمود (رياضيات)' }
+          ],
+          error: null
+        })
+      })
+    })
+  })
+};
+
+/*
+// --- الاستيرادات الحقيقية لمشروعك (قم بإلغاء التعليق عنها) ---
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase'; // 🚀 استيراد Supabase لجلب المعلمين الحقيقيين
+import { supabase } from '@/lib/supabase';
+*/
 
 interface ExtractedQuestion {
   content: string;
@@ -30,12 +78,10 @@ export default function AITestSandbox() {
   const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
-  // 🚀 جلب المواد والفصول الحقيقية من المنصة
   const { data: formData, loading: formLoading } = useSchoolFormData();
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
 
-  // 🚀 حالة لجلب المعلمين الحقيقيين
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [teachersLoading, setTeachersLoading] = useState(true);
 
@@ -48,20 +94,18 @@ export default function AITestSandbox() {
   
   const [customApiKey, setCustomApiKey] = useState('');
   
-  // 🚀 حالات الحفظ بنظام الإدارة الجديد (البيانات الحقيقية)
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 🚀 جلب المعلمين من قاعدة البيانات عند تحميل الصفحة
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
         const { data, error } = await supabase
           .from('users')
           .select('id, full_name')
-          .in('role', ['teacher', 'admin', 'management']) // جلب أي شخص يمكنه إدارة اختبار
+          .in('role', ['teacher', 'admin', 'management']) 
           .order('full_name');
 
         if (error) throw error;
@@ -245,7 +289,6 @@ export default function AITestSandbox() {
     }
   };
 
-  // 🚀 الحفظ الفعلي في قاعدة البيانات بالاعتماد على البيانات الحقيقية
   const saveToRealDatabase = async () => {
     if (!result) return;
     if (!selectedTeacher) { alert('يرجى تحديد المعلم صاحب الاختبار.'); return; }
@@ -268,7 +311,7 @@ export default function AITestSandbox() {
         exam_date: new Date().toISOString().split('T')[0],
         start_time: '08:00',
         end_time: '23:59',
-        status: 'draft', // 🚀 يبقى مسودة ليقوم المعلم بمراجعته قبل نشره
+        status: 'draft', 
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
@@ -292,7 +335,6 @@ export default function AITestSandbox() {
         })) || []
       }));
 
-      // إرسال الطلب الفعلي
       await saveExam(examPayload as any, formattedQuestions as any, true); 
       
       alert('تم إرسال الاختبار بنجاح إلى حساب المعلم كمسودة!');
@@ -355,7 +397,6 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* قسم الرفع */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
@@ -399,7 +440,6 @@ export default function AITestSandbox() {
             </div>
           </div>
 
-          {/* قسم النتائج والتوجيه */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px] flex flex-col">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
@@ -432,7 +472,6 @@ export default function AITestSandbox() {
               {result && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1">
                   
-                  {/* استعراض سريع للأسئلة */}
                   <div className="bg-slate-50 p-4 rounded-3xl border border-slate-200 max-h-[300px] overflow-y-auto">
                      <p className="text-xs font-black text-slate-500 mb-2">تم اكتشاف {result.questions.length} أسئلة:</p>
                      <ul className="list-disc list-inside space-y-1 text-sm font-bold text-slate-700 pr-2">
@@ -442,7 +481,6 @@ export default function AITestSandbox() {
                      </ul>
                   </div>
 
-                  {/* 🚀 قسم الإدارة: تعيين الاختبار للمعلم والفصول (بيانات حقيقية) */}
                   <div className="pt-4 border-t-2 border-indigo-100 mt-4">
                     <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-3xl border border-indigo-100">
                       <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
@@ -455,7 +493,6 @@ export default function AITestSandbox() {
                         </div>
                       ) : (
                         <div className="space-y-5 mb-6 animate-in fade-in">
-                          {/* اختيار المعلم (بيانات حقيقية) */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">تعيين لمعلم: <span className="text-red-500">*</span></label>
                             <select 
@@ -468,7 +505,6 @@ export default function AITestSandbox() {
                             </select>
                           </div>
 
-                          {/* اختيار المادة (بيانات حقيقية) */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">المادة الدراسية: <span className="text-red-500">*</span></label>
                             <select 
@@ -481,7 +517,6 @@ export default function AITestSandbox() {
                             </select>
                           </div>
 
-                          {/* اختيار فصول متعددة (بيانات حقيقية) */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-3">إرسال إلى الفصول: <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[250px] overflow-y-auto">
@@ -512,7 +547,6 @@ export default function AITestSandbox() {
                     </div>
                   </div>
 
-                  {/* JSON كود للتقنيين فقط */}
                   <div className="pt-4 border-t border-slate-100">
                     <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all text-sm">
                       <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> عرض البيانات الخام (JSON)</span>
