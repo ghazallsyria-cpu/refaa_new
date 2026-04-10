@@ -1,3 +1,21 @@
+يا لك من صبور ومحترف يا أبو جمال! 😂 المشكلة هذه المرة ليست من الذكاء الاصطناعي، بل **مني أنا!** 🙋‍♂️
+
+دعني أشرح لك ما حدث لكي تضحك معي:
+الذكاء الاصطناعي هذه المرة **التزم بتعليماتنا الصارمة بالحرف الواحد**، وقام بإنتاج كود JSON مثالي يحتوي على شرطتين مائلتين `\\circ` و `\\text` كما طلبنا منه تماماً. (كما هو واضح في الكود الذي أرسلته لي).
+
+ولكن، "الفلتر السحري" الذي كتبته لك في التحديث السابق كان **هجومياً جداً**، فرأى الشرطتين المائلتين فقام بمضاعفتهما لتصبح ثلاثة `\\\circ`، مما أدى إلى تدمير الـ JSON وظهور خطأ `Invalid escape character c` عند محاولة المتصفح قراءته! 🤦‍♂️
+
+إضافة إلى ذلك، الذكاء الاصطناعي الخارجي تفلسف قليلاً وابتكر نوع سؤال أسماه `short_answer`، ووضع `section_header` كخاصية داخل السؤال بدلاً من سؤال مستقل.
+
+### 🛠️ الحل الجذري (غسالة الأكواد الذكية v3.0)
+لقد قمت بإزالة الفلتر الهجومي تماماً لأن البرومبت الجديد أثبت كفاءته ويُخرج JSON سليماً. وقمت بكتابة خوارزمية ذكية جداً **تستوعب فلسفة الذكاء الاصطناعي**:
+1. إذا دمج الذكاء الاصطناعي الـ `section_header` داخل السؤال، ستقوم المنصة بفصلهما تلقائياً وصنع عنوان رئيسي يتبعه السؤال.
+2. إذا اخترع نوعاً اسمه `short_answer`، ستفهمه المنصة وتحوله إلى `essay` لكي يتوافق مع نظامك.
+3. إذا أرسل الخيارات على شكل كائنات (Objects) بدلاً من نصوص، ستستخرج المنصة النص منها بسلاسة.
+
+إليك الملف النهائي والأكثر استقراراً (`app/ai-assignments/page.tsx`). انسخه واستبدله، والصق كود الـ JSON الذي أرسلته لي، وسيعمل فوراً وبشكل مبهر!
+
+```tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -12,8 +30,9 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ExtractedQuestion {
+  id?: string;
   content: string;
-  type: 'multiple_choice' | 'true_false' | 'essay' | 'section_header';
+  type: string;
   points: number;
   options?: string[];
 }
@@ -218,17 +237,64 @@ export default function AIAssignmentsSandbox() {
     throw new Error('سيرفرات جوجل تشهد ضغطاً شديداً حالياً. استخدم الإدخال اليدوي للطوارئ بالأسفل.');
   };
 
-  // 🚀 دالة تنظيف الكود المشتركة (غسالة الأكواد v2.0)
-  const sanitizeJsonString = (rawStr: string) => {
-    let cleaned = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
-    // 1. إزالة الأسطر الفعلية التي تدمر JSON وتحويلها لمسافات
-    cleaned = cleaned.replace(/\r?\n|\r/g, ' ');
-    
-    // 2. الفلتر السحري: مضاعفة الشرطة المائلة للرموز (يتجاهل رموز JSON الصحيحة مثل \n و \")
-    cleaned = cleaned.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
-    
-    return cleaned;
+  // إزالة الكود البرمجي العالق وتنظيف الـ Markdown
+  const cleanRawJson = (raw: string) => {
+    let cleaned = raw.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```json/i, '');
+      cleaned = cleaned.replace(/^```/, '');
+      cleaned = cleaned.replace(/```$/, '');
+    }
+    return cleaned.trim();
+  };
+
+  // 🚀 خوارزمية المعالجة الذكية لفهم فلسفة الذكاء الاصطناعي
+  const parseAndNormalizeQuestions = (parsedData: any): ExtractedQuestion[] => {
+    const normalizedQuestions: ExtractedQuestion[] = [];
+    let lastHeader = '';
+
+    if (!parsedData.questions || !Array.isArray(parsedData.questions)) {
+      throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
+    }
+
+    parsedData.questions.forEach((q: any) => {
+      // 1. إذا دمج الذكاء الاصطناعي الـ section_header داخل السؤال نفسه
+      if (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader) {
+        normalizedQuestions.push({
+          content: q.section_header,
+          type: 'section_header',
+          points: 0,
+          options: []
+        });
+        lastHeader = q.section_header;
+      }
+
+      // 2. تصحيح الأنواع (Types) التي يخترعها الذكاء الاصطناعي
+      let qType = q.type || 'essay';
+      if (qType === 'short_answer') qType = 'essay'; // تحويل الإجابة القصيرة لمقالي
+      
+      // 3. معالجة خيارات أسئلة الصح والخطأ إذا نسي الذكاء إرسالها
+      let parsedOptions: string[] = [];
+      if (qType === 'true_false' && (!q.options || q.options.length === 0)) {
+         parsedOptions = ['✓', '✗'];
+      } else if (Array.isArray(q.options)) {
+        // 4. استخراج النص إذا أرسل الذكاء الخيارات على شكل Objects
+        parsedOptions = q.options.map((opt: any) => {
+          if (typeof opt === 'string') return opt;
+          if (opt && typeof opt === 'object') return String(opt.content || opt.text || opt.value || '');
+          return String(opt);
+        }).filter(Boolean);
+      }
+
+      normalizedQuestions.push({
+        content: q.content || q.question_text || q.text || q.question || 'سؤال بدون نص',
+        type: qType,
+        points: Number(q.points) || 1,
+        options: parsedOptions
+      });
+    });
+
+    return normalizedQuestions;
   };
 
   const analyzeContent = async () => {
@@ -267,8 +333,12 @@ export default function AIAssignmentsSandbox() {
 
       const aiResponse = await callGeminiWithSmartRetry(payload);
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const safeJsonStr = sanitizeJsonString(aiResponse.candidates[0].content.parts[0].text);
-        setResult(JSON.parse(safeJsonStr)); 
+        const safeJsonStr = cleanRawJson(aiResponse.candidates[0].content.parts[0].text);
+        const parsedData = JSON.parse(safeJsonStr);
+        setResult({ 
+          title: parsedData.title || 'واجب تفاعلي ذكي', 
+          questions: parseAndNormalizeQuestions(parsedData) 
+        });
       } else throw new Error('لم يتم استرجاع بيانات صحيحة من النموذج');
     } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   };
@@ -277,21 +347,17 @@ export default function AIAssignmentsSandbox() {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     setManualJsonError(null);
     try {
-      const safeJsonStr = sanitizeJsonString(manualJson);
+      const safeJsonStr = cleanRawJson(manualJson);
       const parsedData = JSON.parse(safeJsonStr);
       
-      if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
-      
-      const normalizedQuestions: ExtractedQuestion[] = parsedData.questions.map((q: any) => ({
-        content: q.content || q.question_text || q.text || q.question || 'سؤال بدون نص',
-        type: q.type || 'essay', 
-        points: Number(q.points) || 1,
-        options: Array.isArray(q.options) ? q.options.map((opt: any) => typeof opt === 'string' ? opt : String(opt.content || opt.text || opt)) : []
-      }));
+      const normalizedQuestions = parseAndNormalizeQuestions(parsedData);
 
       setResult({ title: parsedData.title || 'واجب بدون عنوان', questions: normalizedQuestions });
-      setManualJson(''); alert('تم تنظيف الكود وتصحيح الأخطاء بنجاح! 🚀');
-    } catch (err: any) { setManualJsonError('خطأ في معالجة الكود: ' + err.message); }
+      setManualJson(''); 
+      alert('تمت معالجة الكود بذكاء وتصحيح الهيكلية بنجاح! 🚀');
+    } catch (err: any) { 
+      setManualJsonError('خطأ في قراءة الكود: تأكد من أن الـ JSON منسوخ بالكامل وأنه سليم. (' + err.message + ')'); 
+    }
   };
 
   const saveToRealDatabase = async () => {
@@ -448,16 +514,13 @@ export default function AIAssignmentsSandbox() {
                   <p className="text-sm font-black text-slate-600 mb-3 flex items-center gap-2"><CheckCircle2 className="text-emerald-500" /> تم استخراج {result.questions.length} أسئلة:</p>
                   <ul className="list-disc list-inside space-y-4 font-bold text-slate-700 text-sm">
                     {result.questions.map((q, i) => {
-                      // إخفاء الإجابة النموذجية من العرض الأولي فقط
                       let displayContent = q.content;
                       const answerIndex = displayContent.indexOf('[الإجابة النموذجية');
-                      if (answerIndex !== -1) {
-                         displayContent = displayContent.substring(0, answerIndex).trim();
-                      }
+                      if (answerIndex !== -1) displayContent = displayContent.substring(0, answerIndex).trim();
                       
                       return (
                         <li key={i} className="border-b border-slate-200 pb-4 last:border-0 leading-loose">
-                          <span className="block">{displayContent}</span>
+                          <span className={q.type === 'section_header' ? "block text-indigo-700 font-black text-base" : "block"}>{displayContent}</span>
                           {q.options && q.options.length > 0 && <div className="mt-2 ml-4">{q.options.map((opt, oIdx) => <span key={oIdx} className="inline-block ml-2 mb-1 px-3 py-1.5 rounded-lg bg-slate-200 text-xs text-slate-700">{opt}</span>)}</div>}
                         </li>
                       );
@@ -509,3 +572,4 @@ export default function AIAssignmentsSandbox() {
     </div>
   );
 }
+```
