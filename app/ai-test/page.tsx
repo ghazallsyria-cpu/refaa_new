@@ -1,15 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck } from 'lucide-react';
-
-
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
-import { supabase } from '@/lib/supabase';
-
 
 interface ExtractedQuestion {
   content: string;
@@ -23,22 +19,18 @@ interface ExtractedExam {
   questions: ExtractedQuestion[];
 }
 
-interface Teacher {
-  id: string;
-  full_name: string;
-}
-
 export default function AITestSandbox() {
   const router = useRouter();
   const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
-  const { data: formData, loading: formLoading } = useSchoolFormData();
+  // 🚀 جلب المواد، الفصول، والمعلمين الحقيقيين من دوال منصتك الأصلية
+  // تم تصحيح الخطأ: استخدام isLoading بدلاً من loading حسب رسالة الخطأ
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
+  
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
-
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [teachersLoading, setTeachersLoading] = useState(true);
+  const teachers = formData?.teachers || [];
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -53,27 +45,6 @@ export default function AITestSandbox() {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
-
-  useEffect(() => {
-    const fetchTeachers = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, full_name')
-          .in('role', ['teacher', 'admin', 'management']) 
-          .order('full_name');
-
-        if (error) throw error;
-        setTeachers(data || []);
-      } catch (err) {
-        console.error("Error fetching teachers:", err);
-      } finally {
-        setTeachersLoading(false);
-      }
-    };
-
-    fetchTeachers();
-  }, []);
 
   const toggleSection = (sectionId: string) => {
     setSelectedSections(prev => 
@@ -266,7 +237,7 @@ export default function AITestSandbox() {
         exam_date: new Date().toISOString().split('T')[0],
         start_time: '08:00',
         end_time: '23:59',
-        status: 'draft', 
+        status: 'draft', // يبقى مسودة ليقوم المعلم بمراجعته قبل نشره
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
@@ -290,6 +261,7 @@ export default function AITestSandbox() {
         })) || []
       }));
 
+      // إرسال الطلب الفعلي
       await saveExam(examPayload as any, formattedQuestions as any, true); 
       
       alert('تم إرسال الاختبار بنجاح إلى حساب المعلم كمسودة!');
@@ -442,7 +414,7 @@ export default function AITestSandbox() {
                         <UserCheck className="w-6 h-6 text-indigo-600" /> تعيين الاختبار للمعلم والفصول
                       </h3>
                       
-                      {formLoading || teachersLoading ? (
+                      {formLoading ? (
                         <div className="flex justify-center py-8">
                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                         </div>
@@ -456,7 +428,11 @@ export default function AITestSandbox() {
                               className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
                             >
                               <option value="">-- اختر المعلم --</option>
-                              {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                              {teachers.map((t: any) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.user?.full_name || t.user?.name || 'معلم غير معروف'}
+                                </option>
+                              ))}
                             </select>
                           </div>
 
@@ -493,7 +469,7 @@ export default function AITestSandbox() {
                       
                       <button 
                         onClick={saveToRealDatabase} 
-                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0 || formLoading || teachersLoading}
+                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0 || formLoading}
                         className="w-full bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                       >
                         {isSavingDB ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
