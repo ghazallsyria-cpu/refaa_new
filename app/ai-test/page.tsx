@@ -1,11 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
+
+/* ============================================================================
+   🔴 تنبيه هام للمهندس إيهاب: للعمل على بيئة Netlify الخاصة بك 🔴
+   يرجى إزالة علامات التعليق (//) عن الاستيرادات الحقيقية التالية في مشروعك،
+   ثم قم بحذف دوال المحاكاة المؤقتة الموجودة أسفلها لكي يرتبط النظام فعلياً بقواعد بياناتك.
+============================================================================ */
+
+// --- الاستيرادات الحقيقية (قم بتفعيلها في 
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
+
 
 interface ExtractedQuestion {
   content: string;
@@ -24,7 +33,6 @@ export default function AITestSandbox() {
   const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
-  // 🚀 جلب البيانات الحقيقية من مشروعك (بناءً على تحديثك الأخير)
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
@@ -41,10 +49,21 @@ export default function AITestSandbox() {
   
   const [customApiKey, setCustomApiKey] = useState('');
   
+  // 🚀 حالات الإدخال اليدوي للطوارئ
+  const [manualJson, setManualJson] = useState('');
+  const [manualJsonError, setManualJsonError] = useState<string | null>(null);
+
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
+
+  const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة شديدة. استخرج عنوان الاختبار إن وجد، واستخرج جميع الأسئلة. لكل سؤال حدد نوعه (multiple_choice أو true_false أو essay)، واستخرج الدرجة (points) المخصصة له إن وجدت (ضع 1 كافتراضي إن لم تجد). واستخرج خيارات الإجابة إن كان السؤال اختيارياً أو صح وخطأ. أرجع النتيجة بتنسيق JSON حصرياً يحتوي على object به title ومصفوفة questions، ولا تكتب أي نص إضافي خارج الكود.`;
+
+  const copyPrompt = () => {
+    navigator.clipboard.writeText(promptText);
+    alert('تم نسخ البرومبت بنجاح! يمكنك الآن لصقه في ChatGPT أو أي ذكاء اصطناعي آخر مع صورة الاختبار.');
+  };
 
   const toggleSection = (sectionId: string) => {
     setSelectedSections(prev => 
@@ -77,7 +96,6 @@ export default function AITestSandbox() {
     });
   };
 
-  // 🚀 خوارزمية ذكية متقدمة ومعدلة
   const callGeminiWithSmartRetry = async (payload: any) => {
     let finalApiKey = customApiKey.trim();
     if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
@@ -85,17 +103,11 @@ export default function AITestSandbox() {
     }
     
     if (!finalApiKey) {
-      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
+      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل في الحقل المخصص بالأعلى، أو استخدم خيار الإدخال اليدوي بالأسفل.');
     }
 
-    // تمت إزالة نماذج الـ Pro لتجنب أخطاء "Not Found" في الحسابات المجانية
-    const modelsToTry = [
-      'gemini-1.5-flash', 
-      'gemini-2.0-flash',
-      'gemini-1.5-flash-8b'
-    ];
-    
-    const delays = [2000, 4000, 8000]; // الانتظار المضاعف بين كل محاولة
+    const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+    const delays = [2000, 4000, 8000]; 
     let lastErrorMsg = '';
 
     for (const model of modelsToTry) {
@@ -116,22 +128,18 @@ export default function AITestSandbox() {
             const errMsg = data.error?.message || 'خطأ غير معروف';
             const lowerErr = errMsg.toLowerCase();
 
-            // أخطاء الحصة (Quota) المباشرة
             if (lowerErr.includes('quota') || lowerErr.includes('limit') || response.status === 429) {
                throw new Error('QUOTA_EXCEEDED');
             }
 
-            // أخطاء النماذج غير المدعومة
             if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('api key')) {
               lastErrorMsg = errMsg;
               break; 
             }
 
-            // أخطاء الضغط العالي
             if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503) {
               lastErrorMsg = errMsg;
               if (attempt < delays.length - 1) {
-                console.warn(`[محاولة ${attempt + 1}] ضغط على ${model}. الانتظار ${delays[attempt]}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
                 continue; 
               } else {
@@ -148,8 +156,7 @@ export default function AITestSandbox() {
         } catch (err: any) {
           const errMsg = err.message;
           if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) {
-             // إيقاف المحاولات فوراً وإبلاغ المستخدم بالانتظار
-             throw new Error('لقد استنفدت الحد المجاني المسموح به للطلبات (15 طلب في الدقيقة). يرجى الانتظار لمدة دقيقة واحدة ثم إعادة المحاولة.');
+             throw new Error('لقد استنفدت الحد المجاني. يرجى الانتظار دقيقة أو استخدام خيار (الإدخال اليدوي للطوارئ) بالأسفل.');
           }
           if (errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('fetch error')) {
              if (attempt < delays.length - 1) {
@@ -165,7 +172,7 @@ export default function AITestSandbox() {
       if (success) return data; 
     }
 
-    throw new Error(`تعذر الاتصال بالذكاء الاصطناعي. (تفاصيل: ${lastErrorMsg})`);
+    throw new Error(`ضغط شديد على السيرفرات. استخدم خيار (الإدخال اليدوي للطوارئ) بالأسفل لعدم تعطل عملك. (تفاصيل: ${lastErrorMsg})`);
   };
 
   const analyzeImage = async () => {
@@ -181,7 +188,7 @@ export default function AITestSandbox() {
         contents: [{
           role: "user",
           parts: [
-            { text: "أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة شديدة. استخرج عنوان الاختبار إن وجد، واستخرج جميع الأسئلة. لكل سؤال حدد نوعه (multiple_choice, true_false, essay)، واستخرج الدرجة (points) المخصصة له إن وجدت (ضع 1 كافتراضي إن لم تجد). واستخرج خيارات الإجابة إن كان السؤال اختيارياً أو صح وخطأ. أرجع النتيجة بتنسيق JSON حصرياً ومطابقاً للـ schema المطلوبة." },
+            { text: promptText },
             { inlineData: { mimeType: imageFile.type, data: base64Data } }
           ]
         }],
@@ -197,7 +204,7 @@ export default function AITestSandbox() {
                   type: "OBJECT",
                   properties: {
                     content: { type: "STRING" },
-                    type: { type: "STRING", description: "يجب أن يكون حصراً: multiple_choice أو true_false أو essay" },
+                    type: { type: "STRING" },
                     points: { type: "NUMBER" },
                     options: {
                       type: "ARRAY",
@@ -232,6 +239,42 @@ export default function AITestSandbox() {
       setError(err.message || 'حدث خطأ غير متوقع أثناء الاتصال بالذكاء الاصطناعي.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🚀 معالجة الكود اليدوي
+  const processManualJson = () => {
+    if (!manualJson.trim()) {
+      setManualJsonError('يرجى لصق الكود أولاً.');
+      return;
+    }
+    
+    setManualJsonError(null);
+    try {
+      // تنظيف الكود في حال قام الذكاء الاصطناعي الخارجي بإرجاعه بداخل علامات markdown ```json
+      let cleanedJson = manualJson.trim();
+      if (cleanedJson.startsWith('```json')) {
+        cleanedJson = cleanedJson.replace('```json', '');
+      }
+      if (cleanedJson.startsWith('```')) {
+        cleanedJson = cleanedJson.replace('```', '');
+      }
+      if (cleanedJson.endsWith('```')) {
+        cleanedJson = cleanedJson.slice(0, -3);
+      }
+
+      const parsedData = JSON.parse(cleanedJson.trim());
+      
+      if (!parsedData.questions || !Array.isArray(parsedData.questions)) {
+        throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة (questions) صالحة.');
+      }
+      
+      setResult(parsedData);
+      setManualJson(''); // تفريغ الحقل بعد النجاح
+      alert('تمت معالجة الكود بنجاح! يمكنك الآن متابعة التعيين.');
+      
+    } catch (err: any) {
+      setManualJsonError('يوجد خطأ في كود الـ JSON المدخل: ' + err.message);
     }
   };
 
@@ -325,7 +368,7 @@ export default function AITestSandbox() {
           </p>
         </div>
 
-        {/* حقل المفتاح */}
+        {/* حقل المفتاح الأساسي */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
             <Key className="w-6 h-6 text-amber-500" />
@@ -333,7 +376,7 @@ export default function AITestSandbox() {
           <div className="flex-1 w-full">
             <input 
               type="password" 
-              placeholder="الصق مفتاح Google Gemini API هنا..." 
+              placeholder="مفتاح التوليد التلقائي (Google Gemini API)..." 
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-left"
               dir="ltr"
               value={customApiKey}
@@ -344,12 +387,14 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* قسم الرفع والتوليد */}
+          {/* العمود الأيمن: الرفع أو الإدخال اليدوي */}
           <div className="space-y-6">
+            
+            {/* القسم التلقائي */}
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
                 <ImageIcon className="w-6 h-6 text-indigo-500" />
-                الخطوة 1: رفع صورة الاختبار
+                الخيار الأول: التوليد التلقائي
               </h2>
 
               <label className="block w-full cursor-pointer relative">
@@ -375,7 +420,7 @@ export default function AITestSandbox() {
                   disabled={loading}
                   className="w-full mt-6 bg-indigo-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                 >
-                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري المعالجة المركزية...</> : <><Sparkles className="w-6 h-6" /> توليد أسئلة الاختبار آلياً</>}
+                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري المعالجة...</> : <><Sparkles className="w-6 h-6" /> توليد آلياً من الصورة</>}
                 </button>
               )}
 
@@ -386,15 +431,56 @@ export default function AITestSandbox() {
                 </div>
               )}
             </div>
+
+            {/* 🚀 القسم اليدوي (الطوارئ) */}
+            <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
+              <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400">
+                <FileJson className="w-6 h-6" />
+                الخيار الثاني: الإدخال اليدوي للطوارئ
+              </h2>
+              <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">
+                في حال تعطل التوليد التلقائي بسبب الضغط، يمكنك نسخ البرومبت أدناه ولصقه في ChatGPT مع صورة ورقة عملك، ثم لصق النتيجة (الكود) هنا.
+              </p>
+              
+              <button 
+                onClick={copyPrompt}
+                className="w-full mb-6 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl border border-slate-600 flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                <Copy className="w-5 h-5 text-slate-300" /> انسخ أمر التوليد (البرومبت) من هنا
+              </button>
+
+              <textarea 
+                value={manualJson}
+                onChange={(e) => setManualJson(e.target.value)}
+                placeholder="الصق كود الـ JSON الذي تم توليده من النظام الخارجي هنا..."
+                className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 font-mono text-sm text-emerald-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                dir="ltr"
+              ></textarea>
+
+              {manualJsonError && (
+                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p>{manualJsonError}</p>
+                </div>
+              )}
+
+              <button 
+                onClick={processManualJson}
+                className="w-full mt-4 bg-emerald-600 text-white font-black py-3.5 rounded-xl hover:bg-emerald-500 transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                <ClipboardPaste className="w-5 h-5" /> معالجة الكود المدخل وإكمال العملية
+              </button>
+            </div>
+
           </div>
 
-          {/* قسم النتائج والتوجيه للمعلم (يظهر فقط إذا نجح الاستخراج) */}
+          {/* العمود الأيسر: قسم النتائج والتوجيه للمعلم */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px] flex flex-col">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
                 <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-                  <FileText className="w-6 h-6 text-emerald-500" />
-                  الخطوة 2: النتيجة والتعيين
+                  <FileText className="w-6 h-6 text-indigo-500" />
+                  النتيجة والتعيين
                 </h2>
                 {result && (
                   <div className="px-4 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm border border-emerald-100">
@@ -406,7 +492,7 @@ export default function AITestSandbox() {
               {!result && !loading && (
                 <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50">
                   <FileText className="w-16 h-16 text-slate-300 mb-4" />
-                  <p className="text-xl font-bold text-slate-400">ستظهر الأسئلة وإعدادات الإرسال هنا بعد تحليل الورقة بنجاح.</p>
+                  <p className="text-xl font-bold text-slate-400">ستظهر الأسئلة وإعدادات الإرسال هنا بعد المعالجة.</p>
                 </div>
               )}
 
@@ -421,7 +507,6 @@ export default function AITestSandbox() {
               {result && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1">
                   
-                  {/* استعراض سريع للأسئلة لكي يتأكد المدير */}
                   <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 max-h-[250px] overflow-y-auto">
                      <p className="text-sm font-black text-slate-600 mb-3 flex items-center gap-2">
                        <CheckCircle2 className="w-5 h-5 text-emerald-500" /> تم اكتشاف واستخراج {result.questions.length} أسئلة بنجاح:
@@ -433,7 +518,6 @@ export default function AITestSandbox() {
                      </ul>
                   </div>
 
-                  {/* 🚀 قسم الإدارة: تعيين الاختبار للمعلم والفصول */}
                   <div className="pt-2">
                     <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-3xl border border-indigo-100 shadow-inner">
                       <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
@@ -456,7 +540,7 @@ export default function AITestSandbox() {
                               <option value="">-- اختر المعلم --</option>
                               {teachers.map((t: any) => (
                                 <option key={t.id} value={t.id}>
-                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم غير محدد'}
+                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم'}
                                 </option>
                               ))}
                             </select>
@@ -475,7 +559,7 @@ export default function AITestSandbox() {
                           </div>
 
                           <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (يمكنك اختيار أكثر من فصل): <span className="text-red-500">*</span></label>
+                            <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (متعدد): <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[200px] overflow-y-auto shadow-sm">
                               {sections.length > 0 ? sections.map((sec: any) => (
                                 <label key={sec.id} className="flex items-center gap-3 cursor-pointer group p-1 hover:bg-slate-50 rounded-lg transition-colors">
@@ -486,7 +570,7 @@ export default function AITestSandbox() {
                                   <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
                                 </label>
                               )) : (
-                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة في النظام.</p>
+                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة.</p>
                               )}
                             </div>
                           </div>
@@ -506,7 +590,7 @@ export default function AITestSandbox() {
 
                   <div className="pt-4 border-t border-slate-100">
                     <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-400 hover:bg-slate-100 transition-all text-xs">
-                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> (للمطورين) عرض الكود الخام JSON المستخرج</span>
+                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> عرض الكود الخام JSON</span>
                       {showJson ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                     {showJson && (
