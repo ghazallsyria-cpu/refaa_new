@@ -24,11 +24,13 @@ export default function AITestSandbox() {
   const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
-  // جلب البيانات الحقيقية من مشروعك
+  // 🚀 جلب البيانات الحقيقية من مشروعك (بناءً على تحديثك الأخير)
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
-  const teachers = formData?.teachers || [];
+  const teachers = formData?.teachers && formData.teachers.length > 0 
+    ? formData.teachers 
+    : [{ id: user?.id || 'admin', user: { full_name: 'أنا (حسابي الحالي)' } }];
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export default function AITestSandbox() {
     });
   };
 
-  // 🚀 خوارزمية ذكية متقدمة لتخطي أخطاء الضغط العالي (Exponential Backoff)
+  // 🚀 خوارزمية ذكية متقدمة ومعدلة
   const callGeminiWithSmartRetry = async (payload: any) => {
     let finalApiKey = customApiKey.trim();
     if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
@@ -86,15 +88,14 @@ export default function AITestSandbox() {
       throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
-    // إضافة نموذج 8b السريع جداً كخيار أول لتجنب الضغط العالي
+    // تمت إزالة نماذج الـ Pro لتجنب أخطاء "Not Found" في الحسابات المجانية
     const modelsToTry = [
-      'gemini-1.5-flash-8b', 
       'gemini-1.5-flash', 
-      'gemini-2.0-flash', 
-      'gemini-1.5-pro'
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-8b'
     ];
     
-    const delays = [2000, 4000, 8000, 15000]; // الانتظار المضاعف
+    const delays = [2000, 4000, 8000]; // الانتظار المضاعف بين كل محاولة
     let lastErrorMsg = '';
 
     for (const model of modelsToTry) {
@@ -115,21 +116,26 @@ export default function AITestSandbox() {
             const errMsg = data.error?.message || 'خطأ غير معروف';
             const lowerErr = errMsg.toLowerCase();
 
-            // أخطاء قاتلة: الحصة انتهت أو المفتاح خاطئ
-            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('quota') || lowerErr.includes('limit') || lowerErr.includes('api key')) {
-              lastErrorMsg = errMsg;
-              break; // نكسر حلقة المحاولات لهذا النموذج وننتقل للذي يليه
+            // أخطاء الحصة (Quota) المباشرة
+            if (lowerErr.includes('quota') || lowerErr.includes('limit') || response.status === 429) {
+               throw new Error('QUOTA_EXCEEDED');
             }
 
-            // أخطاء السيرفر (ضغط عالٍ 503 أو 429)
-            if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503 || response.status === 429) {
+            // أخطاء النماذج غير المدعومة
+            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('api key')) {
+              lastErrorMsg = errMsg;
+              break; 
+            }
+
+            // أخطاء الضغط العالي
+            if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503) {
               lastErrorMsg = errMsg;
               if (attempt < delays.length - 1) {
                 console.warn(`[محاولة ${attempt + 1}] ضغط على ${model}. الانتظار ${delays[attempt]}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
                 continue; 
               } else {
-                break; // استنفدنا المحاولات
+                break; 
               }
             }
 
@@ -137,11 +143,15 @@ export default function AITestSandbox() {
           }
           
           success = true;
-          break; // العملية نجحت!
+          break; 
 
         } catch (err: any) {
-          const lowerErr = err.message.toLowerCase();
-          if (lowerErr.includes('high demand') || lowerErr.includes('fetch error') || lowerErr.includes('network')) {
+          const errMsg = err.message;
+          if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) {
+             // إيقاف المحاولات فوراً وإبلاغ المستخدم بالانتظار
+             throw new Error('لقد استنفدت الحد المجاني المسموح به للطلبات (15 طلب في الدقيقة). يرجى الانتظار لمدة دقيقة واحدة ثم إعادة المحاولة.');
+          }
+          if (errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('fetch error')) {
              if (attempt < delays.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
                 continue;
@@ -155,14 +165,14 @@ export default function AITestSandbox() {
       if (success) return data; 
     }
 
-    throw new Error(`سيرفرات جوجل تشهد ضغطاً شديداً حالياً ولم تستجب للمحاولات المتكررة. يرجى الانتظار دقيقة والمحاولة مجدداً. (آخر خطأ: ${lastErrorMsg})`);
+    throw new Error(`تعذر الاتصال بالذكاء الاصطناعي. (تفاصيل: ${lastErrorMsg})`);
   };
 
   const analyzeImage = async () => {
     if (!imageFile) return;
     setLoading(true);
     setError(null);
-    setResult(null); // إعادة تعيين النتيجة لإخفاء قسم الإدارة في حال المحاولة مرة أخرى
+    setResult(null); 
 
     try {
       const base64Data = await fileToBase64(imageFile);
@@ -315,7 +325,7 @@ export default function AITestSandbox() {
           </p>
         </div>
 
-        {/* حقل المفتاح (يبقى كما هو) */}
+        {/* حقل المفتاح */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
             <Key className="w-6 h-6 text-amber-500" />
@@ -365,7 +375,7 @@ export default function AITestSandbox() {
                   disabled={loading}
                   className="w-full mt-6 bg-indigo-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                 >
-                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري المعالجة المركزية (قد يستغرق ثواني)....</> : <><Sparkles className="w-6 h-6" /> توليد أسئلة الاختبار آلياً</>}
+                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري المعالجة المركزية...</> : <><Sparkles className="w-6 h-6" /> توليد أسئلة الاختبار آلياً</>}
                 </button>
               )}
 
@@ -396,7 +406,7 @@ export default function AITestSandbox() {
               {!result && !loading && (
                 <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50">
                   <FileText className="w-16 h-16 text-slate-300 mb-4" />
-                  <p className="text-xl font-bold text-slate-400">ستظهر الأسئلة وإعدادات الإرسال هنا بعد تحليل الورقة.</p>
+                  <p className="text-xl font-bold text-slate-400">ستظهر الأسئلة وإعدادات الإرسال هنا بعد تحليل الورقة بنجاح.</p>
                 </div>
               )}
 
@@ -423,7 +433,7 @@ export default function AITestSandbox() {
                      </ul>
                   </div>
 
-                  {/* 🚀 قسم الإدارة: تعيين الاختبار للمعلم والفصول (يظهر بوضوح هنا!) */}
+                  {/* 🚀 قسم الإدارة: تعيين الاختبار للمعلم والفصول */}
                   <div className="pt-2">
                     <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-3xl border border-indigo-100 shadow-inner">
                       <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
@@ -446,7 +456,7 @@ export default function AITestSandbox() {
                               <option value="">-- اختر المعلم --</option>
                               {teachers.map((t: any) => (
                                 <option key={t.id} value={t.id}>
-                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم'}
+                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم غير محدد'}
                                 </option>
                               ))}
                             </select>
