@@ -1,11 +1,27 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { useSchoolFormData } from '@/hooks/useSchoolFormData';
-import { useAuth } from '@/context/auth-context';
+
+// --- بيانات وهمية للمختبر (في النظام الحقيقي سيتم جلبها من قاعدة البيانات) ---
+const mockTeachers = [
+  { id: 't1', name: 'أ. إيهاب (المدير/المعلم)' },
+  { id: 't2', name: 'أ. أحمد (فيزياء)' },
+  { id: 't3', name: 'أ. محمود (رياضيات)' },
+];
+const mockSubjects = [
+  { id: 'sub1', name: 'فيزياء' },
+  { id: 'sub2', name: 'رياضيات' },
+  { id: 'sub3', name: 'كيمياء' },
+];
+const mockSections = [
+  { id: 'sec1', name: 'الصف العاشر - أ' },
+  { id: 'sec2', name: 'الصف العاشر - ب' },
+  { id: 'sec3', name: 'الصف الحادي عشر - علمي' },
+];
+// --------------------------------------------------------------------------
 
 interface ExtractedQuestion {
   content: string;
@@ -21,13 +37,8 @@ interface ExtractedExam {
 
 export default function AITestSandbox() {
   const router = useRouter();
-  const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
-  const { data: formData } = useSchoolFormData();
   
-  const subjects = formData?.subjects || [];
-  const sections = formData?.sections || [];
-
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,9 +48,17 @@ export default function AITestSandbox() {
   
   const [customApiKey, setCustomApiKey] = useState('');
   
+  // 🚀 حالات الحفظ بنظام الإدارة الجديد
+  const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [selectedSection, setSelectedSection] = useState('');
+  const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
+
+  const toggleSection = (sectionId: string) => {
+    setSelectedSections(prev => 
+      prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
+    );
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,7 +85,6 @@ export default function AITestSandbox() {
     });
   };
 
-  // 🚀 خوارزمية ذكية مدمجة: (Fallback + Retry) للتعامل مع الضغط العالي والحصص
   const callGeminiWithSmartRetry = async (payload: any) => {
     let finalApiKey = customApiKey.trim();
     if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
@@ -77,21 +95,13 @@ export default function AITestSandbox() {
       throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
-    // ترتيب النماذج من الأسرع والأكثر استقراراً إلى الأحدث
-    const modelsToTry = [
-      'gemini-1.5-flash',
-      'gemini-1.5-pro',
-      'gemini-2.0-flash',
-      'gemini-2.5-flash'
-    ];
-
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.5-flash'];
     let lastErrorMsg = '';
 
     for (const model of modelsToTry) {
       let success = false;
       let data = null;
 
-      // 🚀 محاولة 3 مرات لكل نموذج في حال كان هناك (High Demand)
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${finalApiKey}`, {
@@ -106,13 +116,11 @@ export default function AITestSandbox() {
             const errMsg = data.error?.message || 'خطأ غير معروف';
             const lowerErr = errMsg.toLowerCase();
 
-            // 1. أخطاء قاتلة: لا داعي لإعادة المحاولة، ننتقل للنموذج التالي فوراً
             if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('quota') || lowerErr.includes('limit')) {
               lastErrorMsg = errMsg;
               break; 
             }
 
-            // 2. أخطاء مؤقتة: ضغط عالٍ أو السيرفر مشغول (نعيد المحاولة بعد 3 ثوانٍ)
             if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503 || response.status === 429) {
               lastErrorMsg = errMsg;
               if (attempt < 3) {
@@ -120,7 +128,7 @@ export default function AITestSandbox() {
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 continue; 
               } else {
-                break; // استنفدنا المحاولات لهذا النموذج، ننتقل للنموذج التالي
+                break; 
               }
             }
 
@@ -128,7 +136,7 @@ export default function AITestSandbox() {
           }
           
           success = true;
-          break; // نجحت العملية، نكسر حلقة المحاولات
+          break; 
 
         } catch (err: any) {
           const lowerErr = err.message.toLowerCase();
@@ -143,12 +151,10 @@ export default function AITestSandbox() {
         }
       }
 
-      if (success) {
-        return data; // نُرجع النتيجة النهائية
-      }
+      if (success) return data; 
     }
 
-    throw new Error(`عذراً، سيرفرات الذكاء الاصطناعي تشهد ضغطاً عالمياً عالياً في هذه اللحظة. يرجى المحاولة بعد دقيقة. (تفاصيل: ${lastErrorMsg})`);
+    throw new Error(`عذراً، سيرفرات الذكاء الاصطناعي تشهد ضغطاً عالياً. (تفاصيل: ${lastErrorMsg})`);
   };
 
   const analyzeImage = async () => {
@@ -219,10 +225,9 @@ export default function AITestSandbox() {
 
   const saveToRealDatabase = async () => {
     if (!result) return;
-    if (!selectedSubject) {
-      alert('يرجى اختيار المادة الدراسية أولاً.');
-      return;
-    }
+    if (!selectedTeacher) { alert('يرجى تحديد المعلم صاحب الاختبار.'); return; }
+    if (!selectedSubject) { alert('يرجى اختيار المادة الدراسية.'); return; }
+    if (selectedSections.length === 0) { alert('يرجى تحديد صف واحد على الأقل لإرسال الاختبار إليه.'); return; }
 
     setIsSavingDB(true);
     try {
@@ -230,17 +235,17 @@ export default function AITestSandbox() {
       
       const examPayload = {
         title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
-        description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي من صورة ورقة عمل.',
+        description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي بواسطة إدارة المنصة.',
         subject_id: selectedSubject,
-        section_ids: selectedSection ? [selectedSection] : [],
-        teacher_id: user?.id,
+        section_ids: selectedSections, // 🚀 إرسال قائمة الفصول المتعددة
+        teacher_id: selectedTeacher,   // 🚀 تعيين الاختبار لمعلم محدد
         duration: 45, 
         max_attempts: 1,
         max_score: totalScore,
         exam_date: new Date().toISOString().split('T')[0],
         start_time: '08:00',
         end_time: '23:59',
-        status: 'draft', 
+        status: 'draft', // يبقى مسودة حتى يراجعه المعلم
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
@@ -266,6 +271,7 @@ export default function AITestSandbox() {
 
       await saveExam(examPayload as any, formattedQuestions as any, true); 
       
+      alert('تم إرسال الاختبار بنجاح إلى حساب المعلم كمسودة!');
       router.push('/exams'); 
 
     } catch (error: any) {
@@ -301,9 +307,9 @@ export default function AITestSandbox() {
           <div className="inline-flex items-center justify-center p-4 bg-indigo-100 text-indigo-600 rounded-[2rem] shadow-sm mb-2">
             <Sparkles className="w-10 h-10" />
           </div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">مختبر الذكاء الاصطناعي</h1>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight">إدارة التوليد الآلي (للمدراء)</h1>
           <p className="text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">
-            بيئة ذكية لاستخراج الأسئلة من أوراق العمل والاختبارات المصورة وتحويلها إلى شكل تفاعلي آلياً.
+            بيئة إدارية خاصة تتيح للمدير تصوير أوراق العمل، توليدها كاختبار تفاعلي، وتعيينها لمعلم محدد وفصول متعددة.
           </p>
         </div>
 
@@ -325,6 +331,7 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
+          {/* قسم الرفع */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
@@ -341,8 +348,8 @@ export default function AITestSandbox() {
                     <>
                       <div className="p-4 bg-white rounded-full shadow-sm"><UploadCloud className="w-10 h-10 text-indigo-400" /></div>
                       <div className="text-center">
-                        <p className="text-lg font-bold text-slate-700">اضغط هنا لرفع صورة الاختبار</p>
-                        <p className="text-sm font-medium text-slate-500 mt-1">يدعم JPG, PNG, WEBP</p>
+                        <p className="text-lg font-bold text-slate-700">اضغط هنا لرفع ورقة الاختبار (من المدير)</p>
+                        <p className="text-sm font-medium text-slate-500 mt-1">يدعم أوراق الـ PDF كصور أو ملفات JPG</p>
                       </div>
                     </>
                   )}
@@ -355,7 +362,7 @@ export default function AITestSandbox() {
                   disabled={loading}
                   className="w-full mt-6 bg-indigo-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                 >
-                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري التحليل السحري...</> : <><Sparkles className="w-6 h-6" /> استخراج الأسئلة بالذكاء الاصطناعي</>}
+                  {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري المعالجة المركزية...</> : <><Sparkles className="w-6 h-6" /> توليد أسئلة الاختبار آلياً</>}
                 </button>
               )}
 
@@ -368,16 +375,17 @@ export default function AITestSandbox() {
             </div>
           </div>
 
+          {/* قسم النتائج والتوجيه */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px] flex flex-col">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
                 <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                   <FileText className="w-6 h-6 text-emerald-500" />
-                  النتيجة المستخرجة
+                  النتيجة والتوجيه
                 </h2>
                 {result && (
                   <div className="px-4 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm border border-emerald-100">
-                    تم بنجاح!
+                    تم الاستخراج!
                   </div>
                 )}
               </div>
@@ -385,7 +393,7 @@ export default function AITestSandbox() {
               {!result && !loading && (
                 <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50">
                   <Sparkles className="w-16 h-16 text-slate-300 mb-4" />
-                  <p className="text-xl font-bold text-slate-400">ستظهر الأسئلة هنا بعد التحليل</p>
+                  <p className="text-xl font-bold text-slate-400">بانتظار تحليل ورقة الاختبار...</p>
                 </div>
               )}
 
@@ -393,111 +401,94 @@ export default function AITestSandbox() {
                 <div className="flex-1 flex flex-col items-center justify-center py-20">
                   <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4" />
                   <p className="text-lg font-bold text-indigo-600 animate-pulse">يتم الآن قراءة الورقة وتحليلها...</p>
-                  <p className="text-sm font-medium text-slate-500 mt-2">قد يستغرق الأمر بضع ثوانٍ</p>
+                  <p className="text-sm font-medium text-slate-500 mt-2">يرجى الانتظار...</p>
                 </div>
               )}
 
               {result && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1">
                   
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">عنوان الاختبار المكتشف</p>
-                    <h3 className="text-2xl font-black text-indigo-900">{result.title || 'بدون عنوان'}</h3>
+                  {/* استعراض سريع للأسئلة */}
+                  <div className="bg-slate-50 p-4 rounded-3xl border border-slate-200 max-h-[300px] overflow-y-auto">
+                     <p className="text-xs font-black text-slate-500 mb-2">تم اكتشاف {result.questions.length} أسئلة:</p>
+                     <ul className="list-disc list-inside space-y-1 text-sm font-bold text-slate-700 pr-2">
+                        {result.questions.map((q, i) => (
+                           <li key={i} className="truncate">{q.content}</li>
+                        ))}
+                     </ul>
                   </div>
 
-                  <div className="space-y-4">
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">الأسئلة ({result.questions?.length || 0})</p>
-                    
-                    {result.questions?.map((q, idx) => (
-                      <div key={idx} className="p-6 rounded-3xl border border-slate-200 bg-white hover:shadow-md hover:border-indigo-200 transition-all">
-                        <div className="flex gap-4">
-                          <div className="shrink-0 w-10 h-10 rounded-xl bg-slate-100 text-slate-600 font-black flex items-center justify-center">{idx + 1}</div>
-                          <div className="flex-1 space-y-4">
-                            <h4 className="text-lg font-bold text-slate-800 leading-relaxed">{q.content}</h4>
-                            
-                            <div className="flex flex-wrap items-center gap-3">
-                              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-xs font-black border border-slate-200">
-                                {getQuestionIcon(q.type)} {getQuestionTypeLabel(q.type)}
-                              </span>
-                              <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-black border border-indigo-100">
-                                {q.points || 1} نقاط
-                              </span>
-                            </div>
-
-                            {q.options && q.options.length > 0 && (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-4 border-t border-slate-50">
-                                {q.options.map((opt, oIdx) => (
-                                  <div key={oIdx} className={`p-3 rounded-xl border text-sm font-bold flex items-center gap-3 ${opt.is_correct ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'}`}>
-                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${opt.is_correct ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300'}`}>
-                                      {opt.is_correct && <CheckCircle2 className="w-3 h-3 text-white" />}
-                                    </div>
-                                    {opt.content}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="pt-8 border-t-2 border-indigo-100 mt-8">
-                    <div className="bg-indigo-50/50 p-8 rounded-3xl border border-indigo-100">
+                  {/* 🚀 قسم الإدارة: تعيين الاختبار لمعلم وفصول */}
+                  <div className="pt-4 border-t-2 border-indigo-100 mt-4">
+                    <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-3xl border border-indigo-100">
                       <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
-                        <Database className="w-6 h-6 text-indigo-600" /> حفظ النتيجة كاختبار حقيقي!
+                        <UserCheck className="w-6 h-6 text-indigo-600" /> تعيين الاختبار للمعلم والفصول
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                      
+                      <div className="space-y-5 mb-6">
+                        {/* اختيار المعلم */}
                         <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-2">اختر المادة <span className="text-red-500">*</span></label>
+                          <label className="block text-sm font-bold text-slate-700 mb-2">تعيين لمعلم: <span className="text-red-500">*</span></label>
+                          <select 
+                            value={selectedTeacher} 
+                            onChange={(e) => setSelectedTeacher(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
+                          >
+                            <option value="">-- اختر المعلم --</option>
+                            {mockTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                          </select>
+                        </div>
+
+                        {/* اختيار المادة */}
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 mb-2">المادة الدراسية: <span className="text-red-500">*</span></label>
                           <select 
                             value={selectedSubject} 
                             onChange={(e) => setSelectedSubject(e.target.value)}
                             className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
                           >
                             <option value="">-- اختر مادة --</option>
-                            {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            {mockSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                           </select>
                         </div>
+
+                        {/* 🚀 اختيار فصول متعددة (Checkboxes) */}
                         <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-2">الفصل (اختياري)</label>
-                          <select 
-                            value={selectedSection} 
-                            onChange={(e) => setSelectedSection(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
-                          >
-                            <option value="">-- للجميع --</option>
-                            {sections.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                          </select>
+                          <label className="block text-sm font-bold text-slate-700 mb-3">إرسال إلى الفصول: <span className="text-red-500">*</span></label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200">
+                            {mockSections.map(sec => (
+                              <label key={sec.id} className="flex items-center gap-3 cursor-pointer group">
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedSections.includes(sec.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
+                                  {selectedSections.includes(sec.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                                </div>
+                                <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
+                                <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       </div>
                       
                       <button 
                         onClick={saveToRealDatabase} 
-                        disabled={isSavingDB || !selectedSubject}
+                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0}
                         className="w-full bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                       >
                         {isSavingDB ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
-                        {isSavingDB ? 'جاري إنشاء الاختبار...' : 'إنشاء الاختبار في المنصة (كمسودة)'}
+                        {isSavingDB ? 'جاري الإرسال...' : 'تأكيد الحفظ والإرسال للمعلم'}
                       </button>
                     </div>
                   </div>
 
-                  <div className="pt-8 border-t border-slate-100">
-                    <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-4 bg-slate-50 rounded-2xl font-bold text-slate-700 hover:bg-slate-100 transition-all">
-                      <span className="flex items-center gap-2"><TerminalSquare className="w-5 h-5" /> عرض كود الـ JSON الناتج</span>
-                      {showJson ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  {/* JSON كود للتقنيين فقط */}
+                  <div className="pt-4 border-t border-slate-100">
+                    <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all text-sm">
+                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> عرض البيانات الخام (JSON)</span>
+                      {showJson ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                     {showJson && (
-                      <div className="mt-4 relative group">
-                        <button 
-                          onClick={() => navigator.clipboard.writeText(JSON.stringify(result, null, 2))}
-                          className="absolute top-4 left-4 p-2 bg-slate-700 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="نسخ"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                        <pre className="bg-slate-800 text-emerald-400 p-6 rounded-2xl overflow-x-auto text-sm font-mono whitespace-pre-wrap text-left" dir="ltr">
+                      <div className="mt-2 relative group">
+                        <pre className="bg-slate-800 text-emerald-400 p-4 rounded-xl overflow-x-auto text-xs font-mono whitespace-pre-wrap text-left" dir="ltr">
                           {JSON.stringify(result, null, 2)}
                         </pre>
                       </div>
