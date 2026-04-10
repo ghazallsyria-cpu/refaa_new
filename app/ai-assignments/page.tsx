@@ -134,18 +134,22 @@ export default function AIAssignmentsSandbox() {
 
   const basePromptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة.
 
-🛑 تعليمات صارمة جداً (إجباري):
-1. الرموز والرياضيات: يُمنع منعاً باتاً كتابة أي رقم، درجة حرارة، رمز فيزيائي أو معادلة رياضية بدون وضعها بين علامتي دولار $ لتعمل مكتبة LaTeX. (مثال إجباري: اكتب $100^\\circ \\text{C}$ ولا تكتب أبداً 100^\\circ C).
-2. الهيكلية: إذا كان المحتوى يحتوي على مسألة رئيسية يتبعها طلبات، اجعل رأس المسألة في عنصر مستقل "section_header"، والطلبات كأسئلة فرعية.
-3. الإجابة النموذجية: يجب أن تضع الإجابة النموذجية في نهاية نص السؤال محاطة بأقواس مربعة بهذا النص الحرفي تماماً: [الإجابة النموذجية: الحل هو كذا].
-4. التنسيق الآمن للـ JSON: استخدم دائماً شرطتين مائلتين (\\\\) قبل الرموز لضمان سلامة الكود، مثل \\\\mu أو \\\\circ.
+🛑 تعليمات برمجية صارمة جداً (لضمان سلامة كود JSON):
+1. علامات التنصيص (حرج جداً): يُمنع منعاً باتاً كتابة أي معادلة رياضية أو رقم بدون وضعها داخل علامات تنصيص مزدوجة (" "). 
+   - مثال خاطئ: "options": [$1$]
+   - مثال صحيح: "options": ["$1$"]
+2. الرموز والرياضيات: ضع جميع الأرقام، الرموز، والدرجات المئوية بين علامتي دولار $ لتعمل مكتبة LaTeX. (مثال: "$100^\\circ \\text{C}$").
+3. التنسيق الآمن للـ JSON: استخدم دائماً شرطتين مائلتين (\\\\) قبل الرموز لضمان سلامة الكود، مثل \\\\mu أو \\\\circ أو \\\\text. لا تستخدم شرطة واحدة أبداً.
+4. الأسطر الجديدة: لا تضغط Enter داخل النصوص نهائياً، استخدام النزول العشوائي يدمر الكود.
+5. الهيكلية: إذا كان المحتوى يحتوي على مسألة رئيسية يتبعها طلبات، اجعل رأس المسألة في عنصر مستقل "section_header"، والطلبات كأسئلة فرعية.
+6. الإجابة النموذجية: يجب أن تضع الإجابة النموذجية في نهاية نص السؤال محاطة بأقواس مربعة بهذا النص الحرفي: [الإجابة النموذجية: الحل هو كذا].
 
 أخرج الناتج بصيغة JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
     {
-      "content": "نص السؤال هنا يتضمن $المعادلات$ [الإجابة النموذجية: الحل]",
+      "content": "نص السؤال هنا [الإجابة النموذجية: الحل]",
       "type": "multiple_choice",
       "points": 1,
       "options": ["$32^\\\\circ \\\\text{F}$", "$212^\\\\circ \\\\text{F}$"]
@@ -214,6 +218,19 @@ export default function AIAssignmentsSandbox() {
     throw new Error('سيرفرات جوجل تشهد ضغطاً شديداً حالياً. استخدم الإدخال اليدوي للطوارئ بالأسفل.');
   };
 
+  // 🚀 دالة تنظيف الكود المشتركة (غسالة الأكواد v2.0)
+  const sanitizeJsonString = (rawStr: string) => {
+    let cleaned = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
+    
+    // 1. إزالة الأسطر الفعلية التي تدمر JSON وتحويلها لمسافات
+    cleaned = cleaned.replace(/\r?\n|\r/g, ' ');
+    
+    // 2. الفلتر السحري: مضاعفة الشرطة المائلة للرموز (يتجاهل رموز JSON الصحيحة مثل \n و \")
+    cleaned = cleaned.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+    
+    return cleaned;
+  };
+
   const analyzeContent = async () => {
     if (inputType === 'image' && !imageFile) return;
     if (inputType === 'text' && !rawText.trim()) return;
@@ -250,13 +267,8 @@ export default function AIAssignmentsSandbox() {
 
       const aiResponse = await callGeminiWithSmartRetry(payload);
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        let rawJsonResponse = aiResponse.candidates[0].content.parts[0].text;
-        
-        rawJsonResponse = rawJsonResponse.replace(/```json/gi, '').replace(/```/g, '');
-        // 🚀 الفلتر السحري الآمن
-        rawJsonResponse = rawJsonResponse.replace(/(?<!\\)\\(?=[a-zA-Z])/g, '\\\\');
-
-        setResult(JSON.parse(rawJsonResponse)); 
+        const safeJsonStr = sanitizeJsonString(aiResponse.candidates[0].content.parts[0].text);
+        setResult(JSON.parse(safeJsonStr)); 
       } else throw new Error('لم يتم استرجاع بيانات صحيحة من النموذج');
     } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   };
@@ -265,13 +277,9 @@ export default function AIAssignmentsSandbox() {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     setManualJsonError(null);
     try {
-      let cleanedJson = manualJson.trim();
-      cleanedJson = cleanedJson.replace(/```json/gi, '').replace(/```/g, '');
+      const safeJsonStr = sanitizeJsonString(manualJson);
+      const parsedData = JSON.parse(safeJsonStr);
       
-      // 🚀 الفلتر السحري الآمن: يبحث فقط عن \ المتبوعة بحرف ويضاعفها (يتجاهل الأسطر وعلامات التنصيص)
-      cleanedJson = cleanedJson.replace(/(?<!\\)\\(?=[a-zA-Z])/g, '\\\\');
-
-      const parsedData = JSON.parse(cleanedJson);
       if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
       
       const normalizedQuestions: ExtractedQuestion[] = parsedData.questions.map((q: any) => ({
@@ -282,7 +290,7 @@ export default function AIAssignmentsSandbox() {
       }));
 
       setResult({ title: parsedData.title || 'واجب بدون عنوان', questions: normalizedQuestions });
-      setManualJson(''); alert('تم تنظيف الكود وتصحيح الأخطاء بنجاح!');
+      setManualJson(''); alert('تم تنظيف الكود وتصحيح الأخطاء بنجاح! 🚀');
     } catch (err: any) { setManualJsonError('خطأ في معالجة الكود: ' + err.message); }
   };
 
@@ -421,7 +429,7 @@ export default function AIAssignmentsSandbox() {
 
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400"><FileJson className="w-6 h-6" /> الخيار الثاني: الإدخال اليدوي للطوارئ</h2>
-              <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">انسخ الأمر (البرومبت) ثم توجه إلى حسابك الخارجي، ارفع الملف والصق الأمر هناك.</p>
+              <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">انسخ الأمر (البرومبت) بالأسفل، ثم توجه لحسابك الخارجي، ارفع الملف والصقه هناك.</p>
               <button onClick={copyPrompt} className="w-full mb-6 bg-slate-700 hover:bg-slate-600 font-bold py-3 rounded-xl flex justify-center gap-2 transition-all active:scale-95"><Copy className="w-5 h-5 text-slate-300" /> انسخ أمر التوليد المخصص (البرومبت)</button>
               <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON الناتج من النظام الخارجي هنا..." className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 font-mono text-sm text-emerald-300 focus:outline-none focus:border-emerald-500" dir="ltr"></textarea>
               {manualJsonError && <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex gap-2 text-xs"><AlertCircle className="shrink-0" /><p>{manualJsonError}</p></div>}
@@ -439,16 +447,21 @@ export default function AIAssignmentsSandbox() {
                 <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 max-h-[350px] overflow-y-auto">
                   <p className="text-sm font-black text-slate-600 mb-3 flex items-center gap-2"><CheckCircle2 className="text-emerald-500" /> تم استخراج {result.questions.length} أسئلة:</p>
                   <ul className="list-disc list-inside space-y-4 font-bold text-slate-700 text-sm">
-                    {result.questions.map((q, i) => (
-                      <li key={i} className="border-b border-slate-200 pb-4 last:border-0 leading-loose">
-                        {q.content.split('\n').map((line, idx) => (
-                           <span key={idx} className={line.includes('[الإجابة النموذجية') ? 'block mt-2 p-3 bg-emerald-100 text-emerald-800 rounded-xl text-xs whitespace-pre-wrap font-bold' : 'block'}>
-                             {line}
-                           </span>
-                        ))}
-                        {q.options && q.options.length > 0 && <div className="mt-2 ml-4">{q.options.map((opt, oIdx) => <span key={oIdx} className="inline-block ml-2 mb-1 px-3 py-1.5 rounded-lg bg-slate-200 text-xs text-slate-700">{opt}</span>)}</div>}
-                      </li>
-                    ))}
+                    {result.questions.map((q, i) => {
+                      // إخفاء الإجابة النموذجية من العرض الأولي فقط
+                      let displayContent = q.content;
+                      const answerIndex = displayContent.indexOf('[الإجابة النموذجية');
+                      if (answerIndex !== -1) {
+                         displayContent = displayContent.substring(0, answerIndex).trim();
+                      }
+                      
+                      return (
+                        <li key={i} className="border-b border-slate-200 pb-4 last:border-0 leading-loose">
+                          <span className="block">{displayContent}</span>
+                          {q.options && q.options.length > 0 && <div className="mt-2 ml-4">{q.options.map((opt, oIdx) => <span key={oIdx} className="inline-block ml-2 mb-1 px-3 py-1.5 rounded-lg bg-slate-200 text-xs text-slate-700">{opt}</span>)}</div>}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
 
