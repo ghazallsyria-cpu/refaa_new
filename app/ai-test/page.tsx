@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر لضمان عدم حدوث أخطاء استيراد
+// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر لضمان عدم حدوث أخطاء
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -67,18 +67,26 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 1. 🚀 جلب المعلمين عند تحميل الصفحة
+  // 1. 🚀 جلب المعلمين الرسميين من جدول teachers حصراً لتجنب أخطاء Foreign Key
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
         const { data, error } = await supabase
-          .from('users')
-          .select('id, full_name')
-          .in('role', ['teacher', 'admin', 'management']) 
-          .order('full_name');
+          .from('teachers')
+          .select(`
+            id,
+            users ( full_name )
+          `);
 
         if (error) throw error;
-        setTeachers(data || []);
+        
+        // تنسيق البيانات لتصبح قائمة مسطحة
+        const formattedTeachers = data?.map((t: any) => ({
+          id: t.id,
+          full_name: t.users?.full_name || 'معلم بدون اسم'
+        })) || [];
+
+        setTeachers(formattedTeachers);
       } catch (err) {
         console.error("Error fetching teachers:", err);
       } finally {
@@ -88,7 +96,7 @@ export default function AITestSandbox() {
     fetchTeachers();
   }, []);
 
-  // 2. 🚀 جلب المواد المخصصة للمعلم المُختار فقط
+  // 2. 🚀 جلب المواد المخصصة للمعلم المُختار
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
       if (!selectedTeacher) {
@@ -101,13 +109,15 @@ export default function AITestSandbox() {
       try {
         const { data, error } = await supabase
           .from('teacher_subjects')
-          .select('subjects(id, name)')
+          .select(`
+            subjects ( id, name )
+          `)
           .eq('teacher_id', selectedTeacher);
 
         if (error) throw error;
         
-        // استخراج المواد الصافية وإزالة التكرار إن وجد
-        const extracted = data?.flatMap((item: any) => item.subjects).filter(Boolean) || [];
+        // استخراج المواد وإزالة التكرار
+        const extracted = data?.map((item: any) => item.subjects).filter(Boolean) || [];
         const uniqueSubjects = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
         
         setSubjects(uniqueSubjects as Subject[]);
@@ -122,7 +132,7 @@ export default function AITestSandbox() {
     fetchTeacherSubjects();
   }, [selectedTeacher]);
 
-  // 3. 🚀 جلب فصول المعلم في المادة المُختارة فقط (بالاسم الصريح)
+  // 3. 🚀 جلب فصول المعلم في المادة المُختارة
   useEffect(() => {
     const fetchTeacherSections = async () => {
       if (!selectedTeacher || !selectedSubject) {
@@ -135,14 +145,16 @@ export default function AITestSandbox() {
       try {
         const { data, error } = await supabase
           .from('teacher_sections')
-          .select('sections(id, name)')
+          .select(`
+            sections ( id, name )
+          `)
           .eq('teacher_id', selectedTeacher)
           .eq('subject_id', selectedSubject); 
 
         if (error) throw error;
         
-        // استخراج الفصول الصافية باسمها الصريح
-        const extracted = data?.flatMap((item: any) => item.sections).filter(Boolean) || [];
+        // استخراج الفصول وإزالة التكرار
+        const extracted = data?.map((item: any) => item.sections).filter(Boolean) || [];
         const uniqueSections = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
 
         setSections(uniqueSections as Section[]);
@@ -222,7 +234,7 @@ export default function AITestSandbox() {
     }
     
     if (!finalApiKey) {
-      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل في الحقل المخصص بالأعلى، أو استخدم الإدخال اليدوي للطوارئ بالأسفل.');
+      throw new Error('مفتاح API غير موجود! يرجى لصق مفتاح Google Gemini API في الحقل المخصص أعلى الصفحة للتوليد الآلي، أو استخدم خيار الإدخال اليدوي للطوارئ بالأسفل.');
     }
 
     const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
@@ -447,6 +459,23 @@ export default function AITestSandbox() {
     }
   };
 
+  const getQuestionIcon = (type: string) => {
+    switch (type) {
+      case 'multiple_choice': return <List className="w-5 h-5 text-indigo-500" />;
+      case 'true_false': return <CheckSquare className="w-5 h-5 text-emerald-500" />;
+      default: return <AlignLeft className="w-5 h-5 text-amber-500" />;
+    }
+  };
+
+  const getQuestionTypeLabel = (type: string) => {
+    switch (type) {
+      case 'multiple_choice': return 'اختيار من متعدد';
+      case 'true_false': return 'صح أو خطأ';
+      case 'essay': return 'سؤال مقالي';
+      default: return 'سؤال';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8 font-sans" dir="rtl">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -469,7 +498,7 @@ export default function AITestSandbox() {
           <div className="flex-1 w-full">
             <input 
               type="password" 
-              placeholder="مفتاح التوليد التلقائي (Google Gemini API)..." 
+              placeholder="ضع مفتاح التوليد (Gemini API) هنا ليعمل التوليد التلقائي..." 
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-left"
               dir="ltr"
               value={customApiKey}
@@ -532,7 +561,7 @@ export default function AITestSandbox() {
                 الخيار الثاني: الإدخال اليدوي للطوارئ
               </h2>
               <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">
-                في حال تعطل التوليد التلقائي بسبب الضغط، يمكنك نسخ البرومبت أدناه ولصقه في ChatGPT مع صورة ورقة عملك، ثم لصق النتيجة (الكود) هنا.
+                إذا تعطل التوليد التلقائي، انسخ البرومبت أدناه، ضعه في ChatGPT مع صورة الاختبار، ثم الصق كود الـ JSON الناتج هنا.
               </p>
               
               <button 
@@ -551,8 +580,8 @@ export default function AITestSandbox() {
               ></textarea>
 
               {manualJsonError && (
-                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
+                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs leading-relaxed">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
                   <p>{manualJsonError}</p>
                 </div>
               )}
@@ -631,11 +660,10 @@ export default function AITestSandbox() {
                       {teachersLoading ? (
                         <div className="flex justify-center py-8">
                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-                           <span className="mr-3 text-indigo-600 font-bold">جاري جلب المعلمين...</span>
+                           <span className="mr-3 text-indigo-600 font-bold">جاري جلب قائمة المعلمين...</span>
                         </div>
                       ) : (
                         <div className="space-y-5 mb-6 animate-in fade-in">
-                          {/* 1. اختيار المعلم */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">إرسال إلى حساب المعلم: <span className="text-red-500">*</span></label>
                             <select 
@@ -652,14 +680,13 @@ export default function AITestSandbox() {
                             </select>
                           </div>
 
-                          {/* 2. اختيار المادة */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">تحديد المادة الدراسية: <span className="text-red-500">*</span></label>
                             <select 
                               value={selectedSubject} 
                               onChange={(e) => setSelectedSubject(e.target.value)}
                               disabled={!selectedTeacher || subjectsLoading}
-                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400"
+                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer disabled:cursor-not-allowed"
                             >
                               <option value="">
                                 {!selectedTeacher ? '-- اختر المعلم أولاً --' : (subjectsLoading ? 'جاري جلب المواد...' : '-- اختر المادة --')}
@@ -668,7 +695,6 @@ export default function AITestSandbox() {
                             </select>
                           </div>
 
-                          {/* 3. اختيار الفصول */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (متعدد): <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[200px] overflow-y-auto shadow-sm">
@@ -687,7 +713,7 @@ export default function AITestSandbox() {
                                   </label>
                                 ))
                               ) : (
-                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة لهذا المعلم في هذه المادة.</p>
+                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مرتبطة بهذا المعلم في هذه المادة.</p>
                               )}
                             </div>
                           </div>
@@ -700,7 +726,7 @@ export default function AITestSandbox() {
                         className="w-full bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                       >
                         {isSavingDB ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
-                        {isSavingDB ? 'جاري الحفظ في قاعدة البيانات...' : 'تأكيد وحفظ الاختبار في المنصة'}
+                        {isSavingDB ? 'جاري الحفظ في المنصة...' : 'تأكيد وحفظ الاختبار وإرساله للمعلم'}
                       </button>
                     </div>
                   </div>
@@ -712,6 +738,13 @@ export default function AITestSandbox() {
                     </button>
                     {showJson && (
                       <div className="mt-2 relative group">
+                        <button 
+                          onClick={() => navigator.clipboard.writeText(JSON.stringify(result, null, 2))}
+                          className="absolute top-4 left-4 p-2 bg-slate-700 text-white rounded-lg opacity-0 hover:opacity-100 transition-opacity"
+                          title="نسخ الكود"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <pre className="bg-slate-800 text-emerald-400 p-4 rounded-xl overflow-x-auto text-xs font-mono whitespace-pre-wrap text-left" dir="ltr">
                           {JSON.stringify(result, null, 2)}
                         </pre>
