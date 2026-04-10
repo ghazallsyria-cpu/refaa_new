@@ -5,7 +5,6 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-// 🚀 1. استيراد مكتبة الرياضيات وملف التصميم الخاص بها
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -16,6 +15,7 @@ interface AssignmentFormProps {
   isSubmitting?: boolean;
   initialAnswers?: Record<string, any>;
   readOnly?: boolean;
+  showModelAnswer?: boolean; // 🚀 أضفنا هذا الخيار لإظهار الإجابة للمعلم فقط أثناء التصحيح
   children?: React.ReactNode;
 }
 
@@ -25,7 +25,8 @@ export default function AssignmentForm({
   onChange,
   isSubmitting, 
   initialAnswers = {}, 
-  readOnly = false, 
+  readOnly = false,
+  showModelAnswer = false, // افتراضياً مخفية عن الطلاب
   children 
 }: AssignmentFormProps) {
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
@@ -42,13 +43,11 @@ export default function AssignmentForm({
 
   const handleAnswerChange = (questionId: string, value: any) => {
     if (readOnly) return;
-    
     setAnswers(prev => {
       const newAnswers = { ...prev, [questionId]: value };
       if (onChange) onChange(newAnswers);
       return newAnswers;
     });
-
     if (errors[questionId]) setErrors(prev => { const n = {...prev}; delete n[questionId]; return n; });
   };
 
@@ -56,21 +55,6 @@ export default function AssignmentForm({
     if (readOnly) return;
     const current = (answers[questionId] as string[]) || [];
     handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
-  };
-
-  const handleComparisonGridChange = (questionId: string, rowIndex: number, colIndex: number, value: string) => {
-     if (readOnly) return;
-     try {
-       const currentGrid = answers[questionId] ? JSON.parse(answers[questionId]) : [];
-       while (currentGrid.length <= rowIndex) currentGrid.push(["", ""]);
-       currentGrid[rowIndex][colIndex] = value;
-       handleAnswerChange(questionId, JSON.stringify(currentGrid));
-     } catch(e) {
-       const newGrid = [];
-       for(let i=0; i<=rowIndex; i++) newGrid.push(["", ""]);
-       newGrid[rowIndex][colIndex] = value;
-       handleAnswerChange(questionId, JSON.stringify(newGrid));
-     }
   };
 
   const validate = () => {
@@ -109,7 +93,6 @@ export default function AssignmentForm({
                    {isSelected && <Circle className="h-2.5 w-2.5 fill-current" />}
                 </div>
                 <input type="radio" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => handleAnswerChange(q.id, optId)} />
-                {/* 🚀 2. دعم الرياضيات داخل الخيارات */}
                 <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
                    <Latex>{optContent}</Latex>
                 </span>
@@ -139,7 +122,6 @@ export default function AssignmentForm({
                    const newArr = isSelected ? selectedArray.filter((i: string) => i !== optId && i !== optContent) : [...selectedArray, optId];
                    handleAnswerChange(q.id, newArr);
                 }} />
-                {/* 🚀 3. دعم الرياضيات داخل الخيارات */}
                 <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
                    <Latex>{optContent}</Latex>
                 </span>
@@ -158,17 +140,9 @@ export default function AssignmentForm({
            </label>
            <div className="bg-white p-2 rounded-xl border border-slate-200">
              {readOnly ? (
-               ans ? (
-                  <img src={ans} className="max-h-64 rounded-lg object-contain mx-auto" alt="مرفق الطالب" />
-               ) : (
-                  <p className="text-slate-400 italic text-center py-4 font-bold">لم تقم بإرفاق ملف</p>
-               )
+               ans ? <img src={ans} className="max-h-64 rounded-lg object-contain mx-auto" alt="مرفق الطالب" /> : <p className="text-slate-400 italic text-center py-4 font-bold">لم تقم بإرفاق ملف</p>
              ) : (
-               <ImageUpload 
-                 initialImageUrl={ans || ''} 
-                 onUploadSuccess={(url) => handleAnswerChange(q.id, url)} 
-                 label="انقر أو اسحب صورة ورقة الحل هنا" 
-               />
+               <ImageUpload initialImageUrl={ans || ''} onUploadSuccess={(url) => handleAnswerChange(q.id, url)} label="انقر أو اسحب صورة ورقة الحل هنا" />
              )}
            </div>
          </div>
@@ -196,39 +170,13 @@ export default function AssignmentForm({
                   {aspects.map((aspect: string, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top leading-relaxed">
-                         <div className="prose max-w-none text-slate-700 font-bold">
-                            <Latex>{aspect}</Latex>
-                         </div>
+                         <div className="prose max-w-none text-slate-700 font-bold"><Latex>{aspect}</Latex></div>
                       </td>
                       <td className="p-4 border-b border-l border-slate-200 align-top">
-                         <textarea 
-                           disabled={readOnly}
-                           rows={2}
-                           placeholder="أدخل إجابتك..."
-                           value={parsedAns[idx]?.[0] || ''}
-                           onChange={(e) => {
-                             const newAns = [...parsedAns];
-                             if (!newAns[idx]) newAns[idx] = ['', ''];
-                             newAns[idx][0] = e.target.value;
-                             handleAnswerChange(q.id, newAns);
-                           }}
-                           className="w-full bg-transparent border-0 focus:ring-0 p-0 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-300"
-                         />
+                         <textarea disabled={readOnly} rows={2} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} onChange={(e) => { const newAns = [...parsedAns]; if (!newAns[idx]) newAns[idx] = ['', '']; newAns[idx][0] = e.target.value; handleAnswerChange(q.id, newAns); }} className="w-full bg-transparent border-0 focus:ring-0 p-0 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-300" />
                       </td>
                       <td className="p-4 border-b border-slate-200 align-top">
-                         <textarea 
-                           disabled={readOnly}
-                           rows={2}
-                           placeholder="أدخل إجابتك..."
-                           value={parsedAns[idx]?.[1] || ''}
-                           onChange={(e) => {
-                             const newAns = [...parsedAns];
-                             if (!newAns[idx]) newAns[idx] = ['', ''];
-                             newAns[idx][1] = e.target.value;
-                             handleAnswerChange(q.id, newAns);
-                           }}
-                           className="w-full bg-transparent border-0 focus:ring-0 p-0 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-300"
-                         />
+                         <textarea disabled={readOnly} rows={2} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[1] || ''} onChange={(e) => { const newAns = [...parsedAns]; if (!newAns[idx]) newAns[idx] = ['', '']; newAns[idx][1] = e.target.value; handleAnswerChange(q.id, newAns); }} className="w-full bg-transparent border-0 focus:ring-0 p-0 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-300" />
                       </td>
                     </tr>
                   ))}
@@ -256,13 +204,28 @@ export default function AssignmentForm({
       {questions.map((q, idx) => {
         const isHeader = q.type === 'section_header';
         
+        // 🚀 خوارزمية فصل وإخفاء الإجابة النموذجية
+        let rawContent = q.content || q.text || q.question_text || '';
+        let questionText = rawContent;
+        let modelAnswerText = '';
+        
+        const answerIndex = rawContent.indexOf('[الإجابة النموذجية');
+        if (answerIndex !== -1) {
+          questionText = rawContent.substring(0, answerIndex).trim();
+          modelAnswerText = rawContent.substring(answerIndex).trim();
+        }
+
         if (isHeader) {
           return (
             <div key={q.id} className="pt-8 pb-2 border-b-2 border-indigo-100">
-               {/* 🚀 4. دعم الرياضيات في العنوان الرئيسي بدلاً من dangerouslySetInnerHTML */}
                <div className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed text-right">
-                  <Latex>{q.content || q.text || q.question_text || ''}</Latex>
+                  <Latex>{questionText}</Latex>
                </div>
+               {showModelAnswer && modelAnswerText && (
+                 <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold">
+                   <Latex>{modelAnswerText}</Latex>
+                 </div>
+               )}
                {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
             </div>
           );
@@ -276,13 +239,19 @@ export default function AssignmentForm({
                 </div>
                 <div className="flex-1 pt-2 text-right">
                    <div className="flex items-start gap-1">
-                     {/* 🚀 5. دعم الرياضيات في نص السؤال العادي */}
                      <div className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed w-full">
-                        <Latex>{q.content || q.text || q.question_text || ''}</Latex>
+                        <Latex>{questionText}</Latex>
                      </div>
                      {q.is_required && <span className="text-rose-500 text-xl font-black mt-1 shrink-0">*</span>}
                    </div>
                    
+                   {/* 🚀 إظهار الإجابة النموذجية للمعلم فقط في وضع التصحيح */}
+                   {showModelAnswer && modelAnswerText && (
+                     <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold">
+                       <Latex>{modelAnswerText}</Latex>
+                     </div>
+                   )}
+
                    {q.media_url && <img src={q.media_url} className="mt-4 max-h-72 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
                    
                    {renderQuestionInput(q)}
