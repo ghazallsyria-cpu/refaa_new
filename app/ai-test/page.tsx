@@ -3,58 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck } from 'lucide-react';
 
-/* ========================================================================
-  🚀 ملاحظة هامة عند النقل لمشروعك الحقيقي:
-  لكي يعمل هذا الملف في بيئة العرض (Preview) هنا بدون أخطاء، قمت بوضع "محاكيات مؤقتة" للاستيرادات.
-  عندما تقوم بنسخ هذا الكود إلى مشروعك (Next.js)، قم بحذف هذه المحاكيات (Mocks) 
-  وألغِ التعليق عن الاستيرادات الحقيقية أسفلها.
-  ========================================================================
-*/
 
-// --- محاكيات بيئة العرض (احذفها في مشروعك) ---
-const useRouter = () => ({ push: (path: string) => alert(`تم التوجيه بنجاح إلى: ${path}`) });
-const useAuth = () => ({ user: { id: 'admin-123' } });
-const useExamsSystem = () => ({ saveExam: async () => { console.log('تم الحفظ في قاعدة البيانات'); } });
-const useSchoolFormData = () => ({
-  data: {
-    subjects: [
-      { id: 'sub1', name: 'الفيزياء' },
-      { id: 'sub2', name: 'الرياضيات' },
-      { id: 'sub3', name: 'الكيمياء' }
-    ],
-    sections: [
-      { id: 'sec1', name: 'الصف العاشر - أ' },
-      { id: 'sec2', name: 'الصف العاشر - ب' },
-      { id: 'sec3', name: 'الصف الحادي عشر - علمي' }
-    ]
-  },
-  loading: false
-});
-const supabase = {
-  from: () => ({
-    select: () => ({
-      in: () => ({
-        order: async () => ({
-          data: [
-            { id: 't1', full_name: 'أ. إيهاب (المدير/المعلم)' },
-            { id: 't2', full_name: 'أ. أحمد (فيزياء)' },
-            { id: 't3', full_name: 'أ. محمود (رياضيات)' }
-          ],
-          error: null
-        })
-      })
-    })
-  })
-};
-
-/*
-// --- الاستيرادات الحقيقية لمشروعك (قم بإلغاء التعليق عنها) ---
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
-*/
+
 
 interface ExtractedQuestion {
   content: string;
