@@ -9,12 +9,11 @@ import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Im
    ثم قم بحذف دوال المحاكاة المؤقتة الموجودة أسفلها لكي يرتبط النظام فعلياً بقواعد بياناتك.
 ============================================================================ */
 
-// --- الاستيرادات الحقيقية (قم بتفعيلها في 
-import { useRouter } from 'next/navigation';
-import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { useSchoolFormData } from '@/hooks/useSchoolFormData';
-import { useAuth } from '@/context/auth-context';
-
+// --- الاستيرادات الحقيقية (قم بتفعيلها في مشروعك) ---
+ import { useRouter } from 'next/navigation';
+ import { useExamsSystem } from '@/hooks/useExamsSystem';
+ import { useSchoolFormData } from '@/hooks/useSchoolFormData';
+ import { useAuth } from '@/context/auth-context';
 
 interface ExtractedQuestion {
   content: string;
@@ -49,7 +48,6 @@ export default function AITestSandbox() {
   
   const [customApiKey, setCustomApiKey] = useState('');
   
-  // 🚀 حالات الإدخال اليدوي للطوارئ
   const [manualJson, setManualJson] = useState('');
   const [manualJsonError, setManualJsonError] = useState<string | null>(null);
 
@@ -58,11 +56,32 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة شديدة. استخرج عنوان الاختبار إن وجد، واستخرج جميع الأسئلة. لكل سؤال حدد نوعه (multiple_choice أو true_false أو essay)، واستخرج الدرجة (points) المخصصة له إن وجدت (ضع 1 كافتراضي إن لم تجد). واستخرج خيارات الإجابة إن كان السؤال اختيارياً أو صح وخطأ. أرجع النتيجة بتنسيق JSON حصرياً يحتوي على object به title ومصفوفة questions، ولا تكتب أي نص إضافي خارج الكود.`;
+  // 🚀 تحديث البرومبت ليكون صارماً جداً ومقيداً بهيكل JSON المطلوب
+  const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة. استخرج العنوان والأسئلة.
+يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
+{
+  "title": "عنوان الاختبار هنا",
+  "questions": [
+    {
+      "content": "نص السؤال هنا",
+      "type": "multiple_choice",
+      "points": 1,
+      "options": [
+        { "content": "نص الخيار الأول", "is_correct": false },
+        { "content": "نص الخيار الثاني", "is_correct": true }
+      ]
+    }
+  ]
+}
+ملاحظة هامة:
+- استخدم المفتاح "content" لنص السؤال (ليس question_text).
+- أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay.
+- للأسئلة المقالية، اترك مصفوفة options فارغة [].
+- لا تكتب أي نص إضافي أو شروحات خارج كود الـ JSON.`;
 
   const copyPrompt = () => {
     navigator.clipboard.writeText(promptText);
-    alert('تم نسخ البرومبت بنجاح! يمكنك الآن لصقه في ChatGPT أو أي ذكاء اصطناعي آخر مع صورة الاختبار.');
+    alert('تم نسخ أمر التوليد بنجاح! يمكنك الآن لصقه في ChatGPT أو Claude مع صورة الاختبار.');
   };
 
   const toggleSection = (sectionId: string) => {
@@ -103,7 +122,7 @@ export default function AITestSandbox() {
     }
     
     if (!finalApiKey) {
-      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل في الحقل المخصص بالأعلى، أو استخدم خيار الإدخال اليدوي بالأسفل.');
+      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل في الحقل المخصص بالأعلى، أو استخدم الإدخال اليدوي للطوارئ بالأسفل.');
     }
 
     const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
@@ -156,7 +175,7 @@ export default function AITestSandbox() {
         } catch (err: any) {
           const errMsg = err.message;
           if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) {
-             throw new Error('لقد استنفدت الحد المجاني. يرجى الانتظار دقيقة أو استخدام خيار (الإدخال اليدوي للطوارئ) بالأسفل.');
+             throw new Error('تم استنفاد الحد المجاني للطلبات. يرجى الانتظار قليلاً أو استخدام (الإدخال اليدوي للطوارئ) بالأسفل.');
           }
           if (errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('fetch error')) {
              if (attempt < delays.length - 1) {
@@ -172,7 +191,7 @@ export default function AITestSandbox() {
       if (success) return data; 
     }
 
-    throw new Error(`ضغط شديد على السيرفرات. استخدم خيار (الإدخال اليدوي للطوارئ) بالأسفل لعدم تعطل عملك. (تفاصيل: ${lastErrorMsg})`);
+    throw new Error(`سيرفرات جوجل تشهد ضغطاً شديداً حالياً. يرجى استخدام قسم (الإدخال اليدوي للطوارئ) بالأسفل لضمان عدم توقف عملك.`);
   };
 
   const analyzeImage = async () => {
@@ -188,39 +207,12 @@ export default function AITestSandbox() {
         contents: [{
           role: "user",
           parts: [
-            { text: promptText },
+            { text: promptText }, // تم استخدام البرومبت الصارم هنا أيضاً
             { inlineData: { mimeType: imageFile.type, data: base64Data } }
           ]
         }],
         generationConfig: {
           responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              title: { type: "STRING" },
-              questions: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    content: { type: "STRING" },
-                    type: { type: "STRING" },
-                    points: { type: "NUMBER" },
-                    options: {
-                      type: "ARRAY",
-                      items: {
-                        type: "OBJECT",
-                        properties: {
-                          content: { type: "STRING" },
-                          is_correct: { type: "BOOLEAN" }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
         }
       };
 
@@ -229,7 +221,7 @@ export default function AITestSandbox() {
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         const jsonText = aiResponse.candidates[0].content.parts[0].text;
         const parsedData = JSON.parse(jsonText);
-        setResult(parsedData);
+        setResult(parsedData); // إذا تم التوليد داخلياً، فالهيكل سيكون صحيحاً بفضل البرومبت
       } else {
         throw new Error('لم يتم استرجاع بيانات صحيحة من النموذج');
       }
@@ -242,7 +234,7 @@ export default function AITestSandbox() {
     }
   };
 
-  // 🚀 معالجة الكود اليدوي
+  // 🚀 مترجم ذكي (Data Normalizer) لمعالجة أخطاء الذكاء الاصطناعي الخارجي
   const processManualJson = () => {
     if (!manualJson.trim()) {
       setManualJsonError('يرجى لصق الكود أولاً.');
@@ -251,17 +243,10 @@ export default function AITestSandbox() {
     
     setManualJsonError(null);
     try {
-      // تنظيف الكود في حال قام الذكاء الاصطناعي الخارجي بإرجاعه بداخل علامات markdown ```json
       let cleanedJson = manualJson.trim();
-      if (cleanedJson.startsWith('```json')) {
-        cleanedJson = cleanedJson.replace('```json', '');
-      }
-      if (cleanedJson.startsWith('```')) {
-        cleanedJson = cleanedJson.replace('```', '');
-      }
-      if (cleanedJson.endsWith('```')) {
-        cleanedJson = cleanedJson.slice(0, -3);
-      }
+      if (cleanedJson.startsWith('```json')) cleanedJson = cleanedJson.replace('```json', '');
+      if (cleanedJson.startsWith('```')) cleanedJson = cleanedJson.replace('```', '');
+      if (cleanedJson.endsWith('```')) cleanedJson = cleanedJson.slice(0, -3);
 
       const parsedData = JSON.parse(cleanedJson.trim());
       
@@ -269,12 +254,43 @@ export default function AITestSandbox() {
         throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة (questions) صالحة.');
       }
       
-      setResult(parsedData);
-      setManualJson(''); // تفريغ الحقل بعد النجاح
-      alert('تمت معالجة الكود بنجاح! يمكنك الآن متابعة التعيين.');
+      // 🚀 التصحيح الآلي للبيانات (Normalization)
+      const normalizedQuestions: ExtractedQuestion[] = parsedData.questions.map((q: any) => {
+        // 1. تصحيح مفتاح نص السؤال (لو أرسله question_text أو text نعدله إلى content)
+        const content = q.content || q.question_text || q.text || q.question || 'سؤال بدون نص';
+        
+        // 2. تصحيح مصفوفة الخيارات (لو أرسلها كنصوص عادية، نحولها لكائنات Object)
+        let normalizedOptions = [];
+        if (Array.isArray(q.options)) {
+          normalizedOptions = q.options.map((opt: any) => {
+            if (typeof opt === 'string') {
+              return { content: opt, is_correct: false }; // افتراضياً خطأ لو لم يحدد
+            }
+            return {
+              content: opt.content || opt.text || opt.option || String(opt),
+              is_correct: !!(opt.is_correct || opt.isCorrect || opt.correct || false)
+            };
+          });
+        }
+
+        return {
+          content,
+          type: q.type || 'essay', // لو نسي إرسال النوع، نعتبره مقالي
+          points: Number(q.points) || 1,
+          options: normalizedOptions
+        };
+      });
+
+      setResult({
+        title: parsedData.title || 'اختبار بدون عنوان',
+        questions: normalizedQuestions
+      });
+      
+      setManualJson(''); 
+      alert('تمت معالجة الكود بنجاح وتصحيح الأخطاء فيه! يمكنك الآن مراجعة الأسئلة وتعيينها.');
       
     } catch (err: any) {
-      setManualJsonError('يوجد خطأ في كود الـ JSON المدخل: ' + err.message);
+      setManualJsonError('تعذرت المعالجة، تأكد من نسخ الكود كاملاً. (الخطأ: ' + err.message + ')');
     }
   };
 
@@ -368,7 +384,6 @@ export default function AITestSandbox() {
           </p>
         </div>
 
-        {/* حقل المفتاح الأساسي */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
             <Key className="w-6 h-6 text-amber-500" />
@@ -390,7 +405,6 @@ export default function AITestSandbox() {
           {/* العمود الأيمن: الرفع أو الإدخال اليدوي */}
           <div className="space-y-6">
             
-            {/* القسم التلقائي */}
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
                 <ImageIcon className="w-6 h-6 text-indigo-500" />
@@ -439,7 +453,7 @@ export default function AITestSandbox() {
                 الخيار الثاني: الإدخال اليدوي للطوارئ
               </h2>
               <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">
-                في حال تعطل التوليد التلقائي بسبب الضغط، يمكنك نسخ البرومبت أدناه ولصقه في ChatGPT مع صورة ورقة عملك، ثم لصق النتيجة (الكود) هنا.
+                إذا تعطل التوليد التلقائي، انسخ البرومبت أدناه، ضعه في ChatGPT مع صورة الاختبار، ثم الصق كود الـ JSON الناتج هنا.
               </p>
               
               <button 
@@ -458,8 +472,8 @@ export default function AITestSandbox() {
               ></textarea>
 
               {manualJsonError && (
-                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
+                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs leading-relaxed">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
                   <p>{manualJsonError}</p>
                 </div>
               )}
@@ -507,13 +521,24 @@ export default function AITestSandbox() {
               {result && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1">
                   
-                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 max-h-[250px] overflow-y-auto">
+                  <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 max-h-[350px] overflow-y-auto">
                      <p className="text-sm font-black text-slate-600 mb-3 flex items-center gap-2">
                        <CheckCircle2 className="w-5 h-5 text-emerald-500" /> تم اكتشاف واستخراج {result.questions.length} أسئلة بنجاح:
                      </p>
-                     <ul className="list-disc list-inside space-y-2 text-sm font-bold text-slate-700 pr-2">
+                     <ul className="list-disc list-inside space-y-3 text-sm font-bold text-slate-700 pr-2">
                         {result.questions.map((q, i) => (
-                           <li key={i} className="truncate border-b border-slate-100 pb-2 last:border-0">{q.content}</li>
+                           <li key={i} className="border-b border-slate-100 pb-3 last:border-0 leading-relaxed">
+                              {q.content}
+                              {q.options && q.options.length > 0 && (
+                                <div className="mt-2 text-xs text-slate-500 font-medium mr-4">
+                                  {q.options.map((opt, oIdx) => (
+                                    <span key={oIdx} className={`inline-block ml-3 mb-1 px-2 py-1 rounded ${opt.is_correct ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100'}`}>
+                                      {opt.content} {opt.is_correct && '✓'}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                           </li>
                         ))}
                      </ul>
                   </div>
@@ -540,7 +565,7 @@ export default function AITestSandbox() {
                               <option value="">-- اختر المعلم --</option>
                               {teachers.map((t: any) => (
                                 <option key={t.id} value={t.id}>
-                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم'}
+                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم غير محدد'}
                                 </option>
                               ))}
                             </select>
@@ -559,7 +584,7 @@ export default function AITestSandbox() {
                           </div>
 
                           <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (متعدد): <span className="text-red-500">*</span></label>
+                            <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (يمكنك اختيار أكثر من فصل): <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[200px] overflow-y-auto shadow-sm">
                               {sections.length > 0 ? sections.map((sec: any) => (
                                 <label key={sec.id} className="flex items-center gap-3 cursor-pointer group p-1 hover:bg-slate-50 rounded-lg transition-colors">
@@ -570,7 +595,7 @@ export default function AITestSandbox() {
                                   <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
                                 </label>
                               )) : (
-                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة.</p>
+                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة في النظام.</p>
                               )}
                             </div>
                           </div>
@@ -590,11 +615,18 @@ export default function AITestSandbox() {
 
                   <div className="pt-4 border-t border-slate-100">
                     <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-400 hover:bg-slate-100 transition-all text-xs">
-                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> عرض الكود الخام JSON</span>
+                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> (للمطورين) عرض الكود الخام JSON المستخرج</span>
                       {showJson ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                     {showJson && (
                       <div className="mt-2 relative group">
+                        <button 
+                          onClick={() => navigator.clipboard.writeText(JSON.stringify(result, null, 2))}
+                          className="absolute top-4 left-4 p-2 bg-slate-700 text-white rounded-lg opacity-0 hover:opacity-100 transition-opacity"
+                          title="نسخ"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <pre className="bg-slate-800 text-emerald-400 p-4 rounded-xl overflow-x-auto text-xs font-mono whitespace-pre-wrap text-left" dir="ltr">
                           {JSON.stringify(result, null, 2)}
                         </pre>
