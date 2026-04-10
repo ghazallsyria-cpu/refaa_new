@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ExtractedQuestion {
   content: string;
-  type: 'multiple_choice' | 'true_false' | 'essay';
+  type: 'multiple_choice' | 'true_false' | 'essay' | 'section_header';
   points: number;
   options?: string[];
 }
@@ -132,29 +132,26 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-    const basePromptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة.
-تعليمات هامة جداً:
-1. الهيكلية: إذا كان المحتوى يحتوي على مسألة رئيسية يتبعها طلبات، اجعل رأس المسألة في عنصر مستقل من نوع "section_header"، والطلبات كأسئلة فرعية.
-2. صياغة الرياضيات والفيزياء (حرج جداً): المكتبة البرمجية لدينا تتطلب وضع أي رقم أو رمز أو معادلة أو وحدة قياس بين علامتي دولار $ ... $ لكي تعمل. 
-   - مثال صحيح للدرجة المئوية: اكتب $100^\\circ \\text{C}$ ولا تكتب 100 circ C.
-   - مثال للخيارات: ["$32^\\circ \\text{F}$", "$212^\\circ \\text{F}$"]
-   - استخدم الشرطة المائلة للخلف (\\) للرموز وليس النقطة (.).
-3. التنسيق الآمن للـ JSON: استخدم شرطتين مائلتين (\\\\) قبل الرموز لضمان سلامة الكود، مثل \\\\mu أو \\\\circ.
-4. الإجابة النموذجية: ادمجها في نهاية نص السؤال هكذا: [الإجابة النموذجية للمعلم: ...].
-5. أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay أو section_header.
-6. المخرجات يجب أن تكون بصيغة JSON فقط بالهيكل التالي:
+  const basePromptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة.
+
+🛑 تعليمات صارمة جداً (إجباري):
+1. الرموز والرياضيات: يُمنع منعاً باتاً كتابة أي رقم، درجة حرارة، رمز فيزيائي أو معادلة رياضية بدون وضعها بين علامتي دولار $ لتعمل مكتبة LaTeX. (مثال إجباري: اكتب $100^\\circ \\text{C}$ ولا تكتب أبداً 100^\\circ C).
+2. الهيكلية: إذا كان المحتوى يحتوي على مسألة رئيسية يتبعها طلبات، اجعل رأس المسألة في عنصر مستقل "section_header"، والطلبات كأسئلة فرعية.
+3. الإجابة النموذجية: يجب أن تضع الإجابة النموذجية في نهاية نص السؤال محاطة بأقواس مربعة بهذا النص الحرفي تماماً: [الإجابة النموذجية: الحل هو كذا].
+4. التنسيق الآمن للـ JSON: استخدم دائماً شرطتين مائلتين (\\\\) قبل الرموز لضمان سلامة الكود، مثل \\\\mu أو \\\\circ.
+
+أخرج الناتج بصيغة JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
     {
-      "content": "نص السؤال هنا [الإجابة النموذجية للمعلم: كذا وكذا]",
+      "content": "نص السؤال هنا يتضمن $المعادلات$ [الإجابة النموذجية: الحل]",
       "type": "multiple_choice",
       "points": 1,
       "options": ["$32^\\\\circ \\\\text{F}$", "$212^\\\\circ \\\\text{F}$"]
     }
   ]
 }`;
-
 
   const copyPrompt = () => { 
     let finalPrompt = basePromptText;
@@ -268,10 +265,17 @@ export default function AIAssignmentsSandbox() {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     setManualJsonError(null);
     try {
-      let cleanedJson = manualJson.trim().replace(/```json/g, '').replace(/```/g, '');
+      let cleanedJson = manualJson.trim();
+      cleanedJson = cleanedJson.replace(/```json/g, '').replace(/```/g, '');
       
-      // 🚀 تنظيف الكود اليدوي (Auto-Heal) لمعالجة رموز الفيزياء المنسوخة من الأنظمة الخارجية
-      cleanedJson = cleanedJson.replace(/\\([^"\\])/g, '\\\\$1');
+      // 🚀 الفلتر السحري (Auto-Heal) لعلاج عناد الذكاء الاصطناعي الخارجي
+      // 1. مضاعفة الشرطات المائلة لحماية اللاتكس
+      cleanedJson = cleanedJson.replace(/\\/g, '\\\\');
+      // 2. إصلاح علامات التنصيص التي قد تتأثر بالخطوة السابقة
+      cleanedJson = cleanedJson.replace(/\\\\"/g, '\\"');
+      // 3. تحويل النزول لسطر الفعلي إلى كود برمجي آمن للـ JSON
+      cleanedJson = cleanedJson.replace(/\n/g, '\\n').replace(/\r/g, '');
+      cleanedJson = cleanedJson.replace(/\t/g, '\\t');
 
       const parsedData = JSON.parse(cleanedJson);
       if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
@@ -284,7 +288,7 @@ export default function AIAssignmentsSandbox() {
       }));
 
       setResult({ title: parsedData.title || 'واجب بدون عنوان', questions: normalizedQuestions });
-      setManualJson(''); alert('تمت معالجة الكود وتصحيح الأخطاء بنجاح!');
+      setManualJson(''); alert('تم تنظيف الكود وتصحيح أخطاء الـ JSON بنجاح! 🚀');
     } catch (err: any) { setManualJsonError('خطأ في معالجة الكود: ' + err.message); }
   };
 
@@ -352,7 +356,7 @@ export default function AIAssignmentsSandbox() {
               {inputType === 'text' && (
                 <textarea 
                   value={rawText} onChange={(e) => setRawText(e.target.value)}
-                  placeholder="الصق نص الواجب هنا (بما في ذلك المسائل والحلول النموذجية)..."
+                  placeholder="الصق نص الواجب هنا..."
                   className="w-full h-64 bg-slate-50 border border-slate-200 rounded-2xl p-5 font-medium text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 leading-relaxed resize-none"
                 ></textarea>
               )}
@@ -444,7 +448,7 @@ export default function AIAssignmentsSandbox() {
                     {result.questions.map((q, i) => (
                       <li key={i} className="border-b border-slate-200 pb-4 last:border-0 leading-loose">
                         {q.content.split('\n').map((line, idx) => (
-                           <span key={idx} className={line.includes('[الإجابة النموذجية') ? 'block mt-2 p-3 bg-emerald-100 text-emerald-800 rounded-xl text-xs whitespace-pre-wrap' : 'block'}>
+                           <span key={idx} className={line.includes('[الإجابة النموذجية') ? 'block mt-2 p-3 bg-emerald-100 text-emerald-800 rounded-xl text-xs whitespace-pre-wrap font-bold' : 'block'}>
                              {line}
                            </span>
                         ))}
@@ -474,7 +478,7 @@ export default function AIAssignmentsSandbox() {
                     <div>
                       <label className="block text-sm font-bold mb-3">الفصول (متعدد):</label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border max-h-[200px] overflow-y-auto">
-                        {!selectedSubject ? <p className="col-span-2 text-center text-sm text-slate-400 font-bold">اختر المادة لتظهر الفصول</p> : sections.map(sec => (
+                        {!selectedSubject ? <p className="col-span-2 text-center text-sm text-slate-400 font-bold">اختر المادة لتظهر الفصول</p> : (sectionsLoading ? <div className="col-span-2 flex justify-center py-2"><Loader2 className="animate-spin text-emerald-600" /></div> : sections.map(sec => (
                           <label key={sec.id} className="flex items-center gap-3 cursor-pointer">
                             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedSections.includes(sec.id) ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
                               {selectedSections.includes(sec.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
@@ -482,11 +486,11 @@ export default function AIAssignmentsSandbox() {
                             <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
                             <span className="text-sm font-bold text-slate-700">{sec.name}</span>
                           </label>
-                        ))}
+                        )))}
                       </div>
                     </div>
                   </div>
-                  <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-6 bg-emerald-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-6 bg-emerald-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95">
                     {isSavingDB ? <Loader2 className="animate-spin" /> : <Save />} تأكيد وحفظ الواجب للمعلم
                   </button>
                 </div>
