@@ -2,19 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useExamsSystem } from '@/hooks/useExamsSystem';
+import { createClient } from '@supabase/supabase-js';
 
-/* ============================================================================
-   🔴 تنبيه هام للمهندس إيهاب: للعمل على بيئة Netlify الخاصة بك 🔴
-   يرجى إزالة علامات التعليق (//) عن الاستيرادات الحقيقية التالية في مشروعك،
-   ثم قم بحذف دوال المحاكاة المؤقتة الموجودة أسفلها لكي يرتبط النظام فعلياً بقواعد بياناتك.
-============================================================================ */
-
-// --- الاستيرادات الحقيقية (قم بتفعيلها في مشروعك) ---
- import { useRouter } from 'next/navigation';
- import { useExamsSystem } from '@/hooks/useExamsSystem';
- import { useAuth } from '@/context/auth-context';
- import { supabase } from '@/lib/supabase'; // 🚀 استيراد Supabase لجلب العلاقات الحقيقية
-
+// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر لضمان عدم حدوث أخطاء استيراد
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ExtractedQuestion {
   content: string;
@@ -45,7 +40,6 @@ interface Section {
 
 export default function AITestSandbox() {
   const router = useRouter();
-  const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
   // 🚀 حالات البيانات الحقيقية والفلترة التراتبية
@@ -73,7 +67,7 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 1. جلب المعلمين عند تحميل الصفحة
+  // 1. 🚀 جلب المعلمين عند تحميل الصفحة
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
@@ -94,7 +88,7 @@ export default function AITestSandbox() {
     fetchTeachers();
   }, []);
 
-  // 2. جلب مواد المعلم المُختار فقط
+  // 2. 🚀 جلب المواد المخصصة للمعلم المُختار فقط
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
       if (!selectedTeacher) {
@@ -105,18 +99,19 @@ export default function AITestSandbox() {
       
       setSubjectsLoading(true);
       try {
-        // افتراض أن لديك جدول ربط 'teacher_subjects' أو ما شابه (قم بتعديل اسم الجدول حسب قاعدة بياناتك الحقيقية)
         const { data, error } = await supabase
-          .from('teacher_subjects') // 👈 تعديل: ضع اسم جدول ربط المعلم بالمادة هنا
-          .select('subject:subject_id(id, name)')
+          .from('teacher_subjects')
+          .select('subjects(id, name)')
           .eq('teacher_id', selectedTeacher);
 
         if (error) throw error;
         
-        // استخراج المواد الصافية
-        const extractedSubjects = data?.map((item: any) => item.subject).filter(Boolean) || [];
-        setSubjects(extractedSubjects);
-        setSelectedSubject(''); // تصفير المادة عند تغيير المعلم
+        // استخراج المواد الصافية وإزالة التكرار إن وجد
+        const extracted = data?.flatMap((item: any) => item.subjects).filter(Boolean) || [];
+        const uniqueSubjects = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
+        
+        setSubjects(uniqueSubjects as Subject[]);
+        setSelectedSubject(''); 
         
       } catch (err) {
         console.error("Error fetching subjects:", err);
@@ -127,7 +122,7 @@ export default function AITestSandbox() {
     fetchTeacherSubjects();
   }, [selectedTeacher]);
 
-  // 3. جلب فصول المعلم والمادة المُختارة فقط (باسمها الصريح)
+  // 3. 🚀 جلب فصول المعلم في المادة المُختارة فقط (بالاسم الصريح)
   useEffect(() => {
     const fetchTeacherSections = async () => {
       if (!selectedTeacher || !selectedSubject) {
@@ -138,19 +133,20 @@ export default function AITestSandbox() {
       
       setSectionsLoading(true);
       try {
-        // افتراض أن لديك جدول ربط 'teacher_sections' (قم بتعديله حسب قاعدة بياناتك الحقيقية)
         const { data, error } = await supabase
-          .from('teacher_sections') // 👈 تعديل: ضع اسم جدول ربط المعلم بالفصل هنا
-          .select('section:section_id(id, name)')
+          .from('teacher_sections')
+          .select('sections(id, name)')
           .eq('teacher_id', selectedTeacher)
-          .eq('subject_id', selectedSubject); // جلب فصول المادة المحددة فقط
+          .eq('subject_id', selectedSubject); 
 
         if (error) throw error;
         
         // استخراج الفصول الصافية باسمها الصريح
-        const extractedSections = data?.map((item: any) => item.section).filter(Boolean) || [];
-        setSections(extractedSections);
-        setSelectedSections([]); // تصفير التحديد
+        const extracted = data?.flatMap((item: any) => item.sections).filter(Boolean) || [];
+        const uniqueSections = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
+
+        setSections(uniqueSections as Section[]);
+        setSelectedSections([]); 
         
       } catch (err) {
         console.error("Error fetching sections:", err);
@@ -167,7 +163,6 @@ export default function AITestSandbox() {
     );
   };
 
-  // ... (نفس دوال معالجة الصورة والتوليد الذكي السابقة) ...
   const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة. استخرج العنوان والأسئلة.
 يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
 {
@@ -466,6 +461,7 @@ export default function AITestSandbox() {
           </p>
         </div>
 
+        {/* حقل المفتاح الأساسي */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
             <Key className="w-6 h-6 text-amber-500" />
@@ -484,10 +480,10 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* العمود الأيمن */}
+          {/* العمود الأيمن: الرفع أو الإدخال اليدوي */}
           <div className="space-y-6">
             
-            {/* التوليد التلقائي */}
+            {/* القسم التلقائي */}
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
                 <ImageIcon className="w-6 h-6 text-indigo-500" />
@@ -529,14 +525,14 @@ export default function AITestSandbox() {
               )}
             </div>
 
-            {/* الإدخال اليدوي للطوارئ */}
+            {/* القسم اليدوي (الطوارئ) */}
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400">
                 <FileJson className="w-6 h-6" />
                 الخيار الثاني: الإدخال اليدوي للطوارئ
               </h2>
               <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">
-                إذا تعطل التوليد التلقائي، انسخ البرومبت أدناه، ضعه في ChatGPT مع صورة الاختبار، ثم الصق كود الـ JSON الناتج هنا.
+                في حال تعطل التوليد التلقائي بسبب الضغط، يمكنك نسخ البرومبت أدناه ولصقه في ChatGPT مع صورة ورقة عملك، ثم لصق النتيجة (الكود) هنا.
               </p>
               
               <button 
@@ -555,8 +551,8 @@ export default function AITestSandbox() {
               ></textarea>
 
               {manualJsonError && (
-                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs leading-relaxed">
-                  <AlertCircle className="w-5 h-5 shrink-0" />
+                <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex items-center gap-2 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
                   <p>{manualJsonError}</p>
                 </div>
               )}
@@ -650,13 +646,13 @@ export default function AITestSandbox() {
                               <option value="">-- اختر المعلم --</option>
                               {teachers.map((t: any) => (
                                 <option key={t.id} value={t.id}>
-                                  {t.full_name || t.user?.full_name || t.user?.name || 'معلم غير محدد'}
+                                  {t.full_name}
                                 </option>
                               ))}
                             </select>
                           </div>
 
-                          {/* 2. اختيار المادة (تعتمد على المعلم المختار) */}
+                          {/* 2. اختيار المادة */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">تحديد المادة الدراسية: <span className="text-red-500">*</span></label>
                             <select 
@@ -672,7 +668,7 @@ export default function AITestSandbox() {
                             </select>
                           </div>
 
-                          {/* 3. اختيار الفصول (تعتمد على المعلم والمادة) */}
+                          {/* 3. اختيار الفصول */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (متعدد): <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[200px] overflow-y-auto shadow-sm">
@@ -707,6 +703,20 @@ export default function AITestSandbox() {
                         {isSavingDB ? 'جاري الحفظ في قاعدة البيانات...' : 'تأكيد وحفظ الاختبار في المنصة'}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100">
+                    <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-400 hover:bg-slate-100 transition-all text-xs">
+                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> (للمطورين) عرض الكود الخام JSON المستخرج</span>
+                      {showJson ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    {showJson && (
+                      <div className="mt-2 relative group">
+                        <pre className="bg-slate-800 text-emerald-400 p-4 rounded-xl overflow-x-auto text-xs font-mono whitespace-pre-wrap text-left" dir="ltr">
+                          {JSON.stringify(result, null, 2)}
+                        </pre>
+                      </div>
+                    )}
                   </div>
 
                 </div>
