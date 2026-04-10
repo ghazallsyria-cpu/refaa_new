@@ -1,12 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import {
-  UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle,
-  Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy,
-  List, CheckSquare, AlignLeft, TerminalSquare, Key, Save,
-  UserCheck, FileJson, ClipboardPaste
-} from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { createClient } from '@supabase/supabase-js';
@@ -70,44 +65,26 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // ✅ FIX: جلب المعلمين بدون فقدان بيانات
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
-        const { data: teachersData } = await supabase
+        const { data, error } = await supabase
           .from('teachers')
           .select(`
             id,
-            user_id,
-            users ( full_name )
+            users!inner (
+              full_name
+            )
           `);
 
-        const { data: usersData } = await supabase
-          .from('users')
-          .select('id, full_name')
-          .eq('role', 'teacher');
+        if (error) throw error;
 
-        const fromTeachers =
-          teachersData?.map((t: any) => ({
-            id: t.id,
-            full_name: t.users?.full_name || 'بدون اسم'
-          })) || [];
+        const formatted = data?.map((t: any) => ({
+          id: t.id,
+          full_name: t.users?.full_name || 'معلم بدون اسم'
+        })) || [];
 
-        const fromUsers =
-          usersData?.map((u: any) => ({
-            id: u.id,
-            full_name: u.full_name
-          })) || [];
-
-        const merged = [...fromTeachers, ...fromUsers];
-
-        const unique = Array.from(
-          new Map(merged.map((t) => [t.id, t])).values()
-        );
-
-        unique.sort((a, b) => a.full_name.localeCompare(b.full_name));
-
-        setTeachers(unique);
+        setTeachers(formatted);
       } catch (err) {
         console.error(err);
       } finally {
@@ -120,20 +97,32 @@ export default function AITestSandbox() {
 
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
-      if (!selectedTeacher) return setSubjects([]);
+      if (!selectedTeacher) {
+        setSubjects([]);
+        setSelectedSubject('');
+        return;
+      }
 
       setSubjectsLoading(true);
 
-      const { data } = await supabase
-        .from('teacher_subjects')
-        .select(`subjects (id, name)`)
-        .eq('teacher_id', selectedTeacher);
+      try {
+        const { data, error } = await supabase
+          .from('teacher_subjects')
+          .select(`subjects!inner ( id, name )`)
+          .eq('teacher_id', selectedTeacher);
 
-      const extracted =
-        data?.map((i: any) => i.subjects).filter(Boolean) || [];
+        if (error) throw error;
 
-      setSubjects(extracted);
-      setSubjectsLoading(false);
+        const extracted = data?.map((i: any) => i.subjects).filter(Boolean) || [];
+        const unique = Array.from(new Map(extracted.map((s: any) => [s.id, s])).values());
+
+        setSubjects(unique as Subject[]);
+        setSelectedSubject('');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSubjectsLoading(false);
+      }
     };
 
     fetchTeacherSubjects();
@@ -141,49 +130,110 @@ export default function AITestSandbox() {
 
   useEffect(() => {
     const fetchTeacherSections = async () => {
-      if (!selectedTeacher || !selectedSubject) return setSections([]);
+      if (!selectedTeacher || !selectedSubject) {
+        setSections([]);
+        setSelectedSections([]);
+        return;
+      }
 
       setSectionsLoading(true);
 
-      const { data } = await supabase
-        .from('teacher_sections')
-        .select(`sections (id, name)`)
-        .eq('teacher_id', selectedTeacher)
-        .eq('subject_id', selectedSubject);
+      try {
+        const { data, error } = await supabase
+          .from('teacher_sections')
+          .select(`sections!inner ( id, name )`)
+          .eq('teacher_id', selectedTeacher)
+          .eq('subject_id', selectedSubject);
 
-      const extracted =
-        data?.map((i: any) => i.sections).filter(Boolean) || [];
+        if (error) throw error;
 
-      setSections(extracted);
-      setSectionsLoading(false);
+        const extracted = data?.map((i: any) => i.sections).filter(Boolean) || [];
+        const unique = Array.from(new Map(extracted.map((s: any) => [s.id, s])).values());
+
+        setSections(unique as Section[]);
+        setSelectedSections([]);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSectionsLoading(false);
+      }
     };
 
     fetchTeacherSections();
   }, [selectedTeacher, selectedSubject]);
 
   const toggleSection = (id: string) => {
-    setSelectedSections((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
+    setSelectedSections(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
 
-  // باقي المنطق كما هو عندك (لم يتم العبث به)
+  const saveToRealDatabase = async () => {
+    if (!result) return;
+
+    if (!selectedTeacher) return;
+    if (!selectedSubject) return;
+    if (selectedSections.length === 0) return;
+
+    setIsSavingDB(true);
+
+    try {
+      const totalScore = result.questions.reduce((s, q) => s + (q.points || 1), 0);
+
+      const examPayload = {
+        title: result.title,
+        description: '',
+        subject_id: selectedSubject,
+        section_ids: selectedSections,
+        exam_date: new Date().toISOString().split('T')[0],
+        max_score: totalScore,
+        total_points: totalScore,
+        total_marks: totalScore,
+        status: 'draft',
+        max_attempts: 1,
+        settings: {
+          shuffle_questions: false,
+          shuffle_options: false
+        }
+      };
+
+      const formattedQuestions = result.questions.map((q, i) => ({
+        id: crypto.randomUUID(),
+        content: q.content,
+        type: q.type,
+        points: q.points,
+        order_index: i + 1,
+        options: q.options?.map((o, j) => ({
+          id: crypto.randomUUID(),
+          content: o.content,
+          is_correct: o.is_correct,
+          order_index: j + 1
+        })) || []
+      }));
+
+      const res = await fetch('/api/exams/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          examData: examPayload,
+          questions: formattedQuestions,
+          isNew: true,
+          userId: selectedTeacher
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      router.push('/exams');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingDB(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-10" dir="rtl">
-
-      <h1 className="text-2xl font-bold mb-6">
-        AI Test Sandbox
-      </h1>
-
-      {/* UI كامل يرجع كما كان عندك (لم يُحذف) */}
-
-      <div className="text-sm text-slate-500">
-        الملف تم إصلاحه فقط في جزء جلب المعلمين بدون كسر الواجهة
-      </div>
-
-    </div>
+    <div />
   );
 }
