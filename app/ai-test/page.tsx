@@ -93,7 +93,7 @@ export default function AITestSandbox() {
     fetchTeachers();
   }, []);
 
-  // 2. 🚀 جلب مواد المعلم المُختار فقط (المنطق السليم المترابط)
+  // 2. 🚀 جلب المواد من جدول teacher_sections (لتناسب طريقة حفظ بياناتك)
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
       if (!selectedTeacher) {
@@ -105,8 +105,11 @@ export default function AITestSandbox() {
       setSubjectsLoading(true);
       try {
         const { data, error } = await supabase
-          .from('teacher_subjects')
-          .select(`subject_id, subjects ( id, name )`)
+          .from('teacher_sections')
+          .select(`
+            subject_id,
+            subjects ( id, name )
+          `)
           .eq('teacher_id', selectedTeacher);
 
         if (error) throw error;
