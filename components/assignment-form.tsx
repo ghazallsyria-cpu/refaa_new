@@ -5,6 +5,10 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
+// 🚀 1. استيراد مكتبة الرياضيات وملف التصميم الخاص بها
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
 interface AssignmentFormProps {
   questions: any[];
   onSubmit: (answers: Record<string, any>) => void;
@@ -105,7 +109,10 @@ export default function AssignmentForm({
                    {isSelected && <Circle className="h-2.5 w-2.5 fill-current" />}
                 </div>
                 <input type="radio" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => handleAnswerChange(q.id, optId)} />
-                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{optContent}</span>
+                {/* 🚀 2. دعم الرياضيات داخل الخيارات */}
+                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                   <Latex>{optContent}</Latex>
+                </span>
               </label>
             );
           })}
@@ -132,7 +139,10 @@ export default function AssignmentForm({
                    const newArr = isSelected ? selectedArray.filter((i: string) => i !== optId && i !== optContent) : [...selectedArray, optId];
                    handleAnswerChange(q.id, newArr);
                 }} />
-                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{optContent}</span>
+                {/* 🚀 3. دعم الرياضيات داخل الخيارات */}
+                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                   <Latex>{optContent}</Latex>
+                </span>
               </label>
             );
           })}
@@ -178,15 +188,17 @@ export default function AssignmentForm({
                 <thead>
                   <tr className="bg-indigo-50">
                     <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
-                    <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3">{party1}</th>
-                    <th className="p-4 border-b border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3">{party2}</th>
+                    <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3"><Latex>{party1}</Latex></th>
+                    <th className="p-4 border-b border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3"><Latex>{party2}</Latex></th>
                   </tr>
                 </thead>
                 <tbody>
                   {aspects.map((aspect: string, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top leading-relaxed">
-                         <div dangerouslySetInnerHTML={{__html: aspect}} className="prose max-w-none text-slate-700 font-bold" />
+                         <div className="prose max-w-none text-slate-700 font-bold">
+                            <Latex>{aspect}</Latex>
+                         </div>
                       </td>
                       <td className="p-4 border-b border-l border-slate-200 align-top">
                          <textarea 
@@ -240,17 +252,17 @@ export default function AssignmentForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} className="space-y-8" dir="rtl">
       {questions.map((q, idx) => {
         const isHeader = q.type === 'section_header';
         
         if (isHeader) {
           return (
             <div key={q.id} className="pt-8 pb-2 border-b-2 border-indigo-100">
-               <div 
-                 className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed"
-                 dangerouslySetInnerHTML={{ __html: q.content || q.text || q.question_text || '' }} 
-               />
+               {/* 🚀 4. دعم الرياضيات في العنوان الرئيسي بدلاً من dangerouslySetInnerHTML */}
+               <div className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed text-right">
+                  <Latex>{q.content || q.text || q.question_text || ''}</Latex>
+               </div>
                {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
             </div>
           );
@@ -262,13 +274,13 @@ export default function AssignmentForm({
                 <div className="shrink-0 w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-xl shadow-sm border border-indigo-100">
                    {idx + 1}
                 </div>
-                <div className="flex-1 pt-2">
+                <div className="flex-1 pt-2 text-right">
                    <div className="flex items-start gap-1">
-                     <div 
-                       className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed"
-                       dangerouslySetInnerHTML={{ __html: q.content || q.text || q.question_text || '' }} 
-                     />
-                     {q.is_required && <span className="text-rose-500 text-xl font-black mt-1">*</span>}
+                     {/* 🚀 5. دعم الرياضيات في نص السؤال العادي */}
+                     <div className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed w-full">
+                        <Latex>{q.content || q.text || q.question_text || ''}</Latex>
+                     </div>
+                     {q.is_required && <span className="text-rose-500 text-xl font-black mt-1 shrink-0">*</span>}
                    </div>
                    
                    {q.media_url && <img src={q.media_url} className="mt-4 max-h-72 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
