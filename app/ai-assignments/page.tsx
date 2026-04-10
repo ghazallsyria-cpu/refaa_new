@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
@@ -41,10 +41,16 @@ export default function AIAssignmentsSandbox() {
   const [sectionsLoading, setSectionsLoading] = useState(false);
 
   // حالات الإدخال والتوليد
-  const [inputType, setInputType] = useState<'image' | 'text'>('text'); // افتراضي على النص الآن
+  const [inputType, setInputType] = useState<'text' | 'image' | 'pdf'>('text'); 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [rawText, setRawText] = useState(''); // النص المنسوخ
+  const [rawText, setRawText] = useState('');
+  
+  // حالات الـ PDF
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfMode, setPdfMode] = useState<'all' | 'range'>('all');
+  const [pageFrom, setPageFrom] = useState<number>(1);
+  const [pageTo, setPageTo] = useState<number>(1);
   
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ExtractedAssignment | null>(null);
@@ -128,14 +134,13 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 برومبت ذكي جداً مخصص للتعامل مع مسائل الفيزياء والرياضيات وتجزئتها
-  const promptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق (سواء كان صورة أو نصاً) واستخرج منه عنوان الواجب والأسئلة.
+  const basePromptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة.
 تعليمات هامة جداً:
 1. إذا كان المحتوى عبارة عن "مسألة شاملة" بداخلها عدة طلبات فرعية (1، 2، 3..)، قم بتحويل كل طلب إلى سؤال مستقل (essay)، مع كتابة المعطيات الأساسية للمسألة في بداية كل سؤال ليكون واضحاً للطالب.
 2. إذا كان هناك "إجابة نموذجية" أو "نموذج حل" مرفق في النص، قم بدمجه في نهاية نص السؤال بين قوسين هكذا:
    [الإجابة النموذجية للمعلم: ضع خطوات الحل والناتج النهائي هنا]
-3. حافظ على الرموز والمعادلات الفيزيائية والرياضية كما هي باستخدام التنسيق السليم.
-4. أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay. (للمسائل الحسابية استخدم essay واترك options فارغة).
+3. حافظ على الرموز والمعادلات الفيزيائية والرياضية كما هي.
+4. أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay.
 5. يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
 {
   "title": "عنوان الواجب",
@@ -150,7 +155,15 @@ export default function AIAssignmentsSandbox() {
 }
 لا تكتب أي نص أو شروحات خارج كود الـ JSON.`;
 
-  const copyPrompt = () => { navigator.clipboard.writeText(promptText); alert('تم نسخ أمر التوليد بنجاح!'); };
+  // 🚀 تحديث دالة النسخ لتكون ديناميكية حسب نوع الإدخال والـ PDF
+  const copyPrompt = () => { 
+    let finalPrompt = basePromptText;
+    if (inputType === 'pdf' && pdfMode === 'range') {
+      finalPrompt = `[توجيه صارم: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق. يمنع استخراج أي شيء خارج هذا النطاق.]\n\n` + basePromptText;
+    }
+    navigator.clipboard.writeText(finalPrompt); 
+    alert('تم نسخ أمر التوليد المخصص بنجاح! يمكنك الآن لصقه في حسابك الخارجي.'); 
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -163,10 +176,20 @@ export default function AIAssignmentsSandbox() {
     }
   };
 
+  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      setPdfFile(file);
+      setResult(null); setError(null);
+    } else {
+      alert("يرجى اختيار ملف PDF صالح.");
+    }
+  };
+
   const callGeminiWithSmartRetry = async (payload: any) => {
     let finalApiKey = customApiKey.trim() || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     if (!finalApiKey) throw new Error('يرجى إدخال مفتاح API الخاص بجوجل.');
-    const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro']; 
     const delays = [2000, 4000, 8000]; 
 
     for (const model of modelsToTry) {
@@ -197,19 +220,28 @@ export default function AIAssignmentsSandbox() {
   const analyzeContent = async () => {
     if (inputType === 'image' && !imageFile) return;
     if (inputType === 'text' && !rawText.trim()) return;
+    if (inputType === 'pdf' && !pdfFile) return;
 
     setLoading(true); setError(null); setResult(null); 
     try {
-      let payloadParts: any[] = [{ text: promptText }];
+      let finalPrompt = basePromptText;
+      if (inputType === 'pdf' && pdfMode === 'range') {
+        finalPrompt = `[توجيه صارم للذكاء الاصطناعي: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق. يمنع منعاً باتاً استخراج أي شيء خارج هذا النطاق.]\n\n` + basePromptText;
+      }
+
+      let payloadParts: any[] = [{ text: finalPrompt }];
       
+      const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+      });
+
       if (inputType === 'image' && imageFile) {
-        const base64Data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(imageFile);
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-          reader.onerror = reject;
-        });
-        payloadParts.push({ inlineData: { mimeType: imageFile.type, data: base64Data } });
+        payloadParts.push({ inlineData: { mimeType: imageFile.type, data: await fileToBase64(imageFile) } });
+      } else if (inputType === 'pdf' && pdfFile) {
+        payloadParts.push({ inlineData: { mimeType: 'application/pdf', data: await fileToBase64(pdfFile) } });
       } else if (inputType === 'text' && rawText.trim()) {
         payloadParts.push({ text: `\n\n=== النص المدخل للتحليل ===\n${rawText}` });
       }
@@ -277,7 +309,7 @@ export default function AIAssignmentsSandbox() {
             <Sparkles className="w-10 h-10" />
           </div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">توليد الواجبات آلياً (للمدراء)</h1>
-          <p className="text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة الواجب أو الصق نصه المكتوب، وسنقوم بتحويله لواجب إلكتروني تفاعلي وإرساله لمعلميك بضغطة زر.</p>
+          <p className="text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
         </div>
 
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
@@ -295,23 +327,27 @@ export default function AIAssignmentsSandbox() {
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><Sparkles className="w-6 h-6 text-emerald-500" /> الذكاء الاصطناعي</h2>
               
-              {/* تبويبات الإدخال: صورة أو نص */}
-              <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6">
-                <button onClick={() => setInputType('text')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'text' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                  <Type className="w-5 h-5" /> لصق نص الواجب
+              <div className="flex flex-wrap bg-slate-100 p-1.5 rounded-2xl mb-6 gap-1">
+                <button onClick={() => setInputType('text')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'text' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <Type className="w-5 h-5" /> نص
                 </button>
-                <button onClick={() => setInputType('image')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'image' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                  <ImageIcon className="w-5 h-5" /> رفع صورة الواجب
+                <button onClick={() => setInputType('image')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'image' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <ImageIcon className="w-5 h-5" /> صورة
+                </button>
+                <button onClick={() => setInputType('pdf')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'pdf' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <FileUp className="w-5 h-5" /> ملف PDF
                 </button>
               </div>
 
-              {inputType === 'text' ? (
+              {inputType === 'text' && (
                 <textarea 
                   value={rawText} onChange={(e) => setRawText(e.target.value)}
                   placeholder="الصق نص الواجب هنا (بما في ذلك المسائل والحلول النموذجية)..."
                   className="w-full h-64 bg-slate-50 border border-slate-200 rounded-2xl p-5 font-medium text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 leading-relaxed resize-none"
                 ></textarea>
-              ) : (
+              )}
+
+              {inputType === 'image' && (
                 <label className="block w-full cursor-pointer relative">
                   <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
                   <div className={`w-full border-2 border-dashed rounded-[2rem] p-10 flex flex-col items-center justify-center gap-4 transition-all ${imagePreview ? 'border-emerald-200 bg-emerald-50/30' : 'bg-slate-50 hover:bg-slate-100'}`}>
@@ -320,12 +356,56 @@ export default function AIAssignmentsSandbox() {
                 </label>
               )}
 
+              {inputType === 'pdf' && (
+                <div className="space-y-4 animate-in fade-in">
+                  <label className="block w-full cursor-pointer relative">
+                    <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfChange} />
+                    <div className={`w-full border-2 border-dashed rounded-[2rem] p-8 flex flex-col items-center justify-center gap-4 transition-all ${pdfFile ? 'border-emerald-500 bg-emerald-50' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                      <div className={`p-4 rounded-full shadow-sm ${pdfFile ? 'bg-emerald-100' : 'bg-white'}`}>
+                        <FileText className={`w-10 h-10 ${pdfFile ? 'text-emerald-600' : 'text-emerald-400'}`} />
+                      </div>
+                      <div className="text-center">
+                        <p className={`font-bold ${pdfFile ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          {pdfFile ? pdfFile.name : 'اضغط لرفع ملف PDF'}
+                        </p>
+                        {pdfFile && <p className="text-xs text-emerald-600 mt-1">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</p>}
+                      </div>
+                    </div>
+                  </label>
+
+                  {pdfFile && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                      <p className="font-bold text-slate-700 text-sm">نطاق الاستخراج:</p>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600">
+                          <input type="radio" name="pdfMode" checked={pdfMode === 'all'} onChange={() => setPdfMode('all')} className="w-4 h-4 text-emerald-600 focus:ring-emerald-500" />
+                          كل الملف
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600">
+                          <input type="radio" name="pdfMode" checked={pdfMode === 'range'} onChange={() => setPdfMode('range')} className="w-4 h-4 text-emerald-600 focus:ring-emerald-500" />
+                          تحديد صفحات
+                        </label>
+                      </div>
+                      
+                      {pdfMode === 'range' && (
+                        <div className="flex items-center gap-3 mt-3 animate-in fade-in">
+                          <span className="text-sm font-bold text-slate-500">من صفحة</span>
+                          <input type="number" min="1" value={pageFrom} onChange={(e) => setPageFrom(parseInt(e.target.value) || 1)} className="w-20 p-2 border rounded-lg text-center font-bold outline-none focus:border-emerald-500" />
+                          <span className="text-sm font-bold text-slate-500">إلى</span>
+                          <input type="number" min={pageFrom} value={pageTo} onChange={(e) => setPageTo(parseInt(e.target.value) || pageFrom)} className="w-20 p-2 border rounded-lg text-center font-bold outline-none focus:border-emerald-500" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button 
                 onClick={analyzeContent} 
-                disabled={loading || (inputType === 'image' ? !imageFile : !rawText.trim())}
-                className="w-full mt-6 bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
+                disabled={loading || (inputType === 'image' && !imageFile) || (inputType === 'text' && !rawText.trim()) || (inputType === 'pdf' && !pdfFile)}
+                className="w-full mt-6 bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95 transition-all"
               >
-                {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري التحليل والاستخراج...</> : <><Sparkles className="w-6 h-6" /> {inputType === 'text' ? 'توليد الواجب من النص' : 'توليد الواجب من الصورة'}</>}
+                {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري التحليل والاستخراج...</> : <><Sparkles className="w-6 h-6" /> توليد الواجب آلياً</>}
               </button>
 
               {error && <div className="mt-4 p-4 bg-red-50 text-red-700 border border-red-100 rounded-2xl font-bold flex items-center gap-3 text-sm"><AlertCircle className="shrink-0" /><p>{error}</p></div>}
@@ -333,8 +413,9 @@ export default function AIAssignmentsSandbox() {
 
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400"><FileJson className="w-6 h-6" /> الخيار الثاني: الإدخال اليدوي للطوارئ</h2>
-              <button onClick={copyPrompt} className="w-full mb-6 bg-slate-700 hover:bg-slate-600 font-bold py-3 rounded-xl flex justify-center gap-2"><Copy className="w-5 h-5 text-slate-300" /> انسخ أمر التوليد (البرومبت)</button>
-              <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 font-mono text-sm text-emerald-300 focus:outline-none focus:border-emerald-500" dir="ltr"></textarea>
+              <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">قم بتحديد الصفحات (للـ PDF) واضغط على زر النسخ بالأسفل، ثم توجه إلى حسابك في Gemini Pro، ارفع الملف والصق الأمر المنسوخ.</p>
+              <button onClick={copyPrompt} className="w-full mb-6 bg-slate-700 hover:bg-slate-600 font-bold py-3 rounded-xl flex justify-center gap-2 transition-all active:scale-95"><Copy className="w-5 h-5 text-slate-300" /> انسخ أمر التوليد المخصص (البرومبت)</button>
+              <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON الناتج من النظام الخارجي هنا..." className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 font-mono text-sm text-emerald-300 focus:outline-none focus:border-emerald-500" dir="ltr"></textarea>
               {manualJsonError && <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex gap-2 text-xs"><AlertCircle className="shrink-0" /><p>{manualJsonError}</p></div>}
               <button onClick={processManualJson} className="w-full mt-4 bg-emerald-600 text-white font-black py-3.5 rounded-xl hover:bg-emerald-500 flex justify-center gap-2"><ClipboardPaste className="w-5 h-5" /> معالجة الكود المدخل</button>
             </div>
