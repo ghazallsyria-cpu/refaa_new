@@ -252,8 +252,9 @@ export default function AIAssignmentsSandbox() {
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         let rawJsonResponse = aiResponse.candidates[0].content.parts[0].text;
         
-        rawJsonResponse = rawJsonResponse.replace(/```json/g, '').replace(/```/g, '');
-        rawJsonResponse = rawJsonResponse.replace(/\\([^"\\])/g, '\\\\$1');
+        rawJsonResponse = rawJsonResponse.replace(/```json/gi, '').replace(/```/g, '');
+        // 🚀 الفلتر السحري الآمن
+        rawJsonResponse = rawJsonResponse.replace(/(?<!\\)\\(?=[a-zA-Z])/g, '\\\\');
 
         setResult(JSON.parse(rawJsonResponse)); 
       } else throw new Error('لم يتم استرجاع بيانات صحيحة من النموذج');
@@ -265,13 +266,11 @@ export default function AIAssignmentsSandbox() {
     setManualJsonError(null);
     try {
       let cleanedJson = manualJson.trim();
-      cleanedJson = cleanedJson.replace(/```json/g, '').replace(/```/g, '');
+      cleanedJson = cleanedJson.replace(/```json/gi, '').replace(/```/g, '');
+      
+      // 🚀 الفلتر السحري الآمن: يبحث فقط عن \ المتبوعة بحرف ويضاعفها (يتجاهل الأسطر وعلامات التنصيص)
+      cleanedJson = cleanedJson.replace(/(?<!\\)\\(?=[a-zA-Z])/g, '\\\\');
 
-// إصلاح محدود فقط بدون كسر JSON
-cleanedJson = cleanedJson
-  .replace(/\r/g, '')
-  .replace(/\t/g, '\\t')
-  .replace(/\n/g, '\\n');
       const parsedData = JSON.parse(cleanedJson);
       if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
       
@@ -283,7 +282,7 @@ cleanedJson = cleanedJson
       }));
 
       setResult({ title: parsedData.title || 'واجب بدون عنوان', questions: normalizedQuestions });
-      setManualJson(''); alert('تم تنظيف الكود وتصحيح أخطاء الـ JSON بنجاح! 🚀');
+      setManualJson(''); alert('تم تنظيف الكود وتصحيح الأخطاء بنجاح!');
     } catch (err: any) { setManualJsonError('خطأ في معالجة الكود: ' + err.message); }
   };
 
@@ -351,7 +350,7 @@ cleanedJson = cleanedJson
               {inputType === 'text' && (
                 <textarea 
                   value={rawText} onChange={(e) => setRawText(e.target.value)}
-                  placeholder="الصق نص الواجب هنا..."
+                  placeholder="الصق نص الواجب هنا (بما في ذلك المسائل والحلول النموذجية)..."
                   className="w-full h-64 bg-slate-50 border border-slate-200 rounded-2xl p-5 font-medium text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 leading-relaxed resize-none"
                 ></textarea>
               )}
