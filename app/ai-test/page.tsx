@@ -1,27 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-
-// --- بيانات وهمية للمختبر (في النظام الحقيقي سيتم جلبها من قاعدة البيانات) ---
-const mockTeachers = [
-  { id: 't1', name: 'أ. إيهاب (المدير/المعلم)' },
-  { id: 't2', name: 'أ. أحمد (فيزياء)' },
-  { id: 't3', name: 'أ. محمود (رياضيات)' },
-];
-const mockSubjects = [
-  { id: 'sub1', name: 'فيزياء' },
-  { id: 'sub2', name: 'رياضيات' },
-  { id: 'sub3', name: 'كيمياء' },
-];
-const mockSections = [
-  { id: 'sec1', name: 'الصف العاشر - أ' },
-  { id: 'sec2', name: 'الصف العاشر - ب' },
-  { id: 'sec3', name: 'الصف الحادي عشر - علمي' },
-];
-// --------------------------------------------------------------------------
+import { useSchoolFormData } from '@/hooks/useSchoolFormData';
+import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase'; // 🚀 استيراد Supabase لجلب المعلمين الحقيقيين
 
 interface ExtractedQuestion {
   content: string;
@@ -35,10 +20,25 @@ interface ExtractedExam {
   questions: ExtractedQuestion[];
 }
 
+interface Teacher {
+  id: string;
+  full_name: string;
+}
+
 export default function AITestSandbox() {
   const router = useRouter();
+  const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
+  // 🚀 جلب المواد والفصول الحقيقية من المنصة
+  const { data: formData, loading: formLoading } = useSchoolFormData();
+  const subjects = formData?.subjects || [];
+  const sections = formData?.sections || [];
+
+  // 🚀 حالة لجلب المعلمين الحقيقيين
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teachersLoading, setTeachersLoading] = useState(true);
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,11 +48,33 @@ export default function AITestSandbox() {
   
   const [customApiKey, setCustomApiKey] = useState('');
   
-  // 🚀 حالات الحفظ بنظام الإدارة الجديد
+  // 🚀 حالات الحفظ بنظام الإدارة الجديد (البيانات الحقيقية)
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
+
+  // 🚀 جلب المعلمين من قاعدة البيانات عند تحميل الصفحة
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, full_name')
+          .in('role', ['teacher', 'admin', 'management']) // جلب أي شخص يمكنه إدارة اختبار
+          .order('full_name');
+
+        if (error) throw error;
+        setTeachers(data || []);
+      } catch (err) {
+        console.error("Error fetching teachers:", err);
+      } finally {
+        setTeachersLoading(false);
+      }
+    };
+
+    fetchTeachers();
+  }, []);
 
   const toggleSection = (sectionId: string) => {
     setSelectedSections(prev => 
@@ -223,6 +245,7 @@ export default function AITestSandbox() {
     }
   };
 
+  // 🚀 الحفظ الفعلي في قاعدة البيانات بالاعتماد على البيانات الحقيقية
   const saveToRealDatabase = async () => {
     if (!result) return;
     if (!selectedTeacher) { alert('يرجى تحديد المعلم صاحب الاختبار.'); return; }
@@ -237,15 +260,15 @@ export default function AITestSandbox() {
         title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
         description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي بواسطة إدارة المنصة.',
         subject_id: selectedSubject,
-        section_ids: selectedSections, // 🚀 إرسال قائمة الفصول المتعددة
-        teacher_id: selectedTeacher,   // 🚀 تعيين الاختبار لمعلم محدد
+        section_ids: selectedSections, 
+        teacher_id: selectedTeacher,   
         duration: 45, 
         max_attempts: 1,
         max_score: totalScore,
         exam_date: new Date().toISOString().split('T')[0],
         start_time: '08:00',
         end_time: '23:59',
-        status: 'draft', // يبقى مسودة حتى يراجعه المعلم
+        status: 'draft', // 🚀 يبقى مسودة ليقوم المعلم بمراجعته قبل نشره
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
@@ -269,6 +292,7 @@ export default function AITestSandbox() {
         })) || []
       }));
 
+      // إرسال الطلب الفعلي
       await saveExam(examPayload as any, formattedQuestions as any, true); 
       
       alert('تم إرسال الاختبار بنجاح إلى حساب المعلم كمسودة!');
@@ -309,7 +333,7 @@ export default function AITestSandbox() {
           </div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">إدارة التوليد الآلي (للمدراء)</h1>
           <p className="text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">
-            بيئة إدارية خاصة تتيح للمدير تصوير أوراق العمل، توليدها كاختبار تفاعلي، وتعيينها لمعلم محدد وفصول متعددة.
+            بيئة إدارية خاصة تتيح للمدير تصوير أوراق العمل، توليدها كاختبار تفاعلي، وتعيينها لمعلم محدد وفصول متعددة (بيانات حقيقية).
           </p>
         </div>
 
@@ -348,8 +372,8 @@ export default function AITestSandbox() {
                     <>
                       <div className="p-4 bg-white rounded-full shadow-sm"><UploadCloud className="w-10 h-10 text-indigo-400" /></div>
                       <div className="text-center">
-                        <p className="text-lg font-bold text-slate-700">اضغط هنا لرفع ورقة الاختبار (من المدير)</p>
-                        <p className="text-sm font-medium text-slate-500 mt-1">يدعم أوراق الـ PDF كصور أو ملفات JPG</p>
+                        <p className="text-lg font-bold text-slate-700">اضغط هنا لرفع ورقة الاختبار</p>
+                        <p className="text-sm font-medium text-slate-500 mt-1">يدعم JPG, PNG, WEBP</p>
                       </div>
                     </>
                   )}
@@ -418,60 +442,68 @@ export default function AITestSandbox() {
                      </ul>
                   </div>
 
-                  {/* 🚀 قسم الإدارة: تعيين الاختبار لمعلم وفصول */}
+                  {/* 🚀 قسم الإدارة: تعيين الاختبار للمعلم والفصول (بيانات حقيقية) */}
                   <div className="pt-4 border-t-2 border-indigo-100 mt-4">
                     <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-3xl border border-indigo-100">
                       <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-2">
                         <UserCheck className="w-6 h-6 text-indigo-600" /> تعيين الاختبار للمعلم والفصول
                       </h3>
                       
-                      <div className="space-y-5 mb-6">
-                        {/* اختيار المعلم */}
-                        <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-2">تعيين لمعلم: <span className="text-red-500">*</span></label>
-                          <select 
-                            value={selectedTeacher} 
-                            onChange={(e) => setSelectedTeacher(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
-                          >
-                            <option value="">-- اختر المعلم --</option>
-                            {mockTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                          </select>
+                      {formLoading || teachersLoading ? (
+                        <div className="flex justify-center py-8">
+                           <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                         </div>
+                      ) : (
+                        <div className="space-y-5 mb-6 animate-in fade-in">
+                          {/* اختيار المعلم (بيانات حقيقية) */}
+                          <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2">تعيين لمعلم: <span className="text-red-500">*</span></label>
+                            <select 
+                              value={selectedTeacher} 
+                              onChange={(e) => setSelectedTeacher(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
+                            >
+                              <option value="">-- اختر المعلم --</option>
+                              {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                            </select>
+                          </div>
 
-                        {/* اختيار المادة */}
-                        <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-2">المادة الدراسية: <span className="text-red-500">*</span></label>
-                          <select 
-                            value={selectedSubject} 
-                            onChange={(e) => setSelectedSubject(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
-                          >
-                            <option value="">-- اختر مادة --</option>
-                            {mockSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                          </select>
-                        </div>
+                          {/* اختيار المادة (بيانات حقيقية) */}
+                          <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2">المادة الدراسية: <span className="text-red-500">*</span></label>
+                            <select 
+                              value={selectedSubject} 
+                              onChange={(e) => setSelectedSubject(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
+                            >
+                              <option value="">-- اختر مادة --</option>
+                              {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                          </div>
 
-                        {/* 🚀 اختيار فصول متعددة (Checkboxes) */}
-                        <div>
-                          <label className="block text-sm font-bold text-slate-700 mb-3">إرسال إلى الفصول: <span className="text-red-500">*</span></label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200">
-                            {mockSections.map(sec => (
-                              <label key={sec.id} className="flex items-center gap-3 cursor-pointer group">
-                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedSections.includes(sec.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
-                                  {selectedSections.includes(sec.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
-                                </div>
-                                <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
-                                <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
-                              </label>
-                            ))}
+                          {/* اختيار فصول متعددة (بيانات حقيقية) */}
+                          <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-3">إرسال إلى الفصول: <span className="text-red-500">*</span></label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[250px] overflow-y-auto">
+                              {sections.length > 0 ? sections.map((sec: any) => (
+                                <label key={sec.id} className="flex items-center gap-3 cursor-pointer group">
+                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${selectedSections.includes(sec.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
+                                    {selectedSections.includes(sec.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                                  </div>
+                                  <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
+                                  <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
+                                </label>
+                              )) : (
+                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة في النظام.</p>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
                       
                       <button 
                         onClick={saveToRealDatabase} 
-                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0}
+                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0 || formLoading || teachersLoading}
                         className="w-full bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                       >
                         {isSavingDB ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
