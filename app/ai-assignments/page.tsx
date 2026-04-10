@@ -266,12 +266,12 @@ export default function AIAssignmentsSandbox() {
     try {
       let cleanedJson = manualJson.trim();
       cleanedJson = cleanedJson.replace(/```json/g, '').replace(/```/g, '');
-      
-      cleanedJson = cleanedJson.replace(/\\/g, '\\\\');
-      cleanedJson = cleanedJson.replace(/\\\\"/g, '\\"');
-      cleanedJson = cleanedJson.replace(/\n/g, '\\n').replace(/\r/g, '');
-      cleanedJson = cleanedJson.replace(/\t/g, '\\t');
 
+// إصلاح محدود فقط بدون كسر JSON
+cleanedJson = cleanedJson
+  .replace(/\r/g, '')
+  .replace(/\t/g, '\\t')
+  .replace(/\n/g, '\\n');
       const parsedData = JSON.parse(cleanedJson);
       if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
       
