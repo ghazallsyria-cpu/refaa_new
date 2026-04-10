@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useExamsSystem } from '@/hooks/useExamsSystem';
+import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر لضمان عدم حدوث أخطاء
+// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -40,9 +40,9 @@ interface Section {
 
 export default function AITestSandbox() {
   const router = useRouter();
-  const { saveExam } = useExamsSystem();
   
-  // 🚀 حالات البيانات الحقيقية والفلترة التراتبية
+  // 🚀 حالات البيانات الحقيقية
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -67,25 +67,25 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 1. 🚀 جلب المعلمين الرسميين من جدول teachers حصراً لتجنب أخطاء Foreign Key
+  // 1. جلب المعلمين من جدول teachers حصراً 
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
         const { data, error } = await supabase
-          .from('teachers')
+          .from('teachers') 
           .select(`
             id,
-            users ( full_name )
+            users!inner ( full_name )
           `);
 
         if (error) throw error;
         
-        // تنسيق البيانات لتصبح قائمة مسطحة
         const formattedTeachers = data?.map((t: any) => ({
           id: t.id,
           full_name: t.users?.full_name || 'معلم بدون اسم'
         })) || [];
 
+        formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
         setTeachers(formattedTeachers);
       } catch (err) {
         console.error("Error fetching teachers:", err);
@@ -96,7 +96,7 @@ export default function AITestSandbox() {
     fetchTeachers();
   }, []);
 
-  // 2. 🚀 جلب المواد المخصصة للمعلم المُختار
+  // 2. جلب المواد المخصصة للمعلم المُختار
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
       if (!selectedTeacher) {
@@ -110,19 +110,17 @@ export default function AITestSandbox() {
         const { data, error } = await supabase
           .from('teacher_subjects')
           .select(`
-            subjects ( id, name )
+            subjects!inner ( id, name )
           `)
           .eq('teacher_id', selectedTeacher);
 
         if (error) throw error;
         
-        // استخراج المواد وإزالة التكرار
         const extracted = data?.map((item: any) => item.subjects).filter(Boolean) || [];
         const uniqueSubjects = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
         
         setSubjects(uniqueSubjects as Subject[]);
         setSelectedSubject(''); 
-        
       } catch (err) {
         console.error("Error fetching subjects:", err);
       } finally {
@@ -132,7 +130,7 @@ export default function AITestSandbox() {
     fetchTeacherSubjects();
   }, [selectedTeacher]);
 
-  // 3. 🚀 جلب فصول المعلم في المادة المُختارة
+  // 3. جلب فصول المعلم في المادة المُختارة
   useEffect(() => {
     const fetchTeacherSections = async () => {
       if (!selectedTeacher || !selectedSubject) {
@@ -146,20 +144,18 @@ export default function AITestSandbox() {
         const { data, error } = await supabase
           .from('teacher_sections')
           .select(`
-            sections ( id, name )
+            sections!inner ( id, name )
           `)
           .eq('teacher_id', selectedTeacher)
           .eq('subject_id', selectedSubject); 
 
         if (error) throw error;
         
-        // استخراج الفصول وإزالة التكرار
         const extracted = data?.map((item: any) => item.sections).filter(Boolean) || [];
         const uniqueSections = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
 
         setSections(uniqueSections as Section[]);
         setSelectedSections([]); 
-        
       } catch (err) {
         console.error("Error fetching sections:", err);
       } finally {
@@ -234,7 +230,7 @@ export default function AITestSandbox() {
     }
     
     if (!finalApiKey) {
-      throw new Error('مفتاح API غير موجود! يرجى لصق مفتاح Google Gemini API في الحقل المخصص أعلى الصفحة للتوليد الآلي، أو استخدم خيار الإدخال اليدوي للطوارئ بالأسفل.');
+      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل في الحقل المخصص بالأعلى، أو استخدم الإدخال اليدوي للطوارئ بالأسفل.');
     }
 
     const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
@@ -259,25 +255,15 @@ export default function AITestSandbox() {
             const errMsg = data.error?.message || 'خطأ غير معروف';
             const lowerErr = errMsg.toLowerCase();
 
-            if (lowerErr.includes('quota') || lowerErr.includes('limit') || response.status === 429) {
-               throw new Error('QUOTA_EXCEEDED');
-            }
-
-            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('api key')) {
-              lastErrorMsg = errMsg;
-              break; 
-            }
-
+            if (lowerErr.includes('quota') || lowerErr.includes('limit') || response.status === 429) throw new Error('QUOTA_EXCEEDED');
+            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('api key')) { lastErrorMsg = errMsg; break; }
             if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503) {
               lastErrorMsg = errMsg;
               if (attempt < delays.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
                 continue; 
-              } else {
-                break; 
-              }
+              } else break; 
             }
-
             throw new Error(errMsg);
           }
           
@@ -286,9 +272,7 @@ export default function AITestSandbox() {
 
         } catch (err: any) {
           const errMsg = err.message;
-          if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) {
-             throw new Error('تم استنفاد الحد المجاني للطلبات. يرجى الانتظار قليلاً أو استخدام (الإدخال اليدوي للطوارئ) بالأسفل.');
-          }
+          if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) throw new Error('تم استنفاد الحد المجاني للطلبات. يرجى الانتظار قليلاً أو استخدام (الإدخال اليدوي للطوارئ) بالأسفل.');
           if (errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('fetch error')) {
              if (attempt < delays.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
@@ -299,10 +283,8 @@ export default function AITestSandbox() {
           break; 
         }
       }
-
       if (success) return data; 
     }
-
     throw new Error(`سيرفرات جوجل تشهد ضغطاً شديداً حالياً. يرجى استخدام قسم (الإدخال اليدوي للطوارئ) بالأسفل لضمان عدم توقف عملك.`);
   };
 
@@ -362,7 +344,7 @@ export default function AITestSandbox() {
       const parsedData = JSON.parse(cleanedJson.trim());
       
       if (!parsedData.questions || !Array.isArray(parsedData.questions)) {
-        throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة (questions) صالحة.');
+        throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
       }
       
       const normalizedQuestions: ExtractedQuestion[] = parsedData.questions.map((q: any) => {
@@ -400,6 +382,7 @@ export default function AITestSandbox() {
     }
   };
 
+  // 🚀 الحل الجذري للمشكلة: إدخال مباشر وموثوق في قاعدة البيانات متجاوزاً Hook النظام الخاص بالمعلمين
   const saveToRealDatabase = async () => {
     if (!result) return;
     if (!selectedTeacher) { alert('يرجى تحديد المعلم صاحب الاختبار.'); return; }
@@ -410,49 +393,80 @@ export default function AITestSandbox() {
     try {
       const totalScore = result.questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
       
-      const examPayload = {
-        title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
-        description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي بواسطة إدارة المنصة.',
-        subject_id: selectedSubject,
-        section_ids: selectedSections, 
-        teacher_id: selectedTeacher,   
-        duration: 45, 
-        max_attempts: 1,
-        max_score: totalScore,
-        exam_date: new Date().toISOString().split('T')[0],
-        start_time: '08:00',
-        end_time: '23:59',
-        status: 'draft', 
-        settings: {
-          shuffle_questions: false,
-          shuffle_options: false,
-          show_results_immediately: true,
-          allow_backtracking: true
-        }
-      };
+      // 1. إدخال الاختبار (Exams Table)
+      const { data: newExam, error: examError } = await supabase
+        .from('exams')
+        .insert({
+          title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
+          description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي بواسطة إدارة المنصة.',
+          subject_id: selectedSubject,
+          teacher_id: selectedTeacher, // 🚀 إجبار النظام على استخدام ID المعلم الصحيح
+          exam_date: new Date().toISOString().split('T')[0],
+          max_score: totalScore,
+          total_points: totalScore,
+          total_marks: totalScore,
+          status: 'draft',
+          max_attempts: 1,
+          settings: {
+            shuffle_questions: false,
+            shuffle_options: false,
+            show_results_immediately: true,
+            allow_backtracking: true
+          }
+        })
+        .select('id')
+        .single();
 
-      const formattedQuestions = result.questions.map((q) => ({
-        id: crypto.randomUUID(), 
-        content: q.content,
-        type: q.type,
-        points: q.points || 1,
-        isRequired: true, 
-        is_required: true,
-        options: q.options?.map(opt => ({
-          id: crypto.randomUUID(),
-          content: opt.content,
-          isCorrect: opt.is_correct,
-          is_correct: opt.is_correct
-        })) || []
+      if (examError) throw new Error(`فشل إنشاء الاختبار الأساسي: ${examError.message}`);
+      const examId = newExam.id;
+
+      // 2. ربط الفصول بالاختبار (Exam Sections Table)
+      const sectionsData = selectedSections.map(secId => ({
+        exam_id: examId,
+        section_id: secId
       }));
+      const { error: secError } = await supabase.from('exam_sections').insert(sectionsData);
+      if (secError) throw new Error(`فشل ربط الفصول بالاختبار: ${secError.message}`);
 
-      await saveExam(examPayload as any, formattedQuestions as any, true); 
-      
+      // 3. إدخال الأسئلة والخيارات (Questions & Options Tables)
+      for (let i = 0; i < result.questions.length; i++) {
+        const q = result.questions[i];
+        
+        // إدخال السؤال
+        const { data: newQuestion, error: qError } = await supabase
+          .from('questions')
+          .insert({
+            exam_id: examId,
+            content: q.content,
+            type: q.type,
+            points: q.points || 1,
+            order_index: i + 1,
+            is_required: true
+          })
+          .select('id')
+          .single();
+
+        if (qError) throw new Error(`فشل إدخال السؤال رقم ${i + 1}: ${qError.message}`);
+
+        // إدخال الخيارات (إن وجدت)
+        if (q.options && q.options.length > 0) {
+          const optsData = q.options.map((opt, oIdx) => ({
+            question_id: newQuestion.id,
+            content: opt.content,
+            is_correct: opt.is_correct,
+            order_index: oIdx + 1
+          }));
+          
+          const { error: optError } = await supabase.from('question_options').insert(optsData);
+          if (optError) throw new Error(`فشل إدخال خيارات السؤال رقم ${i + 1}: ${optError.message}`);
+        }
+      }
+
       alert('تم إرسال الاختبار بنجاح إلى حساب المعلم كمسودة!');
       router.push('/exams'); 
 
     } catch (error: any) {
-      console.error(error);
+      console.error("Database Save Error:", error);
       alert('حدث خطأ أثناء الحفظ في قاعدة البيانات: ' + error.message);
     } finally {
       setIsSavingDB(false);
@@ -490,7 +504,6 @@ export default function AITestSandbox() {
           </p>
         </div>
 
-        {/* حقل المفتاح الأساسي */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-100 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
             <Key className="w-6 h-6 text-amber-500" />
@@ -498,7 +511,7 @@ export default function AITestSandbox() {
           <div className="flex-1 w-full">
             <input 
               type="password" 
-              placeholder="ضع مفتاح التوليد (Gemini API) هنا ليعمل التوليد التلقائي..." 
+              placeholder="مفتاح التوليد التلقائي (Google Gemini API)..." 
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-left"
               dir="ltr"
               value={customApiKey}
@@ -509,10 +522,8 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* العمود الأيمن: الرفع أو الإدخال اليدوي */}
           <div className="space-y-6">
             
-            {/* القسم التلقائي */}
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
                 <ImageIcon className="w-6 h-6 text-indigo-500" />
@@ -554,7 +565,6 @@ export default function AITestSandbox() {
               )}
             </div>
 
-            {/* القسم اليدوي (الطوارئ) */}
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400">
                 <FileJson className="w-6 h-6" />
@@ -596,7 +606,6 @@ export default function AITestSandbox() {
 
           </div>
 
-          {/* العمود الأيسر: قسم النتائج والتعيين */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px] flex flex-col">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
@@ -660,7 +669,7 @@ export default function AITestSandbox() {
                       {teachersLoading ? (
                         <div className="flex justify-center py-8">
                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-                           <span className="mr-3 text-indigo-600 font-bold">جاري جلب قائمة المعلمين...</span>
+                           <span className="mr-3 text-indigo-600 font-bold">جاري جلب المعلمين...</span>
                         </div>
                       ) : (
                         <div className="space-y-5 mb-6 animate-in fade-in">
