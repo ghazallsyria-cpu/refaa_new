@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
 
 /* ============================================================================
@@ -12,8 +12,9 @@ import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Im
 // --- الاستيرادات الحقيقية (قم بتفعيلها في مشروعك) ---
  import { useRouter } from 'next/navigation';
  import { useExamsSystem } from '@/hooks/useExamsSystem';
- import { useSchoolFormData } from '@/hooks/useSchoolFormData';
  import { useAuth } from '@/context/auth-context';
+ import { supabase } from '@/lib/supabase'; // 🚀 استيراد Supabase لجلب العلاقات الحقيقية
+
 
 interface ExtractedQuestion {
   content: string;
@@ -27,17 +28,34 @@ interface ExtractedExam {
   questions: ExtractedQuestion[];
 }
 
+interface Teacher {
+  id: string;
+  full_name: string;
+}
+
+interface Subject {
+  id: string;
+  name: string;
+}
+
+interface Section {
+  id: string;
+  name: string;
+}
+
 export default function AITestSandbox() {
   const router = useRouter();
   const { user } = useAuth() as any;
   const { saveExam } = useExamsSystem();
   
-  const { data: formData, isLoading: formLoading } = useSchoolFormData();
-  const subjects = formData?.subjects || [];
-  const sections = formData?.sections || [];
-  const teachers = formData?.teachers && formData.teachers.length > 0 
-    ? formData.teachers 
-    : [{ id: user?.id || 'admin', user: { full_name: 'أنا (حسابي الحالي)' } }];
+  // 🚀 حالات البيانات الحقيقية والفلترة التراتبية
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  
+  const [teachersLoading, setTeachersLoading] = useState(true);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+  const [sectionsLoading, setSectionsLoading] = useState(false);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -47,7 +65,6 @@ export default function AITestSandbox() {
   const [showJson, setShowJson] = useState(false);
   
   const [customApiKey, setCustomApiKey] = useState('');
-  
   const [manualJson, setManualJson] = useState('');
   const [manualJsonError, setManualJsonError] = useState<string | null>(null);
 
@@ -56,7 +73,101 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 🚀 تحديث البرومبت ليكون صارماً جداً ومقيداً بهيكل JSON المطلوب
+  // 1. جلب المعلمين عند تحميل الصفحة
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, full_name')
+          .in('role', ['teacher', 'admin', 'management']) 
+          .order('full_name');
+
+        if (error) throw error;
+        setTeachers(data || []);
+      } catch (err) {
+        console.error("Error fetching teachers:", err);
+      } finally {
+        setTeachersLoading(false);
+      }
+    };
+    fetchTeachers();
+  }, []);
+
+  // 2. جلب مواد المعلم المُختار فقط
+  useEffect(() => {
+    const fetchTeacherSubjects = async () => {
+      if (!selectedTeacher) {
+        setSubjects([]);
+        setSelectedSubject('');
+        return;
+      }
+      
+      setSubjectsLoading(true);
+      try {
+        // افتراض أن لديك جدول ربط 'teacher_subjects' أو ما شابه (قم بتعديل اسم الجدول حسب قاعدة بياناتك الحقيقية)
+        const { data, error } = await supabase
+          .from('teacher_subjects') // 👈 تعديل: ضع اسم جدول ربط المعلم بالمادة هنا
+          .select('subject:subject_id(id, name)')
+          .eq('teacher_id', selectedTeacher);
+
+        if (error) throw error;
+        
+        // استخراج المواد الصافية
+        const extractedSubjects = data?.map((item: any) => item.subject).filter(Boolean) || [];
+        setSubjects(extractedSubjects);
+        setSelectedSubject(''); // تصفير المادة عند تغيير المعلم
+        
+      } catch (err) {
+        console.error("Error fetching subjects:", err);
+      } finally {
+        setSubjectsLoading(false);
+      }
+    };
+    fetchTeacherSubjects();
+  }, [selectedTeacher]);
+
+  // 3. جلب فصول المعلم والمادة المُختارة فقط (باسمها الصريح)
+  useEffect(() => {
+    const fetchTeacherSections = async () => {
+      if (!selectedTeacher || !selectedSubject) {
+        setSections([]);
+        setSelectedSections([]);
+        return;
+      }
+      
+      setSectionsLoading(true);
+      try {
+        // افتراض أن لديك جدول ربط 'teacher_sections' (قم بتعديله حسب قاعدة بياناتك الحقيقية)
+        const { data, error } = await supabase
+          .from('teacher_sections') // 👈 تعديل: ضع اسم جدول ربط المعلم بالفصل هنا
+          .select('section:section_id(id, name)')
+          .eq('teacher_id', selectedTeacher)
+          .eq('subject_id', selectedSubject); // جلب فصول المادة المحددة فقط
+
+        if (error) throw error;
+        
+        // استخراج الفصول الصافية باسمها الصريح
+        const extractedSections = data?.map((item: any) => item.section).filter(Boolean) || [];
+        setSections(extractedSections);
+        setSelectedSections([]); // تصفير التحديد
+        
+      } catch (err) {
+        console.error("Error fetching sections:", err);
+      } finally {
+        setSectionsLoading(false);
+      }
+    };
+    fetchTeacherSections();
+  }, [selectedTeacher, selectedSubject]);
+
+  const toggleSection = (sectionId: string) => {
+    setSelectedSections(prev => 
+      prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
+    );
+  };
+
+  // ... (نفس دوال معالجة الصورة والتوليد الذكي السابقة) ...
   const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة. استخرج العنوان والأسئلة.
 يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
 {
@@ -82,12 +193,6 @@ export default function AITestSandbox() {
   const copyPrompt = () => {
     navigator.clipboard.writeText(promptText);
     alert('تم نسخ أمر التوليد بنجاح! يمكنك الآن لصقه في ChatGPT أو Claude مع صورة الاختبار.');
-  };
-
-  const toggleSection = (sectionId: string) => {
-    setSelectedSections(prev => 
-      prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
-    );
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,7 +312,7 @@ export default function AITestSandbox() {
         contents: [{
           role: "user",
           parts: [
-            { text: promptText }, // تم استخدام البرومبت الصارم هنا أيضاً
+            { text: promptText },
             { inlineData: { mimeType: imageFile.type, data: base64Data } }
           ]
         }],
@@ -221,7 +326,7 @@ export default function AITestSandbox() {
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         const jsonText = aiResponse.candidates[0].content.parts[0].text;
         const parsedData = JSON.parse(jsonText);
-        setResult(parsedData); // إذا تم التوليد داخلياً، فالهيكل سيكون صحيحاً بفضل البرومبت
+        setResult(parsedData); 
       } else {
         throw new Error('لم يتم استرجاع بيانات صحيحة من النموذج');
       }
@@ -234,7 +339,6 @@ export default function AITestSandbox() {
     }
   };
 
-  // 🚀 مترجم ذكي (Data Normalizer) لمعالجة أخطاء الذكاء الاصطناعي الخارجي
   const processManualJson = () => {
     if (!manualJson.trim()) {
       setManualJsonError('يرجى لصق الكود أولاً.');
@@ -254,18 +358,13 @@ export default function AITestSandbox() {
         throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة (questions) صالحة.');
       }
       
-      // 🚀 التصحيح الآلي للبيانات (Normalization)
       const normalizedQuestions: ExtractedQuestion[] = parsedData.questions.map((q: any) => {
-        // 1. تصحيح مفتاح نص السؤال (لو أرسله question_text أو text نعدله إلى content)
         const content = q.content || q.question_text || q.text || q.question || 'سؤال بدون نص';
-        
-        // 2. تصحيح مصفوفة الخيارات (لو أرسلها كنصوص عادية، نحولها لكائنات Object)
         let normalizedOptions = [];
+        
         if (Array.isArray(q.options)) {
           normalizedOptions = q.options.map((opt: any) => {
-            if (typeof opt === 'string') {
-              return { content: opt, is_correct: false }; // افتراضياً خطأ لو لم يحدد
-            }
+            if (typeof opt === 'string') return { content: opt, is_correct: false };
             return {
               content: opt.content || opt.text || opt.option || String(opt),
               is_correct: !!(opt.is_correct || opt.isCorrect || opt.correct || false)
@@ -275,7 +374,7 @@ export default function AITestSandbox() {
 
         return {
           content,
-          type: q.type || 'essay', // لو نسي إرسال النوع، نعتبره مقالي
+          type: q.type || 'essay', 
           points: Number(q.points) || 1,
           options: normalizedOptions
         };
@@ -353,23 +452,6 @@ export default function AITestSandbox() {
     }
   };
 
-  const getQuestionIcon = (type: string) => {
-    switch (type) {
-      case 'multiple_choice': return <List className="w-5 h-5 text-indigo-500" />;
-      case 'true_false': return <CheckSquare className="w-5 h-5 text-emerald-500" />;
-      default: return <AlignLeft className="w-5 h-5 text-amber-500" />;
-    }
-  };
-
-  const getQuestionTypeLabel = (type: string) => {
-    switch (type) {
-      case 'multiple_choice': return 'اختيار من متعدد';
-      case 'true_false': return 'صح أو خطأ';
-      case 'essay': return 'سؤال مقالي';
-      default: return 'سؤال';
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8 font-sans" dir="rtl">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -402,9 +484,10 @@ export default function AITestSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* العمود الأيمن: الرفع أو الإدخال اليدوي */}
+          {/* العمود الأيمن */}
           <div className="space-y-6">
             
+            {/* التوليد التلقائي */}
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
               <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3">
                 <ImageIcon className="w-6 h-6 text-indigo-500" />
@@ -446,7 +529,7 @@ export default function AITestSandbox() {
               )}
             </div>
 
-            {/* 🚀 القسم اليدوي (الطوارئ) */}
+            {/* الإدخال اليدوي للطوارئ */}
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400">
                 <FileJson className="w-6 h-6" />
@@ -488,7 +571,7 @@ export default function AITestSandbox() {
 
           </div>
 
-          {/* العمود الأيسر: قسم النتائج والتوجيه للمعلم */}
+          {/* العمود الأيسر: قسم النتائج والتعيين */}
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 min-h-[500px] flex flex-col">
               <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
@@ -549,12 +632,14 @@ export default function AITestSandbox() {
                         <UserCheck className="w-6 h-6 text-indigo-600" /> تعيين الاختبار وإرساله
                       </h3>
                       
-                      {formLoading ? (
+                      {teachersLoading ? (
                         <div className="flex justify-center py-8">
                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                           <span className="mr-3 text-indigo-600 font-bold">جاري جلب المعلمين...</span>
                         </div>
                       ) : (
                         <div className="space-y-5 mb-6 animate-in fade-in">
+                          {/* 1. اختيار المعلم */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">إرسال إلى حساب المعلم: <span className="text-red-500">*</span></label>
                             <select 
@@ -571,31 +656,42 @@ export default function AITestSandbox() {
                             </select>
                           </div>
 
+                          {/* 2. اختيار المادة (تعتمد على المعلم المختار) */}
                           <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">تحديد المادة الدراسية: <span className="text-red-500">*</span></label>
                             <select 
                               value={selectedSubject} 
                               onChange={(e) => setSelectedSubject(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500"
+                              disabled={!selectedTeacher || subjectsLoading}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-400"
                             >
-                              <option value="">-- اختر المادة --</option>
+                              <option value="">
+                                {!selectedTeacher ? '-- اختر المعلم أولاً --' : (subjectsLoading ? 'جاري جلب المواد...' : '-- اختر المادة --')}
+                              </option>
                               {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                           </div>
 
+                          {/* 3. اختيار الفصول (تعتمد على المعلم والمادة) */}
                           <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (يمكنك اختيار أكثر من فصل): <span className="text-red-500">*</span></label>
+                            <label className="block text-sm font-bold text-slate-700 mb-3">تحديد فصول الاختبار (متعدد): <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[200px] overflow-y-auto shadow-sm">
-                              {sections.length > 0 ? sections.map((sec: any) => (
-                                <label key={sec.id} className="flex items-center gap-3 cursor-pointer group p-1 hover:bg-slate-50 rounded-lg transition-colors">
-                                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${selectedSections.includes(sec.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
-                                    {selectedSections.includes(sec.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
-                                  </div>
-                                  <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
-                                  <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
-                                </label>
-                              )) : (
-                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة في النظام.</p>
+                              {!selectedSubject ? (
+                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">يرجى اختيار المادة أولاً لتظهر الفصول.</p>
+                              ) : sectionsLoading ? (
+                                <div className="col-span-2 flex justify-center py-2"><Loader2 className="w-5 h-5 animate-spin text-indigo-500" /></div>
+                              ) : sections.length > 0 ? (
+                                sections.map((sec: any) => (
+                                  <label key={sec.id} className="flex items-center gap-3 cursor-pointer group p-1 hover:bg-slate-50 rounded-lg transition-colors">
+                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${selectedSections.includes(sec.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
+                                      {selectedSections.includes(sec.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                                    </div>
+                                    <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
+                                    <span className={`text-sm font-bold ${selectedSections.includes(sec.id) ? 'text-indigo-900' : 'text-slate-600'}`}>{sec.name}</span>
+                                  </label>
+                                ))
+                              ) : (
+                                <p className="text-slate-400 text-sm font-bold col-span-2 text-center py-2">لا توجد فصول مضافة لهذا المعلم في هذه المادة.</p>
                               )}
                             </div>
                           </div>
@@ -604,34 +700,13 @@ export default function AITestSandbox() {
                       
                       <button 
                         onClick={saveToRealDatabase} 
-                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0 || formLoading}
+                        disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0}
                         className="w-full bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95"
                       >
                         {isSavingDB ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
                         {isSavingDB ? 'جاري الحفظ في قاعدة البيانات...' : 'تأكيد وحفظ الاختبار في المنصة'}
                       </button>
                     </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-100">
-                    <button onClick={() => setShowJson(!showJson)} className="flex items-center justify-between w-full p-3 bg-slate-50 rounded-xl font-bold text-slate-400 hover:bg-slate-100 transition-all text-xs">
-                      <span className="flex items-center gap-2"><TerminalSquare className="w-4 h-4" /> (للمطورين) عرض الكود الخام JSON المستخرج</span>
-                      {showJson ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                    {showJson && (
-                      <div className="mt-2 relative group">
-                        <button 
-                          onClick={() => navigator.clipboard.writeText(JSON.stringify(result, null, 2))}
-                          className="absolute top-4 left-4 p-2 bg-slate-700 text-white rounded-lg opacity-0 hover:opacity-100 transition-opacity"
-                          title="نسخ"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                        <pre className="bg-slate-800 text-emerald-400 p-4 rounded-xl overflow-x-auto text-xs font-mono whitespace-pre-wrap text-left" dir="ltr">
-                          {JSON.stringify(result, null, 2)}
-                        </pre>
-                      </div>
-                    )}
                   </div>
 
                 </div>
