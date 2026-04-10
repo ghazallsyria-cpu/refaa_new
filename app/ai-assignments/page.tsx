@@ -252,7 +252,6 @@ export default function AIAssignmentsSandbox() {
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         let rawJsonResponse = aiResponse.candidates[0].content.parts[0].text;
         
-        // 🚀 تنظيف الكود التلقائي (Auto-Heal) لإصلاح الرموز الفيزيائية
         rawJsonResponse = rawJsonResponse.replace(/```json/g, '').replace(/```/g, '');
         rawJsonResponse = rawJsonResponse.replace(/\\([^"\\])/g, '\\\\$1');
 
@@ -268,12 +267,8 @@ export default function AIAssignmentsSandbox() {
       let cleanedJson = manualJson.trim();
       cleanedJson = cleanedJson.replace(/```json/g, '').replace(/```/g, '');
       
-      // 🚀 الفلتر السحري (Auto-Heal) لعلاج عناد الذكاء الاصطناعي الخارجي
-      // 1. مضاعفة الشرطات المائلة لحماية اللاتكس
       cleanedJson = cleanedJson.replace(/\\/g, '\\\\');
-      // 2. إصلاح علامات التنصيص التي قد تتأثر بالخطوة السابقة
       cleanedJson = cleanedJson.replace(/\\\\"/g, '\\"');
-      // 3. تحويل النزول لسطر الفعلي إلى كود برمجي آمن للـ JSON
       cleanedJson = cleanedJson.replace(/\n/g, '\\n').replace(/\r/g, '');
       cleanedJson = cleanedJson.replace(/\t/g, '\\t');
 
