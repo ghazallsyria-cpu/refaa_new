@@ -40,13 +40,11 @@ export default function AIAssignmentsSandbox() {
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [sectionsLoading, setSectionsLoading] = useState(false);
 
-  // حالات الإدخال والتوليد
   const [inputType, setInputType] = useState<'text' | 'image' | 'pdf'>('text'); 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [rawText, setRawText] = useState('');
   
-  // حالات الـ PDF
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfMode, setPdfMode] = useState<'all' | 'range'>('all');
   const [pageFrom, setPageFrom] = useState<number>(1);
@@ -136,17 +134,16 @@ export default function AIAssignmentsSandbox() {
 
   const basePromptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة.
 تعليمات هامة جداً:
-1. إذا كان المحتوى عبارة عن "مسألة شاملة" بداخلها عدة طلبات فرعية (1، 2، 3..)، قم بتحويل كل طلب إلى سؤال مستقل (essay)، مع كتابة المعطيات الأساسية للمسألة في بداية كل سؤال ليكون واضحاً للطالب.
-2. إذا كان هناك "إجابة نموذجية" أو "نموذج حل" مرفق في النص، قم بدمجه في نهاية نص السؤال بين قوسين هكذا:
-   [الإجابة النموذجية للمعلم: ضع خطوات الحل والناتج النهائي هنا]
-3. حافظ على الرموز والمعادلات الفيزيائية والرياضية كما هي.
-4. أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay.
-5. يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
+1. إذا كان المحتوى "مسألة شاملة" بداخلها عدة طلبات (1، 2، 3..)، قم بتحويل كل طلب إلى سؤال مستقل (essay)، واكتب المعطيات الأساسية للمسألة في بداية كل سؤال.
+2. إذا كان هناك "إجابة نموذجية"، ادمجه في نهاية نص السؤال بين قوسين هكذا: [الإجابة النموذجية للمعلم: ...]
+3. أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay.
+4. هام جداً للفيزياء والرياضيات: لضمان سلامة كود الـ JSON، استخدم دائماً شرطتين مائلتين (\\\\) بدلاً من شرطة واحدة عند كتابة رموز LaTeX. (مثال: اكتب \\\\mu بدلاً من \\mu واكتب \\\\text بدلاً من \\text).
+5. يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً بالهيكل التالي بالضبط:
 {
   "title": "عنوان الواجب",
   "questions": [
     {
-      "content": "نص السؤال هنا مع المعطيات [الإجابة النموذجية للمعلم: ...]",
+      "content": "نص السؤال مع المعطيات [الإجابة النموذجية للمعلم: ...]",
       "type": "essay",
       "points": 5,
       "options": []
@@ -155,7 +152,6 @@ export default function AIAssignmentsSandbox() {
 }
 لا تكتب أي نص أو شروحات خارج كود الـ JSON.`;
 
-  // 🚀 تحديث دالة النسخ لتكون ديناميكية حسب نوع الإدخال والـ PDF
   const copyPrompt = () => { 
     let finalPrompt = basePromptText;
     if (inputType === 'pdf' && pdfMode === 'range') {
@@ -253,7 +249,13 @@ export default function AIAssignmentsSandbox() {
 
       const aiResponse = await callGeminiWithSmartRetry(payload);
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        setResult(JSON.parse(aiResponse.candidates[0].content.parts[0].text)); 
+        let rawJsonResponse = aiResponse.candidates[0].content.parts[0].text;
+        
+        // 🚀 تنظيف الكود التلقائي (Auto-Heal) لإصلاح الرموز الفيزيائية
+        rawJsonResponse = rawJsonResponse.replace(/```json/g, '').replace(/```/g, '');
+        rawJsonResponse = rawJsonResponse.replace(/\\([^"\\])/g, '\\\\$1');
+
+        setResult(JSON.parse(rawJsonResponse)); 
       } else throw new Error('لم يتم استرجاع بيانات صحيحة من النموذج');
     } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   };
@@ -263,8 +265,12 @@ export default function AIAssignmentsSandbox() {
     setManualJsonError(null);
     try {
       let cleanedJson = manualJson.trim().replace(/```json/g, '').replace(/```/g, '');
+      
+      // 🚀 تنظيف الكود اليدوي (Auto-Heal) لمعالجة رموز الفيزياء المنسوخة من الأنظمة الخارجية
+      cleanedJson = cleanedJson.replace(/\\([^"\\])/g, '\\\\$1');
+
       const parsedData = JSON.parse(cleanedJson);
-      if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة.');
+      if (!parsedData.questions || !Array.isArray(parsedData.questions)) throw new Error('الكود المدخل لا يحتوي على مصفوفة أسئلة صالحة.');
       
       const normalizedQuestions: ExtractedQuestion[] = parsedData.questions.map((q: any) => ({
         content: q.content || q.question_text || q.text || q.question || 'سؤال بدون نص',
@@ -274,8 +280,8 @@ export default function AIAssignmentsSandbox() {
       }));
 
       setResult({ title: parsedData.title || 'واجب بدون عنوان', questions: normalizedQuestions });
-      setManualJson(''); alert('تمت المعالجة بنجاح!');
-    } catch (err: any) { setManualJsonError('خطأ: ' + err.message); }
+      setManualJson(''); alert('تمت معالجة الكود وتصحيح الأخطاء بنجاح!');
+    } catch (err: any) { setManualJsonError('خطأ في معالجة الكود: ' + err.message); }
   };
 
   const saveToRealDatabase = async () => {
@@ -413,7 +419,7 @@ export default function AIAssignmentsSandbox() {
 
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400"><FileJson className="w-6 h-6" /> الخيار الثاني: الإدخال اليدوي للطوارئ</h2>
-              <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">قم بتحديد الصفحات (للـ PDF) واضغط على زر النسخ بالأسفل، ثم توجه إلى حسابك في Gemini Pro، ارفع الملف والصق الأمر المنسوخ.</p>
+              <p className="text-sm text-slate-400 font-bold mb-6 leading-relaxed">انسخ الأمر (البرومبت) ثم توجه إلى حسابك الخارجي، ارفع الملف والصق الأمر هناك.</p>
               <button onClick={copyPrompt} className="w-full mb-6 bg-slate-700 hover:bg-slate-600 font-bold py-3 rounded-xl flex justify-center gap-2 transition-all active:scale-95"><Copy className="w-5 h-5 text-slate-300" /> انسخ أمر التوليد المخصص (البرومبت)</button>
               <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON الناتج من النظام الخارجي هنا..." className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 font-mono text-sm text-emerald-300 focus:outline-none focus:border-emerald-500" dir="ltr"></textarea>
               {manualJsonError && <div className="mt-3 p-3 bg-red-900/50 text-red-300 border border-red-800 rounded-xl font-bold flex gap-2 text-xs"><AlertCircle className="shrink-0" /><p>{manualJsonError}</p></div>}
