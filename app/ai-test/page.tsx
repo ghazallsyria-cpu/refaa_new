@@ -66,7 +66,8 @@ export default function AITestSandbox() {
     });
   };
 
-  const callGeminiWithFallback = async (payload: any) => {
+  // 🚀 خوارزمية ذكية مدمجة: (Fallback + Retry) للتعامل مع الضغط العالي والحصص
+  const callGeminiWithSmartRetry = async (payload: any) => {
     let finalApiKey = customApiKey.trim();
     if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
        finalApiKey = finalApiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
@@ -76,7 +77,7 @@ export default function AITestSandbox() {
       throw new Error('يرجى إدخال مفتاح API الخاص بجوجل (Gemini API Key) في الحقل المخصص بالأعلى.');
     }
 
-    // ترتيب النماذج لضمان تخطي أي نموذج غير متاح أو حصته صفر
+    // ترتيب النماذج من الأسرع والأكثر استقراراً إلى الأحدث
     const modelsToTry = [
       'gemini-1.5-flash',
       'gemini-1.5-pro',
@@ -87,42 +88,67 @@ export default function AITestSandbox() {
     let lastErrorMsg = '';
 
     for (const model of modelsToTry) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${finalApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-          const errMsg = data.error?.message || '';
-          const shouldSkip = 
-            errMsg.toLowerCase().includes('not found') || 
-            errMsg.toLowerCase().includes('not supported') ||
-            errMsg.toLowerCase().includes('quota') ||
-            errMsg.toLowerCase().includes('limit') ||
-            response.status === 429;
+      let success = false;
+      let data = null;
 
-          if (shouldSkip) {
-            lastErrorMsg = errMsg;
-            continue; 
+      // 🚀 محاولة 3 مرات لكل نموذج في حال كان هناك (High Demand)
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${finalApiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          
+          data = await response.json();
+          
+          if (!response.ok) {
+            const errMsg = data.error?.message || 'خطأ غير معروف';
+            const lowerErr = errMsg.toLowerCase();
+
+            // 1. أخطاء قاتلة: لا داعي لإعادة المحاولة، ننتقل للنموذج التالي فوراً
+            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('quota') || lowerErr.includes('limit')) {
+              lastErrorMsg = errMsg;
+              break; 
+            }
+
+            // 2. أخطاء مؤقتة: ضغط عالٍ أو السيرفر مشغول (نعيد المحاولة بعد 3 ثوانٍ)
+            if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503 || response.status === 429) {
+              lastErrorMsg = errMsg;
+              if (attempt < 3) {
+                console.warn(`ضغط عالٍ على نموذج ${model}، جاري إعادة المحاولة...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                continue; 
+              } else {
+                break; // استنفدنا المحاولات لهذا النموذج، ننتقل للنموذج التالي
+              }
+            }
+
+            throw new Error(errMsg);
           }
-          throw new Error(errMsg || 'فشل الاتصال بالذكاء الاصطناعي');
-        }
-        return data; 
-      } catch (err: any) {
-        const errMsg = err.message.toLowerCase();
-        if (errMsg.includes('not found') || errMsg.includes('not supported') || errMsg.includes('quota') || errMsg.includes('limit')) {
+          
+          success = true;
+          break; // نجحت العملية، نكسر حلقة المحاولات
+
+        } catch (err: any) {
+          const lowerErr = err.message.toLowerCase();
+          if (lowerErr.includes('high demand') || lowerErr.includes('fetch error')) {
+             if (attempt < 3) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                continue;
+             }
+          }
           lastErrorMsg = err.message;
-          continue;
+          break; 
         }
-        throw err;
+      }
+
+      if (success) {
+        return data; // نُرجع النتيجة النهائية
       }
     }
 
-    throw new Error(`تعذر الوصول إلى أي نموذج متاح. تأكد من حصة API الخاصة بك. آخر خطأ: ${lastErrorMsg}`);
+    throw new Error(`عذراً، سيرفرات الذكاء الاصطناعي تشهد ضغطاً عالمياً عالياً في هذه اللحظة. يرجى المحاولة بعد دقيقة. (تفاصيل: ${lastErrorMsg})`);
   };
 
   const analyzeImage = async () => {
@@ -173,7 +199,7 @@ export default function AITestSandbox() {
         }
       };
 
-      const aiResponse = await callGeminiWithFallback(payload);
+      const aiResponse = await callGeminiWithSmartRetry(payload);
       
       if (aiResponse?.candidates?.[0]?.content?.parts?.[0]?.text) {
         const jsonText = aiResponse.candidates[0].content.parts[0].text;
@@ -223,23 +249,21 @@ export default function AITestSandbox() {
         }
       };
 
-      // إصلاح: مطابقة هيكل البيانات المطلوب من دالة saveExam
       const formattedQuestions = result.questions.map((q) => ({
         id: crypto.randomUUID(), 
         content: q.content,
         type: q.type,
         points: q.points || 1,
-        isRequired: true, // الحقل المطلوب في نظامك
+        isRequired: true, 
         is_required: true,
         options: q.options?.map(opt => ({
           id: crypto.randomUUID(),
           content: opt.content,
-          isCorrect: opt.is_correct, // الحقل المطلوب في نظامك
+          isCorrect: opt.is_correct,
           is_correct: opt.is_correct
         })) || []
       }));
 
-      // إرسال الطلب الفعلي لقاعدة بيانات Supabase
       await saveExam(examPayload as any, formattedQuestions as any, true); 
       
       router.push('/exams'); 
