@@ -1,15 +1,25 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, Database, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { createClient } from '@supabase/supabase-js';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste } from 'lucide-react';
 
-// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+/* ============================================================================
+   🔴 تنبيه هام للمهندس إيهاب: للعمل على بيئة مشروعك الحقيقي 🔴
+   يرجى إزالة علامات التعليق (//) عن الاستيرادات الحقيقية التالية،
+   ثم قم بحذف قسم "دوال المحاكاة المؤقتة" بالكامل ليتصل النظام بقواعد بياناتك.
+============================================================================ */
+
+// --- 1. الاستيرادات الحقيقية (قم بتفعيلها في مشروعك) ---
+ import { useRouter } from 'next/navigation';
+ import { useExamsSystem } from '@/hooks/useExamsSystem';
+ import { useSchoolFormData } from '@/hooks/useSchoolFormData';
+ import { useAuth } from '@/context/auth-context';
+ import { createClient } from '@supabase/supabase-js';
+ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+ const supabase = createClient(supabaseUrl, supabaseKey);
+
+
 
 interface ExtractedQuestion {
   content: string;
@@ -40,9 +50,11 @@ interface Section {
 
 export default function AITestSandbox() {
   const router = useRouter();
-  const { saveExam } = useExamsSystem();
   
-  // 🚀 حالات البيانات الحقيقية والفلترة التراتبية
+  // 🚀 جلب بيانات تسجيل الدخول لاستخدامها في تأمين الطلبات لاحقاً
+  const { user, session } = useAuth() as any; 
+  
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -67,12 +79,11 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 1. 🚀 جلب المعلمين من جدول teachers حصراً، مع ربط الاسم من جدول users
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
         const { data, error } = await supabase
-          .from('teachers')
+          .from('teachers') 
           .select(`
             id,
             users!inner ( full_name )
@@ -96,7 +107,6 @@ export default function AITestSandbox() {
     fetchTeachers();
   }, []);
 
-  // 2. 🚀 جلب المواد المخصصة للمعلم المُختار من جدول teacher_subjects
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
       if (!selectedTeacher) {
@@ -121,7 +131,6 @@ export default function AITestSandbox() {
         
         setSubjects(uniqueSubjects as Subject[]);
         setSelectedSubject(''); 
-        
       } catch (err) {
         console.error("Error fetching subjects:", err);
       } finally {
@@ -131,7 +140,6 @@ export default function AITestSandbox() {
     fetchTeacherSubjects();
   }, [selectedTeacher]);
 
-  // 3. 🚀 جلب فصول المعلم في المادة المُختارة من جدول teacher_sections
   useEffect(() => {
     const fetchTeacherSections = async () => {
       if (!selectedTeacher || !selectedSubject) {
@@ -157,7 +165,6 @@ export default function AITestSandbox() {
 
         setSections(uniqueSections as Section[]);
         setSelectedSections([]); 
-        
       } catch (err) {
         console.error("Error fetching sections:", err);
       } finally {
@@ -257,25 +264,15 @@ export default function AITestSandbox() {
             const errMsg = data.error?.message || 'خطأ غير معروف';
             const lowerErr = errMsg.toLowerCase();
 
-            if (lowerErr.includes('quota') || lowerErr.includes('limit') || response.status === 429) {
-               throw new Error('QUOTA_EXCEEDED');
-            }
-
-            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('api key')) {
-              lastErrorMsg = errMsg;
-              break; 
-            }
-
+            if (lowerErr.includes('quota') || lowerErr.includes('limit') || response.status === 429) throw new Error('QUOTA_EXCEEDED');
+            if (lowerErr.includes('not found') || lowerErr.includes('not supported') || lowerErr.includes('api key')) { lastErrorMsg = errMsg; break; }
             if (lowerErr.includes('high demand') || lowerErr.includes('overloaded') || response.status === 503) {
               lastErrorMsg = errMsg;
               if (attempt < delays.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
                 continue; 
-              } else {
-                break; 
-              }
+              } else break; 
             }
-
             throw new Error(errMsg);
           }
           
@@ -284,9 +281,7 @@ export default function AITestSandbox() {
 
         } catch (err: any) {
           const errMsg = err.message;
-          if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) {
-             throw new Error('تم استنفاد الحد المجاني للطلبات. يرجى الانتظار قليلاً أو استخدام (الإدخال اليدوي للطوارئ) بالأسفل.');
-          }
+          if (errMsg === 'QUOTA_EXCEEDED' || errMsg.toLowerCase().includes('429')) throw new Error('تم استنفاد الحد المجاني للطلبات. يرجى الانتظار قليلاً أو استخدام (الإدخال اليدوي للطوارئ) بالأسفل.');
           if (errMsg.toLowerCase().includes('high demand') || errMsg.toLowerCase().includes('fetch error')) {
              if (attempt < delays.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, delays[attempt]));
@@ -297,10 +292,8 @@ export default function AITestSandbox() {
           break; 
         }
       }
-
       if (success) return data; 
     }
-
     throw new Error(`سيرفرات جوجل تشهد ضغطاً شديداً حالياً. يرجى استخدام قسم (الإدخال اليدوي للطوارئ) بالأسفل لضمان عدم توقف عملك.`);
   };
 
@@ -398,7 +391,7 @@ export default function AITestSandbox() {
     }
   };
 
-  // 🚀 إدخال مباشر في قاعدة البيانات مع رسائل ذكية لاكتشاف أخطاء الحماية (RLS)
+  // 🚀 إدخال مباشر وموثّق (Authenticated Insert) لتجاوز مشاكل RLS
   const saveToRealDatabase = async () => {
     if (!result) return;
     if (!selectedTeacher) { alert('يرجى تحديد المعلم صاحب الاختبار.'); return; }
@@ -409,8 +402,30 @@ export default function AITestSandbox() {
     try {
       const totalScore = result.questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
       
-      // 1. إدخال الاختبار
-      const { data: newExam, error: examError } = await supabase
+      // 🚀 تجهيز عميل Supabase مُوثق (Authenticated) يحمل التوكن الخاص بك
+      let authSupabase = supabase;
+      try {
+        // محاولة جلب التوكن من الـ Auth Context لتأكيد هويتك كمدير لقاعدة البيانات
+        const activeToken = session?.access_token || user?.token || user?.access_token;
+        if (activeToken) {
+          authSupabase = createClient(supabaseUrl, supabaseKey, {
+             global: { headers: { Authorization: `Bearer ${activeToken}` } }
+          });
+        } else {
+          // محاولة بديلة لجلبه من التخزين المحلي
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.access_token) {
+            authSupabase = createClient(supabaseUrl, supabaseKey, {
+               global: { headers: { Authorization: `Bearer ${data.session.access_token}` } }
+            });
+          }
+        }
+      } catch (e) {
+        console.log("استخدام العميل الافتراضي");
+      }
+
+      // 1. إدخال الاختبار باستخدام العميل الموثق
+      const { data: newExam, error: examError } = await authSupabase
         .from('exams')
         .insert({
           title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
@@ -433,10 +448,9 @@ export default function AITestSandbox() {
         .select('id')
         .single();
 
-      // 🔴 التعامل الذكي مع خطأ الحماية (RLS) وتوجيه المدير للحل
       if (examError) {
         if (examError.message.includes('row-level security') || examError.code === '42501') {
-          throw new Error('تم منع الحفظ بسبب سياسات الحماية (RLS) في قاعدة بياناتك. لحل هذه المشكلة، يجب عليك فتح نافذة الـ SQL في Supabase وإضافة سياسة تسمح للمدراء (Admins) بإضافة اختبارات للمعلمين. (ستجد الكود المطلوب في الأسفل)');
+          throw new Error('قاعدة البيانات رفضت العملية. يرجى التأكد من تشغيل كود الـ SQL الأخير في لوحة تحكم Supabase لتحديث سياسات RLS.');
         }
         throw new Error(`فشل إنشاء الاختبار الأساسي: ${examError.message}`);
       }
@@ -445,14 +459,14 @@ export default function AITestSandbox() {
 
       // 2. ربط الفصول
       const sectionsData = selectedSections.map(secId => ({ exam_id: examId, section_id: secId }));
-      const { error: secError } = await supabase.from('exam_sections').insert(sectionsData);
+      const { error: secError } = await authSupabase.from('exam_sections').insert(sectionsData);
       if (secError) throw new Error(`فشل ربط الفصول بالاختبار: ${secError.message}`);
 
       // 3. إدخال الأسئلة والخيارات
       for (let i = 0; i < result.questions.length; i++) {
         const q = result.questions[i];
         
-        const { data: newQuestion, error: qError } = await supabase
+        const { data: newQuestion, error: qError } = await authSupabase
           .from('questions')
           .insert({
             exam_id: examId,
@@ -475,7 +489,7 @@ export default function AITestSandbox() {
             order_index: oIdx + 1
           }));
           
-          const { error: optError } = await supabase.from('question_options').insert(optsData);
+          const { error: optError } = await authSupabase.from('question_options').insert(optsData);
           if (optError) throw new Error(`فشل إدخال خيارات السؤال رقم ${i + 1}: ${optError.message}`);
         }
       }
@@ -485,7 +499,7 @@ export default function AITestSandbox() {
 
     } catch (error: any) {
       console.error("Database Save Error:", error);
-      alert('⚠️ تنبيه: ' + error.message);
+      alert('⚠️ ' + error.message);
     } finally {
       setIsSavingDB(false);
     }
