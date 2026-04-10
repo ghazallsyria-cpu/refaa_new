@@ -1,21 +1,3 @@
-يا لك من صبور ومحترف يا أبو جمال! 😂 المشكلة هذه المرة ليست من الذكاء الاصطناعي، بل **مني أنا!** 🙋‍♂️
-
-دعني أشرح لك ما حدث لكي تضحك معي:
-الذكاء الاصطناعي هذه المرة **التزم بتعليماتنا الصارمة بالحرف الواحد**، وقام بإنتاج كود JSON مثالي يحتوي على شرطتين مائلتين `\\circ` و `\\text` كما طلبنا منه تماماً. (كما هو واضح في الكود الذي أرسلته لي).
-
-ولكن، "الفلتر السحري" الذي كتبته لك في التحديث السابق كان **هجومياً جداً**، فرأى الشرطتين المائلتين فقام بمضاعفتهما لتصبح ثلاثة `\\\circ`، مما أدى إلى تدمير الـ JSON وظهور خطأ `Invalid escape character c` عند محاولة المتصفح قراءته! 🤦‍♂️
-
-إضافة إلى ذلك، الذكاء الاصطناعي الخارجي تفلسف قليلاً وابتكر نوع سؤال أسماه `short_answer`، ووضع `section_header` كخاصية داخل السؤال بدلاً من سؤال مستقل.
-
-### 🛠️ الحل الجذري (غسالة الأكواد الذكية v3.0)
-لقد قمت بإزالة الفلتر الهجومي تماماً لأن البرومبت الجديد أثبت كفاءته ويُخرج JSON سليماً. وقمت بكتابة خوارزمية ذكية جداً **تستوعب فلسفة الذكاء الاصطناعي**:
-1. إذا دمج الذكاء الاصطناعي الـ `section_header` داخل السؤال، ستقوم المنصة بفصلهما تلقائياً وصنع عنوان رئيسي يتبعه السؤال.
-2. إذا اخترع نوعاً اسمه `short_answer`، ستفهمه المنصة وتحوله إلى `essay` لكي يتوافق مع نظامك.
-3. إذا أرسل الخيارات على شكل كائنات (Objects) بدلاً من نصوص، ستستخرج المنصة النص منها بسلاسة.
-
-إليك الملف النهائي والأكثر استقراراً (`app/ai-assignments/page.tsx`). انسخه واستبدله، والصق كود الـ JSON الذي أرسلته لي، وسيعمل فوراً وبشكل مبهر!
-
-```tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -237,7 +219,6 @@ export default function AIAssignmentsSandbox() {
     throw new Error('سيرفرات جوجل تشهد ضغطاً شديداً حالياً. استخدم الإدخال اليدوي للطوارئ بالأسفل.');
   };
 
-  // إزالة الكود البرمجي العالق وتنظيف الـ Markdown
   const cleanRawJson = (raw: string) => {
     let cleaned = raw.trim();
     if (cleaned.startsWith('```')) {
@@ -248,7 +229,6 @@ export default function AIAssignmentsSandbox() {
     return cleaned.trim();
   };
 
-  // 🚀 خوارزمية المعالجة الذكية لفهم فلسفة الذكاء الاصطناعي
   const parseAndNormalizeQuestions = (parsedData: any): ExtractedQuestion[] => {
     const normalizedQuestions: ExtractedQuestion[] = [];
     let lastHeader = '';
@@ -258,7 +238,6 @@ export default function AIAssignmentsSandbox() {
     }
 
     parsedData.questions.forEach((q: any) => {
-      // 1. إذا دمج الذكاء الاصطناعي الـ section_header داخل السؤال نفسه
       if (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader) {
         normalizedQuestions.push({
           content: q.section_header,
@@ -269,16 +248,13 @@ export default function AIAssignmentsSandbox() {
         lastHeader = q.section_header;
       }
 
-      // 2. تصحيح الأنواع (Types) التي يخترعها الذكاء الاصطناعي
       let qType = q.type || 'essay';
-      if (qType === 'short_answer') qType = 'essay'; // تحويل الإجابة القصيرة لمقالي
+      if (qType === 'short_answer') qType = 'essay'; 
       
-      // 3. معالجة خيارات أسئلة الصح والخطأ إذا نسي الذكاء إرسالها
       let parsedOptions: string[] = [];
       if (qType === 'true_false' && (!q.options || q.options.length === 0)) {
          parsedOptions = ['✓', '✗'];
       } else if (Array.isArray(q.options)) {
-        // 4. استخراج النص إذا أرسل الذكاء الخيارات على شكل Objects
         parsedOptions = q.options.map((opt: any) => {
           if (typeof opt === 'string') return opt;
           if (opt && typeof opt === 'object') return String(opt.content || opt.text || opt.value || '');
@@ -572,4 +548,3 @@ export default function AIAssignmentsSandbox() {
     </div>
   );
 }
-```
