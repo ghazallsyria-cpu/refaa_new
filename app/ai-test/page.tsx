@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -72,18 +71,20 @@ export default function AITestSandbox() {
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
+        // 🚀 تم إزالة !inner لكي يظهر جميع المعلمين حتى لو كان هناك قيود RLS على الاسم
         const { data, error } = await supabase
           .from('teachers')
           .select(`
             id,
-            users!inner ( full_name )
+            users ( full_name )
           `);
 
         if (error) throw error;
         
         const formattedTeachers = data?.map((t: any) => ({
           id: t.id,
-          full_name: t.users?.full_name || 'معلم بدون اسم'
+          // في حال منع الـ RLS جلب الاسم، سيظهر المعلم كـ (معلم بدون اسم) بدلاً من أن يختفي تماماً
+          full_name: t.users?.full_name || 'معلم بدون اسم' 
         })) || [];
 
         formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
@@ -773,4 +774,3 @@ export default function AITestSandbox() {
     </div>
   );
 }
-
