@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, Circle, Square, UploadCloud } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, UploadCloud } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import ImageUpload from '@/components/ImageUpload'; 
+
+// 🚀 استدعاء مكتبة الرياضيات
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
 
 type Exam = { id: string; title: string; description: string; duration: number; exam_date: string; start_time: string; end_time: string; settings: any; max_attempts?: number; };
 
@@ -205,8 +209,9 @@ export default function TakeQuiz() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timeLeft, isFinished, alreadySubmitted, handleSubmit]);
 
+  // 🚀 مراقبة خروج الطالب (مرتبطة بزر الإعدادات الخاص بالمعلم)
   useEffect(() => {
-    if (isFinished || loading || !exam || alreadySubmitted) return;
+    if (isFinished || loading || !exam || alreadySubmitted || !exam.settings?.prevent_tab_switch) return;
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -222,6 +227,33 @@ export default function TakeQuiz() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [isFinished, loading, exam, alreadySubmitted, handleSubmit]);
+
+  // 🚀 كود منع النسخ وتصوير الشاشة (الطباعة)
+  useEffect(() => {
+    if (!exam?.settings?.prevent_copy) return;
+
+    const preventCopyPaste = (e: Event) => {
+        e.preventDefault();
+    };
+
+    const preventPrint = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+            e.preventDefault();
+        }
+    };
+
+    document.addEventListener('copy', preventCopyPaste);
+    document.addEventListener('cut', preventCopyPaste);
+    document.addEventListener('contextmenu', preventCopyPaste);
+    document.addEventListener('keydown', preventPrint);
+
+    return () => {
+        document.removeEventListener('copy', preventCopyPaste);
+        document.removeEventListener('cut', preventCopyPaste);
+        document.removeEventListener('contextmenu', preventCopyPaste);
+        document.removeEventListener('keydown', preventPrint);
+    };
+  }, [exam?.settings?.prevent_copy]);
 
   const handleAnswerChange = (questionId: string, value: any) => setAnswers(prev => ({ ...prev, [questionId]: value }));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -296,11 +328,11 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  // المتغير الجديد للتعرف على جميع حالات رفع الملفات
   const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
+    // 🚀 تم إضافة كلاسات منع تظليل النص وإخفاء الصفحة عند الطباعة
+    <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", exam?.settings?.prevent_copy && "select-none print:hidden")} dir="rtl">
       <AnimatePresence>
         {showCheatModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-sm">
@@ -350,10 +382,12 @@ export default function TakeQuiz() {
               <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm tracking-wider">
                 <span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span>
               </div>
-              <div 
-                 className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed" 
-                 dangerouslySetInnerHTML={{ __html: currentQuestion?.content || currentQuestion?.text || '' }} 
-              />
+              
+              {/* 🚀 السطر المعدل لعرض الـ HTML والـ LaTeX معاً */}
+              <div className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed">
+                 <Latex>{currentQuestion?.content || currentQuestion?.text || ''}</Latex>
+              </div>
+
               {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (
                 <div className="relative w-full flex justify-center bg-slate-50 rounded-2xl border border-slate-100 p-2 mt-4">
                   <img src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} alt="صورة السؤال" className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm" />
@@ -365,7 +399,7 @@ export default function TakeQuiz() {
               {isAutoCurrent && isSingleChoice && currentQuestion.options?.map((option: any) => (
                 <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
                   <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
-                  <span className="text-lg font-medium">{option.content}</span>
+                  <span className="text-lg font-medium"><Latex>{option.content}</Latex></span>
                 </button>
               ))}
 
@@ -377,12 +411,11 @@ export default function TakeQuiz() {
                     handleAnswerChange(currentQuestion.id, isSelected ? current.filter((id: string) => id !== String(option.id)) : [...current, String(option.id)]);
                   }} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all", isSelected ? "bg-indigo-50 border-indigo-600" : "bg-white border-slate-100")}>
                     <div className={cn("h-6 w-6 rounded-lg border-2 flex items-center justify-center shrink-0", isSelected ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0" /></div>
-                    <span className="text-lg font-medium">{option.content}</span>
+                    <span className="text-lg font-medium"><Latex>{option.content}</Latex></span>
                   </button>
                 );
               })}
 
-              {/* التحديث هنا: استخدام isFileUploadType لضمان ظهور زر رفع الملفات دائماً */}
               {isFileUploadType && (
                 <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
                   <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2">
@@ -398,7 +431,6 @@ export default function TakeQuiz() {
                 </div>
               )}
 
-              {/* التحديث هنا أيضاً لعدم ظهور مربع النص المقالي عند وجود سؤال رفع ملف */}
               {!isAutoCurrent && !isFileUploadType && (
                 <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed font-bold" />
               )}
