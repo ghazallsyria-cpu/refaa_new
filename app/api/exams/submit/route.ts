@@ -1,4 +1,3 @@
-// ... existing code ...
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -9,7 +8,47 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 🔴 حذفنا المتغير score من هنا، المتصفح لن يحدد الدرجة بعد الآن
+    // 🔴 حساب الدرجة في الخادم - حذفنا استقبال الدرجة من المتصفح
+    const { examId, studentId, answers, timeTaken } = await req.json();
+
+    if (!examId || !studentId || !answers) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // جلب الأسئلة الصحيحة
+    const { data: questions, error: questionsError } = await supabase
+      .from('questions')
+      .select('id, correct_answer, points')
+      .eq('exam_id', examId);
+
+    if (questionsError || !questions) {
+      return NextResponse.json({ error: 'Failed to fetch questions for grading' }, { status: 500 });
+    }
+
+    // حساب الدرجة
+    let computedScore = 0;
+    for (const question of questions) {
+      const studentAnswer = answers[question.id];
+      if (studentAnswer && studentAnswer === question.correct_answer) {
+        computedScore += question.points || 1;
+      }
+    }
+
+    // Insert attempt
+    const { data: attempt, error: attemptError } = await supabase
+      .from('exam_attempts')
+      .insert({
+        exam_id: examId,
+        student_id: studentId,
+        score: computedScore,
+        time_taken: timeTaken,
+        status: 'completed'
+      })
+      .select()
+      .single();
+
+    if (attemptError) throw attemptError;
+
     const { examId, studentId, answers, timeTaken } = await req.json();
 
     if (!examId || !studentId || !answers) {
