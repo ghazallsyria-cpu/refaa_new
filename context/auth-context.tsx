@@ -1,53 +1,120 @@
-// ... existing code ...
-import { supabase } from '@/lib/supabase'; // تأكد من أن مسار الاستيراد صحيح لديك
+'use client';
 
-// ... existing code ...
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
+
+// تعريف أنواع البيانات للـ Context
+type AuthContextType = {
+  user: User | null;
+  authRole: string | null;
+  isAdminByEmail: boolean;
+  isLoading: boolean;
+  signOut: () => Promise<void>;
+  refreshSession: () => void;
+};
+
+// إنشاء الـ Context بقيمة افتراضية فارغة
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [authRole, setAuthRole] = useState<string | null>(null);
+  const [isAdminByEmail, setIsAdminByEmail] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // دالة لجلب تفاصيل المستخدم ودوره
+  const fetchUserRole = async (currentUser: User) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('role, email')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user role:', error);
+        return;
+      }
+
+      if (data) {
+        setAuthRole(data.role);
+        // التحقق مما إذا كان المستخدم أدمن بناءً على بريده الإلكتروني (مثال)
+        setIsAdminByEmail(data.role === 'admin' || data.role === 'superadmin');
+      }
+    } catch (err) {
+      console.error('Failed to get user role', err);
+    }
+  };
 
   useEffect(() => {
-    // ... existing code ... (أكواد جلب الجلسة الحالية)
-    
-    // 🔴 1. ابحث عن أي سطر يقوم بتخزين الدور في sessionStorage وقم بحذفه تماماً
-    // sessionStorage.setItem('authRole', role); // ❌ يجب حذفه
-    // sessionStorage.getItem('authRole');       // ❌ يجب حذفه والاعتماد فقط على React State (setAuthRole)
+    // 1. جلب الجلسة الحالية عند تحميل التطبيق
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        fetchUserRole(session.user);
+      } else {
+        setIsLoading(false);
+      }
+    });
 
-    // 🟢 2. استبدال setInterval بـ Supabase Realtime Subscription
-    
-    // ❌ الكود القديم الذي يجب حذفه:
-    // const interval = setInterval(evaluatePlatformStatus, 5000);
-    
-    // 🟢 الكود الجديد للترقب اللحظي (Realtime) دون إرهاق الخادم:
+    // 2. مراقبة تغييرات الجلسة (تسجيل دخول، خروج، الخ)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        await fetchUserRole(session.user);
+      } else {
+        setUser(null);
+        setAuthRole(null);
+        setIsAdminByEmail(false);
+      }
+      setIsLoading(false);
+    });
+
+    // 3. الترقب اللحظي (Realtime) بدلاً من setInterval لتقييم حالة المنصة
     const statusSubscription = supabase
       .channel('public:platform_settings')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'platform_settings' },
         (payload) => {
-          // استدعاء دالة التقييم فقط عندما يحدث تغيير فعلي في قاعدة البيانات
-          evaluatePlatformStatus(payload.new); 
+          // يمكنك هنا استدعاء دالة لمعالجة التغييرات في إعدادات المنصة إذا لزم الأمر
+          console.log('Platform settings changed:', payload.new);
         }
       )
       .subscribe();
 
+    // 4. التنظيف (Cleanup) عند إغلاق التطبيق
     return () => {
-      // ... existing code ... (أكواد تنظيف onAuthStateChange)
-      
-      // ❌ احذف السطر القديم:
-      // clearInterval(interval);
-      
-      // 🟢 أضف تنظيف الاشتراك الجديد:
+      subscription.unsubscribe();
       supabase.removeChannel(statusSubscription);
     };
-  }, []); // تأكد من مصفوفة الاعتماديات لديك
+  }, []);
 
-  // ... existing code ...
+  // دالة لتسجيل الخروج
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
 
+  // دالة لتحديث الجلسة يدوياً إذا لزم الأمر
+  const refreshSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+        setUser(session.user);
+        await fetchUserRole(session.user);
+    }
+  };
+
+  // القيم التي سيتم توفيرها لجميع أجزاء التطبيق
   const value = {
     user,
     authRole,
     isAdminByEmail,
-    isLoading, // أضف isLoading إذا لم يكن موجوداً
-    signOut: () => supabase.auth.signOut(),
-    refreshSession: () => {}, // أضف دالة فارغة مؤقتاً إذا كانت مستخدمة في مكان آخر
+    isLoading,
+    signOut,
+    refreshSession,
   };
 
   return (
@@ -57,7 +124,7 @@ import { supabase } from '@/lib/supabase'; // تأكد من أن مسار الا
   );
 }
 
-// 🟢 هذا هو السطر الذي كان مفقوداً وتسبب في الخطأ!
+// Custom Hook لاستخدام الـ Context بسهولة في أي مكان
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
