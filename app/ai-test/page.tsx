@@ -373,6 +373,7 @@ export default function AITestSandbox() {
     try {
       const totalScore = result.questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
       
+      // 🚀 تم تحديث الـ Payload ليتوافق مع الإعدادات الجديدة في API الحفظ
       const examPayload = {
         title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
         description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي بواسطة إدارة المنصة.',
@@ -388,28 +389,28 @@ export default function AITestSandbox() {
           shuffle_questions: false,
           shuffle_options: false,
           show_results_immediately: true,
-          allow_backtracking: true
+          allow_backtracking: true,
+          prevent_tab_switch: false, // الوضع الافتراضي الجديد (مغلق لعدم إزعاج الطلاب في الاختبارات المولدة عشوائياً)
+          prevent_copy: true         // الوضع الافتراضي الجديد (مفعل لمنع النسخ)
         }
       };
 
+      // 🚀 تم تحديث أسماء الخصائص لتتوافق تماماً مع الجدول في Supabase
       const formattedQuestions = result.questions.map((q, i) => ({
         id: crypto.randomUUID(), 
         content: q.content,
         type: q.type,
         points: q.points || 1,
-        isRequired: true, 
-        is_required: true,
+        is_required: true, // الاسم الصحيح للـ API الجديد
         order_index: i + 1,
         options: q.options?.map((opt, oIdx) => ({
           id: crypto.randomUUID(),
           content: opt.content,
-          isCorrect: opt.is_correct,
-          is_correct: opt.is_correct,
+          is_correct: opt.is_correct, // الاسم الصحيح للـ API الجديد
           order_index: oIdx + 1
         })) || []
       }));
 
-      // 🚀 الخدعة الذكية للحفظ عبر API
       const response = await fetch('/api/exams/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -511,7 +512,6 @@ export default function AITestSandbox() {
               )}
             </div>
 
-            {/* 🚀 قسم الإدخال اليدوي للطوارئ عاد إلى مكانه! */}
             <div className="bg-slate-800 p-8 rounded-[2.5rem] shadow-xl border border-slate-700 text-white">
               <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400">
                 <FileJson className="w-6 h-6" />
