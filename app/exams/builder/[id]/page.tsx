@@ -141,6 +141,7 @@ export default function QuizBuilder() {
 
         setQuestions((questionsData || []).map((q: any) => {
            let qType = q.type;
+           // 🚀 إذا كان النوع الحقيقي مسجلاً كـ essay ولكنه يحتوي على العلامة المخفية، نظهره للمعلم كـ file
            if (q.content?.includes('') || qType === 'file_upload') qType = 'file';
            return {...q, type: qType, is_required: q.is_required ?? true};
         }));
@@ -474,7 +475,7 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 الحل الآمن للتعامل مع السلاسل النصية:
+                           // 🚀 عند تغيير نوع السؤال من المعلم، نقوم بتنظيف النص وإزالة الخيارات إذا لزم الأمر
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
                                cleanContent = cleanContent.split('').join('');
@@ -488,6 +489,8 @@ export default function QuizBuilder() {
                                 { id: crypto.randomUUID(), content: 'صح', is_correct: true },
                                 { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
                               ];
+                           } else if (type === 'essay' || type === 'fill_in_blank' || type === 'file' || type === 'file_upload') {
+                              updates.options = [];
                            }
                            updateQuestion(q.id, updates);
                         }} 
