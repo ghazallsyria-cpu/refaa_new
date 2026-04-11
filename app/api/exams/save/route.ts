@@ -68,14 +68,18 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // تنظيف العلامات القديمة من النص لضمان نظافته
-        qContent = qContent.replace(//g, '').replace(//g, '');
+        // تنظيف العلامات القديمة من النص بطريقة آمنة
+        qContent = qContent.split('').join('');
+        const oldTypes = ['essay', 'fill_in_blank', 'file', 'multiple_choice', 'true_false', 'multi_select'];
+        oldTypes.forEach(t => {
+            qContent = qContent.split(``).join('');
+        });
 
         let dbType = frontendType;
         
-        // 🚀 إذا كان النوع مرفوضاً من قاعدة البيانات، نخفيه في النص ونجعله 'essay' أو 'open'
+        // إخفاء النوع في النص إذا كان من الأنواع المعقدة
         if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
-            dbType = 'essay'; // نضع essay كافتراضي لتجربته
+            dbType = 'essay';
             qContent += ``;
         }
 
@@ -91,7 +95,6 @@ export async function POST(req: Request) {
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
-        // 🚀 خوارزمية الإنقاذ: إذا رفضت قاعدة البيانات الحفظ لأي سبب، نجرب الأنواع المضمونة
         if (qErr) {
             const fallbacks = ['open', 'text', 'multiple_choice'];
             for (const fb of fallbacks) {
