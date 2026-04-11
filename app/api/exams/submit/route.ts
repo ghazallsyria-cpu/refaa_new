@@ -8,7 +8,6 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 🔴 حساب الدرجة في الخادم - حذفنا استقبال الدرجة من المتصفح
     const { examId, studentId, answers, timeTaken } = await req.json();
 
     if (!examId || !studentId || !answers) {
@@ -25,14 +24,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Failed to fetch questions for grading' }, { status: 500 });
     }
 
-    // 2. حساب الدرجة (Server-Side Grading)
+    // 2. حساب الدرجة
     let computedScore = 0;
-    
-    // answers is expected to be an object: { question_id: "selected_option" }
     for (const question of questions) {
       const studentAnswer = answers[question.id];
       if (studentAnswer && studentAnswer === question.correct_answer) {
-        computedScore += question.points || 1; // نفترض نقطة واحدة إذا لم تكن محددة
+        computedScore += question.points || 1;
       }
     }
 
@@ -42,17 +39,16 @@ export async function POST(req: Request) {
       .insert({
         exam_id: examId,
         student_id: studentId,
-        score: computedScore, // 🟢 نستخدم الدرجة المحسوبة في الخادم
+        score: computedScore,
         time_taken: timeTaken,
         status: 'completed'
-        // تمت إزالة questions_snapshot بناء على توصية الأداء في التقرير لمنع تضخم البيانات
       })
       .select()
       .single();
 
     if (attemptError) throw attemptError;
 
-    // حفظ إجابات الطالب
+    // 4. حفظ إجابات الطالب
     const answerInserts = Object.entries(answers).map(([questionId, selectedOption]) => ({
       attempt_id: attempt.id,
       question_id: questionId,
@@ -60,11 +56,13 @@ export async function POST(req: Request) {
       is_correct: questions.find(q => q.id === questionId)?.correct_answer === selectedOption
     }));
 
-    const { error: answersInsertError } = await supabase
-      .from('student_answers')
-      .insert(answerInserts);
+    if (answerInserts.length > 0) {
+      const { error: answersInsertError } = await supabase
+        .from('student_answers')
+        .insert(answerInserts);
 
-    if (answersInsertError) throw answersInsertError;
+      if (answersInsertError) throw answersInsertError;
+    }
 
     return NextResponse.json({ 
       success: true, 
