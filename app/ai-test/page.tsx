@@ -6,14 +6,13 @@ import { useRouter } from 'next/navigation';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 تهيئة الاتصال بقاعدة البيانات بشكل مباشر لعمليات القراءة (الفلترة)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ExtractedQuestion {
   content: string;
-  type: 'multiple_choice' | 'true_false' | 'essay' | 'file';
+  type: 'multiple_choice' | 'true_false' | 'essay';
   points: number;
   options?: { content: string; is_correct: boolean }[];
 }
@@ -42,7 +41,6 @@ export default function AITestSandbox() {
   const router = useRouter();
   const { saveExam } = useExamsSystem();
   
-  // حالات البيانات الحقيقية والفلترة التراتبية
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -70,17 +68,9 @@ export default function AITestSandbox() {
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
-        const { data, error } = await supabase
-          .from('teachers')
-          .select(`id, users ( full_name )`);
-
+        const { data, error } = await supabase.from('teachers').select(`id, users ( full_name )`);
         if (error) throw error;
-        
-        const formattedTeachers = data?.map((t: any) => ({
-          id: t.id,
-          full_name: t.users?.full_name || 'معلم بدون اسم' 
-        })) || [];
-
+        const formattedTeachers = data?.map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'معلم بدون اسم' })) || [];
         formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
         setTeachers(formattedTeachers);
       } catch (err) {
@@ -94,30 +84,15 @@ export default function AITestSandbox() {
 
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
-      if (!selectedTeacher) {
-        setSubjects([]);
-        setSelectedSubject('');
-        return;
-      }
-      
+      if (!selectedTeacher) { setSubjects([]); setSelectedSubject(''); return; }
       setSubjectsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('teacher_sections')
-          .select(`
-            subject_id,
-            subjects ( id, name )
-          `)
-          .eq('teacher_id', selectedTeacher);
-
+        const { data, error } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
         if (error) throw error;
-        
         const extracted = data?.map((item: any) => item.subjects).filter(Boolean) || [];
         const uniqueSubjects = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
-        
         setSubjects(uniqueSubjects as Subject[]);
         setSelectedSubject(''); 
-        
       } catch (err) {
         console.error("Error fetching subjects:", err);
       } finally {
@@ -129,28 +104,15 @@ export default function AITestSandbox() {
 
   useEffect(() => {
     const fetchTeacherSections = async () => {
-      if (!selectedTeacher || !selectedSubject) {
-        setSections([]);
-        setSelectedSections([]);
-        return;
-      }
-      
+      if (!selectedTeacher || !selectedSubject) { setSections([]); setSelectedSections([]); return; }
       setSectionsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('teacher_sections')
-          .select(`section_id, sections ( id, name )`)
-          .eq('teacher_id', selectedTeacher)
-          .eq('subject_id', selectedSubject); 
-
+        const { data, error } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
         if (error) throw error;
-        
         const extracted = data?.map((item: any) => item.sections).filter(Boolean) || [];
         const uniqueSections = Array.from(new Map(extracted.map((item: any) => [item.id, item])).values());
-
         setSections(uniqueSections as Section[]);
         setSelectedSections([]); 
-        
       } catch (err) {
         console.error("Error fetching sections:", err);
       } finally {
@@ -161,14 +123,12 @@ export default function AITestSandbox() {
   }, [selectedTeacher, selectedSubject]);
 
   const toggleSection = (sectionId: string) => {
-    setSelectedSections(prev => 
-      prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]
-    );
+    setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 تحديث البرومبت لدعم الرياضيات وأنواع الأسئلة المرفقة
+  // 🚀 التعديل هنا: منع الذكاء الاصطناعي نهائياً من استخدام نوع 'file' حتى لا يخرب الأكواد
   const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة. استخرج العنوان والأسئلة.
-يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
+يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً بالهيكل التالي بالضبط:
 {
   "title": "عنوان الاختبار هنا",
   "questions": [
@@ -183,13 +143,12 @@ export default function AITestSandbox() {
     }
   ]
 }
-ملاحظة هامة جداً للعلوم والرياضيات:
-- إذا كان السؤال أو خياراته تحتوي على معادلات رياضية، فيزيائية، أرقام، أو وحدات قياس، **يجب** كتابتها بصيغة LaTeX محاطة بعلامتي $ (مثال: $x^2 + y^2 = z^2$ أو $100^\\circ \\text{C}$).
+ملاحظة هامة للعلوم والرياضيات: إذا كان السؤال يحتوي على معادلات أو أرقام، اكتبها بصيغة LaTeX محاطة بعلامتي $ (مثال: $x^2 = y$).
 ملاحظات عامة:
-- استخدم المفتاح "content" لنص السؤال (ليس question_text).
-- أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay أو file (لأسئلة الرسم أو المرفقات).
-- للأسئلة المقالية أو التي تتطلب رسم، اترك مصفوفة options فارغة [].
-- لا تكتب أي نص إضافي أو شروحات خارج كود الـ JSON.`;
+- استخدم المفتاح "content" لنص السؤال.
+- أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay. (ممنوع استخدام نوع file نهائياً).
+- للأسئلة المقالية، اترك مصفوفة options فارغة [].
+- لا تكتب أي نص إضافي خارج كود الـ JSON.`;
 
   const copyPrompt = () => {
     navigator.clipboard.writeText(promptText);
@@ -227,9 +186,7 @@ export default function AITestSandbox() {
        finalApiKey = finalApiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     }
     
-    if (!finalApiKey) {
-      throw new Error('يرجى إدخال مفتاح API الخاص بجوجل في الحقل المخصص بالأعلى، أو استخدم الإدخال اليدوي للطوارئ بالأسفل.');
-    }
+    if (!finalApiKey) throw new Error('يرجى إدخال مفتاح API الخاص بجوجل.');
 
     const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
     const delays = [2000, 4000, 8000]; 
@@ -263,7 +220,7 @@ export default function AITestSandbox() {
           success = true;
           break; 
         } catch (err: any) {
-          if (err.message === 'QUOTA_EXCEEDED') throw new Error('تم استنفاد الحد المجاني للطلبات. يرجى الانتظار قليلاً أو استخدام (الإدخال اليدوي للطوارئ) بالأسفل.');
+          if (err.message === 'QUOTA_EXCEEDED') throw new Error('تم استنفاد الحد المجاني للطلبات.');
           if (attempt < delays.length - 1) {
              await new Promise(resolve => setTimeout(resolve, delays[attempt]));
              continue;
@@ -273,7 +230,7 @@ export default function AITestSandbox() {
       }
       if (success) return data; 
     }
-    throw new Error(`سيرفرات جوجل تشهد ضغطاً شديداً حالياً. يرجى استخدام قسم (الإدخال اليدوي للطوارئ) بالأسفل لضمان عدم توقف عملك.`);
+    throw new Error(`سيرفرات جوجل تشهد ضغطاً شديداً حالياً.`);
   };
 
   const analyzeImage = async () => {
@@ -342,9 +299,13 @@ export default function AITestSandbox() {
           });
         }
 
+        // 🚀 التعديل هنا: إذا حاول المدرس الغش واستخدم نوع file يدوياً، نرجعه لـ essay
+        let parsedType = q.type || 'essay';
+        if (parsedType === 'file' || parsedType === 'file_upload') parsedType = 'essay';
+
         return {
           content,
-          type: q.type || 'essay', 
+          type: parsedType, 
           points: Number(q.points) || 1,
           options: normalizedOptions
         };
@@ -384,18 +345,16 @@ export default function AITestSandbox() {
         total_marks: totalScore,
         status: 'draft', 
         max_attempts: 1,
-        // 🚀 تحديث الإعدادات لمنع الغش والنسخ
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
           show_results_immediately: true,
           allow_backtracking: true,
-          prevent_tab_switch: false, // افتراضياً مغلق لعدم إزعاج الطلاب ما لم يفعله المعلم يدوياً
-          prevent_copy: true         // مفعل افتراضياً
+          prevent_tab_switch: false, 
+          prevent_copy: true         
         }
       };
 
-      // 🚀 تجهيز الأسئلة بالصيغة الصحيحة 100% للـ API
       const formattedQuestions = result.questions.map((q, i) => ({
         id: crypto.randomUUID(), 
         content: q.content,
