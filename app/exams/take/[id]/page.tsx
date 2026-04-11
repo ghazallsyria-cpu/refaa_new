@@ -57,7 +57,6 @@ export default function TakeQuiz() {
       let validStudentId = actualUserId;
 
       if (!isPreviewMode) {
-          // 🚀 جلب الـ ID الحقيقي للطالب لمنع خطأ foreign key constraint
           const { data: sProfile } = await supabase.from('students').select('id').eq('user_id', actualUserId).maybeSingle();
           if (sProfile) validStudentId = sProfile.id;
           else {
@@ -72,7 +71,7 @@ export default function TakeQuiz() {
             .eq('exam_id', params.id)
             .eq('student_id', validStudentId);
 
-          const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
+          const { exam: examData } = await fetchExamForStudent(params.id as string);
           const maxAttempts = examData.max_attempts || 1;
 
           if (count !== null && count >= maxAttempts) {
@@ -102,7 +101,23 @@ export default function TakeQuiz() {
 
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
-      let finalQuestions = [...(questionsData || [])];
+      let finalQuestions = [...(questionsData || [])].map((q: any) => {
+         let qType = q.type;
+         let qContent = q.content || '';
+         
+         const typeMatch = qContent.match(//);
+         if (typeMatch) {
+             qType = typeMatch[1];
+             qContent = qContent.replace(//g, '');
+         } else if (qContent.includes('') || qType === 'file_upload') {
+             qType = 'file';
+             qContent = qContent.replace(//g, '');
+         } else if (qType === 'open') {
+             qType = 'essay';
+         }
+
+         return {...q, type: qType, content: qContent};
+      });
       
       if (examData.settings?.shuffle_questions && !isPreviewMode) {
          finalQuestions.sort(() => Math.random() - 0.5);
@@ -208,7 +223,7 @@ export default function TakeQuiz() {
             answers: formattedAnswers,
             score: totalScore,
             status: attemptStatus,
-            userId: studentProfileId || user.id || user.user_id, // 🚀 إرسال الـ ID الصحيح هنا
+            userId: studentProfileId || user.id || user.user_id, 
             timeTaken: calculatedTimeTaken
         })
       });
@@ -351,8 +366,8 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  // 🚀 التعديل هنا: فحص صارم جداً للعلامة المخفية لكي لا تظهر الأسئلة المقالية כرفع صورة!
-  const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType) || (currentQType === 'essay' && (currentQuestion?.content || '').includes(''));
+  // 🚀 التعديل الجذري هنا: لا نعتبره رفع ملف إلا إذا كان نوعه الحقيقي هو ملف أو رفع (انتهى زمن العلامة المخفية)
+  const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
     <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", (exam?.settings?.prevent_copy && !isPreviewMode) && "select-none print:hidden")} dir="rtl">
