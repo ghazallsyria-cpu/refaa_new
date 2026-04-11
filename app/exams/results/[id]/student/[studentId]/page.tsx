@@ -5,6 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target, Timer, FileText } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
+// 🚀 استدعاء مكتبة الرياضيات
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
   return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
@@ -239,7 +243,6 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
-            // التعديل هنا: تعريف شامل لنوع رفع الملفات
             const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
             
             let studentAnswerText = null;
@@ -284,10 +287,10 @@ export default function StudentExamResult() {
                         {index + 1}
                     </div>
                     <div className="pt-2">
-                       <div 
-                         className="prose max-w-none font-bold text-lg text-slate-800 leading-relaxed mt-1" 
-                         dangerouslySetInnerHTML={{ __html: question.content || question.text || '' }} 
-                       />
+                       {/* 🚀 السطر المعدل لعرض المعادلة الرياضية والنصوص */}
+                       <div className="prose max-w-none font-bold text-lg text-slate-800 leading-relaxed mt-1">
+                          <Latex>{question.content || question.text || ''}</Latex>
+                       </div>
                     </div>
                   </div>
                   
@@ -314,7 +317,6 @@ export default function StudentExamResult() {
                       <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابة الطالب</span>
                     </div>
                     
-                    {/* التعديل هنا: استخدام isFileUploadType لضمان ظهور الصورة */}
                     {isFileUploadType && !isUnanswered ? (
                        <div className="mt-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm inline-block">
                           {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
@@ -326,19 +328,22 @@ export default function StudentExamResult() {
                           )}
                        </div>
                     ) : (
-                       <p className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
-                          {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : studentAnswerText}
-                       </p>
+                       {/* 🚀 السطر المعدل لعرض معادلات إجابة الطالب */}
+                       <div className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
+                          {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : <Latex>{String(studentAnswerText)}</Latex>}
+                       </div>
                     )}
                   </div>
 
-                  {/* التعديل هنا أيضاً لإخفاء مربع "الإجابة النموذجية" في حال كانت إجابة بالصور */}
                   {!isFileUploadType && (
                     <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
                       <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
                           <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
                       </div>
-                      <p className="text-lg font-bold text-slate-800 leading-relaxed">{correctAnswerText}</p>
+                      {/* 🚀 السطر المعدل لعرض معادلات الإجابة النموذجية */}
+                      <div className="text-lg font-bold text-slate-800 leading-relaxed">
+                          <Latex>{String(correctAnswerText)}</Latex>
+                      </div>
                     </div>
                   )}
 
