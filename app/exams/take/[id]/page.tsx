@@ -101,19 +101,20 @@ export default function TakeQuiz() {
 
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
-      // 🚀 استخراج النوع الآمن للطالب
       let finalQuestions = [...(questionsData || [])].map((q: any) => {
          let qType = q.type;
          let qContent = q.content || '';
          
-         if (qContent.includes('', startIndex);
-             if (startIndex > 9 && endIndex > startIndex) {
+         if (qContent.includes('[[[TYPE:')) {
+             const startIndex = qContent.indexOf('[[[TYPE:') + 9;
+             const endIndex = qContent.indexOf(']]]', startIndex);
+             if (startIndex > 8 && endIndex > startIndex) {
                  qType = qContent.substring(startIndex, endIndex);
              }
-             qContent = qContent.split(``).join('');
-         } else if (qContent.includes('') || qType === 'file_upload') {
+             qContent = qContent.split(`[[[TYPE:${qType}]]]`).join('');
+         } else if (qContent.includes('[[[FILE_UPLOAD]]]') || qType === 'file_upload') {
              qType = 'file';
-             qContent = qContent.split('').join('');
+             qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
          } else if (qType === 'open') {
              qType = 'essay';
          }
