@@ -101,17 +101,19 @@ export default function TakeQuiz() {
 
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
+      // 🚀 استخراج النوع الآمن للطالب
       let finalQuestions = [...(questionsData || [])].map((q: any) => {
          let qType = q.type;
          let qContent = q.content || '';
          
-         const typeMatch = qContent.match(//);
-         if (typeMatch) {
-             qType = typeMatch[1];
-             qContent = qContent.replace(//g, '');
+         if (qContent.includes('', startIndex);
+             if (startIndex > 9 && endIndex > startIndex) {
+                 qType = qContent.substring(startIndex, endIndex);
+             }
+             qContent = qContent.split(``).join('');
          } else if (qContent.includes('') || qType === 'file_upload') {
              qType = 'file';
-             qContent = qContent.replace(//g, '');
+             qContent = qContent.split('').join('');
          } else if (qType === 'open') {
              qType = 'essay';
          }
@@ -366,7 +368,6 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  // 🚀 التعديل الجذري هنا: لا نعتبره رفع ملف إلا إذا كان نوعه الحقيقي هو ملف أو رفع (انتهى زمن العلامة المخفية)
   const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
