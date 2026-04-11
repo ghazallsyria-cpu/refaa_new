@@ -242,8 +242,8 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
-            // 🚀 تطبيق الخدعة للتعرف على المرفقات
-            const isFileUploadType = (question.content || '').includes('') || ['file_upload', 'file', 'upload', 'image'].includes(qType);
+            // 🚀 التعديل هنا لعدم الخلط بين الأسئلة المقالية العادية وأسئلة الرفع
+            const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType) || (qType === 'essay' && (question.content || '').includes(''));
             
             let studentAnswerText = null;
             let isCorrect = false;
