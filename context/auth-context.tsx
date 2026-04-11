@@ -107,9 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     if (authResult.user) {
+      // 🟢 أضفنا full_name لجلبه مبكراً
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('role, must_reset_password')
+        .select('role, must_reset_password, full_name') 
         .eq('id', authResult.user.id)
         .maybeSingle();
 
@@ -119,6 +120,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
       }
 
+      // 🚀 الحل هنا: تحديث الـ State والكاش يدوياً وفوراً قبل الانتقال للصفحة!
+      const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
+      setUser(authResult.user);
+      setAuthRole(userData.role as UserRole);
+      setUserName(name);
+      setIsChecking(false); // إيقاف مؤشر التحميل الدوار
+      
+      // حفظها في المتصفح لتسريع الفتح لاحقاً
+      sessionStorage.setItem('authRole', userData.role);
+      sessionStorage.setItem('userName', name);
+
+      // 🚀 إجبار Next.js على مسح الكاش وتحديث الـ Server Components
+      router.refresh(); 
+
       if (userData.must_reset_password) {
         setMustResetPassword(true);
         router.push('/reset-password');
@@ -126,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/');
       }
     }
-  };
+
 
   const requestPasswordReset = async (civilId: string) => {
     let authEmail = '';
