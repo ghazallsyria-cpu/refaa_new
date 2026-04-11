@@ -62,58 +62,32 @@ export async function POST(req: Request) {
 
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
-        
-        let frontendType = q.type || 'multiple_choice';
-        if (frontendType === 'file_upload') frontendType = 'file';
+        let qType = q.type || 'multiple_choice';
+        if (qType === 'file_upload') qType = 'file';
         
         let qContent = q.content || '';
         
-        // 🚀 استخدام أقواس عادية لتجنب حذفها أثناء النسخ
-        qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
-        const oldTypes = ['essay', 'fill_in_blank', 'file', 'multiple_choice', 'true_false', 'multi_select'];
-        oldTypes.forEach(t => {
-            qContent = qContent.split(`[[[TYPE:${t}]]]`).join('');
-        });
-
-        let dbType = frontendType;
-        
-        if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
-            dbType = 'essay';
-            qContent += `[[[TYPE:${frontendType}]]]`;
-        }
+        // مسح أي تغليفات قديمة من قاعدة البيانات لتعود الأسئلة نظيفة
+        qContent = qContent.replace(/\[\[\[TYPE:.*?\]\]\]/g, '').replace(/\[\[\[FILE_UPLOAD\]\]\]/g, '').replace(//g, '');
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
-          type: dbType,
+          type: qType, // حفظ النوع الصريح مباشرة
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
           order_index: i
         };
 
-        let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-
-        if (qErr) {
-            const fallbacks = ['open', 'text', 'multiple_choice'];
-            for (const fb of fallbacks) {
-                if (fb === dbType) continue;
-                qPayload.type = fb;
-                const retry = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-                if (!retry.error) {
-                    savedQ = retry.data;
-                    qErr = null as any;
-                    break;
-                }
-            }
-        }
+        const { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
         if (qErr) {
             console.error('Question Save Error:', qErr);
-            continue; 
+            throw new Error(`قاعدة البيانات ترفض نوع السؤال: ${qType}. يرجى إضافته إلى قاعدة البيانات.`);
         }
 
-        if (savedQ && q.options?.length > 0 && (frontendType === 'multiple_choice' || frontendType === 'true_false' || frontendType === 'multi_select')) {
+        if (savedQ && q.options?.length > 0 && ['multiple_choice', 'true_false', 'multi_select'].includes(qType)) {
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
           if (incomingOptionIds.length > 0) {
               await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id).not('id', 'in', `(${incomingOptionIds.join(',')})`);
