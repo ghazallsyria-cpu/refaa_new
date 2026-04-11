@@ -8,6 +8,10 @@ import {
   Palette, Type, X, Calculator, BarChart3, FileText, Files, Check, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
+// 🚀 مكتبة الرياضيات
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
 interface ForumEditorProps {
   content: string;
   setContent: (content: string) => void;
@@ -27,7 +31,7 @@ export default function ForumEditor({
   
   const [isUploading, setIsUploading] = useState(false);
   
-  // 🚀 حالات معالجة الـ PDF والعلامة المائية
+  // حالات معالجة الـ PDF
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [pdfProgressText, setPdfProgressText] = useState('');
   
@@ -41,6 +45,9 @@ export default function ForumEditor({
   const [showFontSize, setShowFontSize] = useState(false);
   const [showMathUI, setShowMathUI] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  
+  // 🚀 حالة معادلة الـ LaTeX
+  const [latexInput, setLatexInput] = useState('');
 
   const savedSelection = useRef<Range | null>(null);
 
@@ -131,11 +138,10 @@ export default function ForumEditor({
     }
   };
 
-  // 🚀 السحر يبدأ هنا: استخراج الصفحات من الـ PDF
   const executePdfProcessing = async () => {
     if (!pendingPdfFile) return;
     
-    setShowWatermarkModal(false); // إغلاق النافذة
+    setShowWatermarkModal(false);
     const file = pendingPdfFile;
 
     const pdfjsLib = (window as any).pdfjsLib;
@@ -168,23 +174,17 @@ export default function ForumEditor({
 
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
-        // 🚀 رسم العلامة المائية في المنتصف فقط إذا طلب المستخدم
         if (applyWatermark && watermarkText.trim() !== '') {
           ctx.save();
-          // شفافية 20% لتكون خفيفة جداً ولا تزعج القراءة
           ctx.globalAlpha = 0.20; 
-          
-          // حساب حجم خط متناسب مع عرض الصفحة
           const fontSize = Math.floor(canvas.width / 12);
           ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
-          ctx.fillStyle = "#4f46e5"; // لون نيلي
+          ctx.fillStyle = "#4f46e5"; 
           
           ctx.translate(canvas.width / 2, canvas.height / 2);
           ctx.rotate(-Math.PI / 4); 
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-
-          // رسم النص مرة واحدة في منتصف اللوحة
           ctx.fillText(watermarkText, 0, 0);
           ctx.restore(); 
         }
@@ -237,11 +237,10 @@ export default function ForumEditor({
     } finally {
       setIsProcessingPdf(false);
       setPdfProgressText("");
-      setPendingPdfFile(null); // مسح الملف المؤقت
+      setPendingPdfFile(null); 
     }
   };
 
-  // 🚀 التعامل مع إغلاق النافذة
   const handleCancelPdf = () => {
     setShowWatermarkModal(false);
     setPendingPdfFile(null);
@@ -286,7 +285,6 @@ export default function ForumEditor({
   return (
     <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative" dir="rtl">
       
-      {/* 🚀 نافذة خيارات العلامة المائية */}
       {showWatermarkModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
            <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full animate-in zoom-in-95 duration-200 border border-slate-100">
@@ -402,16 +400,58 @@ export default function ForumEditor({
              </div>
           )}
 
+          {/* 🚀 لوحة الـ LaTeX الجديدة والمطورة */}
           {showMathUI && (
-            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-2xl rounded-xl p-4 z-50 w-80 animate-in fade-in zoom-in">
-              <div className="flex justify-between items-center mb-3 border-b pb-2">
-                <span className="font-bold text-sm text-pink-600">لوحة الرموز الرياضية</span>
-                <button onMouseDown={(e) => { e.preventDefault(); setShowMathUI(false); }} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4"/></button>
+            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 w-[350px] sm:w-[400px] animate-in fade-in zoom-in" dir="rtl">
+              <div className="flex justify-between items-center mb-4 border-b pb-3">
+                <span className="font-black text-sm text-pink-600 flex items-center gap-2">
+                  <Calculator className="w-5 h-5"/> إدراج معادلة (LaTeX)
+                </span>
+                <button onMouseDown={(e) => { e.preventDefault(); setShowMathUI(false); }} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-1.5 transition-all"><X className="w-4 h-4"/></button>
               </div>
-              <div className="grid grid-cols-4 gap-2" dir="ltr">
-                {['½','¾','√','∛','x²','x³','π','∞','∑','∫','≠','≈'].map(sym => (
-                  <button key={sym} onMouseDown={(e) => { e.preventDefault(); insertMathSymbol(sym); }} className="p-2 border rounded hover:bg-pink-50 font-mono font-bold">{sym}</button>
-                ))}
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">رموز سريعة:</p>
+                  <div className="grid grid-cols-6 gap-2" dir="ltr">
+                    {['½','¾','√','∛','x²','x³','π','∞','∑','∫','≠','≈'].map(sym => (
+                      <button key={sym} onMouseDown={(e) => { e.preventDefault(); insertMathSymbol(sym); }} className="p-2 border border-slate-200 rounded-xl hover:bg-pink-50 hover:border-pink-300 hover:text-pink-600 font-mono font-bold text-slate-600 transition-all shadow-sm">{sym}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-4">
+                   <label className="block text-xs font-black text-slate-500 mb-2">اكتب المعادلة بصيغة LaTeX:</label>
+                   <textarea
+                      value={latexInput}
+                      onChange={(e) => setLatexInput(e.target.value)}
+                      placeholder="\frac{1}{2} mv^2"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 font-mono text-left focus:border-pink-500 focus:ring-2 focus:ring-pink-200 outline-none text-sm font-bold text-slate-700 transition-all"
+                      dir="ltr"
+                      rows={2}
+                   />
+                </div>
+
+                {latexInput && (
+                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-center overflow-x-auto min-h-[60px] items-center text-white shadow-inner">
+                       <Latex>{`$${latexInput}$`}</Latex>
+                   </div>
+                )}
+
+                <button
+                   type="button"
+                   onMouseDown={(e) => {
+                      e.preventDefault();
+                      if(latexInput.trim()) {
+                         execCommand('insertText', ` $${latexInput}$ `);
+                         setLatexInput('');
+                         setShowMathUI(false);
+                      }
+                   }}
+                   className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black text-sm py-4 rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-pink-200 flex items-center justify-center gap-2"
+                >
+                   إدراج المعادلة في النص <Check className="w-4 h-4" />
+                </button>
               </div>
             </div>
           )}
@@ -423,7 +463,6 @@ export default function ForumEditor({
           <div className="mr-auto flex flex-wrap items-center gap-2">
              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
              
-             {/* 🚀 إيقاف المعالجة التلقائية وفتح نافذة الخيارات */}
              <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={(e) => { 
                 const file = e.target.files?.[0]; 
                 if(file) {
