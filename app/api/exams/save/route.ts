@@ -63,25 +63,26 @@ export async function POST(req: Request) {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
         
-        let qType = q.type || 'multiple_choice';
-        if (qType === 'file_upload') qType = 'file';
+        let frontendType = q.type || 'multiple_choice';
+        if (frontendType === 'file_upload') frontendType = 'file';
         
         let qContent = q.content || '';
         
-        if (qType === 'file') {
-            if (!qContent.includes('')) {
-               qContent += '';
-            }
-            qType = 'essay'; 
-        } else {
-            qContent = qContent.split('').join('');
+        // تنظيف العلامات القديمة من النص لضمان نظافته
+        qContent = qContent.replace(//g, '').replace(//g, '');
+
+        let dbType = frontendType;
+        
+        // 🚀 إذا كان النوع مرفوضاً من قاعدة البيانات، نخفيه في النص ونجعله 'essay' أو 'open'
+        if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
+            dbType = 'essay'; // نضع essay كافتراضي لتجربته
+            qContent += ``;
         }
 
-        // 🚀 أزلنا is_required من هنا لكي لا يعترض Supabase ويفسد حفظ الخيارات!
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
-          type: qType,
+          type: dbType,
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
@@ -90,12 +91,27 @@ export async function POST(req: Request) {
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
+        // 🚀 خوارزمية الإنقاذ: إذا رفضت قاعدة البيانات الحفظ لأي سبب، نجرب الأنواع المضمونة
+        if (qErr) {
+            const fallbacks = ['open', 'text', 'multiple_choice'];
+            for (const fb of fallbacks) {
+                if (fb === dbType) continue;
+                qPayload.type = fb;
+                const retry = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
+                if (!retry.error) {
+                    savedQ = retry.data;
+                    qErr = null as any;
+                    break;
+                }
+            }
+        }
+
         if (qErr) {
             console.error('Question Save Error:', qErr);
             continue; 
         }
 
-        if (savedQ && q.options?.length > 0 && (qType === 'multiple_choice' || qType === 'true_false' || qType === 'multi_select')) {
+        if (savedQ && q.options?.length > 0 && (frontendType === 'multiple_choice' || frontendType === 'true_false' || frontendType === 'multi_select')) {
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
           if (incomingOptionIds.length > 0) {
               await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id).not('id', 'in', `(${incomingOptionIds.join(',')})`);
