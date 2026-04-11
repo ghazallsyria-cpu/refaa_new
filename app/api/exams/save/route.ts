@@ -68,19 +68,18 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // تنظيف العلامات القديمة من النص بطريقة آمنة
-        qContent = qContent.split('').join('');
+        // 🚀 استخدام أقواس عادية لتجنب حذفها أثناء النسخ
+        qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
         const oldTypes = ['essay', 'fill_in_blank', 'file', 'multiple_choice', 'true_false', 'multi_select'];
         oldTypes.forEach(t => {
-            qContent = qContent.split(``).join('');
+            qContent = qContent.split(`[[[TYPE:${t}]]]`).join('');
         });
 
         let dbType = frontendType;
         
-        // إخفاء النوع في النص إذا كان من الأنواع المعقدة
         if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
             dbType = 'essay';
-            qContent += ``;
+            qContent += `[[[TYPE:${frontendType}]]]`;
         }
 
         const qPayload = {
