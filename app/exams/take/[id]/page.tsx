@@ -10,7 +10,6 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import ImageUpload from '@/components/ImageUpload'; 
 
-// 🚀 استدعاء مكتبة الرياضيات
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -209,7 +208,6 @@ export default function TakeQuiz() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timeLeft, isFinished, alreadySubmitted, handleSubmit]);
 
-  // 🚀 مراقبة خروج الطالب (مرتبطة بزر الإعدادات الخاص بالمعلم)
   useEffect(() => {
     if (isFinished || loading || !exam || alreadySubmitted || !exam.settings?.prevent_tab_switch) return;
 
@@ -228,7 +226,6 @@ export default function TakeQuiz() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [isFinished, loading, exam, alreadySubmitted, handleSubmit]);
 
-  // 🚀 كود منع النسخ وتصوير الشاشة (الطباعة)
   useEffect(() => {
     if (!exam?.settings?.prevent_copy) return;
 
@@ -328,10 +325,10 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
+  // 🚀 تطبيق الخدعة هنا للتعرف على المرفقات
+  const isFileUploadType = (currentQuestion?.content || '').includes('') || ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
-    // 🚀 تم إضافة كلاسات منع تظليل النص وإخفاء الصفحة عند الطباعة
     <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", exam?.settings?.prevent_copy && "select-none print:hidden")} dir="rtl">
       <AnimatePresence>
         {showCheatModal && (
@@ -383,7 +380,6 @@ export default function TakeQuiz() {
                 <span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span>
               </div>
               
-              {/* 🚀 السطر المعدل لعرض الـ HTML والـ LaTeX معاً */}
               <div className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed">
                  <Latex>{currentQuestion?.content || currentQuestion?.text || ''}</Latex>
               </div>
