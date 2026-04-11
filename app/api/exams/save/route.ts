@@ -9,7 +9,6 @@ export async function POST(req: Request) {
     const { examData, questions, isNew, userId } = body;
 
     let finalTeacherId = examData.teacher_id;
-    
     if (!finalTeacherId) {
         const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
         if (tProfile) {
@@ -70,12 +69,14 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 🚀 الحل الآمن للـ String: استخدام split و join بدلاً من Regex
+        // 🚀 تنظيف صارم للنص وتوحيد النوع
         if (qType === 'file') {
             if (!qContent.includes('')) {
                qContent += '';
             }
+            qType = 'essay'; // خدعة قاعدة البيانات
         } else {
+            // إذا كان أي نوع آخر (مقالي، فراغ، خيارات)، نمسح العلامة بقوة
             qContent = qContent.split('').join('');
         }
 
@@ -90,23 +91,14 @@ export async function POST(req: Request) {
           is_required: q.is_required !== false
         };
 
-        let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-
-        if (qErr && qPayload.type === 'file') {
-            qPayload.type = 'essay';
-            const { data: fallbackQ, error: fbErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-            if (!fbErr) {
-               savedQ = fallbackQ;
-               qErr = null as any;
-            }
-        }
+        const { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
         if (qErr) {
             console.error('Question Save Error:', qErr);
             continue; 
         }
 
-        if (savedQ && q.options?.length > 0) {
+        if (savedQ && q.options?.length > 0 && (qType === 'multiple_choice' || qType === 'true_false' || qType === 'multi_select')) {
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
           if (incomingOptionIds.length > 0) {
               await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id).not('id', 'in', `(${incomingOptionIds.join(',')})`);
@@ -123,7 +115,8 @@ export async function POST(req: Request) {
           }));
           await adminSupabase.from('question_options').upsert(optsPayload, { onConflict: 'id' });
             
-        } else if (savedQ && (!q.options || q.options.length === 0)) {
+        } else if (savedQ) {
+           // مسح الخيارات إذا كان السؤال مقالياً أو رفع صورة أو ملء فراغ
            await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id);
         }
       }
