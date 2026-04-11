@@ -4,6 +4,7 @@ export interface Option {
   id: string;
   content: string;
   is_correct: boolean;
+  order_index?: number;
 }
 
 export interface Question {
@@ -15,7 +16,8 @@ export interface Question {
   options: Option[];
   media_url?: string;
   media_type?: 'image' | 'video' | 'pdf';
-  isRequired: boolean;
+  is_required?: boolean; // 🚀 الاسم المعتمد في قاعدة البيانات
+  isRequired?: boolean;  // 🚀 أبقيناها للتوافق مع الأكواد القديمة
 }
 
 export const normalizeQuestion = (raw: Partial<Question> & { text?: string }): Question => {
@@ -34,7 +36,9 @@ export const normalizeQuestion = (raw: Partial<Question> & { text?: string }): Q
       : [],
     media_url: raw.media_url,
     media_type: raw.media_type,
-    isRequired: !!raw.isRequired,
+    // 🚀 نوحد القيمة هنا لضمان عملها في كل مكان
+    is_required: raw.is_required !== undefined ? raw.is_required : (raw.isRequired !== undefined ? raw.isRequired : true),
+    isRequired: raw.is_required !== undefined ? raw.is_required : (raw.isRequired !== undefined ? raw.isRequired : true),
   };
 };
 
@@ -45,7 +49,8 @@ export const createQuestion = (type: QuestionType): Question => {
     content: '',
     points: 1,
     options: [],
-    isRequired: false,
+    is_required: true,
+    isRequired: true,
   };
 
   switch (type) {
