@@ -24,7 +24,6 @@ const isAutoGradedType = (type: string) => {
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
-  // 🚀 التعديل 1: استخراج دور المستخدم لمعرفة إذا كان معلماً يتصفح للمعاينة
   const { user, userRole, authRole } = useAuth() as any; 
   const currentRole = authRole || userRole;
   const isPreviewMode = ['teacher', 'admin', 'management'].includes(currentRole);
@@ -41,6 +40,7 @@ export default function TakeQuiz() {
   const [isFinished, setIsFinished] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
+  const [studentProfileId, setStudentProfileId] = useState<string | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timeTakenInfo, setTimeTakenInfo] = useState<number>(0);
 
@@ -53,15 +53,24 @@ export default function TakeQuiz() {
     if (!user) return;
 
     try {
-      const studentId = user.id || user.user_id;
-      
-      // 🚀 إذا كان المستخدم طالباً فقط، نتأكد من أنه لم يقدم الاختبار مسبقاً
+      const actualUserId = user.id || user.user_id;
+      let validStudentId = actualUserId;
+
       if (!isPreviewMode) {
+          // 🚀 جلب الـ ID الحقيقي للطالب لمنع خطأ foreign key constraint
+          const { data: sProfile } = await supabase.from('students').select('id').eq('user_id', actualUserId).maybeSingle();
+          if (sProfile) validStudentId = sProfile.id;
+          else {
+              const { data: sProfile2 } = await supabase.from('students').select('id').eq('id', actualUserId).maybeSingle();
+              if (sProfile2) validStudentId = sProfile2.id;
+          }
+          setStudentProfileId(validStudentId);
+
           const { count } = await supabase
             .from('exam_attempts')
             .select('id', { count: 'exact', head: true })
             .eq('exam_id', params.id)
-            .eq('student_id', studentId);
+            .eq('student_id', validStudentId);
 
           const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
           const maxAttempts = examData.max_attempts || 1;
@@ -85,7 +94,6 @@ export default function TakeQuiz() {
       const endDateTime = new Date(examDate);
       endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
       
-      // 🚀 تخطي قيود الوقت في حالة المعاينة
       if (!isPreviewMode && (now < startDateTime || now > endDateTime)) {
         alert("هذا الاختبار غير متاح في الوقت الحالي.");
         window.location.href = '/exams';
@@ -131,7 +139,6 @@ export default function TakeQuiz() {
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !questions || questions.length === 0 || !user) return;
     
-    // 🚀 التعديل 2: إذا كانت معاينة، نظهر تنبيهاً ونخرج دون الإرسال لقاعدة البيانات
     if (isPreviewMode) {
        alert("هذا الاختبار في وضع المعاينة. لن يتم حفظ الإجابات في قاعدة البيانات لأنك لست طالباً مسجلاً في المادة.");
        router.push('/exams');
@@ -201,7 +208,7 @@ export default function TakeQuiz() {
             answers: formattedAnswers,
             score: totalScore,
             status: attemptStatus,
-            userId: user.id || user.user_id,
+            userId: studentProfileId || user.id || user.user_id, // 🚀 إرسال الـ ID الصحيح هنا
             timeTaken: calculatedTimeTaken
         })
       });
@@ -216,7 +223,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, router]);
+  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, router, studentProfileId]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
@@ -228,7 +235,6 @@ export default function TakeQuiz() {
   }, [timeLeft, isFinished, alreadySubmitted, handleSubmit]);
 
   useEffect(() => {
-    // 🚀 إيقاف نظام مراقبة الغش للمعلمين أثناء المعاينة
     if (isFinished || loading || !exam || alreadySubmitted || !exam.settings?.prevent_tab_switch || isPreviewMode) return;
 
     const handleVisibilityChange = () => {
@@ -247,7 +253,6 @@ export default function TakeQuiz() {
   }, [isFinished, loading, exam, alreadySubmitted, handleSubmit, isPreviewMode]);
 
   useEffect(() => {
-    // 🚀 إيقاف نظام منع النسخ للمعلمين أثناء المعاينة
     if (!exam?.settings?.prevent_copy || isPreviewMode) return;
 
     const preventCopyPaste = (e: Event) => {
@@ -346,12 +351,12 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  const isFileUploadType = (currentQuestion?.content || '').includes('') || ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
+  // 🚀 التعديل هنا: فحص صارم جداً للعلامة المخفية لكي لا تظهر الأسئلة المقالية כرفع صورة!
+  const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType) || (currentQType === 'essay' && (currentQuestion?.content || '').includes(''));
 
   return (
     <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", (exam?.settings?.prevent_copy && !isPreviewMode) && "select-none print:hidden")} dir="rtl">
       
-      {/* 🚀 شريط المعاينة للمعلم */}
       {isPreviewMode && (
         <div className="bg-amber-100 border-b border-amber-200 text-amber-800 px-4 py-2 text-center text-sm font-bold flex justify-center items-center gap-2">
            <Eye className="w-4 h-4" />
