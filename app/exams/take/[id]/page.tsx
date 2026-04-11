@@ -18,7 +18,7 @@ type Exam = { id: string; title: string; description: string; duration: number; 
 const isAutoGradedType = (type: string) => {
   if (!type) return false;
   const t = type.toLowerCase();
-  return t === 'multiple_choice' || t === 'true_false' || t === 'multi_select' || t === 'checkbox' || t === 'radio';
+  return ['multiple_choice', 'true_false', 'multi_select', 'checkbox', 'radio'].includes(t);
 };
 
 export default function TakeQuiz() {
@@ -102,24 +102,9 @@ export default function TakeQuiz() {
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
       let finalQuestions = [...(questionsData || [])].map((q: any) => {
-         let qType = q.type;
          let qContent = q.content || '';
-         
-         if (qContent.includes('[[[TYPE:')) {
-             const startIndex = qContent.indexOf('[[[TYPE:') + 9;
-             const endIndex = qContent.indexOf(']]]', startIndex);
-             if (startIndex > 8 && endIndex > startIndex) {
-                 qType = qContent.substring(startIndex, endIndex);
-             }
-             qContent = qContent.split(`[[[TYPE:${qType}]]]`).join('');
-         } else if (qContent.includes('[[[FILE_UPLOAD]]]') || qType === 'file_upload') {
-             qType = 'file';
-             qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
-         } else if (qType === 'open') {
-             qType = 'essay';
-         }
-
-         return {...q, type: qType, content: qContent};
+         qContent = qContent.replace(/\[\[\[TYPE:.*?\]\]\]/g, '').replace(/\[\[\[FILE_UPLOAD\]\]\]/g, '').replace(//g, '');
+         return {...q, content: qContent};
       });
       
       if (examData.settings?.shuffle_questions && !isPreviewMode) {
@@ -208,12 +193,7 @@ export default function TakeQuiz() {
 
         totalScore += pointsEarned;
 
-        formattedAnswers[q.id] = {
-          optionId: optionIdToSend,
-          text: textToSend,
-          isCorrect,
-          pointsEarned
-        };
+        formattedAnswers[q.id] = { optionId: optionIdToSend, text: textToSend, isCorrect, pointsEarned };
       }
 
       const attemptStatus = hasManual ? 'completed' : 'graded';
@@ -221,14 +201,7 @@ export default function TakeQuiz() {
       const response = await fetch('/api/exams/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            examId: params.id,
-            answers: formattedAnswers,
-            score: totalScore,
-            status: attemptStatus,
-            userId: studentProfileId || user.id || user.user_id, 
-            timeTaken: calculatedTimeTaken
-        })
+        body: JSON.stringify({ examId: params.id, answers: formattedAnswers, score: totalScore, status: attemptStatus, userId: studentProfileId || user.id || user.user_id, timeTaken: calculatedTimeTaken })
       });
 
       const data = await response.json();
@@ -254,7 +227,6 @@ export default function TakeQuiz() {
 
   useEffect(() => {
     if (isFinished || loading || !exam || alreadySubmitted || !exam.settings?.prevent_tab_switch || isPreviewMode) return;
-
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setCheatWarnings(prev => {
@@ -265,29 +237,18 @@ export default function TakeQuiz() {
         });
       }
     };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [isFinished, loading, exam, alreadySubmitted, handleSubmit, isPreviewMode]);
 
   useEffect(() => {
     if (!exam?.settings?.prevent_copy || isPreviewMode) return;
-
-    const preventCopyPaste = (e: Event) => {
-        e.preventDefault();
-    };
-
-    const preventPrint = (e: KeyboardEvent) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-            e.preventDefault();
-        }
-    };
-
+    const preventCopyPaste = (e: Event) => { e.preventDefault(); };
+    const preventPrint = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'p') e.preventDefault(); };
     document.addEventListener('copy', preventCopyPaste);
     document.addEventListener('cut', preventCopyPaste);
     document.addEventListener('contextmenu', preventCopyPaste);
     document.addEventListener('keydown', preventPrint);
-
     return () => {
         document.removeEventListener('copy', preventCopyPaste);
         document.removeEventListener('cut', preventCopyPaste);
@@ -338,13 +299,9 @@ export default function TakeQuiz() {
           <p className="text-slate-600 font-medium">
              لقد استلمنا إجاباتك وتم تسجيلها في قاعدة البيانات. 
              {hasManualQuestions ? (
-               <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
-                 ستظهر نتيجتك النهائية بعد تصحيح المعلم وانتهاء الوقت.
-               </span>
+               <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">ستظهر نتيجتك النهائية بعد تصحيح المعلم وانتهاء الوقت.</span>
              ) : (
-               <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                 تم تصحيح الاختبار، ستظهر نتيجتك بعد انتهاء وقت الاختبار.
-               </span>
+               <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">تم تصحيح الاختبار، ستظهر نتيجتك بعد انتهاء وقت الاختبار.</span>
              )}
           </p>
           {timeTakenInfo > 0 && (
@@ -353,9 +310,7 @@ export default function TakeQuiz() {
                <span>أنهيت الاختبار في: <span dir="ltr">{formatTime(timeTakenInfo)}</span></span>
             </div>
           )}
-          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
-            العودة للرئيسية
-          </button>
+          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">العودة للرئيسية</button>
         </motion.div>
       </div>
     );
@@ -366,9 +321,10 @@ export default function TakeQuiz() {
   
   const currentQType = (currentQuestion?.type as string || '').toLowerCase();
   const isAutoCurrent = isAutoGradedType(currentQType);
-  const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
-  const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
+  const isSingleChoice = ['multiple_choice', 'true_false', 'radio'].includes(currentQType);
+  const isMultiChoice = ['multi_select', 'checkbox'].includes(currentQType);
   
+  // 🚀 تحديد صريح لنوع المرفق من قاعدة البيانات (بدون الاعتماد على العلامات المخفية)
   const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
@@ -385,21 +341,10 @@ export default function TakeQuiz() {
         {showCheatModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-sm">
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border-t-8 border-rose-600">
-              <div className="inline-flex p-4 rounded-full bg-rose-100 text-rose-600 mb-4 animate-bounce">
-                <AlertTriangle className="h-12 w-12" />
-              </div>
+              <div className="inline-flex p-4 rounded-full bg-rose-100 text-rose-600 mb-4 animate-bounce"><AlertTriangle className="h-12 w-12" /></div>
               <h2 className="text-2xl font-black text-slate-900 mb-3">إنذار بمحاولة غش!</h2>
-              <p className="text-slate-600 font-bold text-lg leading-relaxed mb-6">
-                لقد اكتشف النظام قيامك بالخروج من شاشة الاختبار (فتح تبويب أو تطبيق آخر). 
-                <br/><br/>
-                <span className="text-rose-600">هذا هو الإنذار الأول والأخير.</span> في حال تكرار ذلك، سيقوم النظام بسحب الورقة وتسليمها فوراً بالوضع الحالي.
-              </p>
-              <button 
-                onClick={() => setShowCheatModal(false)} 
-                className="w-full bg-rose-600 text-white py-4 rounded-xl font-black text-lg hover:bg-rose-700 active:scale-95 transition-all shadow-lg shadow-rose-200"
-              >
-                أتعهد بعدم الخروج من الشاشة
-              </button>
+              <p className="text-slate-600 font-bold text-lg leading-relaxed mb-6">لقد اكتشف النظام قيامك بالخروج من شاشة الاختبار.<br/><br/><span className="text-rose-600">هذا هو الإنذار الأول والأخير.</span> في حال تكرار ذلك، سيقوم النظام بسحب الورقة وتسليمها فوراً.</p>
+              <button onClick={() => setShowCheatModal(false)} className="w-full bg-rose-600 text-white py-4 rounded-xl font-black text-lg hover:bg-rose-700 active:scale-95 transition-all shadow-lg shadow-rose-200">أتعهد بعدم الخروج من الشاشة</button>
             </motion.div>
           </motion.div>
         )}
@@ -415,9 +360,7 @@ export default function TakeQuiz() {
             </div>
           </div>
           {timeLeft !== null && (
-            <div className={cn("flex items-center gap-2 px-4 py-2 rounded-xl border font-mono font-bold transition-all", timeLeft < 60 ? "bg-red-50 text-red-600 animate-pulse" : "bg-slate-50 text-slate-700")}>
-              <Timer className="h-4 w-4" /><span dir="ltr">{formatTime(timeLeft)}</span>
-            </div>
+            <div className={cn("flex items-center gap-2 px-4 py-2 rounded-xl border font-mono font-bold transition-all", timeLeft < 60 ? "bg-red-50 text-red-600 animate-pulse" : "bg-slate-50 text-slate-700")}><Timer className="h-4 w-4" /><span dir="ltr">{formatTime(timeLeft)}</span></div>
           )}
         </div>
         <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100"><motion.div className="h-full bg-indigo-600" initial={{ width: 0 }} animate={{ width: `${progress}%` }} /></div>
@@ -427,19 +370,9 @@ export default function TakeQuiz() {
         <AnimatePresence mode="wait">
           <motion.div key={currentQuestion?.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-8">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm tracking-wider">
-                <span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span>
-              </div>
-              
-              <div className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed">
-                 <Latex>{currentQuestion?.content || currentQuestion?.text || ''}</Latex>
-              </div>
-
-              {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (
-                <div className="relative w-full flex justify-center bg-slate-50 rounded-2xl border border-slate-100 p-2 mt-4">
-                  <img src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} alt="صورة السؤال" className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm" />
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm tracking-wider"><span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span></div>
+              <div className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed"><Latex>{currentQuestion?.content || currentQuestion?.text || ''}</Latex></div>
+              {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (<div className="relative w-full flex justify-center bg-slate-50 rounded-2xl border border-slate-100 p-2 mt-4"><img src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} alt="صورة السؤال" className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm" /></div>)}
             </div>
 
             <div className="space-y-3">
@@ -465,15 +398,9 @@ export default function TakeQuiz() {
 
               {isFileUploadType && (
                 <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
-                  <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2">
-                     <UploadCloud className="h-5 w-5 text-indigo-600" /> قم برفع صورة حلك لهذه المسألة هنا:
-                  </label>
+                  <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2"><UploadCloud className="h-5 w-5 text-indigo-600" /> قم برفع صورة حلك لهذه المسألة هنا:</label>
                   <div className="bg-white rounded-xl overflow-hidden p-2 shadow-sm border border-slate-200">
-                    <ImageUpload
-                      initialImageUrl={answers[currentQuestion.id] || ''}
-                      onUploadSuccess={(url) => handleAnswerChange(currentQuestion.id, url)}
-                      label="انقر هنا لإرفاق الحل (صورة)"
-                    />
+                    <ImageUpload initialImageUrl={answers[currentQuestion.id] || ''} onUploadSuccess={(url) => handleAnswerChange(currentQuestion.id, url)} label="انقر هنا لإرفاق الحل (صورة)" />
                   </div>
                 </div>
               )}
@@ -490,9 +417,7 @@ export default function TakeQuiz() {
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
           {currentQuestionIdx === questions.length - 1 ? (
-            <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50">
-              {isSubmitting ? <span className="animate-pulse">جاري المعالجة...</span> : <><Send className="h-5 w-5" /> {isPreviewMode ? 'إنهاء المعاينة' : 'إرسال الاختبار'}</>}
-            </button>
+            <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50">{isSubmitting ? <span className="animate-pulse">جاري المعالجة...</span> : <><Send className="h-5 w-5" /> {isPreviewMode ? 'إنهاء المعاينة' : 'إرسال الاختبار'}</>}</button>
           ) : (
             <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
           )}
