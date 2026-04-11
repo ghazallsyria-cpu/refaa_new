@@ -1,38 +1,37 @@
-import { v2 as cloudinary } from 'cloudinary';
+// ... existing code ...
 import { NextResponse } from 'next/server';
-
-cloudinary.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+import { createClient } from '@supabase/supabase-js';
+import cloudinary from '@/lib/cloudinary'; // افترض أن هذا مسار إعداد Cloudinary لديك
 
 export async function POST(req: Request) {
   try {
-    const { public_id, resource_type = 'image' } = await req.json();
+    // 1. التحقق من الأمان (Auth Check) - أضفنا هذا الجزء لمنع الحذف العشوائي
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY! // نستخدم Service Role للتحقق الموثوق من الخادم
+    );
+    
+    // استخراج التوكن من الهيدر (Authorization: Bearer <token>)
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return NextResponse.json({ error: 'Unauthorized: No token provided' }, { status: 401 });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+
+    // 2. استلام البيانات بعد التأكد من هوية المستخدم
+    const { public_id } = await req.json();
 
     if (!public_id) {
       return NextResponse.json({ error: 'public_id is required' }, { status: 400 });
     }
 
-    // Check if Cloudinary is configured
-    if (!process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      console.error('Cloudinary API Key or Secret is missing in environment variables');
-      return NextResponse.json({ error: 'Cloudinary is not configured on the server' }, { status: 500 });
-    }
-
-    const result = await cloudinary.uploader.destroy(public_id, {
-      resource_type: resource_type,
-    });
-
-    if (result.result === 'ok' || result.result === 'not found') {
-      return NextResponse.json({ success: true, result: result.result });
-    } else {
-      console.error('Cloudinary deletion failed:', result);
-      return NextResponse.json({ error: 'Failed to delete from Cloudinary', details: result }, { status: 500 });
-    }
-  } catch (error: any) {
-    console.error('Error in Cloudinary delete API:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
-  }
-}
+    // 3. تنفيذ الحذف
+    const result = await cloudinary.uploader.destroy(public_id);
+    
+// ... existing code ...
