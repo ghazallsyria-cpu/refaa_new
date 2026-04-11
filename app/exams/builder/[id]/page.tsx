@@ -16,10 +16,11 @@ import * as Switch from '@radix-ui/react-switch';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import ForumEditor from '@/components/ForumEditor';
+import ForumEditor from '@/components/ForumEditor'; 
 
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
 
+// 🚀 تم تحديث الـ Type ليقبل الإعدادات الجديدة بدون أخطاء في Netlify
 type ExamData = {
   id?: string;
   title: string;
@@ -35,12 +36,12 @@ type ExamData = {
   end_time?: string;
   status: 'draft' | 'published' | 'archived';
   settings?: {
-    shuffle_questions: boolean;
-    shuffle_options: boolean;
-    show_results_immediately: boolean;
-    allow_backtracking: boolean;
-    prevent_tab_switch: boolean;
-    prevent_copy: boolean;
+    shuffle_questions?: boolean;
+    shuffle_options?: boolean;
+    show_results_immediately?: boolean;
+    allow_backtracking?: boolean;
+    prevent_tab_switch?: boolean;
+    prevent_copy?: boolean;
   };
 };
 
@@ -73,8 +74,8 @@ export default function QuizBuilder() {
       shuffle_options: false,
       show_results_immediately: true,
       allow_backtracking: true,
-      prevent_tab_switch: false,
-      prevent_copy: true
+      prevent_tab_switch: false, // 🚀 الوضع الافتراضي لمنع التبويب
+      prevent_copy: true         // 🚀 الوضع الافتراضي لمنع النسخ
     }
   });
 
@@ -125,16 +126,19 @@ export default function QuizBuilder() {
       if (!isNew) {
         const { exam: examData, questions: questionsData } = await fetchExamDetails(params.id as string);
         
+        // 🚀 تجاوز فحص TypeScript الصارم باستخدام (as any) للإعدادات القادمة من قاعدة البيانات
+        const fetchedSettings = (examData.settings || {}) as any;
+        
         setExam({
           ...examData,
           section_ids: examData.section_ids || [],
           settings: {
-            shuffle_questions: examData.settings?.shuffle_questions ?? false,
-            shuffle_options: examData.settings?.shuffle_options ?? false,
-            show_results_immediately: examData.settings?.show_results_immediately ?? true,
-            allow_backtracking: examData.settings?.allow_backtracking ?? true,
-            prevent_tab_switch: examData.settings?.prevent_tab_switch ?? false,
-            prevent_copy: examData.settings?.prevent_copy ?? true,
+            shuffle_questions: fetchedSettings.shuffle_questions ?? false,
+            shuffle_options: fetchedSettings.shuffle_options ?? false,
+            show_results_immediately: fetchedSettings.show_results_immediately ?? true,
+            allow_backtracking: fetchedSettings.allow_backtracking ?? true,
+            prevent_tab_switch: fetchedSettings.prevent_tab_switch ?? false,
+            prevent_copy: fetchedSettings.prevent_copy ?? true,
           }
         });
 
@@ -336,8 +340,8 @@ export default function QuizBuilder() {
                               <p className="text-xs text-slate-500 font-bold">{setting.desc}</p>
                             </div>
                             <Switch.Root 
-                              checked={(exam.settings as any)[setting.key]}
-                              onCheckedChange={(val) => setExam({ ...exam, settings: { ...exam.settings, [setting.key]: val } as NonNullable<typeof exam.settings> })}
+                              checked={!!(exam.settings as any)?.[setting.key]}
+                              onCheckedChange={(val) => setExam({ ...exam, settings: { ...(exam.settings || {}), [setting.key]: val } as any })}
                               className="w-14 h-8 bg-slate-200 rounded-full relative data-[state=checked]:bg-indigo-600 transition-all outline-none cursor-pointer shadow-inner"
                             >
                               <Switch.Thumb className="block w-6 h-6 bg-white rounded-full shadow-xl transition-transform duration-200 translate-x-1 will-change-transform data-[state=checked]:translate-x-[26px]" />
