@@ -474,10 +474,10 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 التعديل هنا: تنظيف النص فوراً إذا غير المعلم نوع السؤال
-                           let cleanContent = q.content;
+                           // 🚀 الحل الآمن للتعامل مع السلاسل النصية:
+                           let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
-                               cleanContent = cleanContent.replace(//g, '');
+                               cleanContent = cleanContent.split('').join('');
                                updates.content = cleanContent;
                            }
 
