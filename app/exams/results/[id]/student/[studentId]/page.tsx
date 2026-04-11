@@ -59,6 +59,23 @@ export default function StudentExamResult() {
              });
           }
 
+          // 🚀 فك التغليف عن الأسئلة لعرضها بشكل صحيح للمعلم
+          if (result.questions) {
+              result.questions = result.questions.map((q: any) => {
+                 let qType = q.type;
+                 let qContent = q.content || '';
+                 const typeMatch = qContent.match(//);
+                 if (typeMatch) {
+                     qType = typeMatch[1];
+                     qContent = qContent.replace(//g, '');
+                 } else if (qContent.includes('') || qType === 'file_upload') {
+                     qType = 'file';
+                     qContent = qContent.replace(//g, '');
+                 }
+                 return { ...q, type: qType, content: qContent };
+              });
+          }
+
           setData(result);
 
           if (result.exam?.exam_date) {
@@ -242,8 +259,8 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
-            // 🚀 التعديل هنا لعدم الخلط بين الأسئلة المقالية العادية وأسئلة الرفع
-            const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType) || (qType === 'essay' && (question.content || '').includes(''));
+            // 🚀 التعديل الجذري
+            const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
             
             let studentAnswerText = null;
             let isCorrect = false;
