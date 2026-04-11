@@ -143,15 +143,16 @@ export default function QuizBuilder() {
            let qType = q.type;
            let qContent = q.content || '';
            
-           // 🚀 استخراج النوع الآمن
-           if (qContent.includes('', startIndex);
-               if (startIndex > 9 && endIndex > startIndex) {
+           if (qContent.includes('[[[TYPE:')) {
+               const startIndex = qContent.indexOf('[[[TYPE:') + 9;
+               const endIndex = qContent.indexOf(']]]', startIndex);
+               if (startIndex > 8 && endIndex > startIndex) {
                    qType = qContent.substring(startIndex, endIndex);
                }
-               qContent = qContent.split(``).join('');
-           } else if (qContent.includes('') || qType === 'file_upload') {
+               qContent = qContent.split(`[[[TYPE:${qType}]]]`).join('');
+           } else if (qContent.includes('[[[FILE_UPLOAD]]]') || qType === 'file_upload') {
                qType = 'file';
-               qContent = qContent.split('').join('');
+               qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
            } else if (qType === 'open') {
                qType = 'essay';
            }
@@ -488,12 +489,11 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // مسح أي علامات قديمة عند تبديل النوع
                            let cleanContent = q.content || '';
-                           cleanContent = cleanContent.split('').join('');
+                           cleanContent = cleanContent.split('[[[FILE_UPLOAD]]]').join('');
                            const oldTypes = ['essay', 'fill_in_blank', 'file', 'multiple_choice', 'true_false', 'multi_select'];
                            oldTypes.forEach(t => {
-                               cleanContent = cleanContent.split(``).join('');
+                               cleanContent = cleanContent.split(`[[[TYPE:${t}]]]`).join('');
                            });
                            updates.content = cleanContent;
 
