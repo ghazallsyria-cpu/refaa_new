@@ -141,7 +141,6 @@ export default function QuizBuilder() {
 
         setQuestions((questionsData || []).map((q: any) => {
            let qType = q.type;
-           // 🚀 إذا كان النوع الحقيقي مسجلاً كـ essay ولكنه يحتوي على العلامة المخفية، نظهره للمعلم كـ file
            if (q.content?.includes('') || qType === 'file_upload') qType = 'file';
            return {...q, type: qType, is_required: q.is_required ?? true};
         }));
@@ -475,7 +474,7 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 عند تغيير نوع السؤال من المعلم، نقوم بتنظيف النص وإزالة الخيارات إذا لزم الأمر
+                           // 🚀 الحل الآمن للـ String لتجاوز TypeScript بـ Netlify:
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
                                cleanContent = cleanContent.split('').join('');
@@ -489,7 +488,7 @@ export default function QuizBuilder() {
                                 { id: crypto.randomUUID(), content: 'صح', is_correct: true },
                                 { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
                               ];
-                           } else if (type === 'essay' || type === 'fill_in_blank' || type === 'file' || type === 'file_upload') {
+                           } else if (['essay', 'fill_in_blank', 'file', 'file_upload'].includes(type as string)) {
                               updates.options = [];
                            }
                            updateQuestion(q.id, updates);
@@ -529,7 +528,7 @@ export default function QuizBuilder() {
                           </button>
                         )}
                       </div>
-                    ) : q.type === 'file' || q.type === 'file_upload' ? (
+                    ) : ['file', 'file_upload'].includes(q.type as string) ? (
                        <div className="p-8 bg-indigo-50/50 rounded-[32px] border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center text-center gap-3">
                          <UploadCloud className="h-10 w-10 text-indigo-400" />
                          <p className="text-indigo-900 font-bold text-lg">سؤال إرفاق ملف / حل مصور</p>
