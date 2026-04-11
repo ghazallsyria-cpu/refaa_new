@@ -473,6 +473,14 @@ export default function QuizBuilder() {
                         onChange={(e) => {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
+                           
+                           // 🚀 التعديل هنا: تنظيف النص فوراً إذا غير المعلم نوع السؤال
+                           let cleanContent = q.content;
+                           if (type !== 'file' && cleanContent) {
+                               cleanContent = cleanContent.replace(//g, '');
+                               updates.content = cleanContent;
+                           }
+
                            if ((type === 'multiple_choice' || type === 'checkbox') && (!q.options || q.options.length === 0)) {
                               updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
                            } else if (type === 'true_false') {
