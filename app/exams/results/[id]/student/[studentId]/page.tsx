@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target, Timer, FileText } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
-// 🚀 استدعاء مكتبة الرياضيات
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -243,7 +242,8 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
-            const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
+            // 🚀 تطبيق الخدعة للتعرف على المرفقات
+            const isFileUploadType = (question.content || '').includes('') || ['file_upload', 'file', 'upload', 'image'].includes(qType);
             
             let studentAnswerText = null;
             let isCorrect = false;
@@ -328,7 +328,6 @@ export default function StudentExamResult() {
                        </div>
                     ) : (
                        <div className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
-                          {/* 🚀 تم نقل التعليق إلى الداخل لتفادي خطأ Netlify */}
                           {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : <Latex>{String(studentAnswerText)}</Latex>}
                        </div>
                     )}
