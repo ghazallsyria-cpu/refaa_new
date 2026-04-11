@@ -13,7 +13,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface ExtractedQuestion {
   content: string;
-  type: 'multiple_choice' | 'true_false' | 'essay';
+  type: 'multiple_choice' | 'true_false' | 'essay' | 'file';
   points: number;
   options?: { content: string; is_correct: boolean }[];
 }
@@ -67,7 +67,6 @@ export default function AITestSandbox() {
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 1. 🚀 جلب المعلمين (المنطق السليم)
   useEffect(() => {
     const fetchTeachers = async () => {
       try {
@@ -93,7 +92,6 @@ export default function AITestSandbox() {
     fetchTeachers();
   }, []);
 
-  // 2. 🚀 جلب المواد من جدول teacher_sections (لتناسب طريقة حفظ بياناتك)
   useEffect(() => {
     const fetchTeacherSubjects = async () => {
       if (!selectedTeacher) {
@@ -129,7 +127,6 @@ export default function AITestSandbox() {
     fetchTeacherSubjects();
   }, [selectedTeacher]);
 
-  // 3. 🚀 جلب فصول المعلم في المادة المُختارة فقط (المنطق السليم المترابط)
   useEffect(() => {
     const fetchTeacherSections = async () => {
       if (!selectedTeacher || !selectedSubject) {
@@ -169,6 +166,7 @@ export default function AITestSandbox() {
     );
   };
 
+  // 🚀 تحديث البرومبت لدعم الرياضيات وأنواع الأسئلة المرفقة
   const promptText = `أنت خبير تعليمي. قم بقراءة ورقة الاختبار المرفقة في هذه الصورة بدقة. استخرج العنوان والأسئلة.
 يجب أن يكون الناتج بتنسيق JSON حصرياً وصالحاً (Valid JSON) بالهيكل التالي بالضبط:
 {
@@ -185,10 +183,12 @@ export default function AITestSandbox() {
     }
   ]
 }
-ملاحظة هامة:
+ملاحظة هامة جداً للعلوم والرياضيات:
+- إذا كان السؤال أو خياراته تحتوي على معادلات رياضية، فيزيائية، أرقام، أو وحدات قياس، **يجب** كتابتها بصيغة LaTeX محاطة بعلامتي $ (مثال: $x^2 + y^2 = z^2$ أو $100^\\circ \\text{C}$).
+ملاحظات عامة:
 - استخدم المفتاح "content" لنص السؤال (ليس question_text).
-- أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay.
-- للأسئلة المقالية، اترك مصفوفة options فارغة [].
+- أنواع الأسئلة المسموحة فقط: multiple_choice أو true_false أو essay أو file (لأسئلة الرسم أو المرفقات).
+- للأسئلة المقالية أو التي تتطلب رسم، اترك مصفوفة options فارغة [].
 - لا تكتب أي نص إضافي أو شروحات خارج كود الـ JSON.`;
 
   const copyPrompt = () => {
@@ -373,7 +373,6 @@ export default function AITestSandbox() {
     try {
       const totalScore = result.questions.reduce((sum, q) => sum + (Number(q.points) || 1), 0);
       
-      // 🚀 تم تحديث الـ Payload ليتوافق مع الإعدادات الجديدة في API الحفظ
       const examPayload = {
         title: result.title || 'اختبار مولد بالذكاء الاصطناعي',
         description: 'تم توليد هذا الاختبار آلياً باستخدام الذكاء الاصطناعي بواسطة إدارة المنصة.',
@@ -385,28 +384,29 @@ export default function AITestSandbox() {
         total_marks: totalScore,
         status: 'draft', 
         max_attempts: 1,
+        // 🚀 تحديث الإعدادات لمنع الغش والنسخ
         settings: {
           shuffle_questions: false,
           shuffle_options: false,
           show_results_immediately: true,
           allow_backtracking: true,
-          prevent_tab_switch: false, // الوضع الافتراضي الجديد (مغلق لعدم إزعاج الطلاب في الاختبارات المولدة عشوائياً)
-          prevent_copy: true         // الوضع الافتراضي الجديد (مفعل لمنع النسخ)
+          prevent_tab_switch: false, // افتراضياً مغلق لعدم إزعاج الطلاب ما لم يفعله المعلم يدوياً
+          prevent_copy: true         // مفعل افتراضياً
         }
       };
 
-      // 🚀 تم تحديث أسماء الخصائص لتتوافق تماماً مع الجدول في Supabase
+      // 🚀 تجهيز الأسئلة بالصيغة الصحيحة 100% للـ API
       const formattedQuestions = result.questions.map((q, i) => ({
         id: crypto.randomUUID(), 
         content: q.content,
         type: q.type,
         points: q.points || 1,
-        is_required: true, // الاسم الصحيح للـ API الجديد
+        is_required: true,
         order_index: i + 1,
         options: q.options?.map((opt, oIdx) => ({
           id: crypto.randomUUID(),
           content: opt.content,
-          is_correct: opt.is_correct, // الاسم الصحيح للـ API الجديد
+          is_correct: Boolean(opt.is_correct),
           order_index: oIdx + 1
         })) || []
       }));
