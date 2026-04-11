@@ -11,9 +11,8 @@ export async function POST(req: Request) {
     let finalTeacherId = examData.teacher_id;
     if (!finalTeacherId) {
         const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
-        if (tProfile) {
-            finalTeacherId = tProfile.id;
-        } else {
+        if (tProfile) finalTeacherId = tProfile.id;
+        else {
             const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
             if (tProfile2) finalTeacherId = tProfile2.id;
             else finalTeacherId = userId; 
@@ -69,17 +68,16 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 🚀 تنظيف صارم للنص وتوحيد النوع
         if (qType === 'file') {
             if (!qContent.includes('')) {
                qContent += '';
             }
-            qType = 'essay'; // خدعة قاعدة البيانات
+            qType = 'essay'; 
         } else {
-            // إذا كان أي نوع آخر (مقالي، فراغ، خيارات)، نمسح العلامة بقوة
             qContent = qContent.split('').join('');
         }
 
+        // 🚀 أزلنا is_required من هنا لكي لا يعترض Supabase ويفسد حفظ الخيارات!
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
@@ -87,11 +85,10 @@ export async function POST(req: Request) {
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
-          order_index: i,
-          is_required: q.is_required !== false
+          order_index: i
         };
 
-        const { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
+        let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
         if (qErr) {
             console.error('Question Save Error:', qErr);
@@ -116,7 +113,6 @@ export async function POST(req: Request) {
           await adminSupabase.from('question_options').upsert(optsPayload, { onConflict: 'id' });
             
         } else if (savedQ) {
-           // مسح الخيارات إذا كان السؤال مقالياً أو رفع صورة أو ملء فراغ
            await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id);
         }
       }
