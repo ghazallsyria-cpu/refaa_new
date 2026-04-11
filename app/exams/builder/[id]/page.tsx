@@ -139,10 +139,23 @@ export default function QuizBuilder() {
           }
         });
 
+        // 🚀 استخراج النوع الحقيقي وفك التغليف
         setQuestions((questionsData || []).map((q: any) => {
            let qType = q.type;
-           if (q.content?.includes('') || qType === 'file_upload') qType = 'file';
-           return {...q, type: qType, is_required: q.is_required ?? true};
+           let qContent = q.content || '';
+           
+           const typeMatch = qContent.match(//);
+           if (typeMatch) {
+               qType = typeMatch[1];
+               qContent = qContent.replace(//g, '');
+           } else if (qContent.includes('') || qType === 'file_upload') {
+               qType = 'file';
+               qContent = qContent.replace(//g, '');
+           } else if (qType === 'open') {
+               qType = 'essay';
+           }
+
+           return {...q, type: qType, content: qContent, is_required: q.is_required ?? true};
         }));
       } else {
         addQuestion('multiple_choice');
@@ -474,10 +487,11 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 الحل الآمن للـ String لتجاوز TypeScript بـ Netlify:
+                           // تنظيف النص عند تغيير النوع لضمان عدم وجود تداخل
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
                                cleanContent = cleanContent.split('').join('');
+                               cleanContent = cleanContent.replace(//g, '');
                                updates.content = cleanContent;
                            }
 
