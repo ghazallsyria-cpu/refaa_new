@@ -15,46 +15,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // جلب الأسئلة الصحيحة
-    const { data: questions, error: questionsError } = await supabase
-      .from('questions')
-      .select('id, correct_answer, points')
-      .eq('exam_id', examId);
-
-    if (questionsError || !questions) {
-      return NextResponse.json({ error: 'Failed to fetch questions for grading' }, { status: 500 });
-    }
-
-    // حساب الدرجة
-    let computedScore = 0;
-    for (const question of questions) {
-      const studentAnswer = answers[question.id];
-      if (studentAnswer && studentAnswer === question.correct_answer) {
-        computedScore += question.points || 1;
-      }
-    }
-
-    // Insert attempt
-    const { data: attempt, error: attemptError } = await supabase
-      .from('exam_attempts')
-      .insert({
-        exam_id: examId,
-        student_id: studentId,
-        score: computedScore,
-        time_taken: timeTaken,
-        status: 'completed'
-      })
-      .select()
-      .single();
-
-    if (attemptError) throw attemptError;
-
-    const { examId, studentId, answers, timeTaken } = await req.json();
-
-    if (!examId || !studentId || !answers) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
-
     // 1. جلب الأسئلة الصحيحة من قاعدة البيانات لحساب الدرجة
     const { data: questions, error: questionsError } = await supabase
       .from('questions')
@@ -84,10 +44,39 @@ export async function POST(req: Request) {
         student_id: studentId,
         score: computedScore, // 🟢 نستخدم الدرجة المحسوبة في الخادم
         time_taken: timeTaken,
-        status: 'completed',
+        status: 'completed'
         // تمت إزالة questions_snapshot بناء على توصية الأداء في التقرير لمنع تضخم البيانات
       })
       .select()
       .single();
 
-// ... existing code ...
+    if (attemptError) throw attemptError;
+
+    // حفظ إجابات الطالب
+    const answerInserts = Object.entries(answers).map(([questionId, selectedOption]) => ({
+      attempt_id: attempt.id,
+      question_id: questionId,
+      selected_option: selectedOption,
+      is_correct: questions.find(q => q.id === questionId)?.correct_answer === selectedOption
+    }));
+
+    const { error: answersInsertError } = await supabase
+      .from('student_answers')
+      .insert(answerInserts);
+
+    if (answersInsertError) throw answersInsertError;
+
+    return NextResponse.json({ 
+      success: true, 
+      attemptId: attempt.id,
+      score: computedScore 
+    });
+
+  } catch (error) {
+    console.error('Exam submission error:', error);
+    return NextResponse.json(
+      { error: 'Failed to submit exam' },
+      { status: 500 }
+    );
+  }
+}
