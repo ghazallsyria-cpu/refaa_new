@@ -59,19 +59,24 @@ export default function StudentExamResult() {
              });
           }
 
-          // 🚀 فك التغليف عن الأسئلة لعرضها بشكل صحيح للمعلم
+          // 🚀 استخراج النوع الآمن لصفحة النتائج
           if (result.questions) {
               result.questions = result.questions.map((q: any) => {
                  let qType = q.type;
                  let qContent = q.content || '';
-                 const typeMatch = qContent.match(//);
-                 if (typeMatch) {
-                     qType = typeMatch[1];
-                     qContent = qContent.replace(//g, '');
+                 
+                 if (qContent.includes('', startIndex);
+                     if (startIndex > 9 && endIndex > startIndex) {
+                         qType = qContent.substring(startIndex, endIndex);
+                     }
+                     qContent = qContent.split(``).join('');
                  } else if (qContent.includes('') || qType === 'file_upload') {
                      qType = 'file';
-                     qContent = qContent.replace(//g, '');
+                     qContent = qContent.split('').join('');
+                 } else if (qType === 'open') {
+                     qType = 'essay';
                  }
+
                  return { ...q, type: qType, content: qContent };
               });
           }
@@ -259,7 +264,6 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
-            // 🚀 التعديل الجذري
             const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
             
             let studentAnswerText = null;
