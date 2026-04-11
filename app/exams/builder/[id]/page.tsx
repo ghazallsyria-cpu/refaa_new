@@ -16,7 +16,7 @@ import * as Switch from '@radix-ui/react-switch';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import ForumEditor from '@/components/ForumEditor'; // 🚀 استدعاء المحرر الذكي للاختبارات
+import ForumEditor from '@/components/ForumEditor';
 
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
 
@@ -39,6 +39,8 @@ type ExamData = {
     shuffle_options: boolean;
     show_results_immediately: boolean;
     allow_backtracking: boolean;
+    prevent_tab_switch: boolean;
+    prevent_copy: boolean;
   };
 };
 
@@ -70,7 +72,9 @@ export default function QuizBuilder() {
       shuffle_questions: false,
       shuffle_options: false,
       show_results_immediately: true,
-      allow_backtracking: true
+      allow_backtracking: true,
+      prevent_tab_switch: false,
+      prevent_copy: true
     }
   });
 
@@ -129,6 +133,8 @@ export default function QuizBuilder() {
             shuffle_options: examData.settings?.shuffle_options ?? false,
             show_results_immediately: examData.settings?.show_results_immediately ?? true,
             allow_backtracking: examData.settings?.allow_backtracking ?? true,
+            prevent_tab_switch: examData.settings?.prevent_tab_switch ?? false,
+            prevent_copy: examData.settings?.prevent_copy ?? true,
           }
         });
 
@@ -321,6 +327,8 @@ export default function QuizBuilder() {
                           { label: 'ترتيب الأسئلة عشوائياً', desc: 'تغيير ترتيب الأسئلة لكل طالب', key: 'shuffle_questions' },
                           { label: 'ترتيب الخيارات عشوائياً', desc: 'تغيير ترتيب خيارات الإجابة', key: 'shuffle_options' },
                           { label: 'إظهار النتيجة فوراً', desc: 'عرض الدرجة للطالب بعد الإرسال', key: 'show_results_immediately' },
+                          { label: 'مراقبة تبديل النوافذ (منع الغش)', desc: 'سحب الورقة عند الخروج (عطّله إذا كان هناك إرفاق ملف)', key: 'prevent_tab_switch' },
+                          { label: 'منع النسخ والطباعة', desc: 'يمنع الطالب من تحديد النص، نسخه، أو طباعته', key: 'prevent_copy' },
                         ].map((setting) => (
                           <div key={setting.key} className="flex items-center justify-between p-4 rounded-3xl bg-slate-50/50 border border-slate-100">
                             <div>
@@ -444,7 +452,6 @@ export default function QuizBuilder() {
                 <div className="p-10 space-y-10">
                   <div className="flex flex-col md:flex-row gap-8">
                     
-                    {/* 🚀 إستخدام ForumEditor لكتابة الأسئلة */}
                     <div className="flex-1 w-full space-y-4">
                       <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">نص السؤال {index + 1}</label>
                       <ForumEditor 
