@@ -239,6 +239,9 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
+            // التعديل هنا: تعريف شامل لنوع رفع الملفات
+            const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
+            
             let studentAnswerText = null;
             let isCorrect = false;
             let pointsEarned = answer ? Number(answer.points_earned) || 0 : 0;
@@ -281,7 +284,6 @@ export default function StudentExamResult() {
                         {index + 1}
                     </div>
                     <div className="pt-2">
-                       {/* 🚀 السطر المعدل ليعرض ألوان HTML بأمان للمعلم */}
                        <div 
                          className="prose max-w-none font-bold text-lg text-slate-800 leading-relaxed mt-1" 
                          dangerouslySetInnerHTML={{ __html: question.content || question.text || '' }} 
@@ -312,7 +314,8 @@ export default function StudentExamResult() {
                       <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابة الطالب</span>
                     </div>
                     
-                    {qType === 'file_upload' && !isUnanswered ? (
+                    {/* التعديل هنا: استخدام isFileUploadType لضمان ظهور الصورة */}
+                    {isFileUploadType && !isUnanswered ? (
                        <div className="mt-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm inline-block">
                           {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
                              <img src={String(studentAnswerText)} alt="صورة إجابة الطالب" className="max-h-96 w-auto rounded-lg object-contain" />
@@ -329,7 +332,8 @@ export default function StudentExamResult() {
                     )}
                   </div>
 
-                  {qType !== 'file_upload' && (
+                  {/* التعديل هنا أيضاً لإخفاء مربع "الإجابة النموذجية" في حال كانت إجابة بالصور */}
+                  {!isFileUploadType && (
                     <div className="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100">
                       <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
                           <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
