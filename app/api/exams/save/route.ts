@@ -8,20 +8,27 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
-    let realTeacherId = userId;
-    const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
-    if (tProfile) {
-        realTeacherId = tProfile.id;
-    } else {
-        const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
-        if (tProfile2) realTeacherId = tProfile2.id;
+    // 🚀 التعديل الجوهري هنا لحل مشكلة الإدارة: 
+    // نعتمد على المعلم المحدد في الواجهة (examData.teacher_id) بدلاً من إجبار السيرفر على استخدام حساب من قام بالضغط على حفظ
+    let finalTeacherId = examData.teacher_id;
+    
+    // إذا لم يكن موجوداً (احتياطياً)، نجلبه من الحساب الحالي
+    if (!finalTeacherId) {
+        const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
+        if (tProfile) {
+            finalTeacherId = tProfile.id;
+        } else {
+            const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
+            if (tProfile2) finalTeacherId = tProfile2.id;
+            else finalTeacherId = userId; // fallback
+        }
     }
 
     const payload = {
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: realTeacherId,
+      teacher_id: finalTeacherId, // 👈 هنا استخدمنا المعرف الصحيح
       duration: Number(examData.duration) || 30,
       max_attempts: Number(examData.max_attempts) || 1,
       max_score: Number(examData.max_score) || 100,
@@ -65,8 +72,14 @@ export async function POST(req: Request) {
         if (qType === 'file_upload') qType = 'file';
         
         let qContent = q.content || '';
-        if (qType === 'file' && !qContent.includes('')) {
-           qContent += '';
+        
+        // 🚀 الخدعة السحرية: التعامل مع الصور وتبويبات الرفع
+        if (qType === 'file') {
+            if (!qContent.includes('')) {
+               qContent += '';
+            }
+        } else {
+            qContent = qContent.replace(//g, '');
         }
 
         const qPayload = {
