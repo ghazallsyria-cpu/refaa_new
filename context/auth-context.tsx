@@ -44,13 +44,24 @@ import { supabase } from '@/lib/supabase'; // تأكد من أن مسار الا
   const value = {
     user,
     authRole,
-    // 🔴 3. احذف هذا السطر لمنع تكرار الأسماء (كما طلب التقرير):
-    // userRole: authRole, 
-    
-    // ملاحظة من التقرير: isAdminByEmail دائماً false. 
-    // إذا كنت لا تستخدمها في باقي المشروع، يمكنك حذفها من هنا لتنظيف الكود.
-    isAdminByEmail, 
-    // ... existing code ...
+    isAdminByEmail,
+    isLoading, // أضف isLoading إذا لم يكن موجوداً
+    signOut: () => supabase.auth.signOut(),
+    refreshSession: () => {}, // أضف دالة فارغة مؤقتاً إذا كانت مستخدمة في مكان آخر
   };
 
-// ... existing code ...
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// 🟢 هذا هو السطر الذي كان مفقوداً وتسبب في الخطأ!
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
