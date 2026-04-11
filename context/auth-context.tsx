@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -26,7 +27,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 🚀 دالة ذكية لاستخراج البريد الإلكتروني بأمان وتخطي فخ الـ Array
 const extractEmail = (data: any) => {
   if (!data || !data.users) return null;
   return Array.isArray(data.users) ? data.users[0]?.email : data.users?.email;
@@ -41,8 +41,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAdminByEmail, setIsAdminByEmail] = useState(false);
   const [platformClosed, setPlatformClosed] = useState(false);
   const [closeMessage, setCloseMessage] = useState('');
-  
-  // 🚀 إضافة حفظ الإعدادات الخام للمحرك الزمني
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
   const router = useRouter();
@@ -56,12 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let lastError = null;
 
     if (civilId.includes('@')) {
-      // الدخول المباشر بالإيميل
       const { data, error } = await supabase.auth.signInWithPassword({ email: civilId, password });
       authResult = data;
       lastError = error;
     } else {
-      // 🚀 الحل الفولاذي: تجربة كل النطاقات الممكنة لتخطي حماية RLS
       let extractedEmail = null;
       try {
         const { data: studentData } = await supabase.from('students').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
@@ -74,18 +70,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { data: parentData } = await supabase.from('parents').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
           extractedEmail = extractEmail(parentData);
         }
-      } catch (e) { /* صمت: حماية RLS منعت القراءة وهذا طبيعي قبل الدخول */ }
+      } catch (e) { }
 
-      // تجهيز قائمة الإيميلات المحتملة
       const possibleEmails = [];
       if (extractedEmail) possibleEmails.push(extractedEmail);
-      possibleEmails.push(`${civilId}@alrefaa.edu`); // النطاق e
-      possibleEmails.push(`${civilId}@alrifaa.edu`); // النطاق i
+      possibleEmails.push(`${civilId}@alrefaa.edu`);
+      possibleEmails.push(`${civilId}@alrifaa.edu`);
 
-      // إزالة المكرر
       const uniqueEmails = [...new Set(possibleEmails)];
 
-      // تجربة الإيميلات بالتسلسل حتى ينجح الدخول
       for (const emailToTry of uniqueEmails) {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: emailToTry,
@@ -107,10 +100,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     if (authResult.user) {
-      // 🟢 أضفنا full_name لجلبه مبكراً
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('role, must_reset_password, full_name') 
+        .select('role, must_reset_password, full_name')
         .eq('id', authResult.user.id)
         .maybeSingle();
 
@@ -120,18 +112,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
       }
 
-      // 🚀 الحل هنا: تحديث الـ State والكاش يدوياً وفوراً قبل الانتقال للصفحة!
+      // 🚀 التحسين هنا: تحديث الحالة فوراً
       const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
       setUser(authResult.user);
       setAuthRole(userData.role as UserRole);
       setUserName(name);
-      setIsChecking(false); // إيقاف مؤشر التحميل الدوار
+      setIsChecking(false);
       
-      // حفظها في المتصفح لتسريع الفتح لاحقاً
       sessionStorage.setItem('authRole', userData.role);
       sessionStorage.setItem('userName', name);
 
-      // 🚀 إجبار Next.js على مسح الكاش وتحديث الـ Server Components
+      // تحديث توجيه الصفحة
       router.refresh(); 
 
       if (userData.must_reset_password) {
@@ -141,22 +132,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/');
       }
     }
-
+  };
 
   const requestPasswordReset = async (civilId: string) => {
     let authEmail = '';
     
     const { data: studentData } = await supabase.from('students').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-    authEmail = extractEmail(studentData);
+    authEmail = extractEmail(studentData) || '';
       
     if (!authEmail) {
       const { data: teacherData } = await supabase.from('teachers').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-      authEmail = extractEmail(teacherData);
+      authEmail = extractEmail(teacherData) || '';
     }
     
     if (!authEmail) {
       const { data: parentData } = await supabase.from('parents').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-      authEmail = extractEmail(parentData);
+      authEmail = extractEmail(parentData) || '';
     }
 
     if (!authEmail) {
@@ -187,7 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (updateError) throw updateError;
 
-    // Update the must_reset_password flag
     const { error: dbError } = await supabase
       .from('users')
       .update({ must_reset_password: false })
@@ -205,7 +195,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUser(session.user);
-          // Check cached role
           const cachedRole = sessionStorage.getItem('authRole');
           const cachedName = sessionStorage.getItem('userName');
           if (cachedRole) setAuthRole(cachedRole as UserRole);
@@ -255,7 +244,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Skip fetching if we already have the role from cache and it's not a fresh login
     if (authRole && userName && !isLoginPage) {
       return;
     }
@@ -286,7 +274,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAuthRole(role as UserRole);
           setMustResetPassword(userRes.data.must_reset_password || false);
           
-          // Cache the data
           sessionStorage.setItem('authRole', role || '');
           sessionStorage.setItem('userName', name);
         }
@@ -294,7 +281,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!isPublicPage) {
           try {
             if (!settingsError && settings) {
-              // 🚀 حفظ الإعدادات الخام للمحرك الزمني
               setRawSettings(settings);
             }
           } catch (settingsErr) {
@@ -311,14 +297,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUserData();
   }, [user, isPublicPage, isLoginPage, authRole, userName]);
 
-  // ==========================================
-  // 🚀 السحر الأول: المحرك الزمني (إلغاء تأثير التواريخ القديمة)
-  // ==========================================
   useEffect(() => {
     if (!rawSettings) return;
 
     const evaluatePlatformStatus = () => {
-      // الاعتماد المطلق على زر التفعيل (is_open) وتجاهل التاريخ القديم
       let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
 
       if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
@@ -335,9 +317,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [rawSettings, authRole]);
 
-  // ==========================================
-  // 🚀 السحر الثاني: المحرك اللحظي لمراقبة حالة المنصة
-  // ==========================================
   useEffect(() => {
     if (!user || isPublicPage || authRole === 'admin' || authRole === 'management') return;
 
@@ -347,7 +326,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'platform_settings' },
         (payload) => {
-          // تحديث الإعدادات الخام للمحرك الزمني
           setRawSettings(payload.new); 
         }
       )
@@ -396,3 +374,6 @@ export function useAuth() {
   }
   return context;
 }
+
+
+
