@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -6,24 +7,24 @@ import {
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
-  AlertTriangle, ShieldAlert, HeartHandshake, Award // 🚀 تمت إضافة Award هنا
+  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import Image from 'next/image'; // 🚀 تمت إضافة استيراد الصور
-import { format } from 'date-fns';
+import Image from 'next/image';
+import { format, startOfWeek, addDays } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth-context'; // 🚀 تم استيراد سياق المصادقة لجلب هوية المعلم
+import { useAuth } from '@/context/auth-context';
 
-// 🚀 تاريخ بدء النظام الإلزامي (1-3-2026)
+// تاريخ بدء النظام الإلزامي (1-3-2026)
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
 export default function TeacherDashboard() {
-  const { user, userRole } = useAuth(); // 🚀 جلب المستخدم للرصد الآلي
+  const { user, authRole } = useAuth(); // استخدام authRole بعد التحديث الأخير
   const [teacherData, setTeacherData] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [recentExams, setRecentExams] = useState<any[]>([]);
@@ -31,10 +32,9 @@ export default function TeacherDashboard() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
-  const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]); // حالة الطلاب المنذرين
-  const [myBadges, setMyBadges] = useState<any[]>([]); // 🚀 حالة أوسمة المعلم
+  const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
+  const [myBadges, setMyBadges] = useState<any[]>([]);
 
-  // 🚀 حالات المراقب الذكي للمعلم
   const [attendanceStatus, setAttendanceStatus] = useState<{
     isActive: boolean;
     missedPeriods: number[];
@@ -60,9 +60,8 @@ export default function TeacherDashboard() {
     setMounted(true);
     setCurrentTime(new Date());
 
-    // 🚀 دالة رصد حضور المعلم الآلية (ترسل إشارة صامتة للمراقب)
     const autoRecordPresence = async () => {
-      if (user?.id && userRole === 'teacher') {
+      if (user?.id && authRole === 'teacher') {
         try {
           await supabase.rpc('auto_record_teacher_presence', { p_user_id: user.id });
         } catch (error) {
@@ -71,17 +70,15 @@ export default function TeacherDashboard() {
       }
     };
 
-    // 1. التشغيل فور الدخول للصفحة
     autoRecordPresence();
 
-    // 2. تحديث الوقت وتشغيل الرصد الآلي كل دقيقة
     const timer = setInterval(() => {
       setCurrentTime(new Date());
       autoRecordPresence();
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [user, userRole]);
+  }, [user, authRole]);
 
   const isCurrentClass = (period: number) => {
     if (!currentTime) return false;
@@ -139,22 +136,16 @@ export default function TeacherDashboard() {
         }
 
         if (data.teacher?.id) {
-            // ==========================================
-            // 0️⃣ جلب الأوسمة الخاصة بالمعلم بذكاء
-            // ==========================================
             const { data: badgesData } = await supabase
               .from('student_badges')
               .select('*, badge:badges(*)')
-              .eq('student_id', data.teacher.id) // نستخدم id المعلم هنا
+              .eq('student_id', data.teacher.id)
               .order('granted_at', { ascending: false });
             
             if (badgesData) {
               setMyBadges(badgesData);
             }
 
-            // ==========================================
-            // 1️⃣ جلب الطلاب المنذرين (تجاوزوا 5 حصص)
-            // ==========================================
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -187,43 +178,35 @@ export default function TeacherDashboard() {
               setAtRiskStudents(atRisk);
             }
 
-            // ==========================================
-            // 2️⃣ خوارزمية المراقب الذكي لغياب المعلم
-            // ==========================================
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
-              const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
-              const currentDayOfWeek = now.getDay() + 1; // 1 للأحد إلى 7 للسبت (حسب ترتيبك)
+              const todayStr = now.toLocaleDateString('en-CA');
+              const currentDayOfWeek = now.getDay() + 1;
               
-              // حصص المعلم المجدولة اليوم
               const todaysSchedule = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
               const myPeriodsToday = Array.from(new Set(todaysSchedule.map((s: any) => s.period)));
 
               if (myPeriodsToday.length === 0) {
                 setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
               } else {
-                // جلب الحصص التي قام المعلم بتسجيلها اليوم
                 const { data: recs } = await supabase
                   .from('attendance_records')
-                  .select('*') // جلب كل شيء لاستخراج period بأمان
+                  .select('*')
                   .eq('date', todayStr)
                   .eq('teacher_id', data.teacher.id);
 
-                // استخراج أرقام الحصص المسجلة بأمان
                 const recordedPeriods = new Set(recs?.map((r: any) => r.period || r.period_number).filter(Boolean) || []);
                 const missed: number[] = [];
                 
                 myPeriodsToday.forEach((pNum: any) => {
-                  if (recordedPeriods.has(pNum)) return; // مسجلة مسبقاً
+                  if (recordedPeriods.has(pNum)) return;
 
-                  // جلب وقت نهاية الحصة من قاعدة البيانات
                   const pInfo = data.periods.find((p: any) => p.period_number === pNum);
                   if (pInfo && pInfo.end_time) {
                     const [h, m] = pInfo.end_time.split(':').map(Number);
                     const endTime = new Date(now);
                     endTime.setHours(h, m, 0, 0);
 
-                    // إذا انتهى وقت الحصة ولم يسجلها
                     if (now > endTime) {
                       missed.push(pNum);
                     }
@@ -274,7 +257,6 @@ export default function TeacherDashboard() {
       className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo"
       dir="rtl"
     >
-      {/* 🚀 نظام الإنذار والشكر الذكي (المراقب الإداري) */}
       <AnimatePresence>
         {attendanceStatus.isActive && attendanceStatus.totalToday > 0 && (
           <motion.div 
@@ -333,7 +315,6 @@ export default function TeacherDashboard() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 Header Section */}
       <div className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
           
@@ -383,24 +364,19 @@ export default function TeacherDashboard() {
           </div>
         </div>
 
-        {/* 🚀 قسم عرض الأوسمة الذكي */}
         {myBadges.length > 0 && (
           <div className="relative z-10 mt-10 pt-6 border-t border-white/20 w-full">
             <h3 className="text-sm font-bold text-indigo-100 mb-4 flex items-center gap-2">
               <Award className="w-5 h-5 text-yellow-300" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
             </h3>
-            {/* Horizontal Scroll Container */}
             <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
               {myBadges.map((badgeEntry, index) => (
                <div 
                   key={badgeEntry.id || index} 
                   className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 group cursor-default"
                 >
-                  {/* 🚀 إعادة التنسيق الأصلي الجميل مع مضاعفة الحجم (w-24 h-24 للموبايل و w-28 h-28 للكمبيوتر) */}
                   <div className="relative w-24 h-24 sm:w-28 sm:h-28 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
-                    {/* تأثير التوهج الخلفي للوسام */}
                     <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
-                    
                     {badgeEntry.badge?.image_url ? (
                       <Image 
                         src={badgeEntry.badge.image_url} 
@@ -408,7 +384,6 @@ export default function TeacherDashboard() {
                         fill 
                         unoptimized 
                         referrerPolicy="no-referrer" 
-                        // 🚀 عدنا لـ object-contain ليظهر الوسام كاملاً بدون اقتصاص مع إضافة ظل خفيف
                         className="object-contain drop-shadow-2xl relative z-10" 
                       />
                     ) : (
@@ -457,15 +432,15 @@ export default function TeacherDashboard() {
                     تنبيه: {atRiskStudents.length} طلاب تجاوزوا حد الغياب لديك!
                   </h2>
                   <p className="text-rose-100 text-xs sm:text-sm font-bold leading-relaxed max-w-xl">
-                    حسب لائحة السلوك والمواظبة، هؤلاء الطلاب تجاوزوا (5 حصص غياب) في حصصك، مما يعادل غياب يوم دراسي كامل. يرجى الانتباه وتنبيههم أو رفع أسمائهم للإدارة.
+                    حسب لائحة السلوك والمواظبة، هؤلاء الطلاب تجاوزوا (5 حصص غياب) في حصصك. يرجى الانتباه ورفع التقرير للإدارة.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* شبكة عرض الطلاب المنذرين */}
+            {/* 🚀 التعديل الذكي: عرض 4 طلاب فقط كحد أقصى (مقتطف) */}
             <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-               {atRiskStudents.map((student, idx) => (
+               {atRiskStudents.slice(0, 4).map((student, idx) => (
                   <div key={idx} className="bg-black/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 flex items-center justify-between group hover:bg-black/30 transition-colors">
                      <div className="flex items-center gap-3 min-w-0">
                        <div className="h-10 w-10 rounded-xl bg-rose-500/50 flex items-center justify-center text-white font-black text-sm border border-rose-400/50 shrink-0">
@@ -478,16 +453,41 @@ export default function TeacherDashboard() {
                      </div>
                      <div className="text-center shrink-0 ml-2 bg-white/10 px-3 py-2 rounded-xl border border-white/20">
                         <span className="block text-xl font-black text-yellow-300 leading-none">{student.count}</span>
-                        <span className="text-[8px] font-bold text-white uppercase tracking-widest mt-1 block">حصص غياب</span>
+                        <span className="text-[8px] font-bold text-white uppercase tracking-widest mt-1 block">حصص</span>
                      </div>
                   </div>
                ))}
             </div>
+
+            {/* 🚀 زر عرض القائمة الكاملة وإبلاغ الإدارة يظهر إذا كان العدد أكثر من 4 */}
+            {atRiskStudents.length > 4 && (
+              <div className="relative z-10 mt-6 flex justify-center sm:justify-end border-t border-white/10 pt-6">
+                <Link 
+                  href="/dashboard/teacher/warnings" 
+                  className="group flex items-center gap-2 bg-white text-rose-700 px-6 py-3 rounded-xl font-black text-sm hover:bg-rose-50 hover:text-rose-800 transition-all shadow-lg active:scale-95 border border-rose-200"
+                >
+                  <span>عرض كل الطلاب المنذرين ({atRiskStudents.length}) وتصدير التقرير للإدارة</span>
+                  <ArrowUpRight className="w-5 h-5 group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </div>
+            )}
+            
+            {/* في حال كان العدد 4 أو أقل نعرض الزر بطريقة أبسط قليلاً */}
+            {atRiskStudents.length > 0 && atRiskStudents.length <= 4 && (
+              <div className="relative z-10 mt-6 flex justify-center sm:justify-end border-t border-white/10 pt-6">
+                <Link 
+                  href="/dashboard/teacher/warnings" 
+                  className="group flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-white/30 transition-all border border-white/30"
+                >
+                  <span>إدارة الإنذارات وتصدير التقرير</span>
+                  <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                </Link>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 🚀 Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-5">
         {[
           { label: 'إجمالي الطلاب', value: stats.totalStudents, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', gradient: 'from-blue-50 to-white', border: 'border-blue-100' },
@@ -517,10 +517,8 @@ export default function TeacherDashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         
-        {/* 🚀 Main Content - Left 2 Columns */}
         <div className="xl:col-span-2 space-y-8">
           
-          {/* Today's Schedule Timeline */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -mr-10 -mt-10"></div>
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white/50 relative z-10 gap-4">
@@ -640,7 +638,6 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* My Sections Grid */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -690,7 +687,6 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* 🚀 Assignment Statistics by Class */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 sm:p-8 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -742,12 +738,10 @@ export default function TeacherDashboard() {
 
         </div>
 
-        {/* 🚀 Sidebar Content - Right 1 Column */}
         <div className="space-y-8">
           
           <AnnouncementsWidget authRole="teacher" />
 
-          {/* Recent Exams */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -794,7 +788,6 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* Recent Assignments */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -841,7 +834,6 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* 🚀 Recent Messages */}
           <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg transition-all relative">
             <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -910,3 +902,5 @@ export default function TeacherDashboard() {
     </motion.div>
   );
 }
+
+
