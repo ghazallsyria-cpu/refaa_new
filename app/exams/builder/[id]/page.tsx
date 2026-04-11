@@ -139,18 +139,19 @@ export default function QuizBuilder() {
           }
         });
 
-        // 🚀 استخراج النوع الحقيقي وفك التغليف
         setQuestions((questionsData || []).map((q: any) => {
            let qType = q.type;
            let qContent = q.content || '';
            
-           const typeMatch = qContent.match(//);
-           if (typeMatch) {
-               qType = typeMatch[1];
-               qContent = qContent.replace(//g, '');
+           // 🚀 استخراج النوع الآمن
+           if (qContent.includes('', startIndex);
+               if (startIndex > 9 && endIndex > startIndex) {
+                   qType = qContent.substring(startIndex, endIndex);
+               }
+               qContent = qContent.split(``).join('');
            } else if (qContent.includes('') || qType === 'file_upload') {
                qType = 'file';
-               qContent = qContent.replace(//g, '');
+               qContent = qContent.split('').join('');
            } else if (qType === 'open') {
                qType = 'essay';
            }
@@ -487,13 +488,14 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // تنظيف النص عند تغيير النوع لضمان عدم وجود تداخل
+                           // مسح أي علامات قديمة عند تبديل النوع
                            let cleanContent = q.content || '';
-                           if (type !== 'file' && cleanContent) {
-                               cleanContent = cleanContent.split('').join('');
-                               cleanContent = cleanContent.replace(//g, '');
-                               updates.content = cleanContent;
-                           }
+                           cleanContent = cleanContent.split('').join('');
+                           const oldTypes = ['essay', 'fill_in_blank', 'file', 'multiple_choice', 'true_false', 'multi_select'];
+                           oldTypes.forEach(t => {
+                               cleanContent = cleanContent.split(``).join('');
+                           });
+                           updates.content = cleanContent;
 
                            if ((type === 'multiple_choice' || type === 'checkbox') && (!q.options || q.options.length === 0)) {
                               updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
