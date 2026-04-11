@@ -1,6 +1,15 @@
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import cloudinary from '@/lib/cloudinary';
+// 🟢 نقوم باستيراد مكتبة Cloudinary الحقيقية الخاصة بـ Node.js
+import { v2 as cloudinary } from 'cloudinary';
+
+// 🟢 إعداد Cloudinary هنا داخل الخادم
+cloudinary.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function POST(request: Request) {
   try {
@@ -9,7 +18,7 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // التحقق من الأمان
+    // 🟢 1. التحقق من الأمان (Auth Check) لمنع الحذف العشوائي
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {
       return NextResponse.json({ error: 'Unauthorized: No token provided' }, { status: 401 });
@@ -22,7 +31,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
 
-    const { publicId } = await request.json();
+    const body = await request.json();
+    
+    // دعم كلا الاسمين للمتغير (publicId أو public_id) لتجنب كسر أي كود قديم يعتمد عليه
+    const publicId = body.publicId || body.public_id;
+    const resourceType = body.resourceType || body.resource_type || 'image';
 
     if (!publicId) {
       return NextResponse.json(
@@ -31,15 +44,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Delete the image from Cloudinary
-    const result = await cloudinary.uploader.destroy(publicId);
+    // 🟢 2. تنفيذ الحذف عبر مكتبة Cloudinary
+    const result = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
 
     return NextResponse.json({ success: true, result });
-  } catch (error) {
-    console.error('Error deleting image:', error);
+  } catch (error: any) {
+    console.error('Error deleting image from Cloudinary:', error);
     return NextResponse.json(
-      { error: 'Failed to delete image' },
+      { error: error?.message || 'Failed to delete image' },
       { status: 500 }
     );
   }
 }
+
