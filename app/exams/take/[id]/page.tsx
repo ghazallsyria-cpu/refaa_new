@@ -295,6 +295,9 @@ export default function TakeQuiz() {
   const isAutoCurrent = isAutoGradedType(currentQType);
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
+  
+  // المتغير الجديد للتعرف على جميع حالات رفع الملفات
+  const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative" dir="rtl">
@@ -347,7 +350,6 @@ export default function TakeQuiz() {
               <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm tracking-wider">
                 <span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span>
               </div>
-              {/* 🚀 السطر المعدل ليعرض ألوان HTML بأمان للاختبارات */}
               <div 
                  className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed" 
                  dangerouslySetInnerHTML={{ __html: currentQuestion?.content || currentQuestion?.text || '' }} 
@@ -380,7 +382,8 @@ export default function TakeQuiz() {
                 );
               })}
 
-              {currentQType === 'file_upload' && (
+              {/* التحديث هنا: استخدام isFileUploadType لضمان ظهور زر رفع الملفات دائماً */}
+              {isFileUploadType && (
                 <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
                   <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2">
                      <UploadCloud className="h-5 w-5 text-indigo-600" /> قم برفع صورة حلك لهذه المسألة هنا:
@@ -395,7 +398,8 @@ export default function TakeQuiz() {
                 </div>
               )}
 
-              {!isAutoCurrent && currentQType !== 'file_upload' && (
+              {/* التحديث هنا أيضاً لعدم ظهور مربع النص المقالي عند وجود سؤال رفع ملف */}
+              {!isAutoCurrent && !isFileUploadType && (
                 <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed font-bold" />
               )}
             </div>
