@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { normalizePayload } from '@/lib/utils';
+// 🚀 قمنا بإزالة normalizePayload لأننا سنبني البيانات يدوياً لضمان عدم ضياع الإعدادات
 
 export async function POST(req: Request) {
   const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -18,18 +18,26 @@ export async function POST(req: Request) {
         if (tProfile2) realTeacherId = tProfile2.id;
     }
 
-    const rawPayload = {
-      ...examData,
-      teacher_id: realTeacherId, 
+    // 🚀 1. بناء الـ Payload يدوياً وبدقة لضمان عدم ضياع أي حقل (الإعدادات، الدرجات، إلخ)
+    const payload = {
+      title: examData.title,
+      description: examData.description,
+      subject_id: examData.subject_id,
+      teacher_id: realTeacherId,
+      duration: Number(examData.duration) || 30,
+      max_attempts: Number(examData.max_attempts) || 1,
+      max_score: Number(examData.max_score) || 100,
+      total_marks: Number(examData.max_score) || 100,
+      exam_date: examData.exam_date,
+      start_time: examData.start_time,
+      end_time: examData.end_time,
+      status: examData.status || 'draft',
+      settings: examData.settings || {} // 👈 هنا يكمن الحل السحري لحفظ الإعدادات ومنع الغش!
     };
 
-    const savedSectionIds = rawPayload.section_ids || [];
-    delete rawPayload.section_ids;
+    let finalExamId = examData.id;
 
-    const payload = normalizePayload(rawPayload);
-    let finalExamId = payload.id;
-
-    // 1. حفظ أو تحديث بيانات الاختبار الأساسية
+    // 2. حفظ أو تحديث بيانات الاختبار الأساسية
     if (isNew || !finalExamId) {
       const { data: newEx, error: insertErr } = await adminSupabase.from('exams').insert([payload]).select().single();
       if (insertErr) throw new Error('DB_INSERT_EXAM: ' + insertErr.message);
@@ -37,17 +45,16 @@ export async function POST(req: Request) {
     } else {
       const { error: updateErr } = await adminSupabase.from('exams').update(payload).eq('id', finalExamId);
       if (updateErr) throw new Error('DB_UPDATE_EXAM: ' + updateErr.message);
-      // 🚨 تم إزالة السطر المدمر الذي كان يحذف جميع الأسئلة هنا!
     }
 
-    // 2. تحديث فصول الاختبار (لا تؤثر على إجابات الطلاب)
-    if (savedSectionIds && savedSectionIds.length > 0) {
+    // 3. تحديث فصول (شعب) الاختبار (لا تؤثر على إجابات الطلاب)
+    if (examData.section_ids && examData.section_ids.length > 0) {
       await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
-      const sections = savedSectionIds.map((sId: string) => ({ exam_id: finalExamId, section_id: sId }));
+      const sections = examData.section_ids.map((sId: string) => ({ exam_id: finalExamId, section_id: sId }));
       await adminSupabase.from('exam_sections').insert(sections);
     }
 
-    // 3. 🚀 المعالجة الذكية للأسئلة (Upsert) للحفاظ على إجابات الطلاب
+    // 4. 🚀 المعالجة الذكية للأسئلة (Upsert)
     if (questions && questions.length > 0) {
       // أ- حذف الأسئلة التي قام المعلم بإزالتها فعلياً من الواجهة فقط
       const incomingQuestionIds = questions.map((q: any) => q.id).filter(Boolean);
@@ -58,7 +65,6 @@ export async function POST(req: Request) {
             .eq('exam_id', finalExamId)
             .not('id', 'in', `(${incomingQuestionIds.join(',')})`);
       } else {
-          // في حال حذف المعلم جميع الأسئلة
           await adminSupabase.from('questions').delete().eq('exam_id', finalExamId);
       }
 
@@ -66,18 +72,18 @@ export async function POST(req: Request) {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i];
         
-        // تجهيز بيانات السؤال
+        // 🚀 تجهيز بيانات السؤال بدقة متناهية للحفاظ على النوع والدرجة
         const qPayload = {
-          id: q.id || undefined, // الحفاظ على الـ ID القديم إذا كان موجوداً
+          id: q.id || undefined, 
           exam_id: finalExamId,
-          type: q.type || 'open',
+          type: q.type || 'multiple_choice', // 👈 أخذ نوع السؤال بدقة
           content: q.content || '',
           media_url: q.mediaUrl || q.media_url || null,
-          points: q.points || 1,
-          order_index: i
+          points: Number(q.points) || 1,     // 👈 تحويل الدرجة لرقم لضمان حفظها في قاعدة البيانات
+          order_index: i,
+          is_required: q.is_required !== false // 👈 حفظ خيار إجبارية السؤال (لم يكن موجوداً سابقاً)
         };
 
-        // Upsert: تحديث إذا كان موجوداً، إدراج إذا كان جديداً
         const { data: savedQ, error: qErr } = await adminSupabase
           .from('questions')
           .upsert([qPayload], { onConflict: 'id' })
@@ -86,12 +92,11 @@ export async function POST(req: Request) {
 
         if (qErr) {
             console.error('Question Save Error:', qErr);
-            continue; // تجاوز الخطأ وإكمال الباقي
+            continue; 
         }
 
         // ج- معالجة الخيارات المرتبطة بالسؤال
         if (savedQ && q.options?.length > 0) {
-          // حذف الخيارات التي تمت إزالتها فقط
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
           if (incomingOptionIds.length > 0) {
               await adminSupabase
@@ -103,12 +108,11 @@ export async function POST(req: Request) {
               await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id);
           }
 
-          // إدراج أو تحديث الخيارات
           const optsPayload = q.options.map((opt: any, idx: number) => ({
             id: opt.id || undefined,
             question_id: savedQ.id,
             content: opt.content || '',
-            is_correct: opt.is_correct || false,
+            is_correct: Boolean(opt.is_correct),
             order_index: idx
           }));
 
@@ -117,7 +121,7 @@ export async function POST(req: Request) {
             .upsert(optsPayload, { onConflict: 'id' });
             
         } else if (savedQ && (!q.options || q.options.length === 0)) {
-           // إذا تم تغيير نوع السؤال إلى مقالي مثلاً ولم يعد له خيارات
+           // إذا تم تغيير نوع السؤال إلى مقالي أو ملف ولم يعد له خيارات
            await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id);
         }
       }
