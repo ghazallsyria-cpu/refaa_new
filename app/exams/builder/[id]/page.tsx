@@ -20,7 +20,6 @@ import ForumEditor from '@/components/ForumEditor';
 
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
 
-// 🚀 تم تحديث الـ Type ليقبل الإعدادات الجديدة بدون أخطاء في Netlify
 type ExamData = {
   id?: string;
   title: string;
@@ -74,8 +73,8 @@ export default function QuizBuilder() {
       shuffle_options: false,
       show_results_immediately: true,
       allow_backtracking: true,
-      prevent_tab_switch: false, // 🚀 الوضع الافتراضي لمنع التبويب
-      prevent_copy: true         // 🚀 الوضع الافتراضي لمنع النسخ
+      prevent_tab_switch: false,
+      prevent_copy: true
     }
   });
 
@@ -101,7 +100,7 @@ export default function QuizBuilder() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const addQuestion = useCallback((type: QuestionType | 'file_upload') => {
+  const addQuestion = useCallback((type: QuestionType | 'file' | 'file_upload') => {
     const newQuestion: any = {
       ...createQuestion(type as QuestionType),
       type: type, 
@@ -125,8 +124,6 @@ export default function QuizBuilder() {
     try {
       if (!isNew) {
         const { exam: examData, questions: questionsData } = await fetchExamDetails(params.id as string);
-        
-        // 🚀 تجاوز فحص TypeScript الصارم باستخدام (as any) للإعدادات القادمة من قاعدة البيانات
         const fetchedSettings = (examData.settings || {}) as any;
         
         setExam({
@@ -142,7 +139,11 @@ export default function QuizBuilder() {
           }
         });
 
-        setQuestions((questionsData || []).map((q: any) => ({...q, is_required: q.is_required ?? true})));
+        setQuestions((questionsData || []).map((q: any) => {
+           let qType = q.type;
+           if (q.content?.includes('') || qType === 'file_upload') qType = 'file';
+           return {...q, type: qType, is_required: q.is_required ?? true};
+        }));
       } else {
         addQuestion('multiple_choice');
         if (user) setExam(prev => ({ ...prev, teacher_id: user.id }));
@@ -389,7 +390,6 @@ export default function QuizBuilder() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-12 space-y-10">
-        {/* Quiz Header Info */}
         <div className="glass-card rounded-[40px] border-t-[16px] border-t-indigo-600 border border-white/60 shadow-2xl shadow-slate-200/50 p-10 space-y-8 relative overflow-hidden">
           <div className="absolute -right-20 -top-20 h-64 w-64 bg-indigo-50/30 rounded-full blur-3xl -z-10" />
           <div className="space-y-4">
@@ -447,7 +447,6 @@ export default function QuizBuilder() {
           </div>
         </div>
 
-        {/* Questions List */}
         <Reorder.Group axis="y" values={questions} onReorder={setQuestions} className="space-y-10">
           <AnimatePresence initial={false}>
             {questions.map((q, index) => (
@@ -491,7 +490,7 @@ export default function QuizBuilder() {
                         <option value="multi_select">اختيار متعدد</option>
                         <option value="essay">سؤال مقالي</option>
                         <option value="fill_in_blank">ملء الفراغ</option>
-                        <option value="file_upload">رفع صورة / ملف (مهم)</option>
+                        <option value="file">رفع صورة / ملف (مهم)</option>
                       </select>
                     </div>
                   </div>
@@ -519,7 +518,7 @@ export default function QuizBuilder() {
                           </button>
                         )}
                       </div>
-                    ) : q.type === 'file_upload' ? (
+                    ) : q.type === 'file' || q.type === 'file_upload' ? (
                        <div className="p-8 bg-indigo-50/50 rounded-[32px] border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center text-center gap-3">
                          <UploadCloud className="h-10 w-10 text-indigo-400" />
                          <p className="text-indigo-900 font-bold text-lg">سؤال إرفاق ملف / حل مصور</p>
@@ -574,7 +573,7 @@ export default function QuizBuilder() {
                   { type: 'multiple_choice', label: 'اختيار من متعدد', icon: List, desc: 'سؤال مع خيارات إجابة واحدة صحيحة' },
                   { type: 'true_false', label: 'صح أو خطأ', icon: CheckSquare, desc: 'سؤال بإجابة منطقية بسيطة' },
                   { type: 'multi_select', label: 'اختيار متعدد', icon: CheckSquare, desc: 'سؤال مع عدة إجابات صحيحة محتملة' },
-                  { type: 'file_upload', label: 'رفع صورة / ملف', icon: UploadCloud, desc: 'يطلب من الطالب تصوير حله ورفعه' },
+                  { type: 'file', label: 'رفع صورة / ملف', icon: UploadCloud, desc: 'يطلب من الطالب تصوير حله ورفعه' },
                   { type: 'essay', label: 'سؤال مقالي', icon: AlignLeft, desc: 'سؤال يتطلب كتابة نصية من الطالب' },
                   { type: 'fill_in_blank', label: 'ملء الفراغ', icon: Type, desc: 'سؤال يتطلب إكمال جملة ناقصة' },
                 ].map((item) => (
