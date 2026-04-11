@@ -67,14 +67,20 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 🚀 تنظيف النصوص بطريقة "سلاسل نصية" آمنة تماماً من الـ Regex المكسور
-        const markers = ['[[[TYPE:', '[[[FILE_UPLOAD]]]', '').join('');
+        // 🚀 تنظيف النصوص القديمة بأسلوب مخادع للدردشة حتى لا تنكسر الأكواد
+        const oldFileMarker = '<' + '!--[FILE_UPLOAD]--' + '>';
+        const regexPattern = '<' + '!--\\[TYPE:.*?\\]--' + '>';
+        
+        qContent = qContent.split(oldFileMarker).join('');
+        qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
+        qContent = qContent.replace(new RegExp(regexPattern, 'g'), '');
+        qContent = qContent.replace(/\[\[\[TYPE:.*?\]\]\]/g, '');
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
           type: qType,
-          content: qContent,
+          content: qContent.trim(),
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
           order_index: i
