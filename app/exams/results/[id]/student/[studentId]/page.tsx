@@ -287,7 +287,6 @@ export default function StudentExamResult() {
                         {index + 1}
                     </div>
                     <div className="pt-2">
-                       {/* 🚀 السطر المعدل لعرض المعادلة الرياضية والنصوص */}
                        <div className="prose max-w-none font-bold text-lg text-slate-800 leading-relaxed mt-1">
                           <Latex>{question.content || question.text || ''}</Latex>
                        </div>
@@ -328,8 +327,8 @@ export default function StudentExamResult() {
                           )}
                        </div>
                     ) : (
-                       {/* 🚀 السطر المعدل لعرض معادلات إجابة الطالب */}
                        <div className={`text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'text-slate-400 italic' : 'text-slate-800'}`}>
+                          {/* 🚀 تم نقل التعليق إلى الداخل لتفادي خطأ Netlify */}
                           {isUnanswered ? 'لم يقم الطالب بتقديم إجابة لهذا السؤال.' : <Latex>{String(studentAnswerText)}</Latex>}
                        </div>
                     )}
@@ -340,7 +339,6 @@ export default function StudentExamResult() {
                       <div className="text-sm font-black text-indigo-600 mb-3 flex items-center gap-2">
                           <Lightbulb className="w-5 h-5"/> الإجابة النموذجية المعتمدة
                       </div>
-                      {/* 🚀 السطر المعدل لعرض معادلات الإجابة النموذجية */}
                       <div className="text-lg font-bold text-slate-800 leading-relaxed">
                           <Latex>{String(correctAnswerText)}</Latex>
                       </div>
