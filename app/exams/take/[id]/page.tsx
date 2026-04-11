@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, UploadCloud } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, UploadCloud, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
@@ -24,7 +24,11 @@ const isAutoGradedType = (type: string) => {
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuth() as any; 
+  // 🚀 التعديل 1: استخراج دور المستخدم لمعرفة إذا كان معلماً يتصفح للمعاينة
+  const { user, userRole, authRole } = useAuth() as any; 
+  const currentRole = authRole || userRole;
+  const isPreviewMode = ['teacher', 'admin', 'management'].includes(currentRole);
+
   const { fetchExamForStudent } = useExamsSystem();
   
   const [exam, setExam] = useState<Exam | null>(null);
@@ -50,20 +54,26 @@ export default function TakeQuiz() {
 
     try {
       const studentId = user.id || user.user_id;
-      const { count } = await supabase
-        .from('exam_attempts')
-        .select('id', { count: 'exact', head: true })
-        .eq('exam_id', params.id)
-        .eq('student_id', studentId);
+      
+      // 🚀 إذا كان المستخدم طالباً فقط، نتأكد من أنه لم يقدم الاختبار مسبقاً
+      if (!isPreviewMode) {
+          const { count } = await supabase
+            .from('exam_attempts')
+            .select('id', { count: 'exact', head: true })
+            .eq('exam_id', params.id)
+            .eq('student_id', studentId);
+
+          const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
+          const maxAttempts = examData.max_attempts || 1;
+
+          if (count !== null && count >= maxAttempts) {
+            setAlreadySubmitted(true);
+            setLoading(false);
+            return;
+          }
+      }
 
       const { exam: examData, questions: questionsData } = await fetchExamForStudent(params.id as string);
-      const maxAttempts = examData.max_attempts || 1;
-
-      if (count !== null && count >= maxAttempts) {
-        setAlreadySubmitted(true);
-        setLoading(false);
-        return;
-      }
       
       const now = new Date();
       const examDate = new Date(examData.exam_date);
@@ -75,7 +85,8 @@ export default function TakeQuiz() {
       const endDateTime = new Date(examDate);
       endDateTime.setHours(parseInt(endTimeParts[0] || '23'), parseInt(endTimeParts[1] || '59'), 0);
       
-      if (now < startDateTime || now > endDateTime) {
+      // 🚀 تخطي قيود الوقت في حالة المعاينة
+      if (!isPreviewMode && (now < startDateTime || now > endDateTime)) {
         alert("هذا الاختبار غير متاح في الوقت الحالي.");
         window.location.href = '/exams';
         return;
@@ -85,11 +96,11 @@ export default function TakeQuiz() {
       
       let finalQuestions = [...(questionsData || [])];
       
-      if (examData.settings?.shuffle_questions) {
+      if (examData.settings?.shuffle_questions && !isPreviewMode) {
          finalQuestions.sort(() => Math.random() - 0.5);
       }
       
-      if (examData.settings?.shuffle_options) {
+      if (examData.settings?.shuffle_options && !isPreviewMode) {
          finalQuestions = finalQuestions.map(q => {
             if (q.options && q.options.length > 0 && q.type !== 'true_false') {
                return { ...q, options: [...q.options].sort(() => Math.random() - 0.5) };
@@ -113,12 +124,20 @@ export default function TakeQuiz() {
     } finally {
       setLoading(false);
     }
-  }, [params.id, fetchExamForStudent, user]);
+  }, [params.id, fetchExamForStudent, user, isPreviewMode]);
 
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !questions || questions.length === 0 || !user) return;
+    
+    // 🚀 التعديل 2: إذا كانت معاينة، نظهر تنبيهاً ونخرج دون الإرسال لقاعدة البيانات
+    if (isPreviewMode) {
+       alert("هذا الاختبار في وضع المعاينة. لن يتم حفظ الإجابات في قاعدة البيانات لأنك لست طالباً مسجلاً في المادة.");
+       router.push('/exams');
+       return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -197,7 +216,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, exam, user, startTime]);
+  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, router]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
@@ -209,7 +228,8 @@ export default function TakeQuiz() {
   }, [timeLeft, isFinished, alreadySubmitted, handleSubmit]);
 
   useEffect(() => {
-    if (isFinished || loading || !exam || alreadySubmitted || !exam.settings?.prevent_tab_switch) return;
+    // 🚀 إيقاف نظام مراقبة الغش للمعلمين أثناء المعاينة
+    if (isFinished || loading || !exam || alreadySubmitted || !exam.settings?.prevent_tab_switch || isPreviewMode) return;
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -224,10 +244,11 @@ export default function TakeQuiz() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [isFinished, loading, exam, alreadySubmitted, handleSubmit]);
+  }, [isFinished, loading, exam, alreadySubmitted, handleSubmit, isPreviewMode]);
 
   useEffect(() => {
-    if (!exam?.settings?.prevent_copy) return;
+    // 🚀 إيقاف نظام منع النسخ للمعلمين أثناء المعاينة
+    if (!exam?.settings?.prevent_copy || isPreviewMode) return;
 
     const preventCopyPaste = (e: Event) => {
         e.preventDefault();
@@ -250,7 +271,7 @@ export default function TakeQuiz() {
         document.removeEventListener('contextmenu', preventCopyPaste);
         document.removeEventListener('keydown', preventPrint);
     };
-  }, [exam?.settings?.prevent_copy]);
+  }, [exam?.settings?.prevent_copy, isPreviewMode]);
 
   const handleAnswerChange = (questionId: string, value: any) => setAnswers(prev => ({ ...prev, [questionId]: value }));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -325,11 +346,19 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  // 🚀 تطبيق الخدعة هنا للتعرف على المرفقات
   const isFileUploadType = (currentQuestion?.content || '').includes('') || ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
-    <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", exam?.settings?.prevent_copy && "select-none print:hidden")} dir="rtl">
+    <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", (exam?.settings?.prevent_copy && !isPreviewMode) && "select-none print:hidden")} dir="rtl">
+      
+      {/* 🚀 شريط المعاينة للمعلم */}
+      {isPreviewMode && (
+        <div className="bg-amber-100 border-b border-amber-200 text-amber-800 px-4 py-2 text-center text-sm font-bold flex justify-center items-center gap-2">
+           <Eye className="w-4 h-4" />
+           أنت تتصفح الاختبار كمعلم (وضع المعاينة). لن يتم حفظ الإجابات أو تفعيل قيود الغش/الوقت.
+        </div>
+      )}
+
       <AnimatePresence>
         {showCheatModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-sm">
@@ -440,7 +469,7 @@ export default function TakeQuiz() {
           <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
           {currentQuestionIdx === questions.length - 1 ? (
             <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50">
-              {isSubmitting ? <span className="animate-pulse">جاري الحفظ بدقة...</span> : <><Send className="h-5 w-5" /> إرسال الاختبار</>}
+              {isSubmitting ? <span className="animate-pulse">جاري المعالجة...</span> : <><Send className="h-5 w-5" /> {isPreviewMode ? 'إنهاء المعاينة' : 'إرسال الاختبار'}</>}
             </button>
           ) : (
             <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
