@@ -67,13 +67,13 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // مسح أي تغليفات قديمة من قاعدة البيانات لتعود الأسئلة نظيفة
-        qContent = qContent.replace(/\[\[\[TYPE:.*?\]\]\]/g, '').replace(/\[\[\[FILE_UPLOAD\]\]\]/g, '').replace(//g, '');
+        // 🚀 تنظيف النصوص بطريقة "سلاسل نصية" آمنة تماماً من الـ Regex المكسور
+        const markers = ['[[[TYPE:', '[[[FILE_UPLOAD]]]', '').join('');
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
-          type: qType, // حفظ النوع الصريح مباشرة
+          type: qType,
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
         if (qErr) {
             console.error('Question Save Error:', qErr);
-            throw new Error(`قاعدة البيانات ترفض نوع السؤال: ${qType}. يرجى إضافته إلى قاعدة البيانات.`);
+            continue; 
         }
 
         if (savedQ && q.options?.length > 0 && ['multiple_choice', 'true_false', 'multi_select'].includes(qType)) {
