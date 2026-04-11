@@ -8,11 +8,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
-    // 🚀 التعديل الجوهري هنا لحل مشكلة الإدارة: 
-    // نعتمد على المعلم المحدد في الواجهة (examData.teacher_id) بدلاً من إجبار السيرفر على استخدام حساب من قام بالضغط على حفظ
     let finalTeacherId = examData.teacher_id;
     
-    // إذا لم يكن موجوداً (احتياطياً)، نجلبه من الحساب الحالي
     if (!finalTeacherId) {
         const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
         if (tProfile) {
@@ -20,7 +17,7 @@ export async function POST(req: Request) {
         } else {
             const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
             if (tProfile2) finalTeacherId = tProfile2.id;
-            else finalTeacherId = userId; // fallback
+            else finalTeacherId = userId; 
         }
     }
 
@@ -28,7 +25,7 @@ export async function POST(req: Request) {
       title: examData.title,
       description: examData.description,
       subject_id: examData.subject_id,
-      teacher_id: finalTeacherId, // 👈 هنا استخدمنا المعرف الصحيح
+      teacher_id: finalTeacherId,
       duration: Number(examData.duration) || 30,
       max_attempts: Number(examData.max_attempts) || 1,
       max_score: Number(examData.max_score) || 100,
@@ -73,13 +70,13 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 🚀 الخدعة السحرية: التعامل مع الصور وتبويبات الرفع
+        // 🚀 الحل الآمن للـ String: استخدام split و join بدلاً من Regex
         if (qType === 'file') {
             if (!qContent.includes('')) {
                qContent += '';
             }
         } else {
-            qContent = qContent.replace(//g, '');
+            qContent = qContent.split('').join('');
         }
 
         const qPayload = {
