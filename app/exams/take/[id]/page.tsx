@@ -101,10 +101,11 @@ export default function TakeQuiz() {
 
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
- let finalQuestions = [...(questionsData || [])].map((q: any) => {
+      let finalQuestions = [...(questionsData || [])].map((q: any) => {
          let qContent = q.content || '';
          let qType = q.type;
          
+         // 🚀 الإصلاح الآمن: استخدام RegExp بدلاً من النص العادي
          const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
          const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
          const typeMatch = qContent.match(typeRegex);
@@ -368,7 +369,6 @@ export default function TakeQuiz() {
   const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
   const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
-  // 🚀 التعديل الجذري هنا: لا نعتبره رفع ملف إلا إذا كان نوعه الحقيقي هو ملف أو رفع (انتهى زمن العلامة المخفية)
   const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
