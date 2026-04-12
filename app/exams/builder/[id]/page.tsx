@@ -10,7 +10,7 @@ import {
   MoreVertical, Type, List, CheckSquare,
   AlignLeft, Hash, Link as LinkIcon, Clock, CheckCircle, UploadCloud
 } from 'lucide-react';
-import { motion, Reorder, AnimatePresence } from 'motion/react';
+import { motion, Reorder, AnimatePresence } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Switch from '@radix-ui/react-switch';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -101,6 +101,7 @@ export default function QuizBuilder() {
 
   const addQuestion = useCallback((type: QuestionType | 'file' | 'file_upload') => {
     const newQuestion: any = {
+      id: crypto.randomUUID(), // 🚀 التأكد من توليد ID جديد دائماً
       ...createQuestion(type as QuestionType),
       type: type, 
       is_required: true 
@@ -111,6 +112,8 @@ export default function QuizBuilder() {
             { id: crypto.randomUUID(), content: 'صح', is_correct: true },
             { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
         ];
+    } else if (type === 'multiple_choice' || type === 'multi_select' || type === 'checkbox') {
+        newQuestion.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
     }
     setQuestions(prev => [...prev, newQuestion]);
   }, []);
@@ -142,7 +145,6 @@ export default function QuizBuilder() {
            let qType = q.type;
            let qContent = q.content || '';
            
-           // تنظيف آمن للعلامات القديمة
            const oldMarker = '<' + '!--[FILE_UPLOAD]--' + '>';
            qContent = qContent.split(oldMarker).join('');
 
@@ -481,17 +483,18 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 عند تغيير النوع، نقوم بمسح الخيارات إذا لم تكن مطلوبة
-                           if ((type === 'multiple_choice' || type === 'checkbox') && (!q.options || q.options.length === 0)) {
-                              updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
+                           // 🚀 تصحيح: إضافة الخيارات تلقائياً إذا كان النوع يتطلب ذلك
+                           if (['multiple_choice', 'multi_select', 'checkbox', 'radio'].includes(type)) {
+                              updates.options = (q.options && q.options.length > 0) ? q.options : [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
                            } else if (type === 'true_false') {
                               updates.options = [
                                 { id: crypto.randomUUID(), content: 'صح', is_correct: true },
                                 { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
                               ];
-                           } else if (['essay', 'fill_in_blank', 'file', 'file_upload'].includes(type as string)) {
+                           } else {
                               updates.options = [];
                            }
+                           
                            updateQuestion(q.id, updates);
                         }} 
                         className="w-full px-6 py-5 rounded-3xl bg-white border-0 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-700 transition-all appearance-none cursor-pointer"
@@ -507,7 +510,7 @@ export default function QuizBuilder() {
                   </div>
 
                   <div className="space-y-6">
-                    {(q.type === 'multiple_choice' || q.type === 'multi_select' || q.type === 'true_false') ? (
+                    {(['multiple_choice', 'multi_select', 'true_false', 'checkbox', 'radio'].includes(q.type as string)) ? (
                       <div className="space-y-4">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">خيارات الإجابة</label>
                         <div className="grid grid-cols-1 gap-4">
