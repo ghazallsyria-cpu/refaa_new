@@ -215,6 +215,7 @@ export default function TakeQuiz() {
             score: totalScore,
             status: attemptStatus,
             userId: studentProfileId || user.id || user.user_id, 
+            studentId: studentProfileId || user.id || user.user_id, // 🚀 إضافة صريحة لمتغير studentId ليتوافق مع جميع نسخ الـ API
             timeTaken: calculatedTimeTaken
         })
       });
