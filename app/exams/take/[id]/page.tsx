@@ -101,23 +101,25 @@ export default function TakeQuiz() {
 
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
-      let finalQuestions = [...(questionsData || [])].map((q: any) => {
-         let qType = q.type;
+ let finalQuestions = [...(questionsData || [])].map((q: any) => {
          let qContent = q.content || '';
+         let qType = q.type;
          
-         const typeMatch = qContent.match(//);
+         const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
+         const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
+         const typeMatch = qContent.match(typeRegex);
+         
          if (typeMatch) {
              qType = typeMatch[1];
-             qContent = qContent.replace(//g, '');
-         } else if (qContent.includes('') || qType === 'file_upload') {
+             qContent = qContent.replace(globalTypeRegex, '');
+         } else if (qContent.includes('<!--[TYPE:file]-->') || qType === 'file_upload') {
              qType = 'file';
-             qContent = qContent.replace(//g, '');
-         } else if (qType === 'open') {
-             qType = 'essay';
+             qContent = qContent.replace(globalTypeRegex, '');
          }
-
-         return {...q, type: qType, content: qContent};
+         
+         return {...q, type: qType, content: qContent.trim()};
       });
+
       
       if (examData.settings?.shuffle_questions && !isPreviewMode) {
          finalQuestions.sort(() => Math.random() - 0.5);
