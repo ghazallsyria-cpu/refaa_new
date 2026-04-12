@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   ArrowLeft, ShieldAlert, Printer, Search, Filter,
   User, GraduationCap, CalendarDays, ChevronDown, ChevronUp,
-  FileText, AlertTriangle, Mail
+  FileText, AlertTriangle, Mail, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -329,7 +329,7 @@ export default function AdminAbsenceWarningsPage() {
                 <h1 className="text-3xl sm:text-5xl font-black mb-4 tracking-tight">إجمالي أيام الغياب المخصومة</h1>
                 <p className="text-indigo-200 max-w-3xl text-base sm:text-lg font-bold leading-relaxed">
                     هذه الصفحة تستخلص آلياً غياب الطلاب من جميع المعلمين وتجمعها لتشكيل الرصيد النهائي المخصوم على الطالب.
-                    <span className="block mt-2 text-rose-300">يظهر هنا فقط من أتم (5 حصص = 1 يوم غياب) في مادة واحدة على الأقل.</span>
+                    <span className="block mt-2 text-rose-300">يظهر هنا فقط من أتم (5 حصص = 1 يوم غياب) في مادة واحدة على অন্তত.</span>
                 </p>
             </div>
             <div className="absolute right-0 top-0 w-1/3 h-full bg-gradient-to-r from-white/5 to-transparent skew-x-12 -translate-x-1/2"></div>
