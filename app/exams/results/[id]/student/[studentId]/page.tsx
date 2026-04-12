@@ -76,7 +76,6 @@ const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
                      qContent = qContent.replace(globalTypeRegex, '');
                  }
 
-بذلك تكون كافة الأخطاء قد أزيلت تماماً وسيتم البناء والرفع بنجاح! بانتظار تأكيدك الجميل.
                      qType = 'file';
                      qContent = qContent.replace(//g, '');
                  }
