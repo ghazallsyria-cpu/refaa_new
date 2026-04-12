@@ -5,12 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, BookOpen, CheckCircle2, XCircle, Trophy, User, AlertCircle, Save, Clock, MinusCircle, Lightbulb, Lock, Award, Target, Timer, FileText } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 
-import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
-  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
+  return ['multiple_choice', 'true_false', 'multi_select', 'checkbox', 'radio'].includes(t);
 };
 
 const formatTimeTaken = (seconds: number) => {
@@ -59,12 +58,12 @@ export default function StudentExamResult() {
              });
           }
 
-          // 🚀 فك التغليف عن الأسئلة لعرضها بشكل صحيح للمعلم
           if (result.questions) {
               result.questions = result.questions.map((q: any) => {
-                 let qType = q.type;
                  let qContent = q.content || '';
-const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
+                 let qType = q.type;
+                 
+                 const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
                  const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
                  const typeMatch = qContent.match(typeRegex);
                  
@@ -75,11 +74,8 @@ const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
                      qType = 'file';
                      qContent = qContent.replace(globalTypeRegex, '');
                  }
-
-                     qType = 'file';
-                     qContent = qContent.replace(//g, '');
-                 }
-                 return { ...q, type: qType, content: qContent };
+                 
+                 return { ...q, type: qType, content: qContent.trim() };
               });
           }
 
@@ -160,6 +156,7 @@ const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-8 pb-24" dir="rtl">
+      <link href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" rel="stylesheet" />
       <div className="flex items-center justify-between">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-3 rounded-xl shadow-sm border border-slate-200 transition-all hover:shadow-md">
           <ArrowRight className="h-5 w-5" /> العودة للنتائج
@@ -266,7 +263,6 @@ const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
-            // 🚀 التعديل الجذري
             const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
             
             let studentAnswerText = null;
