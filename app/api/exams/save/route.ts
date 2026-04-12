@@ -1,126 +1,96 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
-  const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-
   try {
-    const body = await req.json();
-    const { examData, questions, isNew, userId } = body;
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
-    let finalTeacherId = examData.teacher_id;
-    if (!finalTeacherId) {
-        const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
-        if (tProfile) finalTeacherId = tProfile.id;
-        else {
-            const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
-            if (tProfile2) finalTeacherId = tProfile2.id;
-            else finalTeacherId = userId; 
-        }
+    const { examId, studentId, answers, timeTaken } = await req.json();
+
+    if (!examId || !studentId || !answers) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const payload = {
-      title: examData.title,
-      description: examData.description,
-      subject_id: examData.subject_id,
-      teacher_id: finalTeacherId,
-      duration: Number(examData.duration) || 30,
-      max_attempts: Number(examData.max_attempts) || 1,
-      max_score: Number(examData.max_score) || 100,
-      total_marks: Number(examData.max_score) || 100,
-      exam_date: examData.exam_date,
-      start_time: examData.start_time,
-      end_time: examData.end_time,
-      status: examData.status || 'draft',
-      settings: examData.settings || {}
-    };
+    // 1. جلب الأسئلة مع خياراتها لمعرفة الإجابة الصحيحة
+    const { data: questions, error: questionsError } = await supabase
+      .from('questions')
+      .select('id, points, type, question_options(id, is_correct, content)')
+      .eq('exam_id', examId);
 
-    let finalExamId = examData.id;
-
-    if (isNew || !finalExamId) {
-      const { data: newEx, error: insertErr } = await adminSupabase.from('exams').insert([payload]).select().single();
-      if (insertErr) throw new Error('DB_INSERT_EXAM: ' + insertErr.message);
-      finalExamId = newEx.id;
-    } else {
-      const { error: updateErr } = await adminSupabase.from('exams').update(payload).eq('id', finalExamId);
-      if (updateErr) throw new Error('DB_UPDATE_EXAM: ' + updateErr.message);
+    if (questionsError || !questions) {
+      console.error("Fetch Questions Error:", questionsError);
+      return NextResponse.json({ error: 'Failed to fetch questions for grading' }, { status: 500 });
     }
 
-    if (examData.section_ids && examData.section_ids.length > 0) {
-      await adminSupabase.from('exam_sections').delete().eq('exam_id', finalExamId);
-      const sections = examData.section_ids.map((sId: string) => ({ exam_id: finalExamId, section_id: sId }));
-      await adminSupabase.from('exam_sections').insert(sections);
-    }
+    // 2. حساب الدرجة وتجهيز الإجابات للحفظ
+    let computedScore = 0;
+    const answerDataToSave: any[] = [];
 
-    if (questions && questions.length > 0) {
-      const incomingQuestionIds = questions.map((q: any) => q.id).filter(Boolean);
-      if (incomingQuestionIds.length > 0) {
-          await adminSupabase.from('questions').delete().eq('exam_id', finalExamId).not('id', 'in', `(${incomingQuestionIds.join(',')})`);
-      } else {
-          await adminSupabase.from('questions').delete().eq('exam_id', finalExamId);
-      }
+    for (const question of questions) {
+      const studentAnswer = answers[question.id]; // إجابة الطالب (قد تكون ID الخيار، أو نص)
+      let isCorrect = false;
 
-      for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        let qType = q.type || 'multiple_choice';
-        if (qType === 'file_upload') qType = 'file';
+      // التحقق من الإجابة للأسئلة الموضوعية فقط (اختياري، صح/خطأ)
+      if (['multiple_choice', 'true_false', 'multi_select'].includes(question.type)) {
+        const correctOption = question.question_options?.find((opt: any) => opt.is_correct);
         
-        let qContent = q.content || '';
-        
-        // 🚀 تنظيف النصوص القديمة بأسلوب مخادع للدردشة حتى لا تنكسر الأكواد
-        const oldFileMarker = '<' + '!--[FILE_UPLOAD]--' + '>';
-        const regexPattern = '<' + '!--\\[TYPE:.*?\\]--' + '>';
-        
-        qContent = qContent.split(oldFileMarker).join('');
-        qContent = qContent.split('[[[FILE_UPLOAD]]]').join('');
-        qContent = qContent.replace(new RegExp(regexPattern, 'g'), '');
-        qContent = qContent.replace(/\[\[\[TYPE:.*?\]\]\]/g, '');
-
-        const qPayload = {
-          id: q.id || undefined, 
-          exam_id: finalExamId,
-          type: qType,
-          content: qContent.trim(),
-          media_url: q.mediaUrl || q.media_url || null,
-          points: Number(q.points) || 1,
-          order_index: i
-        };
-
-        const { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-
-        if (qErr) {
-            console.error('Question Save Error:', qErr);
-            continue; 
-        }
-
-        if (savedQ && q.options?.length > 0 && ['multiple_choice', 'true_false', 'multi_select'].includes(qType)) {
-          const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
-          if (incomingOptionIds.length > 0) {
-              await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id).not('id', 'in', `(${incomingOptionIds.join(',')})`);
-          } else {
-              await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id);
-          }
-
-          const optsPayload = q.options.map((opt: any, idx: number) => ({
-            id: opt.id || undefined,
-            question_id: savedQ.id,
-            content: opt.content || '',
-            is_correct: Boolean(opt.is_correct),
-            order_index: idx
-          }));
-          await adminSupabase.from('question_options').upsert(optsPayload, { onConflict: 'id' });
-            
-        } else if (savedQ) {
-           await adminSupabase.from('question_options').delete().eq('question_id', savedQ.id);
+        // نتحقق مما إذا كانت إجابة الطالب تطابق ID الخيار الصحيح أو نصه
+        if (correctOption && (studentAnswer === correctOption.id || studentAnswer === correctOption.content)) {
+          isCorrect = true;
+          computedScore += question.points || 1;
         }
       }
-    } else {
-      await adminSupabase.from('questions').delete().eq('exam_id', finalExamId);
+
+      answerDataToSave.push({
+        question_id: question.id,
+        selected_option: studentAnswer ? String(studentAnswer) : null,
+        is_correct: isCorrect
+      });
     }
 
-    return NextResponse.json({ success: true, examId: finalExamId });
+    // 3. حفظ المحاولة في قاعدة البيانات بالدرجة المحسوبة بشكل آمن
+    const { data: attempt, error: attemptError } = await supabase
+      .from('exam_attempts')
+      .insert({
+        exam_id: examId,
+        student_id: studentId,
+        score: computedScore,
+        time_taken: timeTaken,
+        status: 'completed'
+      })
+      .select()
+      .single();
+
+    if (attemptError) throw attemptError;
+
+    // 4. حفظ إجابات الطالب بعد ربطها برقم المحاولة
+    const finalAnswerInserts = answerDataToSave.map(ans => ({
+      attempt_id: attempt.id,
+      ...ans
+    }));
+
+    if (finalAnswerInserts.length > 0) {
+      const { error: answersInsertError } = await supabase
+        .from('student_answers')
+        .insert(finalAnswerInserts);
+
+      if (answersInsertError) throw answersInsertError;
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      attemptId: attempt.id,
+      score: computedScore 
+    });
+
   } catch (error: any) {
-    console.error('Save Exam Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Exam submission error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to submit exam' },
+      { status: 500 }
+    );
   }
 }
