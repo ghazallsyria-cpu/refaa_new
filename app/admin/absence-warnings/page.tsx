@@ -155,7 +155,7 @@ export default function AdminAbsenceWarningsPage() {
     setTimeout(() => {
         window.print();
         setPrintMode(null);
-    }, 100);
+    }, 300); // إعطاء المتصفح وقتاً كافياً لرسم الجدول
   };
 
   const handleLetterPrint = (student: AggregatedStudent) => {
@@ -164,7 +164,7 @@ export default function AdminAbsenceWarningsPage() {
     setTimeout(() => {
         window.print();
         setPrintMode(null);
-    }, 100);
+    }, 300); // إعطاء المتصفح وقتاً كافياً لرسم الرسالة
   };
 
   if (loading) {
@@ -181,24 +181,34 @@ export default function AdminAbsenceWarningsPage() {
     <>
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          /* إخفاء واجهة الموقع الأصلية بالكامل أثناء الطباعة */
-          body > * { display: none !important; }
-          .print-area { display: block !important; position: absolute; left: 0; top: 0; width: 100%; direction: rtl; font-family: 'Cairo', sans-serif; background: white; padding: 20px; }
+          /* إخفاء الواجهة الأصلية وتأمين عدم تداخل الأكواد */
+          .no-print, nav, header, footer, button, select, input { display: none !important; }
+          body, html { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; height: auto !important; }
+          
+          .print-area { 
+             display: block !important; 
+             width: 100% !important; 
+             direction: rtl; 
+             font-family: 'Cairo', sans-serif; 
+             background: white; 
+             padding: 0 !important;
+             margin: 0 !important;
+          }
           
           /* تنسيقات الطباعة المجمعة */
           .bulk-print-wrapper table { width: 100%; border-collapse: collapse; margin-top: 20px; }
           .bulk-print-wrapper th, .bulk-print-wrapper td { border: 1px solid #000; padding: 10px; text-align: right; }
-          .bulk-print-wrapper th { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+          .bulk-print-wrapper th { background-color: #f1f5f9 !important; }
           .print-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 30px; }
           
           /* تنسيقات رسالة ولي الأمر */
-          .letter-print-wrapper { max-width: 800px; margin: 0 auto; line-height: 1.8; font-size: 16px; }
+          .letter-print-wrapper { max-width: 100%; line-height: 1.8; font-size: 16px; }
           .letter-print-wrapper .school-logo-area { text-align: center; margin-bottom: 40px; }
           .letter-print-wrapper .letter-title { text-align: center; font-size: 24px; font-weight: bold; text-decoration: underline; margin-bottom: 40px; }
-          .letter-print-wrapper .letter-body { margin-bottom: 40px; text-align: justify; }
+          .letter-print-wrapper .letter-body { margin-bottom: 30px; text-align: justify; font-size: 18px; }
           .letter-print-wrapper table { width: 100%; border-collapse: collapse; margin: 30px 0; }
           .letter-print-wrapper th, .letter-print-wrapper td { border: 1px solid #000; padding: 12px; text-align: center; }
-          .letter-print-wrapper th { background-color: #e2e8f0 !important; -webkit-print-color-adjust: exact; }
+          .letter-print-wrapper th { background-color: #e2e8f0 !important; }
           .letter-print-wrapper .signatures { display: flex; justify-content: space-between; margin-top: 80px; text-align: center; font-weight: bold; }
           @page { size: A4; margin: 20mm; }
         }
@@ -206,7 +216,7 @@ export default function AdminAbsenceWarningsPage() {
 
       {/* 🖨️ منطقة طباعة التقرير المجمع */}
       {printMode === 'bulk' && (
-        <div className="print-area bulk-print-wrapper hidden">
+        <div className="print-area bulk-print-wrapper">
             <div className="print-header">
                 <h1 style={{fontSize: '28px', marginBottom: '5px'}}>مدرسة الرفعة النموذجية</h1>
                 <h2 style={{fontSize: '18px', color: '#444'}}>التقرير المجمع للمنذرين (تجاوز الحد المسموح للغياب)</h2>
@@ -241,7 +251,7 @@ export default function AdminAbsenceWarningsPage() {
 
       {/* 🖨️ منطقة طباعة إشعار ولي الأمر الفردي */}
       {printMode === 'letter' && studentForLetter && (
-        <div className="print-area letter-print-wrapper hidden">
+        <div className="print-area letter-print-wrapper">
             <div className="school-logo-area">
                 <h1 style={{fontSize: '32px', margin: 0}}>مدرسة الرفعة النموذجية</h1>
                 <p style={{fontSize: '18px', margin: '5px 0 0 0'}}>إدارة شؤون الطلاب</p>
@@ -329,7 +339,7 @@ export default function AdminAbsenceWarningsPage() {
                 <h1 className="text-3xl sm:text-5xl font-black mb-4 tracking-tight">إجمالي أيام الغياب المخصومة</h1>
                 <p className="text-indigo-200 max-w-3xl text-base sm:text-lg font-bold leading-relaxed">
                     هذه الصفحة تستخلص آلياً غياب الطلاب من جميع المعلمين وتجمعها لتشكيل الرصيد النهائي المخصوم على الطالب.
-                    <span className="block mt-2 text-rose-300">يظهر هنا فقط من أتم (5 حصص = 1 يوم غياب) في مادة واحدة على অন্তত.</span>
+                    <span className="block mt-2 text-rose-300">يظهر هنا فقط من أتم (5 حصص = 1 يوم غياب) في مادة واحدة على الأقل.</span>
                 </p>
             </div>
             <div className="absolute right-0 top-0 w-1/3 h-full bg-gradient-to-r from-white/5 to-transparent skew-x-12 -translate-x-1/2"></div>
