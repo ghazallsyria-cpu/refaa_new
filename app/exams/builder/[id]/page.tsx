@@ -101,8 +101,8 @@ export default function QuizBuilder() {
 
   const addQuestion = useCallback((type: QuestionType | 'file' | 'file_upload') => {
     const newQuestion: any = {
-      id: crypto.randomUUID(), // 🚀 التأكد من توليد ID جديد دائماً
-      ...createQuestion(type as QuestionType),
+      ...createQuestion(type as QuestionType), // 🚀 دمج الخصائص أولاً
+      id: crypto.randomUUID(), // 🚀 ثم تخصيص المعرف لمنع تضارب TypeScript
       type: type, 
       is_required: true 
     };
