@@ -18,7 +18,7 @@ type Exam = { id: string; title: string; description: string; duration: number; 
 const isAutoGradedType = (type: string) => {
   if (!type) return false;
   const t = type.toLowerCase();
-  return ['multiple_choice', 'true_false', 'multi_select', 'checkbox', 'radio'].includes(t);
+  return t === 'multiple_choice' || t === 'true_false' || t === 'multi_select' || t === 'checkbox' || t === 'radio';
 };
 
 export default function TakeQuiz() {
@@ -102,12 +102,21 @@ export default function TakeQuiz() {
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
       let finalQuestions = [...(questionsData || [])].map((q: any) => {
+         let qType = q.type;
          let qContent = q.content || '';
-         const htmlCommentStart = '<' + '!' + '-' + '-';
-         if (qContent.includes('[[[')) qContent = qContent.split('[[[')[0];
-         if (qContent.includes(htmlCommentStart)) qContent = qContent.split(htmlCommentStart)[0];
          
-         return {...q, content: qContent.trim()};
+         const typeMatch = qContent.match(//);
+         if (typeMatch) {
+             qType = typeMatch[1];
+             qContent = qContent.replace(//g, '');
+         } else if (qContent.includes('') || qType === 'file_upload') {
+             qType = 'file';
+             qContent = qContent.replace(//g, '');
+         } else if (qType === 'open') {
+             qType = 'essay';
+         }
+
+         return {...q, type: qType, content: qContent};
       });
       
       if (examData.settings?.shuffle_questions && !isPreviewMode) {
@@ -143,11 +152,7 @@ export default function TakeQuiz() {
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
   const handleSubmit = useCallback(async () => {
-    if (!user) {
-        alert("الرجاء التأكد من تسجيل الدخول أولاً.");
-        return;
-    }
-    if (isSubmitting || !questions || questions.length === 0) return;
+    if (isSubmitting || !questions || questions.length === 0 || !user) return;
     
     if (isPreviewMode) {
        alert("هذا الاختبار في وضع المعاينة. لن يتم حفظ الإجابات في قاعدة البيانات لأنك لست طالباً مسجلاً في المادة.");
@@ -158,8 +163,7 @@ export default function TakeQuiz() {
     setIsSubmitting(true);
 
     try {
-      // ضمان أن الوقت المسجل ليس صفراً أبداً لتجنب رفض الخادم
-      const calculatedTimeTaken = startTime ? Math.max(1, Math.floor((Date.now() - startTime) / 1000)) : 1;
+      const calculatedTimeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
       setTimeTakenInfo(calculatedTimeTaken);
 
       let totalScore = 0;
@@ -210,29 +214,22 @@ export default function TakeQuiz() {
       }
 
       const attemptStatus = hasManual ? 'completed' : 'graded';
-      const accurateUserId = studentProfileId || user?.id || user?.user_id || 'unknown';
 
-      // 🚀 إرسال جميع المسميات المحتملة للمتغيرات (camelCase و snake_case) لضمان نجاح الـ API مهما كان إصداره
       const response = await fetch('/api/exams/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             examId: params.id,
-            exam_id: params.id,
             answers: formattedAnswers,
             score: totalScore,
             status: attemptStatus,
-            userId: accurateUserId, 
-            user_id: accurateUserId,
-            studentId: accurateUserId,
-            student_id: accurateUserId,
-            timeTaken: calculatedTimeTaken,
-            time_taken: calculatedTimeTaken
+            userId: studentProfileId || user.id || user.user_id, 
+            timeTaken: calculatedTimeTaken
         })
       });
 
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر. يرجى المحاولة مرة أخرى.");
+      if (!response.ok || !data.success) throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر");
 
       setIsFinished(true); 
       
@@ -241,7 +238,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, user, startTime, isPreviewMode, router, studentProfileId]);
+  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, router, studentProfileId]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
@@ -273,8 +270,15 @@ export default function TakeQuiz() {
   useEffect(() => {
     if (!exam?.settings?.prevent_copy || isPreviewMode) return;
 
-    const preventCopyPaste = (e: Event) => { e.preventDefault(); };
-    const preventPrint = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'p') e.preventDefault(); };
+    const preventCopyPaste = (e: Event) => {
+        e.preventDefault();
+    };
+
+    const preventPrint = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+            e.preventDefault();
+        }
+    };
 
     document.addEventListener('copy', preventCopyPaste);
     document.addEventListener('cut', preventCopyPaste);
@@ -359,9 +363,10 @@ export default function TakeQuiz() {
   
   const currentQType = (currentQuestion?.type as string || '').toLowerCase();
   const isAutoCurrent = isAutoGradedType(currentQType);
-  const isSingleChoice = ['multiple_choice', 'true_false', 'radio'].includes(currentQType);
-  const isMultiChoice = ['multi_select', 'checkbox'].includes(currentQType);
+  const isSingleChoice = currentQType === 'multiple_choice' || currentQType === 'true_false' || currentQType === 'radio';
+  const isMultiChoice = currentQType === 'multi_select' || currentQType === 'checkbox';
   
+  // 🚀 التعديل الجذري هنا: لا نعتبره رفع ملف إلا إذا كان نوعه الحقيقي هو ملف أو رفع (انتهى زمن العلامة المخفية)
   const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
