@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   ArrowLeft, Printer, Send, Search, Filter,
-  User, GraduationCap, CalendarDays, ClipboardList, BookOpen
+  User, GraduationCap, CalendarDays, ClipboardList, BookOpen, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
