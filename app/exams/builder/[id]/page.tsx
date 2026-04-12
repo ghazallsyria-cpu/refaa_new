@@ -10,7 +10,7 @@ import {
   MoreVertical, Type, List, CheckSquare,
   AlignLeft, Hash, Link as LinkIcon, Clock, CheckCircle, UploadCloud
 } from 'lucide-react';
-import { motion, Reorder, AnimatePresence } from 'framer-motion';
+import { motion, Reorder, AnimatePresence } from 'motion/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Switch from '@radix-ui/react-switch';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -19,9 +19,6 @@ import { useExamsSystem } from '@/hooks/useExamsSystem';
 import ForumEditor from '@/components/ForumEditor'; 
 
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
-import { useAuth } from '@/context/auth-context';
-import { useSchoolFormData } from '@/hooks/useSchoolFormData';
-import ImageUpload from '@/components/ImageUpload';
 
 type ExamData = {
   id?: string;
@@ -46,6 +43,10 @@ type ExamData = {
     prevent_copy?: boolean;
   };
 };
+
+import { useAuth } from '@/context/auth-context';
+import { useSchoolFormData } from '@/hooks/useSchoolFormData';
+import ImageUpload from '@/components/ImageUpload';
 
 export default function QuizBuilder() {
   const params = useParams();
@@ -77,7 +78,7 @@ export default function QuizBuilder() {
     }
   });
 
-  const { data: formData } = useSchoolFormData();
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -101,8 +102,7 @@ export default function QuizBuilder() {
 
   const addQuestion = useCallback((type: QuestionType | 'file' | 'file_upload') => {
     const newQuestion: any = {
-      ...createQuestion(type as QuestionType), // دمج الخصائص أولاً
-      id: crypto.randomUUID(), // تخصيص المعرف لمنع تضارب TypeScript
+      ...createQuestion(type as QuestionType),
       type: type, 
       is_required: true 
     };
@@ -112,8 +112,6 @@ export default function QuizBuilder() {
             { id: crypto.randomUUID(), content: 'صح', is_correct: true },
             { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
         ];
-    } else if (['multiple_choice', 'multi_select', 'checkbox', 'radio'].includes(type)) {
-        newQuestion.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
     }
     setQuestions(prev => [...prev, newQuestion]);
   }, []);
@@ -141,17 +139,23 @@ export default function QuizBuilder() {
           }
         });
 
+        // 🚀 استخراج النوع الحقيقي وفك التغليف
         setQuestions((questionsData || []).map((q: any) => {
            let qType = q.type;
            let qContent = q.content || '';
            
-           const oldMarker = '<' + '!--[FILE_UPLOAD]--' + '>';
-           qContent = qContent.split(oldMarker).join('');
+           const typeMatch = qContent.match(//);
+           if (typeMatch) {
+               qType = typeMatch[1];
+               qContent = qContent.replace(//g, '');
+           } else if (qContent.includes('') || qType === 'file_upload') {
+               qType = 'file';
+               qContent = qContent.replace(//g, '');
+           } else if (qType === 'open') {
+               qType = 'essay';
+           }
 
-           if (qType === 'file_upload') qType = 'file';
-           if (qType === 'open') qType = 'essay';
-
-           return {...q, type: qType, content: qContent.trim(), is_required: q.is_required ?? true};
+           return {...q, type: qType, content: qContent, is_required: q.is_required ?? true};
         }));
       } else {
         addQuestion('multiple_choice');
@@ -231,42 +235,8 @@ export default function QuizBuilder() {
   };
 
   const handleSave = async () => {
-    // التحققات الآمنة قبل الحفظ
     if (!exam.title || !exam.subject_id) {
       showNotification('error', 'يرجى إدخال عنوان الاختبار والمادة');
-      return;
-    }
-
-    if (!exam.section_ids || exam.section_ids.length === 0) {
-      showNotification('error', 'يرجى تحديد الشعب المستهدفة للاختبار من الأسفل');
-      return;
-    }
-
-    if (questions.length === 0) {
-      showNotification('error', 'يجب إضافة سؤال واحد على الأقل للاختبار');
-      return;
-    }
-
-    // التأكد من عدم وجود أسئلة فارغة (بدون نص وبدون صورة)
-    const emptyQuestion = questions.find(q => {
-      const text = String(q.content || '').replace(/<[^>]*>?/gm, '').trim();
-      const hasMedia = !!q.media_url;
-      return text === '' && !hasMedia;
-    });
-    
-    if (emptyQuestion) {
-      showNotification('error', 'يوجد سؤال فارغ! يرجى إدخال نص لجميع الأسئلة قبل الحفظ');
-      return;
-    }
-
-    // التأكد من أن جميع الخيارات مكتوبة للأسئلة الموضوعية
-    const emptyOption = questions.find(q => 
-      ['multiple_choice', 'multi_select', 'checkbox', 'radio'].includes(q.type) && 
-      (!q.options || q.options.length === 0 || q.options.some((o: any) => !o.content || String(o.content).trim() === ''))
-    );
-    
-    if (emptyOption) {
-      showNotification('error', 'يوجد سؤال يحتوي على خيارات إجابة فارغة! يرجى تعبئتها');
       return;
     }
 
@@ -288,20 +258,11 @@ export default function QuizBuilder() {
         else throw new Error('يجب اختيار معلم للاختبار');
       }
 
-      // تجهيز الكائن للإرسال مع ضمان وجود جميع المسميات المحتملة لتجنب خطأ السيرفر
       const examPayload = {
         ...exam,
-        id: isNew ? undefined : (params.id as string),
-        exam_id: isNew ? undefined : (params.id as string),
-        examId: isNew ? undefined : (params.id as string),
         teacher_id: finalTeacherId,
-        teacherId: finalTeacherId,
         max_score: maxScore,
-        maxScore: maxScore,
-        total_marks: maxScore,
-        totalMarks: maxScore,
-        userId: user?.id || user?.user_id,
-        user_id: user?.id || user?.user_id,
+        total_marks: maxScore
       };
 
       await saveExam(examPayload, questions, isNew);
@@ -309,7 +270,7 @@ export default function QuizBuilder() {
       router.push('/exams');
     } catch (err: any) {
       console.error('Error saving quiz:', err);
-      showNotification('error', `حدث خطأ أثناء الحفظ: ${err.message || 'تأكد من اكتمال البيانات'}`);
+      showNotification('error', `حدث خطأ أثناء حفظ الاختبار: ${err.message || 'خطأ غير معروف'}`);
     } finally {
       setSaving(false);
     }
@@ -346,7 +307,7 @@ export default function QuizBuilder() {
               <h1 className="text-xl font-black text-slate-900 tracking-tight truncate max-w-[300px]">{exam.title || 'اختبار جديد'}</h1>
               <div className="flex items-center gap-2">
                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">تأكد من الحفظ عند الانتهاء</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">جاري الحفظ تلقائياً</p>
               </div>
             </div>
           </div>
@@ -526,18 +487,24 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // إضافة الخيارات تلقائياً إذا كان النوع يتطلب ذلك
-                           if (['multiple_choice', 'multi_select', 'checkbox', 'radio'].includes(type)) {
-                              updates.options = (q.options && q.options.length > 0) ? q.options : [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
+                           // تنظيف النص عند تغيير النوع لضمان عدم وجود تداخل
+                           let cleanContent = q.content || '';
+                           if (type !== 'file' && cleanContent) {
+                               cleanContent = cleanContent.split('').join('');
+                               cleanContent = cleanContent.replace(//g, '');
+                               updates.content = cleanContent;
+                           }
+
+                           if ((type === 'multiple_choice' || type === 'checkbox') && (!q.options || q.options.length === 0)) {
+                              updates.options = [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
                            } else if (type === 'true_false') {
                               updates.options = [
                                 { id: crypto.randomUUID(), content: 'صح', is_correct: true },
                                 { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }
                               ];
-                           } else {
+                           } else if (['essay', 'fill_in_blank', 'file', 'file_upload'].includes(type as string)) {
                               updates.options = [];
                            }
-                           
                            updateQuestion(q.id, updates);
                         }} 
                         className="w-full px-6 py-5 rounded-3xl bg-white border-0 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 outline-none font-black text-slate-700 transition-all appearance-none cursor-pointer"
@@ -553,7 +520,7 @@ export default function QuizBuilder() {
                   </div>
 
                   <div className="space-y-6">
-                    {(['multiple_choice', 'multi_select', 'true_false', 'checkbox', 'radio'].includes(q.type as string)) ? (
+                    {(q.type === 'multiple_choice' || q.type === 'multi_select' || q.type === 'true_false') ? (
                       <div className="space-y-4">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">خيارات الإجابة</label>
                         <div className="grid grid-cols-1 gap-4">
