@@ -1,20 +1,18 @@
-
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
-  ArrowLeft, ShieldAlert, AlertTriangle, Printer, 
-  Send, Search, Download, CheckCircle2, FileText, Filter,
-  User, GraduationCap, CalendarDays, ClipboardList
+  ArrowLeft, Printer, Send, Search, Filter,
+  User, GraduationCap, CalendarDays, ClipboardList, BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
-interface AtRiskStudent {
+interface StudentAbsence {
   id: string;
   name: string;
   className: string;
@@ -22,9 +20,9 @@ interface AtRiskStudent {
   count: number;
 }
 
-export default function TeacherWarningsPage() {
+export default function TeacherAbsenceEquivalencePage() {
   const { user, authRole } = useAuth();
-  const [students, setStudents] = useState<AtRiskStudent[]>([]);
+  const [students, setStudents] = useState<StudentAbsence[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSection, setSelectedSection] = useState<string>('all');
@@ -33,14 +31,13 @@ export default function TeacherWarningsPage() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [teacherName, setTeacherName] = useState('');
 
-  // 🚀 جلب البيانات الأساسية للطلاب المنذرين
-  const fetchAtRiskStudents = useCallback(async () => {
+  // 1. جلب البيانات وحساب الحصص
+  const fetchAbsences = useCallback(async () => {
     if (!user?.id || authRole !== 'teacher') return;
     
     try {
       setLoading(true);
       
-      // جلب اسم المعلم الحالي
       const { data: teacherUser } = await supabase.from('users').select('full_name').eq('id', user.id).single();
       if (teacherUser) setTeacherName(teacherUser.full_name);
 
@@ -73,32 +70,32 @@ export default function TeacherWarningsPage() {
           studentMap.get(sid).count++;
         });
 
-        // قاعدة الـ 5 حصص
-        const atRisk = Array.from(studentMap.values())
+        // استخراج الطلاب الذين لديهم 5 حصص فأكثر (ما يعادل يوم غياب فأكثر)
+        const validRecords = Array.from(studentMap.values())
                             .filter((s: any) => s.count >= 5)
                             .sort((a: any, b: any) => b.count - a.count);
         
-        setStudents(atRisk);
+        setStudents(validRecords);
       }
     } catch (error) {
-      console.error('Error fetching warnings:', error);
+      console.error('Error fetching absences:', error);
     } finally {
       setLoading(false);
     }
   }, [user, authRole]);
 
   useEffect(() => {
-    fetchAtRiskStudents();
-  }, [fetchAtRiskStudents]);
+    fetchAbsences();
+  }, [fetchAbsences]);
 
-  // 🚀 استخراج قائمة الفصول المتاحة للفلترة
+  // 2. قوائم الفلترة
   const sectionsList = useMemo(() => {
     const list = students.map(s => ({ id: s.sectionId, name: s.className }));
     const unique = Array.from(new Map(list.map(item => [item.id, item])).values());
     return unique;
   }, [students]);
 
-  // 🚀 تصفية الطلاب بناءً على البحث والفلتر
+  // 3. تطبيق البحث والفلترة
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -107,36 +104,50 @@ export default function TeacherWarningsPage() {
     });
   }, [searchTerm, selectedSection, students]);
 
-  // 🚀 تفعيل إبلاغ الإدارة (إرسال رسالة رسمية لمدير النظام)
+  // 4. إبلاغ الإدارة (تم إصلاحها للبحث عن admin أو management)
   const handleNotifyAdmin = async () => {
     if (!user?.id || filteredStudents.length === 0) return;
     setIsSending(true);
 
     try {
-      // البحث عن أي مسؤول في النظام
-      const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin').limit(1);
-      const targetAdmin = admins?.[0]?.id;
+      // البحث عن أي مسؤول (admin أو management)
+      const { data: admins, error: adminError } = await supabase
+        .from('users')
+        .select('id')
+        .in('role', ['admin', 'management'])
+        .limit(1);
+
+      if (adminError) throw adminError;
+
+      const targetAdminId = admins?.[0]?.id;
+
+      if (!targetAdminId) {
+        alert("تنبيه: لم يتم العثور على حساب إداري في النظام لاستلام الرسالة. يرجى مراجعة الصلاحيات.");
+        setIsSending(false);
+        return;
+      }
 
       const reportDetails = filteredStudents.map(s => 
-        `- ${s.name} (${s.className}): ${s.count} حصص غياب ≈ ${Math.floor(s.count / 5)} أيام.`
+        `- ${s.name} (${s.className}): ${s.count} حصص ≈ ${Math.floor(s.count / 5)} أيام.`
       ).join('\n');
 
-      const reportContent = `السادة في إدارة شؤون الطلاب،\nيرجى العلم بأنني قمت برصد تجاوزات في نسب المواظبة للطلاب المذكورين أدناه في حصصي، حيث أتم كل منهم يوماً دراسياً كاملاً أو أكثر من الغياب (بناءً على قاعدة 5 حصص = 1 يوم):\n\n${reportDetails}\n\nيرجى اتخاذ اللازم.\n\nالمرسل: أ. ${teacherName}`;
+      const reportContent = `السادة في إدارة المدرسة،\nمرفق لكم كشف بمعادلة غياب الطلاب في حصصي الدراسية (بواقع 1 يوم لكل 5 حصص):\n\n${reportDetails}\n\nللاطلاع والمتابعة.\nمعلم المادة: أ. ${teacherName}`;
       
-      const { error } = await supabase.from('messages').insert({
+      const { error: msgError } = await supabase.from('messages').insert({
         sender_id: user.id,
-        receiver_id: targetAdmin, // إرسال لأول مسؤول أو كبلاغ عام
-        subject: '🔴 بلاغ تجاوز نسب الغياب (رصد المعلم)',
+        receiver_id: targetAdminId,
+        subject: 'كشف معادلة غياب الطلاب',
         content: reportContent,
         is_read: false
       });
 
-      if (error) throw error;
+      if (msgError) throw msgError;
 
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 5000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error reporting to admin:', error);
+      alert("حدث خطأ أثناء الإرسال: " + error.message);
     } finally {
       setIsSending(false);
     }
@@ -147,37 +158,39 @@ export default function TeacherWarningsPage() {
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-rose-600 border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
       </div>
     );
   }
 
   return (
     <>
-      {/* 🚀 CSS الطباعة المتقدم: يحول الصفحة إلى تقرير رسمي A4 عند الطباعة */}
+      {/* 🚀 CSS طباعة سليم ومضمون 100% */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          body * { visibility: hidden; }
-          .no-print { display: none !important; }
-          #printable-report, #printable-report * { visibility: visible; }
-          #printable-report { 
-            position: absolute; left: 0; top: 0; width: 100%; 
-            direction: rtl; padding: 40px; background: white; 
-            font-family: 'Cairo', sans-serif;
-          }
-          .print-header { 
-            text-align: center; border-bottom: 4px double #000; 
-            margin-bottom: 30px; padding-bottom: 15px; 
-          }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #000; padding: 12px; text-align: right; }
-          th { background-color: #f5f5f5 !important; font-weight: bold; }
-          .print-footer { margin-top: 80px; display: grid; grid-template-columns: 1fr 1fr; text-align: center; }
-          @page { size: A4; margin: 1cm; }
+          /* إخفاء العناصر غير الضرورية */
+          .no-print, nav, header, footer, button, input, select { display: none !important; }
+          
+          /* إعدادات الصفحة للطباعة */
+          body { background: white !important; -webkit-print-color-adjust: exact !important; }
+          @page { size: A4; margin: 15mm; }
+          
+          /* ضبط عرض المحتوى الأساسي */
+          .print-container { width: 100% !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; border: none !important; }
+          
+          /* إظهار ترويسة الطباعة الرسمية المخفية في وضع الشاشة */
+          .print-only-header { display: block !important; margin-bottom: 30px; text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+          
+          /* ضبط ألوان الجدول */
+          table th { background-color: #f1f5f9 !important; color: #000 !important; border: 1px solid #cbd5e1 !important; }
+          table td { border: 1px solid #cbd5e1 !important; }
+          
+          /* إظهار تذييل الطباعة */
+          .print-only-footer { display: flex !important; justify-content: space-between; margin-top: 50px; text-align: center; font-weight: bold; }
         }
       `}} />
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto px-4 py-8 font-cairo space-y-6 pb-20">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto px-4 py-8 font-cairo space-y-6 pb-20 print-container" dir="rtl">
         
         <div className="no-print flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <Link href="/dashboard/teacher" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100 transition-all">
@@ -185,45 +198,54 @@ export default function TeacherWarningsPage() {
           </Link>
           <div className="flex gap-2 w-full sm:w-auto">
              <button onClick={handlePrint} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white text-slate-700 px-6 py-3 rounded-xl font-black shadow-sm border border-slate-200 hover:bg-slate-50 transition-all active:scale-95">
-                <Printer className="w-5 h-5 text-indigo-600" /> طباعة التقرير
+                <Printer className="w-5 h-5 text-indigo-600" /> تصدير PDF
              </button>
-             <button onClick={handleNotifyAdmin} disabled={isSending || filteredStudents.length === 0} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-rose-600 text-white px-6 py-3 rounded-xl font-black shadow-lg hover:bg-rose-700 transition-all active:scale-95 disabled:opacity-50">
-                <Send className="w-4 h-4" /> {isSending ? 'جاري الإبلاغ...' : 'إبلاغ الإدارة'}
+             <button onClick={handleNotifyAdmin} disabled={isSending || filteredStudents.length === 0} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-black shadow-md hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50">
+                <Send className="w-4 h-4" /> {isSending ? 'جاري الإرسال...' : 'إرسال للإدارة'}
              </button>
           </div>
         </div>
 
-        {/* Banner */}
-        <div className="bg-gradient-to-r from-slate-900 via-rose-900 to-rose-950 rounded-[2.5rem] p-8 sm:p-12 text-white relative overflow-hidden shadow-2xl no-print">
+        {/* Banner (غير مرئي في الطباعة) */}
+        <div className="bg-gradient-to-l from-indigo-900 to-slate-800 rounded-[2.5rem] p-8 sm:p-12 text-white relative overflow-hidden shadow-xl no-print">
             <div className="relative z-10">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white/10 rounded-full border border-white/20 text-xs font-black uppercase tracking-widest mb-6 backdrop-blur-md">
-                    <ShieldAlert className="w-4 h-4 text-yellow-400" /> مصفاة المواظبة الذكية
+                    <BookOpen className="w-4 h-4 text-indigo-300" /> سجل المواظبة
                 </div>
-                <h1 className="text-3xl sm:text-5xl font-black mb-4 tracking-tight">إدارة إنذارات غياب الحصص</h1>
-                <p className="text-rose-100 max-w-2xl text-base sm:text-lg font-bold leading-relaxed">
-                    نظام الحصر الآلي للطلاب الذين تجاوزوا حد الـ 5 حصص غياب. 
-                    <span className="block mt-2 text-yellow-300">كل 5 حصص غياب في سجلك = 1 يوم غياب كامل مسجل على الطالب.</span>
+                <h1 className="text-3xl sm:text-4xl font-black mb-4">كشف معادلة غياب الطلاب</h1>
+                <p className="text-indigo-100 max-w-2xl text-base font-medium leading-relaxed">
+                    يعرض هذا السجل إحصائية دقيقة لعدد حصص الغياب لكل طالب وما يعادلها بالأيام الكاملة، بناءً على النظام المعتمد (5 حصص = 1 يوم غياب).
                 </p>
             </div>
-            <div className="absolute right-0 top-0 w-1/3 h-full bg-gradient-to-l from-white/5 to-transparent skew-x-12 translate-x-1/2"></div>
+            <div className="absolute right-0 top-0 w-64 h-64 bg-indigo-500/20 blur-[80px] rounded-full mix-blend-overlay"></div>
         </div>
 
-        {/* Filters & Search */}
+        {/* 🖨️ ترويسة تظهر فقط عند الطباعة */}
+        <div className="print-only-header hidden">
+            <h1 className="text-2xl font-black mb-2">مدرسة الرفعة النموذجية</h1>
+            <h2 className="text-lg text-slate-800 mb-2">كشف معادلة غياب الطلاب المعتمد</h2>
+            <div className="flex justify-between text-sm mt-4 font-bold">
+               <span>معلم المادة: {teacherName || '................'}</span>
+               <span>تاريخ التقرير: {format(new Date(), 'yyyy/MM/dd', { locale: arSA })}</span>
+            </div>
+        </div>
+
+        {/* Filters & Search (غير مرئي في الطباعة) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
             <div className="md:col-span-2 relative">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                 <input 
                     type="text" 
                     placeholder="ابحث باسم الطالب..." 
-                    className="w-full pr-12 pl-4 py-4 bg-white rounded-2xl border-2 border-slate-100 focus:border-rose-500 focus:ring-0 transition-all font-bold text-slate-700 shadow-sm"
+                    className="w-full pr-12 pl-4 py-4 bg-white rounded-2xl border border-slate-200 focus:border-indigo-500 focus:ring-0 transition-all font-bold text-slate-700 shadow-sm"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
-            <div className="md:col-span-2 flex items-center gap-3 bg-white p-2 rounded-2xl border-2 border-slate-100 shadow-sm">
+            <div className="md:col-span-2 flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
                 <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><Filter className="w-5 h-5" /></div>
                 <select 
-                    className="flex-1 bg-transparent border-none focus:ring-0 font-black text-slate-700"
+                    className="flex-1 bg-transparent border-none focus:ring-0 font-black text-slate-700 cursor-pointer"
                     value={selectedSection}
                     onChange={(e) => setSelectedSection(e.target.value)}
                 >
@@ -235,47 +257,41 @@ export default function TeacherWarningsPage() {
             </div>
         </div>
 
-        {/* Data Table */}
-        <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden no-print">
+        {/* Data Table (الجدول الأساسي للعرض والطباعة) */}
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
                 <table className="w-full text-right border-collapse">
-                    <thead className="bg-slate-50 border-b border-slate-100">
+                    <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                            <th className="p-6 font-black text-slate-500 text-sm uppercase">الطالب</th>
-                            <th className="p-6 font-black text-slate-500 text-sm uppercase">الفصل الدراسي</th>
-                            <th className="p-6 font-black text-slate-500 text-sm uppercase text-center">إجمالي الحصص</th>
-                            <th className="p-6 font-black text-slate-500 text-sm uppercase text-center">أيام الغياب المعادلة</th>
+                            <th className="p-5 font-black text-slate-600 text-sm">الطالب</th>
+                            <th className="p-5 font-black text-slate-600 text-sm">الصف والشعبة</th>
+                            <th className="p-5 font-black text-slate-600 text-sm text-center">إجمالي الحصص</th>
+                            <th className="p-5 font-black text-slate-600 text-sm text-center">الأيام المعادلة (حصة/5)</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
+                    <tbody className="divide-y divide-slate-100">
                         {filteredStudents.map(student => (
-                            <tr key={student.id} className="hover:bg-rose-50/30 transition-colors group">
-                                <td className="p-6">
+                            <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="p-5">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-rose-100 group-hover:text-rose-600 transition-all">
-                                            <User className="w-6 h-6" />
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 no-print shrink-0">
+                                            <User className="w-5 h-5" />
                                         </div>
                                         <div>
-                                            <p className="font-black text-slate-900 group-hover:text-rose-700 transition-colors">{student.name}</p>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">رقم الطالب: {student.id.substring(0, 8)}</p>
+                                            <p className="font-black text-slate-900">{student.name}</p>
                                         </div>
                                     </div>
                                 </td>
-                                <td className="p-6">
-                                    <div className="flex items-center gap-2 text-slate-600 font-bold">
-                                        <GraduationCap className="w-4 h-4 opacity-50" />
-                                        {student.className}
-                                    </div>
+                                <td className="p-5 text-slate-700 font-bold">
+                                    {student.className}
                                 </td>
-                                <td className="p-6 text-center">
-                                    <span className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-black border border-slate-200 group-hover:bg-white transition-all">
-                                        {student.count} حصص
-                                    </span>
+                                <td className="p-5 text-center font-black text-slate-600">
+                                    {student.count} حصص
                                 </td>
-                                <td className="p-6 text-center">
-                                    <div className="inline-flex flex-col items-center justify-center bg-rose-600 text-white rounded-2xl px-5 py-2 shadow-lg shadow-rose-200 border border-rose-500 group-hover:scale-105 transition-transform">
-                                        <span className="text-2xl font-black leading-none">{Math.floor(student.count / 5)}</span>
-                                        <span className="text-[8px] font-bold uppercase tracking-tighter mt-1 opacity-80">أيام كاملة</span>
+                                <td className="p-5 text-center">
+                                    <div className="inline-flex flex-col items-center justify-center bg-slate-100 text-slate-800 rounded-xl px-6 py-2 border border-slate-200">
+                                        <span className="text-xl font-black">{Math.floor(student.count / 5)}</span>
+                                        <span className="text-[10px] font-bold mt-1">يوم كامل</span>
                                     </div>
                                 </td>
                             </tr>
@@ -284,76 +300,38 @@ export default function TeacherWarningsPage() {
                 </table>
             </div>
             {filteredStudents.length === 0 && (
-                <div className="py-32 text-center bg-slate-50/50">
-                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100">
-                        <ClipboardList className="w-10 h-10 text-slate-200" />
+                <div className="py-20 text-center bg-white no-print">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                        <ClipboardList className="w-8 h-8 text-slate-300" />
                     </div>
-                    <h3 className="text-xl font-black text-slate-800">لا يوجد بيانات مطابقة</h3>
-                    <p className="text-slate-500 font-bold mt-2">جرب تغيير الفصل أو مراجعة معايير البحث.</p>
+                    <h3 className="text-lg font-black text-slate-800">لا توجد سجلات مطابقة</h3>
+                    <p className="text-sm text-slate-500 font-medium mt-1">لم يتم العثور على طلاب تجاوزوا 5 حصص ضمن معايير البحث الحالية.</p>
                 </div>
             )}
         </div>
 
-        {/* 🖨️ منطقة التقرير الرسمي (تظهر في الطباعة فقط) */}
-        <div id="printable-report" className="hidden">
-            <div className="print-header">
-                <h1 style={{fontSize: '32px', marginBottom: '10px'}}>مدرسة الرفعة النموذجية</h1>
-                <h2 style={{fontSize: '20px', color: '#333'}}>كشف بأسماء الطلاب المتجاوزين لنسبة غياب الحصص</h2>
-                <p style={{fontSize: '14px', marginTop: '10px'}}>تاريخ التقرير: {format(new Date(), 'EEEE d MMMM yyyy', { locale: arSA })}</p>
+        {/* 🖨️ تذييل يظهر فقط عند الطباعة */}
+        <div className="print-only-footer hidden">
+            <div>
+                <p>توقيع معلم المادة</p>
+                <p className="mt-6 text-slate-400">........................</p>
             </div>
-
-            <div style={{marginBottom: '30px', padding: '15px', border: '1px solid #ddd', borderRadius: '10px'}}>
-                <strong>إقرار المعلم:</strong> أشهد أنا المعلم / <strong>{teacherName}</strong>، بأن البيانات المذكورة أدناه مستخرجة من واقع سجلات الحضور الإلكترونية الخاصة بحصصي المجدولة، وأن هؤلاء الطلاب تجاوزوا (5 حصص غياب) فأكثر.
-            </div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th style={{width: '40px'}}>م</th>
-                        <th>اسم الطالب</th>
-                        <th>الصف والشعبة</th>
-                        <th style={{textAlign: 'center'}}>إجمالي الحصص</th>
-                        <th style={{textAlign: 'center'}}>الأيام المعادلة</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {filteredStudents.map((s, i) => (
-                        <tr key={s.id}>
-                            <td style={{textAlign: 'center'}}>{i + 1}</td>
-                            <td style={{fontWeight: 'bold'}}>{s.name}</td>
-                            <td>{s.className}</td>
-                            <td style={{textAlign: 'center'}}>{s.count}</td>
-                            <td style={{textAlign: 'center', fontWeight: 'bold'}}>{Math.floor(s.count / 5)} يوم غياب</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-
-            <div className="print-footer">
-                <div>
-                    <strong>توقيع معلم المادة</strong>
-                    <br/><br/>.........................
-                </div>
-                <div>
-                    <strong>اعتماد مدير المدرسة</strong>
-                    <br/><br/>.........................
-                </div>
-            </div>
-
-            <div style={{marginTop: '60px', textAlign: 'center', fontSize: '12px', color: '#666', borderTop: '1px dashed #ccc', paddingTop: '20px'}}>
-                يُعتد بهذا التقرير كوثيقة رسمية لاتخاذ الإجراءات الإدارية بحق الطلاب المتغيبين.
+            <div>
+                <p>اعتماد إدارة المدرسة</p>
+                <p className="mt-6 text-slate-400">........................</p>
             </div>
         </div>
 
+        {/* إشعار نجاح الإرسال */}
         <AnimatePresence>
           {showSuccess && (
-            <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-5 rounded-[2rem] shadow-2xl z-50 flex items-center gap-4 border border-white/20">
-                <div className="p-2 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/30">
-                    <CheckCircle2 className="w-6 h-6" />
+            <motion.div initial={{ opacity: 0, y: 50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed bottom-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4 border border-slate-700 no-print">
+                <div className="p-1.5 bg-emerald-500 rounded-lg">
+                    <CheckCircle2 className="w-5 h-5 text-white" />
                 </div>
-                <div className="pr-1">
-                    <p className="font-black text-sm">تم إرسال البلاغ للإدارة</p>
-                    <p className="text-[10px] font-bold text-slate-400">سيظهر التقرير في صندوق رسائل الإدارة فوراً.</p>
+                <div>
+                    <p className="font-black text-sm">تم إرسال الكشف بنجاح</p>
+                    <p className="text-xs text-slate-400 font-medium">سيظهر التقرير لدى الإدارة فوراً.</p>
                 </div>
             </motion.div>
           )}
@@ -363,5 +341,3 @@ export default function TeacherWarningsPage() {
     </>
   );
 }
-
-
