@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   Plus, Save, Eye, Settings, Trash2, 
@@ -50,10 +50,14 @@ type ExamData = {
 export default function QuizBuilder() {
   const params = useParams();
   const router = useRouter();
-  const { user, userRole } = useAuth() as any;
+  const { user, userRole, isChecking } = useAuth() as any;
   const isNew = params.id === 'new';
   
   const { fetchExamDetails, saveExam } = useExamsSystem();
+  
+  // 🚀 حارس يمنع إعادة جلب البيانات عند تغيير التبويب (Tab Switch)
+  const dataFetchedRef = useRef(false);
+
   const [exam, setExam] = useState<ExamData>({
     title: '',
     description: '',
@@ -77,7 +81,7 @@ export default function QuizBuilder() {
     }
   });
 
-  const { data: formData } = useSchoolFormData();
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -102,7 +106,7 @@ export default function QuizBuilder() {
   const addQuestion = useCallback((type: QuestionType | 'file' | 'file_upload') => {
     const newQuestion: any = {
       ...createQuestion(type as QuestionType),
-      id: crypto.randomUUID(), // 🚀 توليد ID جديد بعد الدمج لتفادي خطأ TypeScript
+      id: crypto.randomUUID(),
       type: type, 
       is_required: true 
     };
@@ -123,6 +127,10 @@ export default function QuizBuilder() {
   }, [userRole]);
 
   const fetchInitialData = useCallback(async () => {
+    // 🚀 إذا تم جلب البيانات مسبقاً، لا تقم بجلبها مرة أخرى!
+    if (dataFetchedRef.current || isChecking) return;
+    dataFetchedRef.current = true;
+
     try {
       if (!isNew) {
         const { exam: examData, questions: questionsData } = await fetchExamDetails(params.id as string);
@@ -141,7 +149,6 @@ export default function QuizBuilder() {
           }
         });
 
-        // 🚀 استخدام RegExp بشكل آمن لمنع أخطاء الـ Comments
         setQuestions((questionsData || []).map((q: any) => {
            let qType = q.type;
            let qContent = q.content || '';
@@ -171,46 +178,58 @@ export default function QuizBuilder() {
     } finally {
       setLoading(false);
     }
-  }, [isNew, params.id, addQuestion, user, fetchExamDetails]);
+  }, [isNew, params.id, addQuestion, user, isChecking, fetchExamDetails]);
 
-  useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
+  useEffect(() => { 
+    if (!isChecking) {
+      fetchInitialData(); 
+    }
+  }, [fetchInitialData, isChecking]);
 
-  const updateQuestion = (id: string, updates: Partial<any>) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q));
-  };
+  // 🚀 تحسين دوال التحديث لاستخدام Functional Updates لمنع فقدان البيانات عند التحديث السريع
+  const updateQuestion = useCallback((id: string, updates: Partial<any>) => {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
+  }, []);
 
-  const deleteQuestion = async (id: string) => {
-    const question = questions.find(q => q.id === id);
-    if (question?.media_url) await deleteFromCloudinary(question.media_url);
-    setQuestions(questions.filter(q => q.id !== id));
-  };
+  const deleteQuestion = useCallback(async (id: string) => {
+    setQuestions(prev => {
+      const question = prev.find(q => q.id === id);
+      if (question?.media_url) {
+        // الحذف من الكلاوديناري يعمل في الخلفية
+        deleteFromCloudinary(question.media_url).catch(console.error);
+      }
+      return prev.filter(q => q.id !== id);
+    });
+  }, []);
 
-  const duplicateQuestion = (id: string) => {
-    const question = questions.find(q => q.id === id);
-    if (question) {
+  const duplicateQuestion = useCallback((id: string) => {
+    setQuestions(prev => {
+      const question = prev.find(q => q.id === id);
+      if (!question) return prev;
+      
       const duplicated = {
         ...question,
         id: crypto.randomUUID(),
         options: question.options?.map((o: any) => ({ ...o, id: crypto.randomUUID() })) || []
       };
-      const index = questions.findIndex(q => q.id === id);
-      const newQuestions = [...questions];
+      const index = prev.findIndex(q => q.id === id);
+      const newQuestions = [...prev];
       newQuestions.splice(index + 1, 0, duplicated);
-      setQuestions(newQuestions);
-    }
-  };
+      return newQuestions;
+    });
+  }, []);
 
-  const addOption = (questionId: string) => {
-    setQuestions(questions.map(q => {
+  const addOption = useCallback((questionId: string) => {
+    setQuestions(prev => prev.map(q => {
       if (q.id === questionId) {
         return { ...q, options: [...(q.options || []), { id: crypto.randomUUID(), content: '', is_correct: false }] };
       }
       return q;
     }));
-  };
+  }, []);
 
-  const updateOption = (questionId: string, optionId: string, updates: Partial<Option>) => {
-    setQuestions(questions.map(q => {
+  const updateOption = useCallback((questionId: string, optionId: string, updates: Partial<Option>) => {
+    setQuestions(prev => prev.map(q => {
       if (q.id === questionId) {
         const newOptions = (q.options || []).map((o: any) => {
           if (o.id === optionId) {
@@ -228,16 +247,16 @@ export default function QuizBuilder() {
       }
       return q;
     }));
-  };
+  }, []);
 
-  const deleteOption = (questionId: string, optionId: string) => {
-    setQuestions(questions.map(q => {
+  const deleteOption = useCallback((questionId: string, optionId: string) => {
+    setQuestions(prev => prev.map(q => {
       if (q.id === questionId) {
         return { ...q, options: (q.options || []).filter((o: any) => o.id !== optionId) };
       }
       return q;
     }));
-  };
+  }, []);
 
   const handleSave = async () => {
     if (!exam.title || !exam.subject_id) {
@@ -492,7 +511,6 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 الإصلاح الآمن: استخدام RegExp لمنع خطأ التعليقات
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
                                const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
