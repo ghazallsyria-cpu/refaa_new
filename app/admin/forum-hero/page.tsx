@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { 
   Plus, Trash2, Save, XCircle, Sparkles, Trophy, Quote, 
   Image as ImageIcon, Loader2, Eye, EyeOff, LayoutTemplate,
-  UserPlus, X, Camera, Pin, PinOff
+  UserPlus, X, Camera, Pin, PinOff, Edit2 // 🚀 تم استيراد أيقونة التعديل
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
@@ -28,6 +29,7 @@ export default function ForumHeroAdminPage() {
   const [uploadingStudentIdx, setUploadingStudentIdx] = useState<number | null>(null);
 
   // حالات النموذج (Form)
+  const [editingId, setEditingId] = useState<string | null>(null); // 🚀 حالة لمعرفة إذا كنا نعدل
   const [type, setType] = useState('welcome');
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -40,8 +42,8 @@ export default function ForumHeroAdminPage() {
     const { data, error } = await supabase
       .from('forum_hero_slides')
       .select('*')
-      .order('sort_order', { ascending: false }) // 🚀 المثبت يظهر أولاً
-      .order('created_at', { ascending: false }); // ثم الأحدث
+      .order('sort_order', { ascending: false }) 
+      .order('created_at', { ascending: false }); 
     
     if (data) setSlides(data);
     setLoading(false);
@@ -52,7 +54,7 @@ export default function ForumHeroAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🚀 رفع صورة حقيقية للطالب
+  // رفع صورة حقيقية للطالب
   const handleStudentImageUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -85,7 +87,6 @@ export default function ForumHeroAdminPage() {
   const updateStudent = (index: number, field: string, value: string) => {
     const updated = [...students];
     (updated[index] as any)[field] = value;
-    // توليد صورة افتراضية فقط إذا لم يقم المدير برفع صورة حقيقية
     if (field === 'name' && value.trim() !== '' && !updated[index].img.includes('cloudinary')) {
       updated[index].img = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(value)}&backgroundColor=b6e3f4`;
     }
@@ -96,7 +97,19 @@ export default function ForumHeroAdminPage() {
     setStudents(students.filter((_, i) => i !== index));
   };
 
-  // 🚀 حفظ الشريحة الجديدة
+  // 🚀 دالة فتح نافذة التعديل مع تعبئة البيانات القديمة
+  const openEditModal = (slide: any) => {
+    setEditingId(slide.id);
+    setType(slide.type || 'welcome');
+    setTitle(slide.title || '');
+    setDesc(slide.description || '');
+    setBadge(slide.badge_text || '');
+    setMediaUrl(slide.media_url || '');
+    setStudents(slide.metadata?.students || []);
+    setIsModalOpen(true);
+  };
+
+  // 🚀 حفظ الشريحة (سواء إنشاء أو تعديل)
   const handleSaveSlide = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return alert('الرجاء إدخال عنوان الشريحة');
@@ -104,7 +117,7 @@ export default function ForumHeroAdminPage() {
 
     const selectedType = SLIDE_TYPES.find(t => t.id === type);
     
-    const payload = {
+    const payload: any = {
       type,
       title,
       description: desc,
@@ -114,10 +127,20 @@ export default function ForumHeroAdminPage() {
       media_url: mediaUrl || null,
       metadata: type === 'honor_roll' ? { students } : null,
       is_active: true,
-      sort_order: 0 // افتراضياً غير مثبت
     };
 
-    const { error } = await supabase.from('forum_hero_slides').insert([payload]);
+    let error;
+
+    if (editingId) {
+      // تعديل شريحة موجودة
+      const { error: updateError } = await supabase.from('forum_hero_slides').update(payload).eq('id', editingId);
+      error = updateError;
+    } else {
+      // إنشاء شريحة جديدة
+      payload.sort_order = 0; // افتراضياً غير مثبت
+      const { error: insertError } = await supabase.from('forum_hero_slides').insert([payload]);
+      error = insertError;
+    }
     
     setIsSubmitting(false);
     if (error) {
@@ -135,7 +158,7 @@ export default function ForumHeroAdminPage() {
     if (!error) fetchSlides();
   };
 
-  // 🚀 تثبيت/إلغاء تثبيت الشريحة (Pinning)
+  // تثبيت/إلغاء تثبيت الشريحة (Pinning)
   const togglePin = async (id: string, currentSortOrder: number) => {
     const newSortOrder = currentSortOrder > 0 ? 0 : 100; // 100 يعني مثبت في الأعلى
     const { error } = await supabase.from('forum_hero_slides').update({ sort_order: newSortOrder }).eq('id', id);
@@ -150,6 +173,7 @@ export default function ForumHeroAdminPage() {
   };
 
   const resetForm = () => {
+    setEditingId(null);
     setType('welcome');
     setTitle('');
     setDesc('');
@@ -199,7 +223,7 @@ export default function ForumHeroAdminPage() {
             return (
               <div key={slide.id} className={`relative bg-white rounded-[2rem] p-6 border shadow-sm transition-all flex flex-col ${slide.is_active ? 'border-slate-200 hover:shadow-lg hover:border-indigo-200' : 'border-slate-200 opacity-60 bg-slate-50'}`}>
                 
-                {/* 🚀 شريط التثبيت الجمالي */}
+                {/* شريط التثبيت الجمالي */}
                 {isPinned && (
                    <div className="absolute -top-3 left-6 bg-amber-400 text-amber-950 text-[10px] font-black px-3 py-1 rounded-full shadow-md flex items-center gap-1">
                      <Pin className="w-3 h-3" /> مثبت كشريحة أولى
@@ -210,16 +234,23 @@ export default function ForumHeroAdminPage() {
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-br ${slide.color_gradient} text-white shadow-md`}>
                     <SlideIcon className="w-6 h-6" />
                   </div>
-                  <div className="flex gap-2">
-                    {/* 🚀 زر التثبيت */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {/* زر التثبيت */}
                     <button onClick={() => togglePin(slide.id, slide.sort_order)} className={`p-2 rounded-xl transition-colors ${isPinned ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'}`} title={isPinned ? 'إلغاء التثبيت' : 'تثبيت في الواجهة'}>
                       {isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
                     </button>
 
+                    {/* زر الإخفاء/الإظهار */}
                     <button onClick={() => toggleActive(slide.id, slide.is_active)} className={`p-2 rounded-xl transition-colors ${slide.is_active ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`} title={slide.is_active ? 'إخفاء' : 'إظهار'}>
                       {slide.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                     </button>
                     
+                    {/* 🚀 زر التعديل (الجديد) */}
+                    <button onClick={() => openEditModal(slide)} className="p-2 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors" title="تعديل">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+
+                    {/* زر الحذف */}
                     <button onClick={() => deleteSlide(slide.id)} className="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors" title="حذف">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -251,7 +282,7 @@ export default function ForumHeroAdminPage() {
         </div>
       )}
 
-      {/* 🌟 نافذة إضافة شاشة جديدة */}
+      {/* 🌟 نافذة إضافة/تعديل شاشة */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
@@ -259,13 +290,15 @@ export default function ForumHeroAdminPage() {
               
               <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-black text-slate-900 mb-1">تصميم شاشة جديدة</h2>
+                  <h2 className="text-xl font-black text-slate-900 mb-1">
+                    {editingId ? 'تعديل بيانات الشاشة' : 'تصميم شاشة جديدة'}
+                  </h2>
                   <p className="text-xs font-bold text-slate-500">اختر النوع، املأ البيانات، وسنقوم بعرضها بجمالية للطلاب.</p>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 shadow-sm border border-slate-100 transition-all"><XCircle className="w-6 h-6" /></button>
               </div>
               
-              <form onSubmit={handleSaveSlide} className="p-6 sm:p-8 space-y-6">
+              <form onSubmit={handleSaveSlide} className="p-6 sm:p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
                 
                 {/* نوع الشاشة */}
                 <div>
@@ -303,7 +336,7 @@ export default function ForumHeroAdminPage() {
                   </div>
                 </div>
 
-                {/* 🚀 إعدادات خاصة حسب النوع المختار */}
+                {/* إعدادات خاصة حسب النوع المختار */}
                 <AnimatePresence mode="wait">
                   {type === 'honor_roll' && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-amber-50/50 p-5 rounded-[2rem] border border-amber-100 overflow-hidden">
@@ -312,12 +345,12 @@ export default function ForumHeroAdminPage() {
                         <button type="button" onClick={addStudent} className="bg-amber-400 hover:bg-amber-500 text-amber-950 text-xs font-black px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"><UserPlus className="w-3 h-3"/> طالب جديد</button>
                       </div>
                       
-                      <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="space-y-3 pr-2">
                         {students.length === 0 && <p className="text-xs font-bold text-amber-700/60 text-center py-4">لم تقم بإضافة أي طالب بعد.</p>}
                         {students.map((student, index) => (
                           <div key={index} className="flex gap-3 items-center bg-white p-3 rounded-xl border border-amber-200/50 shadow-sm">
                             
-                            {/* 🚀 زر رفع صورة الطالب المخصص */}
+                            {/* رفع صورة الطالب */}
                             <div className="relative group cursor-pointer shrink-0">
                                <input 
                                  type="file" 
@@ -364,17 +397,24 @@ export default function ForumHeroAdminPage() {
                   )}
                 </AnimatePresence>
 
-                <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-100">
                   <button type="submit" disabled={isSubmitting} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-sm flex justify-center items-center gap-2 shadow-xl shadow-indigo-600/20 transition-all active:scale-95">
-                      {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} حفظ ونشر الإعلان
+                      {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} {editingId ? 'تحديث البيانات' : 'حفظ ونشر الإعلان'}
                   </button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 rounded-2xl font-black text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all active:scale-95">إلغاء</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="w-full sm:w-1/3 py-4 rounded-2xl font-black text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all active:scale-95">إلغاء الأمر</button>
                 </div>
               </form>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      `}} />
     </div>
   );
 }
+
+
