@@ -2,10 +2,16 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Bell, Info, AlertTriangle, CheckCircle2, MessageSquare, BookOpen, FileText } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion'; // إصلاح مسار framer-motion
 
-export type NotificationType = 'exam' | 'assignment' | 'attendance' | 'message' | 'announcement' | 'system' | 'success' | 'error';
+export type NotificationType =
+  | 'exam'
+  | 'assignment'
+  | 'attendance'
+  | 'message'
+  | 'announcement'
+  | 'system'
+  | 'success'
+  | 'error';
 
 export interface Notification {
   id: string;
@@ -25,7 +31,13 @@ interface NotificationContextType {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
-  sendNotification: (userId: string, title: string, content: string, type: NotificationType, link?: string) => Promise<void>;
+  sendNotification: (
+    userId: string,
+    title: string,
+    content: string,
+    type: NotificationType,
+    link?: string
+  ) => Promise<void>;
   showNotification: (type: NotificationType, content: string) => Promise<void>;
 }
 
@@ -55,31 +67,40 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
     let currentUserId: string | null = null;
 
     const setupNotifications = async (user: any) => {
       const newUserId = user?.id || null;
-      
-      if (newUserId === currentUserId) {
-        return; // Already set up for this user
-      }
-      
-      currentUserId = newUserId;
 
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
+      if (newUserId === currentUserId) return;
+      currentUserId = newUserId;
 
       if (newUserId) {
         setUserId(newUserId);
+
+        // تحميل مرة واحدة فقط
         fetchNotifications(newUserId);
 
-        // Polling every 30 seconds instead of Realtime
-        intervalId = setInterval(() => {
-          fetchNotifications(newUserId);
-        }, 30000);
+        // (اختياري) realtime بدون polling
+        const channel = supabase
+          .channel('notifications-realtime')
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'notifications',
+              filter: `user_id=eq.${newUserId}`,
+            },
+            (payload) => {
+              setNotifications((prev) => [payload.new as Notification, ...prev]);
+            }
+          )
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(channel);
+        };
       } else {
         setUserId(null);
         setNotifications([]);
@@ -90,62 +111,50 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setupNotifications(session?.user);
     });
 
-    // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setupNotifications(session?.user);
     });
 
     return () => {
       subscription.unsubscribe();
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
     };
   }, [fetchNotifications]);
 
   const markAsRead = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', id);
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', id);
 
-      if (error) throw error;
+    if (!error) {
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
     }
   };
 
   const markAllAsRead = async () => {
     if (!userId) return;
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', userId)
-        .eq('is_read', false);
 
-      if (error) throw error;
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (!error) {
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    } catch (error) {
-      console.error('Error marking all notifications as read:', error);
     }
   };
 
   const deleteNotification = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('id', id);
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id);
 
-      if (error) throw error;
+    if (!error) {
       setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } catch (error) {
-      console.error('Error deleting notification:', error);
     }
   };
 
@@ -156,31 +165,36 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     type: NotificationType,
     link?: string
   ) => {
-    try {
-      const { error } = await supabase.from('notifications').insert({
-        user_id: targetUserId,
-        title,
-        content,
-        type,
-        link,
-      });
-      if (error) throw error;
+    const { error } = await supabase.from('notifications').insert({
+      user_id: targetUserId,
+      title,
+      content,
+      type,
+      link,
+    });
 
-      // 🚀 الإضافة السحرية هنا: إرسال الإشعار الفعلي لهاتف الطالب عبر الـ API
-      fetch('/api/send-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: targetUserId, title, body: content, url: link || '/' })
-      }).catch(err => console.error("Failed to trigger push:", err));
-
-    } catch (error) {
+    if (error) {
       console.error('Error sending notification:', error);
+      return;
     }
+
+    fetch('/api/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: targetUserId,
+        title,
+        body: content,
+        url: link || '/',
+      }),
+    }).catch(() => {});
   };
 
   const showNotification = async (type: NotificationType, content: string) => {
     if (!userId) return;
+
     const title = type.charAt(0).toUpperCase() + type.slice(1);
+
     await sendNotification(userId, title, content, type);
   };
 
@@ -206,7 +220,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
 export function useNotifications() {
   const context = useContext(NotificationContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useNotifications must be used within a NotificationProvider');
   }
   return context;
