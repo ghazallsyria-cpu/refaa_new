@@ -68,22 +68,24 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // تنظيف العلامات القديمة من النص لضمان نظافته
-        qContent = qContent.replace(//g, '').replace(//g, '');
+        // 🚀 الإصلاح: إزالة الريجكس المعطوب الذي يسبب مشكلة التعليقات
+        const regex1 = new RegExp('<\!--\\[TYPE:.*?\\]-->', 'g');
+        const regex2 = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
+        qContent = qContent.replace(regex1, '').replace(regex2, '');
 
         let dbType = frontendType;
         
-        // 🚀 إذا كان النوع مرفوضاً من قاعدة البيانات، نخفيه في النص ونجعله 'essay' أو 'open'
+        // إذا كان النوع مرفوضاً من قاعدة البيانات، نخفيه في النص ونجعله 'essay'
         if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
-            dbType = 'essay'; // نضع essay كافتراضي لتجربته
-            qContent += ``;
+            dbType = 'essay'; 
+            qContent += `<!--[TYPE:${frontendType}]-->`;
         }
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
           type: dbType,
-          content: qContent,
+          content: qContent.trim(),
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
           order_index: i
@@ -91,7 +93,6 @@ export async function POST(req: Request) {
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
-        // 🚀 خوارزمية الإنقاذ: إذا رفضت قاعدة البيانات الحفظ لأي سبب، نجرب الأنواع المضمونة
         if (qErr) {
             const fallbacks = ['open', 'text', 'multiple_choice'];
             for (const fb of fallbacks) {
