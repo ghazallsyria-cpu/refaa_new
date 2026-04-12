@@ -103,7 +103,6 @@ export default function TakeQuiz() {
       
       let finalQuestions = [...(questionsData || [])].map((q: any) => {
          let qContent = q.content || '';
-         // 🚀 خدعة برمجية قوية لتنظيف الأكواد بدون كسر الـ Regex وبدون حذف الدردشة لها
          const htmlCommentStart = '<' + '!' + '-' + '-';
          if (qContent.includes('[[[')) qContent = qContent.split('[[[')[0];
          if (qContent.includes(htmlCommentStart)) qContent = qContent.split(htmlCommentStart)[0];
@@ -230,7 +229,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, router, studentProfileId]);
+  }, [isSubmitting, questions, answers, params.id, user, startTime, isPreviewMode, router, studentProfileId]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
