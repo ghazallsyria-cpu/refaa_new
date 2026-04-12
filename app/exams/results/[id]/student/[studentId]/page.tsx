@@ -10,7 +10,7 @@ import Latex from 'react-latex-next';
 
 const isAutoGradedType = (type: string) => {
   const t = (type || '').toLowerCase();
-  return ['multiple_choice', 'true_false', 'multi_select', 'checkbox', 'radio'].includes(t);
+  return t.includes('choice') || t.includes('true_false') || t.includes('select') || t.includes('checkbox') || t.includes('radio');
 };
 
 const formatTimeTaken = (seconds: number) => {
@@ -59,13 +59,20 @@ export default function StudentExamResult() {
              });
           }
 
+          // 🚀 فك التغليف عن الأسئلة لعرضها بشكل صحيح للمعلم
           if (result.questions) {
               result.questions = result.questions.map((q: any) => {
+                 let qType = q.type;
                  let qContent = q.content || '';
-                 const htmlCommentStart = '<' + '!' + '-' + '-';
-                 if (qContent.includes('[[[')) qContent = qContent.split('[[[')[0];
-                 if (qContent.includes(htmlCommentStart)) qContent = qContent.split(htmlCommentStart)[0];
-                 return { ...q, content: qContent.trim() };
+                 const typeMatch = qContent.match(//);
+                 if (typeMatch) {
+                     qType = typeMatch[1];
+                     qContent = qContent.replace(//g, '');
+                 } else if (qContent.includes('') || qType === 'file_upload') {
+                     qType = 'file';
+                     qContent = qContent.replace(//g, '');
+                 }
+                 return { ...q, type: qType, content: qContent };
               });
           }
 
@@ -252,6 +259,7 @@ export default function StudentExamResult() {
             const qType = (question.type || '').toLowerCase();
             const isAuto = isAutoGradedType(qType);
             
+            // 🚀 التعديل الجذري
             const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(qType);
             
             let studentAnswerText = null;
