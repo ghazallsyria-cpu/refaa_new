@@ -143,7 +143,11 @@ export default function TakeQuiz() {
   useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
 
   const handleSubmit = useCallback(async () => {
-    if (isSubmitting || !questions || questions.length === 0 || !user) return;
+    if (!user) {
+        alert("الرجاء التأكد من تسجيل الدخول أولاً.");
+        return;
+    }
+    if (isSubmitting || !questions || questions.length === 0) return;
     
     if (isPreviewMode) {
        alert("هذا الاختبار في وضع المعاينة. لن يتم حفظ الإجابات في قاعدة البيانات لأنك لست طالباً مسجلاً في المادة.");
@@ -154,7 +158,8 @@ export default function TakeQuiz() {
     setIsSubmitting(true);
 
     try {
-      const calculatedTimeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+      // ضمان أن الوقت المسجل ليس صفراً أبداً لتجنب رفض الخادم
+      const calculatedTimeTaken = startTime ? Math.max(1, Math.floor((Date.now() - startTime) / 1000)) : 1;
       setTimeTakenInfo(calculatedTimeTaken);
 
       let totalScore = 0;
@@ -205,23 +210,29 @@ export default function TakeQuiz() {
       }
 
       const attemptStatus = hasManual ? 'completed' : 'graded';
+      const accurateUserId = studentProfileId || user?.id || user?.user_id || 'unknown';
 
+      // 🚀 إرسال جميع المسميات المحتملة للمتغيرات (camelCase و snake_case) لضمان نجاح الـ API مهما كان إصداره
       const response = await fetch('/api/exams/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             examId: params.id,
+            exam_id: params.id,
             answers: formattedAnswers,
             score: totalScore,
             status: attemptStatus,
-            userId: studentProfileId || user.id || user.user_id, 
-            studentId: studentProfileId || user.id || user.user_id, // 🚀 إضافة صريحة لمتغير studentId ليتوافق مع جميع نسخ الـ API
-            timeTaken: calculatedTimeTaken
+            userId: accurateUserId, 
+            user_id: accurateUserId,
+            studentId: accurateUserId,
+            student_id: accurateUserId,
+            timeTaken: calculatedTimeTaken,
+            time_taken: calculatedTimeTaken
         })
       });
 
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر");
+      if (!response.ok || !data.success) throw new Error(data.error || "فشل في إرسال الإجابات إلى السيرفر. يرجى المحاولة مرة أخرى.");
 
       setIsFinished(true); 
       
