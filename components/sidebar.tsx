@@ -33,7 +33,8 @@ import {
   Medal,
   ShieldAlert,
   LayoutGrid,
-  Compass // 🚀 تمت إضافة أيقونة المنتديات
+  Compass,
+  AlertTriangle // 🚀 تم استيراد أيقونة الإنذار
 } from 'lucide-react';
 
 const navigation = [
@@ -44,6 +45,7 @@ const navigation = [
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
   { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
   { name: 'رصد الغياب الآلي', href: '/admin/teacher-attendance', icon: ShieldAlert },
+  { name: 'إنذارات الغياب', href: '/admin/absence-warnings', icon: AlertTriangle }, // 🚀 تمت إضافة الصفحة هنا
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
   { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
@@ -51,7 +53,7 @@ const navigation = [
   { name: 'الفصول', href: '/classes', icon: School },
   { name: 'المواد الدراسية', href: '/subjects', icon: BookOpen },
   { name: 'إدارة المنتديات', href: '/admin/forums-management', icon: LayoutGrid },
-  { name: 'المنتديات', href: '/forums', icon: Compass }, // 🚀 تم إضافة المنتديات هنا
+  { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
   { name: 'الحصص الحية', href: '/live', icon: Clock },
@@ -102,7 +104,6 @@ export function Sidebar({
 
   const filteredNavigation = navigation.filter(item => {
     if (authRole === 'admin' || authRole === 'management') return true;
-    // 🚀 تم السماح بظهور "المنتديات" للمعلم والطالب وولي الأمر
     if (authRole === 'teacher') return ['لوحة التحكم', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
     if (authRole === 'student') return ['لوحة التحكم', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
     if (authRole === 'parent') return ['لوحة التحكم', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
@@ -199,10 +200,11 @@ export function Sidebar({
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
             
-            const isSpecialBtn = item.name === 'قرارات الخصم';
+            // 🚀 تم دمج الإنذارات مع قرارات الخصم لتأخذ لوناً مميزاً
+            const isSpecialBtn = item.name === 'قرارات الخصم' || item.name === 'إنذارات الغياب';
             const isRadarBtn = item.name === 'الرادار الرقمي' || item.name === 'رصد الغياب الآلي';
             const isBadgeBtn = item.name === 'إدارة الأوسمة';
-            const isForumBtn = item.name === 'المنتديات'; // 🚀 تأثير خاص للمنتديات
+            const isForumBtn = item.name === 'المنتديات';
 
             return (
               <motion.div
@@ -224,7 +226,7 @@ export function Sidebar({
                         : isBadgeBtn ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
                         : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30" 
                       : "hover:bg-white/5 hover:text-white text-slate-400",
-                    isForumBtn && !isActive && "text-indigo-300 hover:text-indigo-100" // 🚀 تمييز المنتديات حتى لو لم تكن نشطة
+                    isForumBtn && !isActive && "text-indigo-300 hover:text-indigo-100"
                   )}
                 >
                   <item.icon
