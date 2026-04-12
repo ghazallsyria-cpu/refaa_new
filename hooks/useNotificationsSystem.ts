@@ -1,5 +1,6 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
 export interface Notification {
@@ -13,71 +14,53 @@ export interface Notification {
   created_at: string;
 }
 
+// مفتاح تعطيل النظام
+const NOTIFICATIONS_ENABLED = false;
+
 export function useNotificationsSystem() {
   const { user } = useAuth();
   const [data, setData] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async (): Promise<void> => {
+    if (!NOTIFICATIONS_ENABLED) return;
     if (!user) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const { data: notifData, error: fetchError } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (fetchError) throw fetchError;
-      setData((notifData as Notification[]) || []);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load notifications';
-      console.error("Error fetching notifications:", err);
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
   }, [user]);
 
   useEffect(() => {
+    if (!NOTIFICATIONS_ENABLED) return;
+    if (!user?.id) return;
+
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [user?.id, fetchNotifications]);
 
   const markAsRead = useCallback(async (notificationId: string): Promise<void> => {
-    if (!user) return;
-    try {
-      const response = await fetch('/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId, userId: user.id }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to mark as read');
-      await fetchNotifications();
-    } catch (err: unknown) {
-      console.error('Error marking as read:', err);
-      throw err;
-    }
-  }, [user, fetchNotifications]);
+    if (!NOTIFICATIONS_ENABLED) return;
+
+    // تحديث محلي فقط بدون أي request
+    setData(prev =>
+      prev.map(n =>
+        n.id === notificationId ? { ...n, is_read: true } : n
+      )
+    );
+  }, []);
 
   const markAllAsRead = useCallback(async (): Promise<void> => {
-    if (!user) return;
-    try {
-      const response = await fetch('/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, all: true }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to mark all as read');
-      await fetchNotifications();
-    } catch (err: unknown) {
-      console.error('Error marking all as read:', err);
-      throw err;
-    }
-  }, [user, fetchNotifications]);
+    if (!NOTIFICATIONS_ENABLED) return;
 
-  return { data, loading, error, refetch: fetchNotifications, markAsRead, markAllAsRead };
+    // تحديث محلي فقط
+    setData(prev =>
+      prev.map(n => ({ ...n, is_read: true }))
+    );
+  }, []);
+
+  return {
+    data,              // فارغ دائماً حالياً
+    loading,           // false
+    error,             // null
+    refetch: fetchNotifications, // معطل
+    markAsRead,
+    markAllAsRead
+  };
 }
