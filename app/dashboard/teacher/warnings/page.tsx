@@ -104,7 +104,7 @@ export default function TeacherAbsenceEquivalencePage() {
     });
   }, [searchTerm, selectedSection, students]);
 
-  // 4. إبلاغ الإدارة (تم إصلاحها للبحث عن admin أو management)
+  // 4. إبلاغ الإدارة بتلخيص ذكي
   const handleNotifyAdmin = async () => {
     if (!user?.id || filteredStudents.length === 0) return;
     setIsSending(true);
@@ -127,16 +127,16 @@ export default function TeacherAbsenceEquivalencePage() {
         return;
       }
 
-      const reportDetails = filteredStudents.map(s => 
-        `- ${s.name} (${s.className}): ${s.count} حصص ≈ ${Math.floor(s.count / 5)} أيام.`
-      ).join('\n');
+      // 🚀 إعداد إحصائيات ذكية للإدارة بدلاً من سرد الأسماء
+      const totalMissedPeriods = filteredStudents.reduce((acc, s) => acc + s.count, 0);
+      const highestAbsence = Math.max(...filteredStudents.map(s => s.count));
 
-      const reportContent = `السادة في إدارة المدرسة،\nمرفق لكم كشف بمعادلة غياب الطلاب في حصصي الدراسية (بواقع 1 يوم لكل 5 حصص):\n\n${reportDetails}\n\nللاطلاع والمتابعة.\nمعلم المادة: أ. ${teacherName}`;
+      const reportContent = `السادة في إدارة المدرسة الموقرة،\n\nنحيطكم علماً بأنه من خلال الرصد الدوري، تم تسجيل تجاوزات للائحة المواظبة في حصصي الدراسية (بواقع احتساب يوم غياب كامل لكل 5 حصص).\n\n📊 ملخص الرصد:\n- عدد الطلاب المتجاوزين للحد المسموح: ${filteredStudents.length} طلاب.\n- إجمالي الحصص المهدرة بالغياب لهؤلاء الفئة: ${totalMissedPeriods} حصة.\n- أعلى معدل غياب مسجل لطالب واحد: ${highestAbsence} حصص.\n\nيرجى التفضل بالدخول إلى (المركز المجمع للإنذارات) من لوحة الإدارة للاطلاع على كشف الأسماء التفصيلي وإصدار الإشعارات الرسمية لأولياء الأمور.\n\nللاطلاع والمتابعة،،،\nمعلم المادة: أ. ${teacherName}`;
       
       const { error: msgError } = await supabase.from('messages').insert({
         sender_id: user.id,
         receiver_id: targetAdminId,
-        subject: 'كشف معادلة غياب الطلاب',
+        subject: '🔴 إشعار إداري: تجاوز حد الغياب المسموح للطلاب',
         content: reportContent,
         is_read: false
       });
@@ -330,8 +330,8 @@ export default function TeacherAbsenceEquivalencePage() {
                     <CheckCircle2 className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                    <p className="font-black text-sm">تم إرسال الكشف بنجاح</p>
-                    <p className="text-xs text-slate-400 font-medium">سيظهر التقرير لدى الإدارة فوراً.</p>
+                    <p className="font-black text-sm">تم إرسال الإشعار للإدارة بنجاح</p>
+                    <p className="text-xs text-slate-400 font-medium">سيصل الملخص إلى صندوق رسائل المدير فوراً.</p>
                 </div>
             </motion.div>
           )}
