@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -52,11 +53,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     const handleGlobalError = (event: ErrorEvent) => {
-      systemLogger.log(event.error, 'critical', 'RUNTIME_EXCEPTION');
+      // 🛑 تم التعطيل المؤقت لمنع حلقة الأخطاء المفرغة وتدمير السيرفر
+      // systemLogger.log(event.error, 'critical', 'RUNTIME_EXCEPTION');
+      console.error("Global Error Caught:", event.error); // طباعة في المتصفح فقط
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      systemLogger.log(event.reason, 'critical', 'API_COMM_FAILURE');
+      // 🛑 تم التعطيل المؤقت لمنع حلقة الأخطاء المفرغة
+      // systemLogger.log(event.reason, 'critical', 'API_COMM_FAILURE');
+      console.error("Unhandled Rejection:", event.reason);
     };
 
     window.addEventListener('error', handleGlobalError);
@@ -70,6 +75,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // 2️⃣ تفعيل جهاز البث للرادار (Realtime Presence Broadcaster)
   useEffect(() => {
+    // 🛑 🚨 إيقاف الطوارئ: إيقاف الرادار وعمليات Upsert تماماً لإنقاذ السيرفر
+    return; // هذا السطر يمنع الكود بالأسفل من العمل مؤقتاً
+
+    /* ---- الكود الموقوف مؤقتاً بالأسفل ---- */
+    /*
     // لا نرسل إشارة إذا كان المستخدم في صفحة عامة أو لم يسجل دخوله
     if (!user || !authRole || isPublicPage) return;
 
@@ -109,6 +119,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(room);
     };
+    */
   }, [user, authRole, userName, isPublicPage]);
 
   // 3️⃣ دالة فحص الصلاحيات
@@ -274,3 +285,4 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
