@@ -105,16 +105,33 @@ export function useAssignmentsSystem() {
       });
 
       if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        const assignmentsWithStats = await Promise.all(mappedData.map(async (a) => {
-          const { data: attempts } = await supabase.from('assignment_submissions').select('status').eq('assignment_id', a.id);
-          const subs = attempts || [];
-          return {
-            ...a,
-            submission_count: subs.length,
-            graded_count: subs.filter(s => s.status === 'graded').length,
-          };
-        }));
-        mappedData = assignmentsWithStats;
+        // 🚀 إنقاذ السيرفر: بدلاً من 100 طلب، نقوم بطلب واحد فقط (دمج الطلبات)
+        if (mappedData.length > 0) {
+          const assignmentIds = mappedData.map(a => a.id);
+          
+          const { data: allAttempts, error: attemptsError } = await supabase
+            .from('assignment_submissions')
+            .select('assignment_id, status')
+            .in('assignment_id', assignmentIds);
+
+          if (!attemptsError && allAttempts) {
+            // توزيع البيانات في الذاكرة لتسريع الأداء
+            const attemptsMap = allAttempts.reduce((acc: any, curr: any) => {
+              if (!acc[curr.assignment_id]) acc[curr.assignment_id] = [];
+              acc[curr.assignment_id].push(curr);
+              return acc;
+            }, {});
+
+            mappedData = mappedData.map(a => {
+              const subs = attemptsMap[a.id] || [];
+              return {
+                ...a,
+                submission_count: subs.length,
+                graded_count: subs.filter((s: any) => s.status === 'graded').length,
+              };
+            });
+          }
+        }
       }
 
       if (currentRole === 'student') {
@@ -205,7 +222,6 @@ export function useAssignmentsSystem() {
           }
         }
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        // 🚀 السحر هنا: استخدام sections بالجمع لضمان مطابقة بنية قاعدة البيانات
         const { data: subsData } = await supabase
           .from('assignment_submissions')
           .select(`*, student:students(users(full_name, email), sections(id, name, classes(id, name)))`)
