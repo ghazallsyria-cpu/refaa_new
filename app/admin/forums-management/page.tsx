@@ -14,10 +14,13 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useForums } from '@/hooks/useForums';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
 import Link from 'next/link';
 import ImageUpload from '@/components/ImageUpload';
 
 export default function ForumsManagementPage() {
+  const { authRole, isChecking } = useAuth(); // 🚀 تفعيل الحماية
+
   const { structuredCategories, schoolClasses, fetchCategoriesAndClasses, createCategory, updateCategory } = useForums();
   
   const [loading, setLoading] = useState(true);
@@ -47,11 +50,11 @@ export default function ForumsManagementPage() {
   }, [fetchCategoriesAndClasses]);
 
   useEffect(() => { 
-    const timeout = setTimeout(() => {
-      loadData();
-    }, 0);
-    return () => clearTimeout(timeout);
-  }, []); 
+    // 🚀 لا نطلب البيانات من السيرفر إلا إذا كان المستخدم ضمن الإدارة
+    if (authRole === 'admin' || authRole === 'management') {
+       loadData();
+    }
+  }, [loadData, authRole]); 
 
   const handleOpenCatModal = (cat: any = null, parentId: string = 'none') => {
     if (cat) {
@@ -112,6 +115,22 @@ export default function ForumsManagementPage() {
     const { error } = await supabase.from('forum_categories').delete().eq('id', id);
     if (!error) loadData();
   };
+
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-24 p-4 sm:p-6 lg:p-8 font-sans" dir="rtl">
@@ -177,7 +196,6 @@ export default function ForumsManagementPage() {
                           <div className="min-w-0">
                             <h4 className="font-black text-slate-800 text-sm truncate">{sub.name}</h4>
                             <div className="flex gap-1.5 mt-1">
-                               {/* تم حل المشكلة هنا بإضافة (sub.target_classes?.length || 0) */}
                                {(sub.target_classes?.length || 0) > 0 ? <Target className="w-3 h-3 text-amber-500" /> : <Globe className="w-3 h-3 text-emerald-500" />}
                                <span className="text-[9px] font-bold text-slate-400">
                                  {(sub.target_classes?.length || 0) > 0 ? 'فصول محددة' : 'متاح للجميع'}
@@ -244,7 +262,7 @@ export default function ForumsManagementPage() {
                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">{editingCat ? 'تعديل القسم' : 'إنشاء قسم جديد'}</h2>
                    <p className="text-sm font-bold text-slate-500">تحكم بالبيانات، الأيقونات، وصلاحيات الوصول للطلاب.</p>
                 </div>
-                <button onClick={() => setIsCatModalOpen(false)} className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 shadow-sm border border-slate-100 transition-all"><XCircle className="w-7 h-7" /></button>
+                <button type="button" onClick={() => setIsCatModalOpen(false)} className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 shadow-sm border border-slate-100 transition-all"><XCircle className="w-7 h-7" /></button>
               </div>
 
               <form onSubmit={handleSaveCategory} className="p-6 sm:p-10 space-y-8 bg-white max-h-[75vh] overflow-y-auto custom-scrollbar">
