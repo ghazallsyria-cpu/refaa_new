@@ -5,18 +5,18 @@ import {
   BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
   Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
   XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer,
-  RefreshCw, SearchX, Bug, Calculator
+  RefreshCw, SearchX, Bug, Calculator, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import * as XLSX from 'xlsx';
 
 export default function AttendanceReportsPage() {
-  const { user, authRole } = useAuth();
+  const { user, authRole, isChecking } = useAuth(); // 🚀 استيراد جدار الحماية
   const { fetchTeacherDashboardData } = useDashboardSystem();
   
   const [loading, setLoading] = useState(true);
@@ -31,7 +31,9 @@ export default function AttendanceReportsPage() {
   const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    // 🚀 تأكيد الصلاحية قبل جلب البيانات لحماية السيرفر من المتطفلين
+    if (!user || (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher')) return;
+
     setLoading(true);
     setDbError(null);
     try {
@@ -67,7 +69,7 @@ export default function AttendanceReportsPage() {
         return;
       }
 
-      // 🚀 قراءة السجلات من الهيكلة الجديدة
+      // 🚀 قراءة السجلات
       let query = supabase
         .from('attendance_records')
         .select(`
@@ -108,10 +110,13 @@ export default function AttendanceReportsPage() {
   }, [user, authRole, fetchTeacherDashboardData]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // 🚀 لا نجلب البيانات إلا بعد التأكد من الهوية
+    if (authRole === 'admin' || authRole === 'management' || authRole === 'teacher') {
+       fetchData();
+    }
+  }, [fetchData, authRole]);
 
-  // 🚀 المحرك الذكي للفلترة والتجميع وتطبيق معادلة (5 حصص = 1 يوم)
+  // المحرك الذكي للفلترة والتجميع وتطبيق معادلة (5 حصص = 1 يوم)
   const reportData = useMemo(() => {
     let filtered = records || [];
 
@@ -135,7 +140,8 @@ export default function AttendanceReportsPage() {
         
         const recordDate = new Date(targetDateStr);
         if (dateRange === 'week') {
-          return recordDate >= startOfWeek(today, { weekStartsOn: 6 }) && recordDate <= endOfWeek(today, { weekStartsOn: 6 });
+          // 🚀 تم تعديل بداية الأسبوع ليكون الأحد (0) بدلاً من السبت
+          return recordDate >= startOfWeek(today, { weekStartsOn: 0 }) && recordDate <= endOfWeek(today, { weekStartsOn: 0 });
         } else if (dateRange === 'month') {
           return recordDate >= startOfMonth(today) && recordDate <= endOfMonth(today);
         } else if (dateRange === 'custom') {
@@ -298,6 +304,23 @@ export default function AttendanceReportsPage() {
     printWindow.document.close();
   };
 
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق من الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 منع الدخول إذا لم يكن المستخدم مديراً أو معلماً
+  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة للمعلمين وفريق الإدارة فقط.</div>;
+  }
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
@@ -309,7 +332,6 @@ export default function AttendanceReportsPage() {
     );
   }
 
-  // 🚀 رادار الأخطاء
   if (dbError) {
     return (
       <div className="flex h-screen items-center justify-center p-6" dir="rtl">
@@ -335,7 +357,7 @@ export default function AttendanceReportsPage() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
       
       {/* 🚀 Top Navigation */}
       <div className="pt-6 flex justify-between items-center">
@@ -477,7 +499,7 @@ export default function AttendanceReportsPage() {
 
       {/* 🚀 Main Data Table */}
       <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-5 sm:p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="p-5 sm:p-8 border-b border-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50/30">
           <div className="flex items-center gap-3">
             <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner border border-indigo-100 shrink-0">
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
