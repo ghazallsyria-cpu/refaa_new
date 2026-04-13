@@ -1,67 +1,80 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Megaphone, Calendar, Users, ArrowLeft, Bell } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import Link from 'next/link';
-import * as Dialog from '@radix-ui/react-dialog';
-import Image from 'next/image';
+import { Bell, Megaphone } from 'lucide-react';
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
 
-type Announcement = {
+interface Announcement {
   id: string;
   title: string;
   content: string;
-  target_role: string;
   created_at: string;
-  image_url?: string;
-};
+  target_role: string | null;
+}
 
-export default function AnnouncementsWidget({ limit = 3, authRole }: { limit?: number; authRole: string }) {
+interface AnnouncementsWidgetProps {
+  authRole: string;
+}
+
+// 🚀 نظام كاش مخصص للإعلانات لتخفيف الضغط
+const announcementsCache = new Map<string, { data: Announcement[]; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 دقائق
+
+// 🚀 استخدام React.memo لمنع إعادة التصيير العشوائي
+const AnnouncementsWidget = memo(({ authRole }: AnnouncementsWidgetProps) => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const fetchAnnouncements = useCallback(async () => {
+    if (!authRole) return;
 
-  useEffect(() => {
-    async function fetchAnnouncements() {
-      try {
-        let query = supabase
-          .from('announcements')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(limit);
-
-        if (authRole && authRole !== 'admin' && authRole !== 'management') {
-          query = query.or(`target_role.eq.${authRole},target_role.is.null`);
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
-        setAnnouncements(data || []);
-      } catch (error) {
-        console.error('Error fetching widget announcements:', error);
-      } finally {
+    const cacheKey = `announcements_${authRole}`;
+    
+    // فحص الكاش أولاً
+    if (announcementsCache.has(cacheKey)) {
+      const cached = announcementsCache.get(cacheKey)!;
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        setAnnouncements(cached.data);
         setLoading(false);
+        return;
       }
     }
 
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3)
+        .or(`target_role.eq.${authRole},target_role.is.null`);
+
+      if (error) throw error;
+      
+      const result = data || [];
+      setAnnouncements(result);
+      
+      // حفظ في الكاش
+      announcementsCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [authRole]);
+
+  useEffect(() => {
     fetchAnnouncements();
-  }, [limit, authRole]);
+  }, [fetchAnnouncements]);
 
   if (loading) {
     return (
-      <div className="bg-white/70 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-sm ring-1 ring-slate-200/50 animate-pulse">
-        <div className="h-6 w-48 bg-slate-200 rounded-lg mb-8"></div>
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-24 bg-slate-100 rounded-3xl"></div>
-          ))}
-        </div>
+      <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-200 p-6 sm:p-8 animate-pulse flex flex-col justify-center items-center h-48">
+         <div className="h-10 w-10 bg-indigo-100 rounded-full mb-3"></div>
+         <div className="h-4 w-32 bg-slate-200 rounded-full"></div>
       </div>
     );
   }
@@ -69,121 +82,108 @@ export default function AnnouncementsWidget({ limit = 3, authRole }: { limit?: n
   if (announcements.length === 0) return null;
 
   return (
-    <div className="bg-white/70 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-sm ring-1 ring-slate-200/50">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
-            <Megaphone className="h-5 w-5" />
+    <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all">
+      <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
+        <h2 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-inner">
+            <Megaphone className="h-5 w-5 text-indigo-600" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900">آخر الإعلانات</h2>
-        </div>
-        <Link href="/announcements" className="text-sm font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-4 py-2 rounded-xl transition-colors">
-          عرض الكل
-        </Link>
+          إعلانات المدرسة
+        </h2>
       </div>
-
-      <div className="space-y-4">
-        {announcements.map((announcement, i) => (
-          <motion.div
-            key={announcement.id}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.1 }}
-            onClick={() => setSelectedAnnouncement(announcement)}
-            className="group p-5 rounded-3xl border border-slate-100 bg-white/50 hover:bg-white hover:shadow-md hover:border-indigo-100 transition-all cursor-pointer"
-          >
+      <div className="divide-y divide-slate-100 bg-slate-50/30">
+        {announcements.map((announcement) => (
+          <div key={announcement.id} className="p-6 hover:bg-white transition-colors group">
             <div className="flex items-start gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0 group-hover:scale-110 transition-transform">
-                <Bell className="h-6 w-6" />
+              <div className="h-10 w-10 rounded-2xl bg-indigo-100 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                <Bell className="h-5 w-5 text-indigo-600" />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                  {announcement.title}
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {(() => {
-                    if (!mounted || !announcement.created_at) return '...';
-                    try {
-                      return new Date(announcement.created_at).toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' });
-                    } catch (e) {
-                      return '...';
-                    }
-                  })()}
-                </p>
-                <p className="text-sm text-slate-600 mt-2 line-clamp-2 leading-relaxed">
-                  {announcement.content}
-                </p>
-              </div>
-              <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
-                <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+              <div className="min-w-0 flex-1">
+                <h3 className="font-black text-slate-900 text-base leading-tight mb-1 group-hover:text-indigo-600 transition-colors truncate">{announcement.title}</h3>
+                <p className="text-xs font-bold text-slate-400 mb-2">{format(new Date(announcement.created_at), 'EEEE، d MMMM', { locale: arSA })}</p>
+                <p className="text-sm font-medium text-slate-600 leading-relaxed line-clamp-2">{announcement.content}</p>
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
-
-      {/* Detail Modal */}
-      <Dialog.Root open={!!selectedAnnouncement} onOpenChange={(open) => !open && setSelectedAnnouncement(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl z-[100] animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-[101] w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] rounded-[3rem] bg-white p-10 shadow-2xl focus:outline-none animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto" dir="rtl">
-            {selectedAnnouncement && (
-              <div className="space-y-8">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                      <Bell className="h-8 w-8" />
-                    </div>
-                    <div>
-                      <Dialog.Title className="text-2xl font-black text-slate-900 tracking-tight">
-                        {selectedAnnouncement.title}
-                      </Dialog.Title>
-                      <p className="text-sm text-slate-500 font-bold mt-1">
-                        {(() => {
-                          if (!selectedAnnouncement.created_at) return '...';
-                          try {
-                            return new Date(selectedAnnouncement.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
-                          } catch (e) {
-                            return '...';
-                          }
-                        })()}
-                      </p>
-                    </div>
-                  </div>
-                  <Dialog.Close className="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-100 transition-colors">
-                    <ArrowLeft className="h-6 w-6 text-slate-400" />
-                  </Dialog.Close>
-                </div>
-
-                {selectedAnnouncement.image_url && (
-                  <div className="relative w-full aspect-video rounded-3xl overflow-hidden border border-slate-100 shadow-sm">
-                    <Image 
-                      src={selectedAnnouncement.image_url} 
-                      alt={selectedAnnouncement.title} 
-                      fill
-                      className="object-contain"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                )}
-
-                <div className="prose prose-lg prose-slate max-w-none text-slate-600 whitespace-pre-wrap leading-relaxed font-medium bg-slate-50/50 p-8 rounded-[2rem] border border-slate-100/50">
-                  {selectedAnnouncement.content}
-                </div>
-
-                <div className="flex justify-center">
-                  <Dialog.Close asChild>
-                    <button className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95">
-                      إغلاق
-                    </button>
-                  </Dialog.Close>
-                </div>
-              </div>
-            )}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </div>
   );
-}
+});
+
+AnnouncementsWidget.displayName = 'AnnouncementsWidget';
+export default AnnouncementsWidget;
+```
+
+#### 2. تحديث جزء بسيط في لوحة المعلم `app/dashboard/teacher/page.tsx`
+
+الآن، سنقوم بتعديل بسيط في لوحة المعلم لمنع تكرار إرسال طلب `auto_record_teacher_presence`.
+
+**ابحث عن هذا الجزء في أعلى ملف `app/dashboard/teacher/page.tsx` (حوالي السطر 45):**
+```tsx
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date());
+
+    const autoRecordPresence = async () => {
+      if (user?.id && authRole === 'teacher') {
+        try {
+          await supabase.rpc('auto_record_teacher_presence', { p_user_id: user.id });
+        } catch (error) {
+          console.error("Error auto-recording presence:", error);
+        }
+      }
+    };
+
+    if (authRole === 'teacher') {
+       autoRecordPresence();
+    }
+
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      if (authRole === 'teacher') {
+         autoRecordPresence();
+      }
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [user, authRole]);
+```
+
+**واستبدله بهذا الكود الذكي:**
+```tsx
+  // 🚀 استخدام useRef لمنع تكرار إرسال الطلب في نفس الدقيقة
+  const lastRecordedTime = React.useRef<number>(0);
+
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date());
+
+    const autoRecordPresence = async () => {
+      // نمنع إرسال الطلب إذا لم تمر 50 ثانية على الأقل منذ آخر طلب (لتفادي تكرار Strict Mode)
+      const now = Date.now();
+      if (now - lastRecordedTime.current < 50000) return;
+      
+      if (user?.id && authRole === 'teacher') {
+        try {
+          lastRecordedTime.current = now;
+          await supabase.rpc('auto_record_teacher_presence', { p_user_id: user.id });
+        } catch (error) {
+          console.error("Error auto-recording presence:", error);
+        }
+      }
+    };
+
+    if (authRole === 'teacher' && !isChecking) {
+       autoRecordPresence();
+    }
+
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      if (authRole === 'teacher' && !isChecking) {
+         autoRecordPresence();
+      }
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [user, authRole, isChecking]);
