@@ -1,3 +1,4 @@
+```react
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -10,11 +11,9 @@ import { useAuth } from '../context/auth-context';
 import { cn } from '../lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '../lib/supabase';
-// 🚀 استيراد محرك تسجيل الأخطاء
-import { systemLogger } from '../lib/logger';
 
 /**
- * 🛠️ الإطار الرئيسي للمنصة (النسخة النهائية الكاملة)
+ * 🛠️ الإطار الرئيسي للمنصة (النسخة المنظفة من الكاش)
  * المسار: components/app-layout.tsx
  */
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -40,64 +39,58 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
-  // 💥 [بداية كود التدمير الشامل للكاش المطور]
+  // 💥 [الضربة النووية للكاش والـ Service Workers]
   useEffect(() => {
-    // 💡 غيّر هذا الرقم في كل مرة تريد إجبار الجميع على التحديث
-    const CURRENT_APP_VERSION = "2.0.0"; 
-    const savedVersion = localStorage.getItem('app_refresh_version');
-    const isResetPage = window.location.pathname.includes('reset-password');
+    const nukeCache = async () => {
+      // 💡 تغيير هذا الرقم يجبر هواتف الطلاب على التحديث فوراً
+      const CURRENT_APP_VERSION = "3.0.0"; 
+      const savedVersion = localStorage.getItem('app_nuke_version');
 
-    if (savedVersion !== CURRENT_APP_VERSION && !isResetPage) {
-      // 1. حفظ النسخة الجديدة فوراً لمنع حلقة إعادة التحميل اللانهائية
-      localStorage.setItem('app_refresh_version', CURRENT_APP_VERSION);
-
-      const clearCacheAndReload = async () => {
+      // 1. الإلغاء الدائم لأي Service Worker (هذا يمنع الموقع من العناد)
+      if ('serviceWorker' in navigator) {
         try {
-          // 2. تدمير Service Workers (السبب الرئيسي لتعليق ملفات JS القديمة)
-          if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            for (let registration of registrations) {
-              await registration.unregister();
-            }
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (let registration of registrations) {
+            await registration.unregister();
+            console.log("💀 Service Worker Destroyed");
           }
+        } catch (e) {
+          console.error("SW Nuke Error:", e);
+        }
+      }
 
-          // 3. مسح ذواكر الكاش العميقة للمتصفح (Caches API)
+      if (savedVersion !== CURRENT_APP_VERSION && !pathname.includes('reset-password')) {
+        console.log("🚨 Initiating Cache Nuke...");
+        localStorage.setItem('app_nuke_version', CURRENT_APP_VERSION);
+
+        try {
+          // 2. مسح ذواكر الكاش العميقة للمتصفح بالكامل
           if ('caches' in window) {
             const keys = await caches.keys();
             for (let key of keys) {
               await caches.delete(key);
             }
           }
+          
+          // 3. مسح Session Storage (لتفريغ بيانات الجلسة المؤقتة)
+          sessionStorage.clear();
 
-          // 4. إعادة التوجيه القسرية مع بصمة زمنية لضمان جلب ملفات السيرفر
+          // 4. إعادة تحميل إجبارية متخطية الكاش
           const timeStamp = new Date().getTime();
-          window.location.href = `${window.location.pathname}?v=${timeStamp}`;
+          window.location.href = `${window.location.pathname}?update=${timeStamp}`;
         } catch (err) {
-          console.error("Cache clear failed", err);
-          // كحل بديل في حال رفض المتصفح
           window.location.reload();
         }
-      };
+      }
+    };
 
-      clearCacheAndReload();
-    }
-  }, []);
-  // 💥 [نهاية كود التدمير الشامل للكاش]
+    nukeCache();
 
-  // 1️⃣ تفعيل مستشعرات الأخطاء العالمية وتسجيل PWA
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
-          console.error('Service Worker registration failed: ', err);
-        });
-      });
-    }
+    // 🛑 قمنا بإزالة كود تسجيل (register) الـ sw.js لمنع عودة الكاش!
 
     const handleGlobalError = (event: ErrorEvent) => {
       console.error("Global Error Caught:", event.error);
     };
-
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error("Unhandled Rejection:", event.reason);
     };
@@ -109,7 +102,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
-  }, []);
+  }, [pathname]);
 
   // 2️⃣ نظام التوجيه والتواجد (تم تعطيله لإنقاذ السيرفر مؤقتاً)
   useEffect(() => {
@@ -235,3 +228,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+
+```
