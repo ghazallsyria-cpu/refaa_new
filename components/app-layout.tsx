@@ -30,7 +30,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     platformClosed, 
     closeMessage,
     signOut
-  } = useAuth() as any; // 🚀 استخدام as any لتجنب تعارض الأنواع في Build
+  } = useAuth() as any;
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -40,23 +40,49 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
-  // 🔄 [بداية كود تجاوز الكاش المطور - يمنع الانقطاع في صفحة الاستعادة]
+  // 💥 [بداية كود التدمير الشامل للكاش المطور]
   useEffect(() => {
-    const CURRENT_APP_VERSION = "1.2.5"; // نغير الرقم لضمان تحديث جديد عند الجميع
+    // 💡 غيّر هذا الرقم في كل مرة تريد إجبار الجميع على التحديث
+    const CURRENT_APP_VERSION = "2.0.0"; 
     const savedVersion = localStorage.getItem('app_refresh_version');
-    
-    // 🚀 القوة هنا: نتحقق إذا كان المستخدم في صفحة إعادة تعيين كلمة المرور
-    // نمنع التحديث التلقائي في هذه الصفحة لضمان عدم ضياع جلسة (Auth Session)
     const isResetPage = window.location.pathname.includes('reset-password');
 
     if (savedVersion !== CURRENT_APP_VERSION && !isResetPage) {
+      // 1. حفظ النسخة الجديدة فوراً لمنع حلقة إعادة التحميل اللانهائية
       localStorage.setItem('app_refresh_version', CURRENT_APP_VERSION);
-      if (typeof window !== 'undefined') {
-        window.location.reload();
-      }
+
+      const clearCacheAndReload = async () => {
+        try {
+          // 2. تدمير Service Workers (السبب الرئيسي لتعليق ملفات JS القديمة)
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+              await registration.unregister();
+            }
+          }
+
+          // 3. مسح ذواكر الكاش العميقة للمتصفح (Caches API)
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            for (let key of keys) {
+              await caches.delete(key);
+            }
+          }
+
+          // 4. إعادة التوجيه القسرية مع بصمة زمنية لضمان جلب ملفات السيرفر
+          const timeStamp = new Date().getTime();
+          window.location.href = `${window.location.pathname}?v=${timeStamp}`;
+        } catch (err) {
+          console.error("Cache clear failed", err);
+          // كحل بديل في حال رفض المتصفح
+          window.location.reload();
+        }
+      };
+
+      clearCacheAndReload();
     }
   }, []);
-  // 🔄 [نهاية كود تجاوز الكاش المطور]
+  // 💥 [نهاية كود التدمير الشامل للكاش]
 
   // 1️⃣ تفعيل مستشعرات الأخطاء العالمية وتسجيل PWA
   useEffect(() => {
