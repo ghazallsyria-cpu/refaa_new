@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAnnouncementsSystem, Announcement } from '@/hooks/useAnnouncementsSystem';
 import { useAuth } from '@/context/auth-context';
-import { Plus, Search, Edit2, Trash2, Megaphone, Bell, X, Users, Calendar, Filter, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Megaphone, Bell, X, Users, Calendar, Filter, AlertCircle, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion'; // 🚀 تم تصحيح الاستيراد
 import Image from 'next/image';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 
@@ -19,7 +19,7 @@ const AUDIENCE_OPTIONS = [
 ];
 
 export default function AnnouncementsPage() {
-  const { authRole } = useAuth();
+  const { authRole, isChecking } = useAuth(); // 🚀 استيراد حالة التحقق
   const { 
     announcements, 
     loading, 
@@ -50,8 +50,11 @@ export default function AnnouncementsPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    fetchRef.current(authRole);
-  }, [authRole]);
+    // 🚀 لا نطلب الإعلانات إلا بعد التأكد التام من هوية المستخدم لتوفير الطلبات الخاطئة
+    if (!isChecking) {
+       fetchRef.current(authRole);
+    }
+  }, [authRole, isChecking]);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -136,6 +139,18 @@ export default function AnnouncementsPage() {
 
   // حماية ضد خطأ الترطيب (Hydration)
   if (!isMounted) return null;
+
+  // 🚀 شاشة التحميل لمنع الوميض قبل التأكد من الهوية
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق من الصلاحيات لجلب الإعلانات...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-24 relative overflow-hidden" dir="rtl">
