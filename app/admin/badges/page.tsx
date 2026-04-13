@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useBadgesSystem, Badge } from '@/hooks/useBadgesSystem';
-import { Plus, Edit2, Trash2, Award, Medal, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
+import { Plus, Edit2, Trash2, Award, Medal, X, AlertCircle, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import Link from 'next/link';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import ImageUpload from '@/components/ImageUpload';
 
@@ -19,9 +21,11 @@ const COLOR_THEMES = [
 ];
 
 export default function AdminBadgesPage() {
+  const { authRole, isChecking } = useAuth(); // 🚀 تفعيل الحماية
+
   const { 
     availableBadges, 
-    loading, 
+    loading: hookLoading, 
     fetchAvailableBadges, 
     createBadge, 
     updateBadge, 
@@ -43,8 +47,11 @@ export default function AdminBadgesPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    fetchRef.current();
-  }, []);
+    // 🚀 لا نطلب البيانات من السيرفر إلا إذا كان المستخدم ضمن الإدارة
+    if (authRole === 'admin' || authRole === 'management') {
+      fetchRef.current();
+    }
+  }, [authRole]);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -68,13 +75,13 @@ export default function AdminBadgesPage() {
         }
         
         const result = await updateBadge(currentBadge.id, currentBadge);
-        if (!result.success) throw new Error(result.error); // 🚀 التقاط خطأ التعديل
+        if (!result.success) throw new Error(result.error); 
         
         showNotification('success', 'تم تحديث الوسام بنجاح');
       } else {
         // === حالة الإضافة الجديدة ===
         const result = await createBadge(currentBadge);
-        if (!result.success) throw new Error(result.error); // 🚀 التقاط خطأ الإضافة
+        if (!result.success) throw new Error(result.error); 
         
         showNotification('success', 'تم إنشاء الوسام الجديد بنجاح');
       }
@@ -121,13 +128,36 @@ export default function AdminBadgesPage() {
 
   if (!isMounted) return null;
 
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking || hookLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 relative overflow-hidden" dir="rtl">
+    <div className="min-h-screen bg-slate-50/50 pb-24 relative overflow-hidden font-cairo" dir="rtl">
       {/* Mesh Gradient Background */}
       <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-br from-amber-100/40 via-orange-50/40 to-yellow-50/40 -z-10 blur-3xl rounded-b-[100px]"></div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 space-y-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-12">
         
+        {/* 🚀 زر العودة الموحد */}
+        <div className="mb-2">
+          <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-amber-600 font-bold bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200 transition-all w-fit group">
+            <ArrowRight className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
+          </Link>
+        </div>
+
         {/* Toast Notification */}
         <AnimatePresence>
           {notification && (
@@ -178,11 +208,7 @@ export default function AdminBadgesPage() {
         </motion.div>
 
         {/* Content */}
-        {loading ? (
-          <div className="flex justify-center items-center py-32">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-amber-500 border-solid"></div>
-          </div>
-        ) : availableBadges.length === 0 ? (
+        {availableBadges.length === 0 ? (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="text-center py-32 bg-white/50 backdrop-blur-sm rounded-[3rem] border border-white shadow-xl"
@@ -335,7 +361,7 @@ export default function AdminBadgesPage() {
                     <button type="button" className="flex-1 py-4 rounded-2xl bg-slate-100 font-black text-slate-600 hover:bg-slate-200">إلغاء</button>
                   </Dialog.Close>
                   <button type="submit" disabled={isSubmitting} className="flex-[2] py-4 rounded-2xl bg-amber-500 font-black text-white hover:bg-amber-600 shadow-lg shadow-amber-500/20 disabled:opacity-50 flex justify-center items-center gap-2">
-                    {isSubmitting ? <span className="animate-pulse">جاري الحفظ...</span> : <><Award className="h-5 w-5"/> حفظ الوسام</>}
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Award className="h-5 w-5"/> حفظ الوسام</>}
                   </button>
                 </div>
               </form>
