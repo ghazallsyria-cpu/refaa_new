@@ -19,7 +19,9 @@ const renderContentWithMath = (content: string) => {
 export default function GradingPage({ params }: { params: Promise<{ id: string, submissionId: string }> }) {
   const { id: assignmentId, submissionId } = use(params);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, authRole, userRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
+  
   const { fetchSubmissionDetails, updateSubmissionGrade } = useAssignmentsSystem();
   
   const [assignment, setAssignment] = useState<any>(null);
@@ -105,8 +107,16 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     }
   }, [questionGrades, questions.length]);
 
+  // 🚀 مفتاح الصلاحية الذكي: من يملك حق الحفظ والتعديل؟
+  const canEdit = currentRole === 'admin' || currentRole === 'management' || assignment?.teacher_id === user?.id;
+
   const handleSaveGrade = async () => {
+    if (!canEdit) {
+      setNotification({ type: 'error', message: 'عذراً، ليس لديك صلاحية لتقييم هذا الواجب.' });
+      return;
+    }
     if (grade === '') { setNotification({ type: 'error', message: 'يرجى إدخال الدرجة' }); return; }
+    
     setIsSaving(true);
     try {
       if (!user) throw new Error('Not authenticated');
@@ -149,10 +159,22 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
               <p className="text-xs font-bold text-slate-500">{assignment?.title}</p>
             </div>
           </div>
-          <button onClick={handleSaveGrade} disabled={isSaving} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-black text-white hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-70 shadow-md">
-            {isSaving ? <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save className="h-4 w-4" />} حفظ التقييم
-          </button>
+          
+          {/* 🚀 إخفاء زر الحفظ العلوي إذا لم يكن يملك الصلاحية */}
+          {canEdit && (
+            <button onClick={handleSaveGrade} disabled={isSaving} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-black text-white hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-70 shadow-md">
+              {isSaving ? <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Save className="h-4 w-4" />} حفظ التقييم
+            </button>
+          )}
         </div>
+        
+        {/* 🚀 رسالة تنبيه واضحة لوضع المعاينة (للمعلمين الآخرين) */}
+        {!canEdit && assignment && (
+          <div className="bg-amber-100 border-b border-amber-200 text-amber-800 px-4 py-2 text-center text-sm font-bold flex justify-center items-center gap-2 w-full">
+             <Eye className="w-4 h-4 shrink-0" />
+             أنت تتصفح تقييم الطالب في (وضع المعاينة). ليس لديك صلاحية لتعديل الدرجات أو التقييم.
+          </div>
+        )}
       </div>
 
       <div className="max-w-6xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -270,7 +292,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                             </div>
                           </div>
                         ) : q.type === 'file_upload' && !isUnanswered ? (
-                          // 🚀 عرض الصورة المرفوعة من الطالب
                           <div className="mt-2 p-3 bg-slate-50 rounded-2xl border border-slate-200 inline-block shadow-sm">
                             {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
                                <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-96 w-auto object-contain rounded-xl border border-slate-200" />
@@ -303,23 +324,46 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                      <div className="p-5 sm:p-8 bg-slate-50 border-t-4 border-indigo-100">
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-4">
                            <div className="sm:col-span-7 flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200">
-                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: true, pointsEarned: Number(q.points) || 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
+                              <button 
+                                disabled={!canEdit} 
+                                onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: true, pointsEarned: Number(q.points) || 0}}))} 
+                                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === true ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-50 text-slate-500'} ${canEdit ? 'hover:bg-emerald-50 hover:text-emerald-600' : 'opacity-60 cursor-not-allowed'}`}
+                              >
                                 <CheckCircle2 className="w-4 h-4" /> إجابة صحيحة
                               </button>
-                              <button onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: false, pointsEarned: 0}}))} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === false ? 'bg-red-500 text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
+                              <button 
+                                disabled={!canEdit} 
+                                onClick={() => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], isCorrect: false, pointsEarned: 0}}))} 
+                                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${qGrade.isCorrect === false ? 'bg-red-500 text-white shadow-md' : 'bg-slate-50 text-slate-500'} ${canEdit ? 'hover:bg-red-50 hover:text-red-600' : 'opacity-60 cursor-not-allowed'}`}
+                              >
                                 <XCircle className="w-4 h-4" /> إجابة خاطئة
                               </button>
                            </div>
                            <div className="sm:col-span-5 flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200">
                               <span className="text-xs font-black text-slate-500 px-3">الدرجة:</span>
                               <div className="flex items-center gap-2">
-                                <input type="number" min="0" max={q.points} value={qGrade.pointsEarned === 0 && qGrade.isCorrect !== true ? '' : qGrade.pointsEarned} onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], pointsEarned: Number(e.target.value)}}))} className="w-16 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center font-black text-indigo-700 outline-none focus:border-indigo-500" />
+                                <input 
+                                  type="number" 
+                                  min="0" 
+                                  max={q.points} 
+                                  disabled={!canEdit}
+                                  value={qGrade.pointsEarned === 0 && qGrade.isCorrect !== true ? '' : qGrade.pointsEarned} 
+                                  onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], pointsEarned: Number(e.target.value)}}))} 
+                                  className={`w-16 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center font-black text-indigo-700 outline-none ${canEdit ? 'focus:border-indigo-500' : 'opacity-60 cursor-not-allowed'}`} 
+                                />
                                 <span className="text-xs font-black text-slate-400 pl-3">/ {q.points}</span>
                               </div>
                            </div>
                         </div>
-                        <div className="bg-white rounded-2xl border border-slate-200 focus-within:border-indigo-500 overflow-hidden">
-                           <textarea rows={2} placeholder="ملاحظة مخصصة لهذه الإجابة لتوضيح الخطأ للطالب..." value={qGrade.feedback} onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], feedback: e.target.value}}))} className="w-full bg-transparent border-none focus:ring-0 p-4 text-sm font-bold text-slate-700 resize-none outline-none" />
+                        <div className={`bg-white rounded-2xl border border-slate-200 overflow-hidden ${canEdit ? 'focus-within:border-indigo-500' : ''}`}>
+                           <textarea 
+                             rows={2} 
+                             disabled={!canEdit}
+                             placeholder={canEdit ? "ملاحظة مخصصة لهذه الإجابة لتوضيح الخطأ للطالب..." : "لا توجد ملاحظات"} 
+                             value={qGrade.feedback} 
+                             onChange={e => setQuestionGrades(p => ({...p, [q.id]: {...p[q.id], feedback: e.target.value}}))} 
+                             className={`w-full bg-transparent border-none focus:ring-0 p-4 text-sm font-bold text-slate-700 resize-none outline-none ${!canEdit ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                           />
                         </div>
                      </div>
                    </div>
@@ -366,7 +410,13 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
               <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 relative overflow-hidden">
                 <label className="block text-sm font-black text-indigo-800 mb-3 relative z-10">المجموع (تلقائي)</label>
                 <div className="relative z-10 flex items-center gap-4">
-                  <input type="number" className="block w-full rounded-2xl border-2 border-indigo-200 py-4 px-4 text-indigo-700 text-4xl font-black text-center outline-none bg-white" value={grade} onChange={(e) => setGrade(e.target.value)} />
+                  <input 
+                    type="number" 
+                    disabled={!canEdit}
+                    className={`block w-full rounded-2xl border-2 border-indigo-200 py-4 px-4 text-indigo-700 text-4xl font-black text-center outline-none bg-white ${!canEdit ? 'opacity-70 cursor-not-allowed' : ''}`} 
+                    value={grade} 
+                    onChange={(e) => setGrade(e.target.value)} 
+                  />
                   <div className="shrink-0 bg-indigo-600 px-4 py-4 rounded-2xl text-center shadow-md">
                     <span className="block text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-1">من</span>
                     <span className="block font-black text-2xl text-white">{questions.reduce((acc, q) => acc + (Number(q.points)||0), 0)}</span>
@@ -378,15 +428,24 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                 <label className="block text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-slate-400" /> التقييم العام (يظهر للطالب)
                 </label>
-                <textarea rows={5} className="block w-full rounded-2xl border border-slate-200 py-4 px-5 bg-slate-50 focus:bg-white resize-none font-bold outline-none leading-relaxed" placeholder="اكتب تقييماً عاماً لأداء الطالب..." value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+                <textarea 
+                  rows={5} 
+                  disabled={!canEdit}
+                  className={`block w-full rounded-2xl border border-slate-200 py-4 px-5 bg-slate-50 resize-none font-bold outline-none leading-relaxed ${canEdit ? 'focus:bg-white' : 'opacity-70 cursor-not-allowed'}`} 
+                  placeholder={canEdit ? "اكتب تقييماً عاماً لأداء الطالب..." : "لا يوجد تقييم عام"} 
+                  value={feedback} 
+                  onChange={(e) => setFeedback(e.target.value)} 
+                />
               </div>
 
-              <div className="pt-2">
-                <button onClick={handleSaveGrade} disabled={isSaving} className="w-full flex justify-center items-center gap-3 rounded-2xl bg-slate-900 px-8 py-5 text-lg font-black text-white hover:bg-indigo-600 transition-all active:scale-95 disabled:opacity-70 shadow-lg">
-                  {isSaving ? <div className="h-6 w-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <CheckCircle2 className="h-6 w-6" />}
-                  اعتماد وحفظ النتيجة
-                </button>
-              </div>
+              {canEdit && (
+                <div className="pt-2">
+                  <button onClick={handleSaveGrade} disabled={isSaving} className="w-full flex justify-center items-center gap-3 rounded-2xl bg-slate-900 px-8 py-5 text-lg font-black text-white hover:bg-indigo-600 transition-all active:scale-95 disabled:opacity-70 shadow-lg">
+                    {isSaving ? <div className="h-6 w-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <CheckCircle2 className="h-6 w-6" />}
+                    اعتماد وحفظ النتيجة
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
