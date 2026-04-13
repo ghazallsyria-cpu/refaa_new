@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد الصلاحيات
 import { 
   Radio, Clock, TrendingUp, Activity, 
   GraduationCap, UserCheck, MonitorPlay, 
-  Search, Zap
+  Search, Zap, ArrowRight, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -12,6 +13,7 @@ import {
   Tooltip, ResponsiveContainer
 } from 'recharts';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 // واجهة بيانات المستخدم المتصل
 interface OnlineUser {
@@ -34,6 +36,8 @@ interface DailyLogin {
 }
 
 export default function LiveMonitorPage() {
+  const { authRole, isChecking } = useAuth(); // 🚀 حماية الصفحة
+
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'teachers' | 'students'>('all');
@@ -42,11 +46,11 @@ export default function LiveMonitorPage() {
   const [peakUsers, setPeakUsers] = useState(0);
   const [chartData, setChartData] = useState<{ time: string, users: number }[]>([]);
 
-  // 🚀 حالات السجل اليومي
+  // حالات السجل اليومي
   const [dailyLogins, setDailyLogins] = useState<DailyLogin[]>([]);
   const [dailyTab, setDailyTab] = useState<'all' | 'teachers' | 'students'>('all');
 
-  // جلب السجل اليومي (يتجدد كل 24 ساعة بناءً على تاريخ اليوم)
+  // جلب السجل اليومي (مكتوبة بشكل ممتاز من ناحية الأداء Bulk Fetching)
   const fetchDailyLogins = useCallback(async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -59,7 +63,6 @@ export default function LiveMonitorPage() {
       if (presenceData && presenceData.length > 0) {
          const detailsMap = new Map<string, string>();
 
-         // جلب بيانات الطلاب (الفصول)
          const studentIds = presenceData.filter(p => p.role === 'student').map(p => p.user_id);
          if (studentIds.length > 0) {
             const { data: stData } = await supabase.from('students').select('id, sections(name, classes(name))').in('id', studentIds);
@@ -72,12 +75,10 @@ export default function LiveMonitorPage() {
             });
          }
 
-         // جلب بيانات المعلمين (التخصصات)
          const teacherIds = presenceData.filter(p => p.role === 'teacher').map(p => p.user_id);
          if (teacherIds.length > 0) {
             const { data: tsData } = await supabase.from('teacher_subjects').select('teacher_id, subjects(name)').in('teacher_id', teacherIds);
             tsData?.forEach((ts: any) => {
-               // 🚀 تم إصلاح خطأ TypeScript هنا بالتحقق من النوع والوصول الآمن للاسم
                const subjectName = Array.isArray(ts.subjects) ? ts.subjects[0]?.name : ts.subjects?.name;
                if (subjectName && !detailsMap.has(ts.teacher_id)) {
                   detailsMap.set(ts.teacher_id, subjectName);
@@ -90,7 +91,6 @@ export default function LiveMonitorPage() {
             }
          }
 
-         // دمج البيانات
          const enriched = presenceData.map(p => ({
             ...p,
             detail: detailsMap.get(p.user_id) || (p.role === 'teacher' ? 'معلم عام' : p.role === 'student' ? 'بدون فصل' : 'إدارة')
@@ -105,27 +105,19 @@ export default function LiveMonitorPage() {
   }, []);
 
   useEffect(() => {
-    // الالتفاف على التحذير باستخدام دالة داخلية
+    if (authRole !== 'admin' && authRole !== 'management') return;
+
     const initializeData = async () => {
        await fetchDailyLogins();
     };
-    
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     initializeData().catch(console.error);
 
-    const today = new Date().toISOString().split('T')[0];
-    
-    // مراقبة التغييرات الحية في الجدول اليومي
-    const dailyChannel = supabase.channel('daily_presence_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_presence', filter: `record_date=eq.${today}` }, () => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setTimeout(() => {
-            fetchDailyLogins().catch(console.error);
-        }, 1000);
-      })
-      .subscribe();
+    // 🚀 التحسين السحري: تحديث هادئ كل 30 ثانية بدلاً من الـ WebSockets المدمر للسيرفر
+    const intervalId = setInterval(() => {
+      fetchDailyLogins().catch(console.error);
+    }, 30000);
 
-    // البث المباشر الفوري (الرادار)
+    // البث المباشر الفوري (متروك في حال قررت إعادته مستقبلاً)
     const room = supabase.channel('global_online_users');
     room.on('presence', { event: 'sync' }, () => {
       const newState = room.presenceState();
@@ -151,11 +143,11 @@ export default function LiveMonitorPage() {
     const timeout = setTimeout(() => setLoading(false), 2000);
 
     return () => {
+      clearInterval(intervalId); // تنظيف المؤقت الزمني
       supabase.removeChannel(room);
-      supabase.removeChannel(dailyChannel);
       clearTimeout(timeout);
     };
-  }, [fetchDailyLogins]);
+  }, [fetchDailyLogins, authRole]);
 
   const analytics = useMemo(() => {
     const teachers = onlineUsers.filter(u => u.role === 'teacher');
@@ -191,6 +183,23 @@ export default function LiveMonitorPage() {
     (dailyTab === 'students' && u.role === 'student')
   );
 
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#020817]">
+        <div className="relative flex flex-col items-center gap-6">
+          <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full animate-pulse"></div>
+          <Loader2 className="w-16 h-16 text-emerald-500 animate-spin" />
+          <p className="text-emerald-400 font-mono text-xs uppercase tracking-widest">AUTHENTICATING...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#020817]">
@@ -204,8 +213,15 @@ export default function LiveMonitorPage() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-24 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pb-24 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6" dir="rtl">
       
+      {/* 🚀 زر العودة */}
+      <div className="mb-2">
+        <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-emerald-600 font-bold bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200 transition-all w-fit group">
+          <ArrowRight className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
+        </Link>
+      </div>
+
       {/* Hero Radar Section */}
       <div className="relative overflow-hidden rounded-[2.5rem] bg-[#020817] p-8 sm:p-12 text-white shadow-2xl border border-emerald-900/50">
         <div className="absolute top-1/2 left-1/4 w-[800px] h-[800px] -translate-x-1/2 -translate-y-1/2 border border-emerald-500/10 rounded-full pointer-events-none">
@@ -324,7 +340,7 @@ export default function LiveMonitorPage() {
                 </motion.div>
               ))}
               {filteredUsers.length === 0 && (
-                <div className="text-center text-slate-400 text-xs font-bold py-10">لا يوجد متصلين حالياً</div>
+                <div className="text-center text-slate-400 text-xs font-bold py-10">لا يوجد متصلين حالياً أو الرادار متوقف</div>
               )}
             </AnimatePresence>
           </div>
