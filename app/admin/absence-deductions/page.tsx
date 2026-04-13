@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
 import { 
   Calculator, ShieldAlert, FileSignature, Printer, 
   Search, Filter, Users, Clock, AlertTriangle, 
-  FileText, ArrowLeft, RefreshCw, Scale, CheckCircle2 
+  FileText, ArrowLeft, RefreshCw, Scale, CheckCircle2, Loader2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -21,6 +22,8 @@ interface DeductionStudent {
 }
 
 export default function AbsenceDeductionsPage() {
+  const { authRole, isChecking } = useAuth(); // 🚀 تفعيل الحماية
+
   const [students, setStudents] = useState<DeductionStudent[]>([]);
   const [sections, setSections] = useState<{id: string, name: string}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,8 +97,11 @@ export default function AbsenceDeductionsPage() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    // 🚀 لا نطلب البيانات من السيرفر إلا إذا كان المستخدم ضمن الإدارة
+    if (authRole === 'admin' || authRole === 'management') {
+      fetchData();
+    }
+  }, [authRole]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -111,9 +117,25 @@ export default function AbsenceDeductionsPage() {
     window.print();
   };
 
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-rose-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق من الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
+  }
+
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
         <div className="flex flex-col items-center gap-4">
           <div className="h-16 w-16 border-4 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-slate-500 font-bold tracking-widest animate-pulse text-lg">جاري فحص السجلات وتطبيق لوائح الخصم...</p>
@@ -125,8 +147,15 @@ export default function AbsenceDeductionsPage() {
   return (
     <>
       {/* 🚀 واجهة النظام للمدير (تختفي عند الطباعة) */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:hidden" dir="rtl">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 print:hidden pt-8 font-cairo" dir="rtl">
         
+        {/* 🚀 زر العودة الموحد */}
+        <div className="mb-2 no-print">
+          <Link href="/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-rose-600 font-bold bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-2xl shadow-sm border border-slate-200 transition-all w-fit group">
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة الإدارة
+          </Link>
+        </div>
+
         {/* Hero Section */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-rose-800 via-red-700 to-rose-900 p-6 sm:p-12 text-white shadow-2xl shadow-rose-900/30 border-b-4 border-rose-400">
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
@@ -361,7 +390,7 @@ export default function AbsenceDeductionsPage() {
                   {stu.deductionDays} يوم
                 </td>
                 <td className="border-2 border-slate-900 p-3 text-center text-slate-300 border-dashed">
-                   ....................
+                    ....................
                 </td>
               </tr>
             ))}
