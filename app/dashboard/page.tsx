@@ -1,11 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, School, ArrowUpRight, Activity, FileText, Target, ShieldCheck } from 'lucide-react';
+import { 
+  Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
+  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 
+} from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
 
 const containerVariants: any = {
   hidden: { opacity: 0 },
@@ -30,6 +34,8 @@ const itemVariants: any = {
 };
 
 export default function AdminDashboard() {
+  const { authRole, isChecking } = useAuth(); // 🚀 تفعيل الحماية
+
   const { fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats } = useDashboardSystem();
   const [stats, setStats] = useState([
     { name: 'إجمالي الطلاب', value: '...', icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: '+12%' },
@@ -48,6 +54,9 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    // 🚀 لا نقوم بجلب أي بيانات حساسة إلا إذا كان المستخدم إدارياً
+    if (authRole !== 'admin' && authRole !== 'management') return;
+
     async function fetchDashboardStats() {
       try {
         const data = await fetchAdminDashboardStats();
@@ -88,7 +97,7 @@ export default function AdminDashboard() {
     fetchDashboardStats();
     fetchRecentActivities();
     fetchTrackData();
-  }, [fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats]);
+  }, [authRole, fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats]);
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '...';
@@ -104,6 +113,23 @@ export default function AdminDashboard() {
     if (diffHours < 24) return `منذ ${diffHours} ساعة`;
     return `منذ ${diffDays} يوم`;
   };
+
+  // 🚀 شاشة حماية الوصول والتحميل
+  if (isChecking) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 منع المتطفلين من رؤية إحصائيات الإدارة
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
+  }
 
   if (loading) {
     return (
@@ -121,7 +147,7 @@ export default function AdminDashboard() {
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden"
+      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden font-cairo"
       dir="rtl"
     >
       {/* 🚀 Welcome Header (التحفة المعمارية الفنية) */}
@@ -333,17 +359,17 @@ export default function AdminDashboard() {
           {/* Live Classes Card */}
           <motion.div 
             variants={itemVariants}
-            className="bg-gradient-to-br from-red-500 to-rose-600 rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-xl shadow-red-200 relative overflow-hidden group hover:shadow-2xl hover:shadow-red-300 transition-all"
+            className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-xl shadow-indigo-200 relative overflow-hidden group hover:shadow-2xl hover:shadow-indigo-300 transition-all"
           >
             <div className="relative z-10">
               <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div className="h-10 w-10 sm:h-12 sm:w-12 bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg border border-white/30 shrink-0">
                   <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-white animate-pulse" />
                 </div>
-                <h2 className="text-lg sm:text-xl lg:text-2xl font-black tracking-tight">الحصص الحية</h2>
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-black tracking-tight">الرادار الرقمي الحصري</h2>
               </div>
-              <p className="text-red-100 text-xs sm:text-sm mb-5 sm:mb-6 font-bold leading-relaxed">
-                رابط المراقبة الحية للمشرفين التربويين (لا يحتاج تسجيل دخول)
+              <p className="text-indigo-100 text-xs sm:text-sm mb-5 sm:mb-6 font-bold leading-relaxed">
+                رابط المراقبة الحية للمشرفين لمتابعة تواجد الطلاب والمعلمين (لا يحتاج تسجيل دخول)
               </p>
               <div className="bg-black/20 rounded-xl sm:rounded-2xl p-3 sm:p-4 mb-5 sm:mb-6 font-mono text-[10px] sm:text-sm text-center select-all border border-white/10 shadow-inner overflow-hidden text-ellipsis whitespace-nowrap">
                 {typeof window !== 'undefined' ? `${window.location.origin}/live` : '.../live'}
@@ -359,9 +385,8 @@ export default function AdminDashboard() {
                   نسخ الرابط
                 </button>
                 <Link 
-                  href="/live"
-                  target="_blank"
-                  className="flex-1 bg-white text-red-600 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black hover:bg-red-50 transition-all shadow-lg flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-95"
+                  href="/admin/live-monitor"
+                  className="flex-1 bg-white text-indigo-600 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl font-black hover:bg-indigo-50 transition-all shadow-lg flex items-center justify-center gap-2 text-xs sm:text-sm active:scale-95"
                 >
                   فتح اللوحة
                 </Link>
