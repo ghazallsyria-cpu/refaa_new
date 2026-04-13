@@ -200,7 +200,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
           
           <script>
-             window.onload = () => { setTimeout(() => window.print(), 800); }
+              window.onload = () => { setTimeout(() => window.print(), 800); }
           </script>
         </body>
       </html>
@@ -352,7 +352,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     e.preventDefault();
     setIsSubmittingEdit(true);
     try {
-      // 🚀 إزالة الوصف من الإرسال لكي لا يتدمر الـ HTML الملون عند التعديل السريع
       const payload = { title: editData.title!, due_date: new Date(editData.due_date!).toISOString() };
       
       const { error } = await supabase
@@ -426,6 +425,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const fullSectionName = className ? `${className} - ${sectionName}` : sectionName;
 
   const isGraded = mySubmission?.status === 'graded';
+  
+  // 🚀 مفتاح الصلاحية الذكي
+  const canEdit = currentRole === 'admin' || currentRole === 'management' || (assignment as any)?.teacher_id === user?.id;
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-24" dir="rtl">
@@ -458,7 +460,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           <button onClick={copyAssignmentLink} className="h-12 px-4 rounded-2xl bg-white border border-slate-100 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex items-center gap-2 shadow-sm font-bold">
             <Share2 className="h-5 w-5" /> <span className="hidden sm:inline">مشاركة</span>
           </button>
-          {['teacher', 'admin', 'management'].includes(currentRole || '') && (
+          
+          {/* 🚀 إخفاء أزرار التعديل والحذف عن المعلمين الذين لا يملكون الواجب */}
+          {canEdit && (
             <>
               <button onClick={() => setIsEditModalOpen(true)} className="h-12 px-6 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all flex items-center gap-2 font-black shadow-sm">
                 <Edit2 className="h-5 w-5" /> <span>تعديل سريع (لتمديد الوقت)</span>
@@ -487,7 +491,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           <div className="mb-8">
             <h3 className="text-xl font-bold text-slate-900 mb-4">وصف الواجب</h3>
             {assignment.description ? (
-               // 🚀 السماح للوصف بإظهار التنسيقات والألوان بأمان
                <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed text-lg" dangerouslySetInnerHTML={{ __html: assignment.description }} />
             ) : (
                <p className="text-slate-500 font-medium">لا يوجد وصف إضافي.</p>
@@ -577,7 +580,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   if (isHeader) {
                      return (
                        <div key={q.id} className="pt-6 pb-2 border-b-2 border-indigo-100 mt-8">
-                          {/* 🚀 دعم الألوان والتنسيقات للعنوان الرئيسي */}
                           <div className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed" dangerouslySetInnerHTML={{ __html: q.content || (q as any).text || '' }} />
                           {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200" alt="مرفق" />}
                        </div>
@@ -603,7 +605,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               {idx + 1}
                           </div>
                           <div className="pt-2">
-                             {/* 🚀 دعم الألوان والتنسيقات في نص السؤال هنا */}
                              <div className="prose max-w-none font-bold text-xl text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: (q as any).text || q.content || '' }} />
                              {q.media_url && <img src={q.media_url} className="mt-4 max-h-48 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
                           </div>
@@ -894,13 +895,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                  </span>
                                )}
                                
-                               <button
-                                 onClick={() => setSubmissionToDelete(sub.id)}
-                                 className="h-11 w-11 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100 active:scale-95"
-                                 title="حذف هذا التسليم لإتاحة الفرصة للطالب"
-                               >
-                                 <Trash2 className="h-5 w-5" />
-                               </button>
+                               {/* 🚀 إخفاء زر الحذف عن المعلمين الآخرين */}
+                               {canEdit && (
+                                 <button
+                                   onClick={() => setSubmissionToDelete(sub.id)}
+                                   className="h-11 w-11 flex items-center justify-center rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100 active:scale-95"
+                                   title="حذف هذا التسليم لإتاحة الفرصة للطالب"
+                                 >
+                                   <Trash2 className="h-5 w-5" />
+                                 </button>
+                               )}
 
                                <Link 
                                  href={`/assignments/${assignmentId}/submissions/${sub.id}`}
