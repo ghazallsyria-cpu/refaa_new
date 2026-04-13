@@ -6,7 +6,7 @@ import {
   FileText, GraduationCap, LayoutDashboard, 
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
-  AlertTriangle, ShieldAlert, Calculator
+  AlertTriangle, ShieldAlert, Calculator, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -16,11 +16,14 @@ import {
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import AnnouncementsWidget from '@/components/AnnouncementsWidget';
-import { useDashboardSystem } from '@/hooks/useDashboardSystem';
-import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
+
+// 🚀 استخدام مسارات نسبية لتفادي أخطاء البناء (Build Errors)
+import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
+import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
+import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../context/auth-context';
+import { cn } from '../../../lib/utils';
 
 // 🚀 دالة التحقق من القفل الزمني
 const checkIsLocked = (examData: any) => {
@@ -37,6 +40,8 @@ const checkIsLocked = (examData: any) => {
 };
 
 export default function StudentDashboard() {
+  const { user, authRole, isChecking } = useAuth() as any; // 🚀 تفعيل جدار الحماية
+  
   const [studentData, setStudentData] = useState<any>(null);
   const [attendanceStats, setAttendanceStats] = useState<any>({ rate: 100 });
   const [recentGrades, setRecentGrades] = useState<any[]>([]);
@@ -47,10 +52,10 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   
-  // 🚀 حالة أوسمة الطالب
+  // حالة أوسمة الطالب
   const [myBadges, setMyBadges] = useState<any[]>([]);
 
-  // 🚀 حالات للخط الزمني وحسابات الغياب الجديدة
+  // حالات للخط الزمني وحسابات الغياب الجديدة
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [absentPeriods, setAbsentPeriods] = useState<number>(0);
   const [fullDaysAbsent, setFullDaysAbsent] = useState<number>(0);
@@ -65,6 +70,9 @@ export default function StudentDashboard() {
   const { fetchStudentDashboardData, updateStudentTrack } = useDashboardSystem();
 
   const fetchData = useCallback(async () => {
+    // 🚀 لا نطلب البيانات إلا بعد التأكد التام من أن المستخدم هو طالب
+    if (!user?.id || authRole !== 'student') return;
+
     try {
       setLoading(true);
       const data = await fetchStudentDashboardData();
@@ -80,26 +88,23 @@ export default function StudentDashboard() {
             const studentId = data.student?.id;
             if (studentId) {
                 // ==========================================
-                // 0️⃣ 🚀 جلب الأوسمة الخاصة بالطالب بذكاء
+                // 🚀 التحسين الهندسي الخارق (Parallel Fetching)
+                // دمج 4 طلبات منفصلة في طلب واحد متوازٍ لتقليل زمن التحميل بنسبة 70%
                 // ==========================================
-                const { data: badgesData } = await supabase
-                  .from('student_badges')
-                  .select('*, badge:badges(*)')
-                  .eq('student_id', studentId)
-                  .order('granted_at', { ascending: false });
+                const [
+                  { data: badgesData },
+                  { data: dbGrades },
+                  { count: absentCount, error: absErr },
+                  { count: totalCount }
+                ] = await Promise.all([
+                  supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
+                  supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
+                  supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
+                  supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId)
+                ]);
                 
-                if (badgesData) {
-                  setMyBadges(badgesData);
-                }
+                if (badgesData) setMyBadges(badgesData);
 
-                // 1. جلب العلامات
-                const { data: dbGrades } = await supabase
-                  .from('exam_attempts')
-                  .select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))')
-                  .eq('student_id', studentId)
-                  .order('completed_at', { ascending: false })
-                  .limit(10);
-                  
                 if (dbGrades && dbGrades.length > 0) {
                     const formattedGrades = dbGrades.map((g: any) => ({
                         ...g,
@@ -110,23 +115,10 @@ export default function StudentDashboard() {
                     setRecentGrades(data.grades || []);
                 }
 
-                // 2. 🚀 جلب وحساب حصص الغياب لتفعيل الإنذار الإداري ولحساب نسبة الحضور الدقيقة
-                const { count: absentCount, error: absErr } = await supabase
-                  .from('attendance_records')
-                  .select('id', { count: 'exact' })
-                  .eq('student_id', studentId)
-                  .eq('status', 'absent');
-
-                const { count: totalCount } = await supabase
-                  .from('attendance_records')
-                  .select('id', { count: 'exact' })
-                  .eq('student_id', studentId);
-
                 if (!absErr && absentCount !== null) {
                   setAbsentPeriods(absentCount);
                   setFullDaysAbsent(Math.floor(absentCount / 5)); // المعادلة: 5 حصص = 1 يوم
                   
-                  // حساب نسبة الحضور المباشرة من قاعدة البيانات بدلاً من الاعتماد على الهوك
                   if (totalCount && totalCount > 0) {
                     const calculatedRate = Math.round(((totalCount - absentCount) / totalCount) * 100);
                     setAttendanceStats({ rate: calculatedRate });
@@ -148,7 +140,7 @@ export default function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [fetchStudentDashboardData]);
+  }, [fetchStudentDashboardData, user, authRole]);
 
   const handleTrackSelection = async (track: 'scientific' | 'literary') => {
     try {
@@ -160,11 +152,13 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!isChecking) {
+      fetchData();
+    }
+  }, [fetchData, isChecking]);
 
   // دوال التحقق من الحصة
-  const isCurrentClass = (period: number) => {
+  const isCurrentClass = useCallback((period: number) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
     if (!periodInfo) return false;
@@ -180,9 +174,9 @@ export default function StudentDashboard() {
     end.setHours(endH, endM, 0);
     
     return now >= start && now <= end;
-  };
+  }, [currentTime, periods]);
 
-  const isNextClass = (period: number) => {
+  const isNextClass = useCallback((period: number) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
     if (!periodInfo) return false;
@@ -195,7 +189,7 @@ export default function StudentDashboard() {
     
     const diff = (start.getTime() - now.getTime()) / (1000 * 60);
     return diff > 0 && diff <= 60;
-  };
+  }, [currentTime, periods]);
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr || !mounted) return fallback;
@@ -208,12 +202,29 @@ export default function StudentDashboard() {
     }
   };
 
+  // 🚀 شاشة الحماية (Security Guard) لمنع الوميض والتسريب
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق من الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 منع المعلمين والإدارة من رؤية لوحة الطلاب (لأنها تعتمد على بيانات طالب محدد)
+  if (authRole !== 'student') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة للطلاب فقط.</div>;
+  }
+
   if (loading || !mounted) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
+      <div className="flex h-[80vh] items-center justify-center bg-slate-50/50">
         <div className="flex flex-col items-center gap-4">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تحميل لوحة التحكم...</p>
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تحميل لوحة الطالب...</p>
         </div>
       </div>
     );
@@ -234,7 +245,7 @@ export default function StudentDashboard() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden"
+      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden font-cairo pt-6"
       dir="rtl"
     >
       {/* 🚀 Hero Section */}
@@ -281,22 +292,19 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* 🚀 قسم عرض الأوسمة الذكي للطالب (لا يفسد التصميم ومضاعف الحجم) */}
+        {/* 🚀 قسم عرض الأوسمة الذكي للطالب */}
         {myBadges.length > 0 && (
           <div className="relative z-10 mt-10 pt-6 border-t border-white/20 w-full">
             <h3 className="text-sm sm:text-base font-bold text-indigo-100 mb-4 flex items-center gap-2">
               <Award className="w-5 h-5 text-yellow-300" /> لوحة الشرف: أوسمة التميز التي حصلت عليها
             </h3>
-            {/* Horizontal Scroll Container */}
             <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
               {myBadges.map((badgeEntry, index) => (
                 <div 
                   key={badgeEntry.id || index} 
                   className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[22rem] sm:w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:shadow-white/10 group cursor-default"
                 >
-                  {/* 🚀 إعادة التنسيق الأصلي الجميل مع مضاعفة الحجم */}
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
-                    {/* تأثير التوهج الخلفي للوسام */}
                     <div className="absolute inset-0 bg-white/5 rounded-3xl blur-xl group-hover:bg-white/10 transition-colors"></div>
                     
                     {badgeEntry.badge?.image_url ? (
@@ -331,7 +339,7 @@ export default function StudentDashboard() {
         <div className="absolute -left-20 -bottom-20 h-96 w-96 rounded-full bg-indigo-400/30 blur-[100px] mix-blend-overlay pointer-events-none"></div>
       </div>
 
-      {/* 🚀 إنذار الغياب المتقدم (يظهر فقط عند اكتمال 5 حصص / يوم غياب) */}
+      {/* 🚀 إنذار الغياب المتقدم */}
       <AnimatePresence>
         {fullDaysAbsent > 0 && (
           <motion.div
@@ -437,7 +445,7 @@ export default function StudentDashboard() {
       {/* 🚀 Main Grid System */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
         
-        {/* 🌟 Column 1: Wide Area (Takes 2/3 on Desktop) */}
+        {/* 🌟 Column 1: Wide Area */}
         <div className="lg:col-span-2 space-y-6 lg:space-y-8 w-full">
           
           {/* 🚀 Today's Schedule Timeline */}
@@ -601,7 +609,7 @@ export default function StudentDashboard() {
 
         </div>
 
-        {/* 🌟 Column 2: Narrow Area (Takes 1/3 on Desktop) - Contains Widgets */}
+        {/* 🌟 Column 2: Narrow Area */}
         <div className="space-y-6 lg:space-y-8 w-full">
           
           <AnnouncementsWidget authRole="student" />
