@@ -4,7 +4,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useUsersSystem } from "@/hooks/useUsersSystem";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+
 import {
   CheckCircle2, FileText, Download, Calendar, Clock, Search, ShieldCheck, Zap, Info, Filter
 } from "lucide-react";
