@@ -10,9 +10,16 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 0, // 🚀 صفر: إجبار جلب البيانات فوراً مع كل تنقل
-            refetchOnMount: true, // 🚀 إعادة جلب البيانات عند فتح الصفحة
-            refetchOnWindowFocus: true, // 🚀 إعادة الجلب عند العودة للمتصفح (بشكل آمن لأننا أوقفنا قنوات الـ Realtime)
+            // 🚀 التعديل الأهم: صفر، يعني بمجرد التنقل لصفحة أخرى، اطلب البيانات الجديدة.
+            staleTime: 0, 
+            
+            // 🚀 إجباري: إعادة الطلب بمجرد فتح الصفحة (لكي يرى المعلم التحديثات فوراً).
+            refetchOnMount: true, 
+            
+            // 🚀 تم إغلاقه لإنقاذ السيرفر: يمنع الطلبات العشوائية عند فتح وقفل الموبايل.
+            refetchOnWindowFocus: false, 
+            
+            // المحاولة مرة واحدة عند الفشل
             retry: 1, 
           },
         },
