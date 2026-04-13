@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { User, UserRole } from '@/types';
+import { UserRole } from '@/types';
 
 interface AuthContextType {
   user: SupabaseUser | null;
@@ -26,11 +26,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const extractEmail = (data: any) => {
-  if (!data || !data.users) return null;
-  return Array.isArray(data.users) ? data.users[0]?.email : data.users?.email;
-};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -58,22 +53,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authResult = data;
       lastError = error;
     } else {
-      let extractedEmail = null;
-      try {
-        const { data: studentData } = await supabase.from('students').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-        extractedEmail = extractEmail(studentData);
-        if (!extractedEmail) {
-          const { data: teacherData } = await supabase.from('teachers').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-          extractedEmail = extractEmail(teacherData);
-        }
-        if (!extractedEmail) {
-          const { data: parentData } = await supabase.from('parents').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-          extractedEmail = extractEmail(parentData);
-        }
-      } catch (e) { }
-
+      // 🚀 إصلاح: العودة للاعتماد على users للبحث عن الإيميل من خلال الرقم المدني
+      const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
+      
       const possibleEmails = [];
-      if (extractedEmail) possibleEmails.push(extractedEmail);
+      if (userData?.email) possibleEmails.push(userData.email);
       possibleEmails.push(`${civilId}@alrefaa.edu`);
       possibleEmails.push(`${civilId}@alrifaa.edu`);
 
@@ -133,26 +117,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const requestPasswordReset = async (civilId: string) => {
-    let authEmail = '';
+    const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
     
-    const { data: studentData } = await supabase.from('students').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-    authEmail = extractEmail(studentData) || '';
-      
-    if (!authEmail) {
-      const { data: teacherData } = await supabase.from('teachers').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-      authEmail = extractEmail(teacherData) || '';
-    }
-    
-    if (!authEmail) {
-      const { data: parentData } = await supabase.from('parents').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-      authEmail = extractEmail(parentData) || '';
-    }
-
-    if (!authEmail) {
+    if (!userData?.email) {
       throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+    const { error } = await supabase.auth.resetPasswordForEmail(userData.email, {
       redirectTo: `${window.location.origin}/login/update-password`,
     });
 
@@ -314,30 +285,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearInterval(interval);
   }, [rawSettings, authRole]);
-
-  useEffect(() => {
-    // 🛑 🚨 إيقاف القناة الحية (Websocket) لتخفيف استهلاك السيرفر ومنع الانهيار
-    return;
-    
-    /* ---- الكود الموقوف ---- 
-    if (!user || isPublicPage || authRole === 'admin' || authRole === 'management') return;
-
-    const channel = supabase
-      .channel('platform_settings_listener')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'platform_settings' },
-        (payload) => {
-          setRawSettings(payload.new); 
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    */
-  }, [user, isPublicPage, authRole]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
