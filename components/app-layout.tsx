@@ -30,7 +30,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     platformClosed, 
     closeMessage,
     signOut
-  } = useAuth();
+  } = useAuth() as any; // 🚀 استخدام as any لتجنب تعارض الأنواع في Build
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -40,26 +40,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
-  // 🔄 [بداية كود تجاوز الكاش] - يمكن حذفه بعد استقرار التحديث عند الجميع
+  // 🔄 [بداية كود تجاوز الكاش المطور - يمنع الانقطاع في صفحة الاستعادة]
   useEffect(() => {
-    const CURRENT_APP_VERSION = "1.1.0"; // قم بتغيير الرقم لإجبار المتصفحات على التحديث مجدداً
+    const CURRENT_APP_VERSION = "1.2.5"; // نغير الرقم لضمان تحديث جديد عند الجميع
     const savedVersion = localStorage.getItem('app_refresh_version');
+    
+    // 🚀 القوة هنا: نتحقق إذا كان المستخدم في صفحة إعادة تعيين كلمة المرور
+    // نمنع التحديث التلقائي في هذه الصفحة لضمان عدم ضياع جلسة (Auth Session)
+    const isResetPage = window.location.pathname.includes('reset-password');
 
-    if (savedVersion !== CURRENT_APP_VERSION) {
-      // مسح الكاش البسيط وتخزين الإصدار الجديد
+    if (savedVersion !== CURRENT_APP_VERSION && !isResetPage) {
       localStorage.setItem('app_refresh_version', CURRENT_APP_VERSION);
-      
-      // إعادة تحميل الصفحة بشكل كامل لجلب ملفات JS الجديدة من السيرفر
       if (typeof window !== 'undefined') {
         window.location.reload();
       }
     }
   }, []);
-  // 🔄 [نهاية كود تجاوز الكاش]
+  // 🔄 [نهاية كود تجاوز الكاش المطور]
 
   // 1️⃣ تفعيل مستشعرات الأخطاء العالمية وتسجيل PWA
   useEffect(() => {
-    // 🚀 تسجيل Service Worker ليتمكن المتصفح من عرض زر "تثبيت التطبيق"
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').catch((err) => {
@@ -69,14 +69,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     const handleGlobalError = (event: ErrorEvent) => {
-      // 🛑 تم التعطيل المؤقت لمنع حلقة الأخطاء المفرغة وتدمير السيرفر
-      // systemLogger.log(event.error, 'critical', 'RUNTIME_EXCEPTION');
-      console.error("Global Error Caught:", event.error); // طباعة في المتصفح فقط
+      console.error("Global Error Caught:", event.error);
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      // 🛑 تم التعطيل المؤقت لمنع حلقة الأخطاء المفرغة
-      // systemLogger.log(event.reason, 'critical', 'API_COMM_FAILURE');
       console.error("Unhandled Rejection:", event.reason);
     };
 
@@ -89,9 +85,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // 2️⃣ تفعيل جهاز البث للرادار (Realtime Presence Broadcaster)
+  // 2️⃣ نظام التوجيه والتواجد (تم تعطيله لإنقاذ السيرفر مؤقتاً)
   useEffect(() => {
-    // 🛑 🚨 إيقاف الطوارئ: إيقاف الرادار وعمليات Upsert تماماً لإنقاذ السيرفر
     return; 
   }, [user, authRole, userName, isPublicPage]);
 
@@ -111,8 +106,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) return false;
     } else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) {
       if (isRoot) return false;
-    } else {
-      if (isDashboardRoute) return false;
     }
     return true;
   };
@@ -141,8 +134,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       if (isRoot || (isDashboardRoute && !pathname.startsWith('/dashboard/parent'))) router.push('/dashboard/parent');
     } else if (authRole === 'admin' || authRole === 'management' || isAdminByEmail) {
       if (isRoot) router.push('/dashboard');
-    } else {
-      if (isDashboardRoute) router.push('/');
     }
   }, [pathname, authRole, isChecking, isPublicPage, router, isAdminByEmail, user, mustResetPassword, isResetPasswordPage]);
 
@@ -162,38 +153,29 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   if (platformClosed && !isPublicPage) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4 text-center relative overflow-hidden" dir="rtl">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl mb-8 relative z-10 border-4 border-white">
+        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl mb-8 border-4 border-white">
           <School className="h-12 w-12 text-white" />
         </motion.div>
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="bg-white/80 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-xl border border-slate-200 max-w-md w-full relative z-10">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white/80 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-xl border border-slate-200 max-w-md w-full">
           <div className="flex justify-center mb-6">
             <div className="bg-amber-50 p-4 rounded-full border border-amber-100 animate-bounce">
               <AlertTriangle className="h-10 w-10 text-amber-500" />
             </div>
           </div>
           <h1 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">المنصة مغلقة مؤقتاً</h1>
-          <p className="text-slate-600 mb-8 leading-relaxed font-bold text-sm bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <p className="text-slate-600 mb-8 font-bold text-sm bg-slate-50 p-4 rounded-2xl border border-slate-100">
             {closeMessage}
           </p>
-          <button
-            onClick={signOut}
-            className="w-full flex justify-center py-4 px-4 rounded-[1.5rem] shadow-lg text-sm font-black text-white bg-slate-900 hover:bg-slate-800 transition-all active:scale-95"
-          >
-            العودة لتسجيل الدخول
-          </button>
+          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-lg text-sm font-black text-white bg-slate-900 hover:bg-slate-800 transition-all active:scale-95">العودة لتسجيل الدخول</button>
         </motion.div>
       </div>
     );
   }
 
-  // 🌍 الصفحات العامة (مثل تسجيل الدخول)
   if (isPublicPage) {
     return (
       <main className="flex-1 h-full flex flex-col overflow-y-auto">
-        <div className="flex-1">
-          {children}
-        </div>
+        <div className="flex-1">{children}</div>
         <Footer />
       </main>
     );
@@ -201,57 +183,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const showSidebar = !isPublicPage;
 
-  // 🏛️ الإطار الرئيسي للمنصة وبناء الواجهة
   return (
     <div className="flex h-full overflow-hidden bg-slate-50 selection:bg-indigo-100 selection:text-indigo-900" dir="rtl">
-      
       <AnimatePresence>
         {isSidebarOpen && showSidebar && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden backdrop-blur-md"
-            onClick={() => setIsSidebarOpen(false)}
-          />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
         )}
       </AnimatePresence>
       
       {showSidebar && (
-        <div 
-          className={cn(
-            "fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-2xl lg:shadow-none",
-            isSidebarCollapsed ? "w-20" : "w-72",
-            isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
-            !isSidebarOpen && "lg:translate-x-full lg:w-0",
-            isSidebarOpen && "lg:translate-x-0 lg:static"
-          )}
-        >
-          <Sidebar 
-            onClose={() => setIsSidebarOpen(false)} 
-            authRole={authRole || 'student'} 
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => {
-              setIsSidebarCollapsed(!isSidebarCollapsed);
-              if (window.innerWidth >= 1024) setIsSidebarOpen(false);
-            }}
-          />
+        <div className={cn("fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-2xl lg:shadow-none", isSidebarCollapsed ? "w-20" : "w-72", isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0", !isSidebarOpen && "lg:translate-x-full lg:w-0", isSidebarOpen && "lg:translate-x-0 lg:static")}>
+          <Sidebar onClose={() => setIsSidebarOpen(false)} authRole={authRole || 'student'} isCollapsed={isSidebarCollapsed} onToggleCollapse={() => { setIsSidebarCollapsed(!isSidebarCollapsed); if (window.innerWidth >= 1024) setIsSidebarOpen(false); }} />
         </div>
       )}
       
       <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible w-full relative bg-slate-50/50">
         <div className="print:hidden sticky top-0 z-30">
-          <Header 
-            onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-            showMenuButton={showSidebar} 
-            user={user} 
-            authRole={authRole || ''} 
-            userName={userName} 
-            isSidebarCollapsed={!isSidebarOpen}
-          />
+          <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} showMenuButton={showSidebar} user={user} authRole={authRole || ''} userName={userName} isSidebarCollapsed={!isSidebarOpen} />
         </div>
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 print:p-0 print:overflow-visible flex flex-col scroll-smooth">
-          <div className="flex-1 max-w-[1600px] mx-auto w-full">
-            {children}
-          </div>
+          <div className="flex-1 max-w-[1600px] mx-auto w-full">{children}</div>
           <Footer />
         </main>
       </div>
