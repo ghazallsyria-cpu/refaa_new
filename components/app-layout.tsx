@@ -1,4 +1,4 @@
-```react
+
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -230,4 +230,3 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 
-```
