@@ -330,8 +330,7 @@ export default function ExamsDashboard() {
                               </motion.button>
                             </DropdownMenu.Trigger>
                             <DropdownMenu.Portal>
-                              <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200" dir="rtl">
-                                <DropdownMenu.Item asChild>
+<DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">                                 <DropdownMenu.Item asChild>
                                   <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
                                     <Edit2 className="h-5 w-5" />
                                     <span>تعديل الاختبار</span>
