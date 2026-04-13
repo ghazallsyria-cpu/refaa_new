@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -68,6 +69,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     let currentUserId: string | null = null;
+    let intervalId: NodeJS.Timeout | null = null; // 🚀 أضفنا التحديث الهادئ
 
     const setupNotifications = async (user: any) => {
       const newUserId = user?.id || null;
@@ -75,23 +77,29 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       if (newUserId === currentUserId) return;
       currentUserId = newUserId;
 
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+
       if (newUserId) {
         setUserId(newUserId);
 
-        // تحميل مرة واحدة فقط
+        // تحميل أولي للبيانات
         fetchNotifications(newUserId);
 
-        // (اختياري) realtime بدون polling
+        // 🚀 تحديث هادئ جداً للإشعارات كل 3 دقائق بدلاً من القناة الحية القاتلة
+        intervalId = setInterval(() => {
+          fetchNotifications(newUserId);
+        }, 3 * 60 * 1000);
+
+        // 🛑 🚨 إيقاف القناة الحية (Websocket) التي تستهلك 500 اتصال وتدمر السيرفر
+        /*
         const channel = supabase
           .channel('notifications-realtime')
           .on(
             'postgres_changes',
-            {
-              event: 'INSERT',
-              schema: 'public',
-              table: 'notifications',
-              filter: `user_id=eq.${newUserId}`,
-            },
+            { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${newUserId}` },
             (payload) => {
               setNotifications((prev) => [payload.new as Notification, ...prev]);
             }
@@ -101,6 +109,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         return () => {
           supabase.removeChannel(channel);
         };
+        */
       } else {
         setUserId(null);
         setNotifications([]);
@@ -117,6 +126,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     return () => {
       subscription.unsubscribe();
+      if (intervalId) clearInterval(intervalId);
     };
   }, [fetchNotifications]);
 
@@ -225,3 +235,5 @@ export function useNotifications() {
   }
   return context;
 }
+
+
