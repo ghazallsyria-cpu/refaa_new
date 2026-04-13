@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from '@/context/auth-context';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
 import { supabase } from '@/lib/supabase';
 import { 
   ArrowLeft, ShieldAlert, Printer, Search, Filter,
   User, GraduationCap, CalendarDays, ChevronDown, ChevronUp,
-  FileText, AlertTriangle, Mail, CheckCircle2
+  FileText, AlertTriangle, Mail, CheckCircle2, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -30,7 +30,8 @@ interface AggregatedStudent {
 }
 
 export default function AdminAbsenceWarningsPage() {
-  const { authRole } = useAuth();
+  const { authRole, isChecking } = useAuth(); // 🚀 تفعيل الحماية
+  
   const [students, setStudents] = useState<AggregatedStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,6 +44,7 @@ export default function AdminAbsenceWarningsPage() {
   const [studentForLetter, setStudentForLetter] = useState<AggregatedStudent | null>(null);
 
   const fetchData = useCallback(async () => {
+    // 🚀 تأكيد إضافي قبل الطلب
     if (authRole !== 'admin' && authRole !== 'management') return;
     
     try {
@@ -133,8 +135,11 @@ export default function AdminAbsenceWarningsPage() {
   }, [authRole]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // 🚀 لا نطلب البيانات من السيرفر إلا إذا كان المستخدم ضمن الإدارة
+    if (authRole === 'admin' || authRole === 'management') {
+      fetchData();
+    }
+  }, [authRole, fetchData]);
 
   const sectionsList = useMemo(() => {
     const list = students.map(s => ({ id: s.sectionId, name: s.className }));
@@ -167,15 +172,32 @@ export default function AdminAbsenceWarningsPage() {
     }, 300); // إعطاء المتصفح وقتاً كافياً لرسم الرسالة
   };
 
-  if (loading) {
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="animate-spin rounded-full h-14 w-14 border-4 border-indigo-600 border-t-transparent"></div>
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-rose-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق من الصلاحيات...</p>
+        </div>
       </div>
     );
   }
 
-  if (authRole !== 'admin' && authRole !== 'management') return null;
+  if (authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة لفريق الإدارة فقط.</div>;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-16 w-16 border-4 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-bold tracking-widest animate-pulse text-lg">جاري فحص وتجميع الإنذارات...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
