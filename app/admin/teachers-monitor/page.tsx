@@ -44,6 +44,10 @@ const getSchoolTime = () => {
   return new Date(utc + (3 * 3600000));
 };
 
+const getDbDay = (jsDay: number) => {
+  return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+};
+
 export default function TeachersMonitorPage() {
   const { teachers: allTeachers, fetchTeachers, loading: usersLoading } = useUsersSystem();
   const { sendTeacherWarning } = useTeachersSystem();
@@ -75,7 +79,7 @@ export default function TeachersMonitorPage() {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = now.getDay() ; // الأحد = 1، الاثنين = 2...
+      const currentDbDay = now.getDay() + 1;
 
       const [
         { data: schedulesDB },
@@ -84,8 +88,7 @@ export default function TeachersMonitorPage() {
         { data: assignmentsDB },
         { data: examsDB }
       ] = await Promise.all([
-        // 🚀 التحسين السحري: جلب جدول اليوم الحالي فقط بدلاً من جدول الأسبوع بأكمله لجميع المعلمين
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').eq('day_of_week', currentDbDay),
+        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
         supabase.from('class_periods').select('period_number, end_time'),
         supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr),
         supabase.from('assignments').select('teacher_id').gte('created_at', weekAgoStr),
@@ -100,7 +103,7 @@ export default function TeachersMonitorPage() {
       const safeSchedules = (schedulesDB || []) as any[];
 
       const results: TeacherMonitor[] = allTeachers.map((teacher: any) => {
-        const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id));
+        const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay));
         const scheduledTotal = daySchedules.length;
 
         let expectedTotal = 0;
@@ -306,7 +309,7 @@ export default function TeachersMonitorPage() {
               {isDataLoading ? (
                 <tr><td colSpan={6} className="py-20 text-center"><div className="flex flex-col items-center gap-4"><div className="h-10 w-10 sm:h-12 sm:w-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin mx-auto" /><p className="text-slate-400 font-bold text-sm sm:text-base">جاري معالجة البيانات السحابية...</p></div></td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="py-20 text-center"><div className="flex flex-col items-center gap-4"><div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 mx-auto text-slate-300"><Search className="h-6 w-6 sm:h-8 sm:w-8" /></div><p className="text-slate-400 font-bold text-sm sm:text-lg">لا توجد نتائج مطابقة</p></div></td></tr>
+                <tr><td colSpan={6} className="py-20 text-center"><div className="flex flex-col items-center gap-4"><div className="h-14 w-14 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100 mx-auto text-slate-300"><SearchX className="h-6 w-6 sm:h-8 sm:w-8" /></div><p className="text-slate-400 font-bold text-sm sm:text-lg">لا توجد نتائج مطابقة</p></div></td></tr>
               ) : (
                 filtered.map((teacher, idx) => {
                   const hasAlert = teacher.status === "حرج" || teacher.status === "تحذير";
@@ -396,5 +399,13 @@ export default function TeachersMonitorPage() {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function SearchX({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+    </svg>
   );
 }
