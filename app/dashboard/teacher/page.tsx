@@ -1,13 +1,12 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, 
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
-  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight
+  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -18,13 +17,13 @@ import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import { useDashboardSystem } from '@/hooks/useDashboardSystem';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth-context';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
 
 // تاريخ بدء النظام الإلزامي (1-3-2026)
 const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
 
 export default function TeacherDashboard() {
-  const { user, authRole } = useAuth(); // استخدام authRole بعد التحديث الأخير
+  const { user, authRole, isChecking } = useAuth() as any; // 🚀 تفعيل الحماية
   const [teacherData, setTeacherData] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [recentExams, setRecentExams] = useState<any[]>([]);
@@ -70,17 +69,21 @@ export default function TeacherDashboard() {
       }
     };
 
-    autoRecordPresence();
+    if (authRole === 'teacher') {
+       autoRecordPresence();
+    }
 
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-      autoRecordPresence();
+      if (authRole === 'teacher') {
+         autoRecordPresence();
+      }
     }, 60000);
 
     return () => clearInterval(timer);
   }, [user, authRole]);
 
-  const isCurrentClass = (period: number) => {
+  const isCurrentClass = useCallback((period: number) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
     if (!periodInfo) return false;
@@ -96,9 +99,9 @@ export default function TeacherDashboard() {
     end.setHours(endH, endM, 0);
     
     return now >= start && now <= end;
-  };
+  }, [currentTime, periods]);
 
-  const isNextClass = (period: number) => {
+  const isNextClass = useCallback((period: number) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
     if (!periodInfo) return false;
@@ -111,7 +114,7 @@ export default function TeacherDashboard() {
     
     const diff = (start.getTime() - now.getTime()) / (1000 * 60);
     return diff > 0 && diff <= 60;
-  };
+  }, [currentTime, periods]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -181,10 +184,10 @@ export default function TeacherDashboard() {
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
               const todayStr = now.toLocaleDateString('en-CA');
-              const currentDayOfWeek = now.getDay() + 1;
+              const currentDayOfWeek = now.getDay() + 1; // الأحد = 1
               
-              const todaysSchedule = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
-              const myPeriodsToday = Array.from(new Set(todaysSchedule.map((s: any) => s.period)));
+              const todaysScheduleData = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
+              const myPeriodsToday = Array.from(new Set(todaysScheduleData.map((s: any) => s.period)));
 
               if (myPeriodsToday.length === 0) {
                 setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
@@ -231,8 +234,38 @@ export default function TeacherDashboard() {
   }, [fetchTeacherDashboardData]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // 🚀 لا نجلب البيانات إلا بعد التأكد من الهوية لتوفير استهلاك السيرفر
+    if (!isChecking && (authRole === 'teacher' || authRole === 'admin' || authRole === 'management')) {
+      fetchData();
+    }
+  }, [fetchData, isChecking, authRole]);
+
+  // 🚀 استخدام useMemo لتقليل إعادة حساب المتغيرات الثقيلة مع كل تحديث للوقت
+  const todaysSchedule = useMemo(() => {
+    const today = new Date().getDay() + 1; 
+    return schedule.filter(s => s.day_of_week === today);
+  }, [schedule]);
+
+  const unreadMessagesCount = useMemo(() => {
+    return messages.filter(m => !m.is_read).length;
+  }, [messages]);
+
+  // 🚀 شاشة التحميل وحماية الوصول
+  if (isChecking) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 منع المتطفلين من رؤية لوحة المعلمين
+  if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') {
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة للمعلمين وإدارة المدرسة فقط.</div>;
+  }
 
   if (loading) {
     return (
@@ -245,16 +278,13 @@ export default function TeacherDashboard() {
     );
   }
 
-  const today = new Date().getDay() + 1; 
-  const todaysSchedule = schedule.filter(s => s.day_of_week === today);
   const avatarUrl = teacherData?.users?.avatar_url;
-  const unreadMessagesCount = messages.filter(m => !m.is_read).length;
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo"
+      className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6"
       dir="rtl"
     >
       <AnimatePresence>
