@@ -15,8 +15,8 @@ interface TeacherReport {
   specialization: string;
   recorded: number;
   missed: number;
-  expected: number; // الحصص التي انتهى وقتها ومطالب برصدها
-  scheduled: number; // إجمالي جدوله
+  expected: number; 
+  scheduled: number; 
   percent: number;
   lastRecorded: string | null;
   status: "ممتاز" | "جيد" | "تحذير" | "حرج";
@@ -60,7 +60,7 @@ export default function TeachersReportPage() {
   const [isWeekend, setIsWeekend] = useState(false);
 
   useEffect(() => {
-    fetchTeachers(); // ضمان جلب جميع المعلمين بأسمائهم الحقيقية
+    fetchTeachers(); 
     const now = getSchoolTime();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -80,12 +80,18 @@ export default function TeachersReportPage() {
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
 
+      // 🚀 تحسين استعلام الجداول: جلب جدول اليوم فقط إذا كان التقرير يومياً لتقليل الضغط
+      let scheduleQuery = supabase.from('schedules').select('teacher_id, section_id, day_of_week, period');
+      if (reportType === "day") {
+        scheduleQuery = scheduleQuery.eq('day_of_week', getDbDay(now.getDay()));
+      }
+
       const [
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
+        scheduleQuery,
         supabase.from('class_periods').select('period_number, end_time'),
         reportType === "day" 
           ? supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr)
@@ -99,6 +105,24 @@ export default function TeachersReportPage() {
       const safeAttendance = (attendanceDB || []) as any[];
       const safeSchedules = (schedulesDB || []) as any[];
 
+      // 🚀 التحسين السحري الأكبر (Hash Maps): 
+      // فهرسة الحضور وجداول المعلمين لتكون سرعة البحث لحظية بدلاً من تجمد المتصفح بسبب كثرة البيانات
+      const attendanceMap = new Map();
+      safeAttendance.forEach(a => {
+        const dStr = String(a.date).split('T')[0];
+        const key = `${a.section_id}_${dStr}_${a.period}`;
+        // نحتفظ بأحدث توقيت للرصد
+        if (!attendanceMap.has(key) || new Date(a.created_at) > new Date(attendanceMap.get(key).created_at)) {
+            attendanceMap.set(key, a);
+        }
+      });
+
+      const schedulesByTeacher = new Map();
+      safeSchedules.forEach(s => {
+        if (!schedulesByTeacher.has(s.teacher_id)) schedulesByTeacher.set(s.teacher_id, []);
+        schedulesByTeacher.get(s.teacher_id).push(s);
+      });
+
       const results: TeacherReport[] = allTeachers.map((teacher: any) => {
         const daysToLookBack = reportType === "day" ? 1 : 7;
         let expectedTotal = 0;
@@ -107,6 +131,8 @@ export default function TeachersReportPage() {
         let actualMissed = 0;
         let lastRecorded: string | null = null;
 
+        const teacherSchedules = schedulesByTeacher.get(teacher.id) || [];
+
         for (let i = 0; i < daysToLookBack; i++) {
           const d = new Date(now);
           d.setDate(d.getDate() - i);
@@ -114,9 +140,9 @@ export default function TeachersReportPage() {
           const dDay = getDbDay(d.getDay());
 
           if (dDay >= 1 && dDay <= 5) { // أيام العمل فقط
-            const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay));
+            const daySchedules = teacherSchedules.filter((s: any) => String(s.day_of_week) === String(dDay));
             
-            daySchedules.forEach(sch => {
+            daySchedules.forEach((sch: any) => {
               scheduledTotal++;
               let isPassed = false;
               
@@ -129,17 +155,15 @@ export default function TeachersReportPage() {
                   if (now > pTime) isPassed = true;
                 }
               } else {
-                isPassed = true;
+                isPassed = true; // الأيام السابقة تعتبر منتهية
               }
 
               if (isPassed && isSystemActive) {
                 expectedTotal++;
-                // 🚀 السحر هنا: نعتمد على رقم الفصل والحصة والتاريخ (بدون اسم المعلم) لضمان أن الحصة تم رصدها!
-                const hasRecord = safeAttendance.find(a => 
-                  String(a.section_id) === String(sch.section_id) && 
-                  String(a.date).split('T')[0] === dStr && 
-                  String(a.period) === String(sch.period)
-                );
+                
+                // 🚀 بحث لحظي (O(1)) بدلاً من الدوران في المصفوفة، مما يمنع تجمد المتصفح!
+                const searchKey = `${sch.section_id}_${dStr}_${sch.period}`;
+                const hasRecord = attendanceMap.get(searchKey);
                 
                 if (hasRecord) {
                   actualRecorded++;
@@ -207,7 +231,13 @@ export default function TeachersReportPage() {
   const deselectAll = () => setLocalTeachers(prev => prev.map(t => ({ ...t, selected: false })));
 
   const selectedTeachers = localTeachers.filter(t => t.selected);
-  const generatePDF = () => window.print();
+  
+  // 🚀 تحسين عملية الطباعة لتكون أكثر استقراراً
+  const generatePDF = () => {
+    setTimeout(() => {
+        window.print();
+    }, 300);
+  };
 
   const statusColor = (status: string) => {
     if (status === "ممتاز") return "bg-emerald-50 text-emerald-700 border-emerald-100 shadow-emerald-100";
@@ -225,7 +255,7 @@ export default function TeachersReportPage() {
       <style jsx global>{`
         @media print {
           @page { size: portrait; margin: 1cm; }
-          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; }
+          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           .print-table { width: 100% !important; border-collapse: collapse !important; }
@@ -397,7 +427,7 @@ export default function TeachersReportPage() {
             <p className="text-[10px] font-bold text-slate-500 mt-1">الوقت: {new Date().toLocaleTimeString('ar-EG')}</p>
           </div>
           <h1 className="text-3xl font-black mb-2 tracking-tight text-slate-900">مدرسة الرفعة النموذجية</h1>
-          <h2 className="text-xl font-bold text-slate-700 bg-slate-50 inline-block px-6 py-2 rounded-xl border border-slate-200 mt-2">التقرير المعتمد لمتابعة تسجيل الغياب اليومي للمعلمين</h2>
+          <h2 className="text-xl font-bold text-slate-700 bg-slate-50 inline-block px-6 py-2 rounded-xl border border-slate-200 mt-2">التقرير المعتمد لمتابعة تسجيل الغياب للمعلمين</h2>
           <p className="text-sm font-black text-indigo-700 mt-4">{reportType === "day" ? `التقرير اليومي — ${todayName} ${dateLabel}` : `التقرير الأسبوعي الشامل — لآخر 7 أيام`}</p>
         </div>
         <div className="flex justify-between items-center mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
