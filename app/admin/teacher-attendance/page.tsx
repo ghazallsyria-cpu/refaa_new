@@ -8,7 +8,6 @@ import {
   XCircle, Hourglass, Minus, Database
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-// 🚀 استيراد دوال الوقت الذكية لمعرفة تاريخ اليوم المحدد بدقة
 import { format, startOfWeek, addDays } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Link from 'next/link';
@@ -30,7 +29,7 @@ export default function TeacherAttendanceMatrix() {
   
   const currentDbDay = getDbDay();
   const [selectedDay, setSelectedDay] = useState<number>(currentDbDay);
-  const [displayDate, setDisplayDate] = useState<string>(''); // 🚀 لعرض التاريخ الفعلي لليوم المختار
+  const [displayDate, setDisplayDate] = useState<string>(''); 
   
   const [stats, setStats] = useState({ totalAbsences: 0, totalPresents: 0 });
   const [debugInfo, setDebugInfo] = useState({ schedulesCount: -1, periodsCount: -1, error: null as string | null });
@@ -38,12 +37,11 @@ export default function TeacherAttendanceMatrix() {
   const fetchMatrixData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 الحل الذكي: حساب التاريخ الفعلي لليوم الذي اختاره المدير في هذا الأسبوع
-      const sundayOfThisWeek = startOfWeek(new Date(), { weekStartsOn: 0 }); // الأحد هو بداية الأسبوع (0)
+      const sundayOfThisWeek = startOfWeek(new Date(), { weekStartsOn: 0 }); 
       const targetDateObj = addDays(sundayOfThisWeek, selectedDay - 1);
-      const targetDateStr = format(targetDateObj, 'yyyy-MM-dd'); // التاريخ الموجه لقاعدة البيانات
+      const targetDateStr = format(targetDateObj, 'yyyy-MM-dd'); 
       
-      setDisplayDate(format(targetDateObj, 'yyyy/MM/dd')); // التاريخ المعروض للمدير
+      setDisplayDate(format(targetDateObj, 'yyyy/MM/dd')); 
       
       const [
         schRes, 
@@ -53,11 +51,11 @@ export default function TeacherAttendanceMatrix() {
         usrRes, 
         attRes
       ] = await Promise.all([
-        supabase.from('schedules').select('*'),
+        // 🚀 التحسين 1: جلب حصص اليوم المختار فقط لتخفيف الضغط على السيرفر
+        supabase.from('schedules').select('*').eq('day_of_week', selectedDay),
         supabase.from('class_periods').select('*').order('period_number'), 
         supabase.from('sections').select('id, name, class_id'), 
         supabase.from('classes').select('id, name'), 
-        // 🚀 الحل هنا: جلب أسماء المعلمين والإدارة فقط لتجنب مشكلة حد الـ 1000 مستخدم
         supabase.from('users').select('id, full_name').in('role', ['teacher', 'admin', 'management']),
         supabase.from('teacher_attendance_records').select('*').eq('date', targetDateStr)
       ]);
@@ -68,24 +66,30 @@ export default function TeacherAttendanceMatrix() {
         error: schRes.error?.message || perRes.error?.message || null
       });
 
-      const allSchedules = schRes.data || [];
+      const todaysSchedule = schRes.data || [];
       const periods = perRes.data || [];
       const sections = secRes.data || [];
       const classes = clsRes.data || [];
       const users = usrRes.data || [];
       const attendance = attRes.data || [];
 
+      // 🚀 التحسين 2: الفهرسة (Hash Maps / Sets) 
+      // لتحويل سرعة البحث داخل المصفوفات من بطيئة جداً O(N) إلى سرعة لحظية O(1) ومنع تجمد المتصفح
+      const sectionsMap = new Map(sections.map(s => [s.id, s]));
+      const classesMap = new Map(classes.map(c => [c.id, c]));
+      const usersMap = new Map(users.map(u => [u.id, u]));
+      const periodsMap = new Map(periods.map(p => [Number(p.period_number), p]));
+      
+      // فهرسة الحضور في Set للتحقق السريع
+      const attendanceSet = new Set(attendance.map(a => `${a.teacher_id}_${a.period_number}`));
+
       // ترتيب الحصص حسب الرقم المعتمد في القاعدة
       const sortedPeriods = [...periods].sort((a: any, b: any) => Number(a.period_number) - Number(b.period_number));
       setPeriodsList(sortedPeriods);
 
-      // تصفية جدول اليوم المختار
-      const todaysSchedule = allSchedules.filter(s => Number(s.day_of_week) === Number(selectedDay));
-
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       
-      // 🚀 تحسين منطق التأكد من أن اليوم المختار هو اليوم الحالي أو في الماضي
       const isToday = targetDateStr === format(now, 'yyyy-MM-dd');
       const isPastDay = targetDateObj < new Date(new Date().setHours(0,0,0,0));
 
@@ -96,9 +100,9 @@ export default function TeacherAttendanceMatrix() {
 
       todaysSchedule.forEach(sch => {
         if (!teacherMap.has(sch.teacher_id)) {
-          const userRecord = users.find(u => u.id === sch.teacher_id);
+          // استخدام الخريطة السريعة للبحث عن اسم المعلم
+          const userRecord = usersMap.get(sch.teacher_id);
           
-          // تأمين إضافي في حال كان الاسم المسجل فارغاً بالخطأ
           let finalName = `معلم (${sch.teacher_id.substring(0, 4)})`;
           if (userRecord && userRecord.full_name && userRecord.full_name.trim() !== '') {
              finalName = userRecord.full_name;
@@ -113,14 +117,14 @@ export default function TeacherAttendanceMatrix() {
 
         const row = teacherMap.get(sch.teacher_id);
         
-        // جلب اسم الصف والشعبة
-        const section = sections.find(s => s.id === sch.section_id);
-        const cls = section ? classes.find(c => c.id === section.class_id) : null;
+        // استخدام الخرائط السريعة لجلب الصف والشعبة
+        const section = sectionsMap.get(sch.section_id);
+        const cls = section ? classesMap.get(section.class_id) : null;
         const classNameToDisplay = cls && section ? `${cls.name} - ${section.name}` : 'صف غير محدد';
         
-        // 🚀 تحقق الحضور من المصفوفة التي جلبناها بالتاريخ الصحيح
-        const hasAttended = attendance.some(a => a.teacher_id === sch.teacher_id && Number(a.period_number) === Number(sch.period));
-        const periodInfo = sortedPeriods.find(p => Number(p.period_number) === Number(sch.period));
+        // 🚀 تحقق لحظي وفوري من الحضور باستخدام Set بدلاً من الدوران الكامل
+        const hasAttended = attendanceSet.has(`${sch.teacher_id}_${sch.period}`);
+        const periodInfo = periodsMap.get(Number(sch.period));
 
         let status = 'pending';
 
@@ -198,7 +202,6 @@ export default function TeacherAttendanceMatrix() {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "الحضور");
-    // 🚀 استخدام التاريخ الفعلي المختار في اسم الملف
     XLSX.writeFile(workbook, `سجل_الدوام_${displayDate.replace(/\//g, '-')}.xlsx`);
   };
 
@@ -272,7 +275,6 @@ export default function TeacherAttendanceMatrix() {
                 <Calendar className="w-8 h-8 text-indigo-600" />
                 سجل الحضور - {daysOfWeek.find(d => d.id === selectedDay)?.name}
               </h2>
-              {/* 🚀 إظهار التاريخ الفعلي ليوم الرصد بوضوح */}
               <p className="text-slate-500 font-bold mt-2 flex items-center gap-2">تاريخ السجل: <span className="bg-white px-3 py-1 rounded-lg border border-slate-200 text-indigo-700 shadow-sm" dir="ltr">{displayDate}</span></p>
             </div>
             <div className="flex gap-4">
