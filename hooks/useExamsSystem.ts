@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/auth-context';
-import { deleteFromCloudinary } from '@/lib/cloudinary';
-import { ExamWithMeta, ExamDetails, ExamResults, Exam, ExamAttempt } from '@/types';
-import { Question, normalizeQuestion } from '@/types/question';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/auth-context';
+import { deleteFromCloudinary } from '../lib/cloudinary';
+import { ExamWithMeta, ExamDetails, ExamResults, Exam, ExamAttempt } from '../types';
+import { Question, normalizeQuestion } from '../types/question';
 
 export interface ExamForStudent {
   exam: ExamWithMeta;
@@ -29,6 +29,29 @@ const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   });
 };
 
+// ==========================================
+// 🚀 محرك الكاش الذكي للاختبارات (Exams Cache Engine)
+// ==========================================
+const globalCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // مدة حفظ الكاش: 5 دقائق
+
+const withCache = async <T>(key: string, fetcher: () => Promise<T>, forceRefresh = false): Promise<T> => {
+  if (!forceRefresh && globalCache.has(key)) {
+    const cached = globalCache.get(key)!;
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data; // استرجاع فوري من الذاكرة
+    }
+  }
+  
+  const data = await fetcher();
+  globalCache.set(key, { data, timestamp: Date.now() });
+  return data;
+};
+
+export const clearExamsCache = () => {
+  globalCache.clear();
+};
+
 export function useExamsSystem() {
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
@@ -37,101 +60,113 @@ export function useExamsSystem() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchExams = useCallback(async (): Promise<void> => {
+  const fetchExams = useCallback(async (forceRefresh = false): Promise<void> => {
     if (!user || !currentRole) return;
-    setLoading(true);
+    
+    const cacheKey = `exams_${currentRole}_${user.id}`;
+    const isCached = !forceRefresh && globalCache.has(cacheKey) && (Date.now() - globalCache.get(cacheKey)!.timestamp < CACHE_TTL);
+    
+    // إظهار التحميل فقط إذا لم يكن هناك كاش
+    if (!isCached) {
+      setLoading(true);
+    }
     setError(null);
+    
     try {
-      const selectQuery = currentRole === 'student' 
-        ? `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections!inner(section_id, sections(name, classes(name)))`
-        : `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections(section_id, sections(name, classes(name)))`;
+      const fetchedData = await withCache(cacheKey, async () => {
+        const selectQuery = currentRole === 'student' 
+          ? `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections!inner(section_id, sections(name, classes(name)))`
+          : `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections(section_id, sections(name, classes(name)))`;
 
-      let query = supabase.from('exams').select(selectQuery).order('created_at', { ascending: false });
+        let query = supabase.from('exams').select(selectQuery).order('created_at', { ascending: false });
 
-      let currentStudentProfileId = null;
+        let currentStudentProfileId = null;
 
-      if (currentRole === 'student') {
-        let studentProfile = null;
-        const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
-        if (sp1) studentProfile = sp1;
-        else {
-          const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
-          if (sp2) studentProfile = sp2;
+        if (currentRole === 'student') {
+          let studentProfile = null;
+          const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
+          if (sp1) studentProfile = sp1;
+          else {
+            const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
+            if (sp2) studentProfile = sp2;
+          }
+
+          if (studentProfile?.section_id) {
+            currentStudentProfileId = studentProfile.id;
+            query = query.eq('exam_sections.section_id', studentProfile.section_id).eq('status', 'published');
+          } else {
+            return [];
+          }
+        } else if (currentRole === 'teacher') {
+          let teacherProfile = null;
+          const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+          if (tp1) teacherProfile = tp1;
+          else {
+            const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+            if (tp2) teacherProfile = tp2;
+          }
+            
+          if (!teacherProfile && user.user_metadata?.role === 'teacher') {
+            const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
+                user_id: user.id,
+                national_id: 'TEMP_' + user.id.substring(0, 8),
+                specialization: 'غير محدد'
+              }).select('id').single();
+            if (!createError && newTeacher) teacherProfile = newTeacher;
+          }
+
+          if (teacherProfile) {
+            query = query.eq('teacher_id', teacherProfile.id);
+          } else {
+            return [];
+          }
         }
 
-        if (studentProfile?.section_id) {
-          currentStudentProfileId = studentProfile.id;
-          query = query.eq('exam_sections.section_id', studentProfile.section_id).eq('status', 'published');
-        } else {
-          setData([]); setLoading(false); return;
-        }
-      } else if (currentRole === 'teacher') {
-        let teacherProfile = null;
-        const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (tp1) teacherProfile = tp1;
-        else {
-          const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-          if (tp2) teacherProfile = tp2;
-        }
-          
-        if (!teacherProfile && user.user_metadata?.role === 'teacher') {
-          const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
-              user_id: user.id,
-              national_id: 'TEMP_' + user.id.substring(0, 8),
-              specialization: 'غير محدد'
-            }).select('id').single();
-          if (!createError && newTeacher) teacherProfile = newTeacher;
-        }
+        const { data: examsData, error: fetchError } = await query;
+        if (fetchError) throw fetchError;
 
-        if (teacherProfile) {
-          query = query.eq('teacher_id', teacherProfile.id);
-        } else {
-          setData([]); setLoading(false); return;
-        }
-      }
-
-      const { data: examsData, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-
-      let mappedData: ExamWithMeta[] = (examsData || []).map((e: any) => ({
-        ...e,
-        total_marks: e.total_marks || e.max_score || 0,
-        subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name,
-        teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
-        section_name: e.exam_sections && e.exam_sections.length > 0 ? e.exam_sections.map((es: any) => es.sections?.name).join(', ') : 'غير محدد',
-      }));
-
-      if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
-        const examsWithStats = await Promise.all(mappedData.map(async (e) => {
-          const [attemptsRes, questionsRes] = await Promise.all([
-            supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
-            supabase.from('questions').select('id', { count: 'exact', head: true }).eq('exam_id', e.id)
-          ]);
-          const attempts = attemptsRes.data || [];
-          return {
-            ...e,
-            submission_count: attempts.length,
-            graded_count: attempts.filter(a => a.status === 'graded' || a.status === 'completed').length,
-            avg_score: attempts.length > 0 ? Math.round(attempts.reduce((acc, curr) => acc + (curr.score || 0), 0) / attempts.length) : 0,
-            question_count: questionsRes.count || 0
-          };
+        let mappedData: ExamWithMeta[] = (examsData || []).map((e: any) => ({
+          ...e,
+          total_marks: e.total_marks || e.max_score || 0,
+          subject_name: Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name,
+          teacher_name: Array.isArray(e.teacher?.users) ? e.teacher.users[0]?.full_name : e.teacher?.users?.full_name,
+          section_name: e.exam_sections && e.exam_sections.length > 0 ? e.exam_sections.map((es: any) => es.sections?.name).join(', ') : 'غير محدد',
         }));
-        mappedData = examsWithStats;
-      }
 
-      if (currentRole === 'student' && currentStudentProfileId) {
-        const { data: attemptsData } = await supabase.from('exam_attempts').select('exam_id, score, status').eq('student_id', currentStudentProfileId);
-        mappedData = mappedData.map(exam => {
-          const attempt = attemptsData?.find(a => a.exam_id === exam.id);
-          return {
-            ...exam,
-            submission_status: attempt ? (attempt.status === 'completed' || attempt.status === 'graded' ? 'submitted' : 'pending') : 'pending',
-            score: attempt?.score
-          };
-        });
-      }
+        if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
+          const examsWithStats = await Promise.all(mappedData.map(async (e) => {
+            const [attemptsRes, questionsRes] = await Promise.all([
+              supabase.from('exam_attempts').select('score, status').eq('exam_id', e.id),
+              supabase.from('questions').select('id', { count: 'exact', head: true }).eq('exam_id', e.id)
+            ]);
+            const attempts = attemptsRes.data || [];
+            return {
+              ...e,
+              submission_count: attempts.length,
+              graded_count: attempts.filter(a => a.status === 'graded' || a.status === 'completed').length,
+              avg_score: attempts.length > 0 ? Math.round(attempts.reduce((acc, curr) => acc + (curr.score || 0), 0) / attempts.length) : 0,
+              question_count: questionsRes.count || 0
+            };
+          }));
+          mappedData = examsWithStats;
+        }
 
-      setData(mappedData);
+        if (currentRole === 'student' && currentStudentProfileId) {
+          const { data: attemptsData } = await supabase.from('exam_attempts').select('exam_id, score, status').eq('student_id', currentStudentProfileId);
+          mappedData = mappedData.map(exam => {
+            const attempt = attemptsData?.find(a => a.exam_id === exam.id);
+            return {
+              ...exam,
+              submission_status: attempt ? (attempt.status === 'completed' || attempt.status === 'graded' ? 'submitted' : 'pending') : 'pending',
+              score: attempt?.score
+            };
+          });
+        }
+
+        return mappedData;
+      }, forceRefresh);
+
+      setData(fetchedData);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error fetching exams');
     } finally {
@@ -166,7 +201,8 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to save exam');
-      await fetchExams();
+      clearExamsCache(); // 🚀 تفريغ الكاش
+      await fetchExams(true);
       return result.examId;
     } catch (err) { throw err; }
   }, [user, fetchExams]);
@@ -212,7 +248,8 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to submit exam');
-      await fetchExams();
+      clearExamsCache(); // 🚀
+      await fetchExams(true);
       return result.attemptId;
     } catch (err: any) { throw err; }
   }, [user, fetchExams]);
@@ -222,7 +259,8 @@ export function useExamsSystem() {
     try {
       const response = await fetch('/api/exams/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId, userId: user.id }) });
       if (!response.ok) throw new Error('Failed to delete exam');
-      await fetchExams();
+      clearExamsCache(); // 🚀
+      await fetchExams(true);
     } catch (err) { throw err; }
   }, [user, fetchExams]);
 
@@ -237,16 +275,15 @@ export function useExamsSystem() {
       }
       const response = await fetch('/api/exams/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId, userId: user.id }) });
       if (!response.ok) throw new Error('Failed to delete exam');
-      await fetchExams();
+      clearExamsCache(); // 🚀
+      await fetchExams(true);
       return { success: true };
     } catch (err: unknown) { throw err; }
   }, [user, fetchExams]);
 
   const fetchExamResults = useCallback(async (examId: string): Promise<ExamResults> => {
     try {
-      // 🚀 إضافة cache: no-store لضمان جلب النتائج الطازجة دائماً في الداشبورد
       const response = await fetch(`/api/exams/results-data?examId=${examId}`, { cache: 'no-store' }).catch(() => null);
-      // Fallback in case API isn't made yet, fall back to direct supabase calls
       
       const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name)').eq('id', examId).single();
       if (examError) throw examError;
@@ -290,13 +327,13 @@ export function useExamsSystem() {
     try {
       const response = await fetch('/api/exams/delete-attempt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attemptId, userId: user.id }) });
       if (!response.ok) throw new Error('Failed to delete attempt');
+      clearExamsCache(); // 🚀
       return { success: true };
     } catch (err) { throw err; }
   }, [user]);
 
   const fetchStudentExamResult = useCallback(async (examId: string, studentId: string): Promise<StudentExamResult> => {
     try {
-      // 🚀 القوة الخفية: تدمير التخبئة (cache: 'no-store') ليتم جلب النتيجة فوراً بعد التصحيح!
       const response = await fetch('/api/exams/student-result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -340,8 +377,9 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'فشل تقييم الإجابة');
+      clearExamsCache(); // 🚀
     } catch (err) { throw err; }
   }, []);
 
-  return { data, loading, error, refetch: fetchExams, saveExam, submitExam, deleteExamWithMedia, deleteExam, fetchExamDetails, fetchExamForStudent, fetchExamResults, deleteAttempt, fetchStudentExamResult, gradeAnswer };
+  return { data, loading, error, refetch: fetchExams, saveExam, submitExam, deleteExamWithMedia, deleteExam, fetchExamDetails, fetchExamForStudent, fetchExamResults, deleteAttempt, fetchStudentExamResult, gradeAnswer, clearExamsCache };
 }
