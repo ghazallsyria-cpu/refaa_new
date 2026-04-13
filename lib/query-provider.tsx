@@ -10,8 +10,9 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000, 
-            refetchOnWindowFocus: false, 
+            staleTime: 0, // 🚀 صفر: إجبار جلب البيانات فوراً مع كل تنقل
+            refetchOnMount: true, // 🚀 إعادة جلب البيانات عند فتح الصفحة
+            refetchOnWindowFocus: true, // 🚀 إعادة الجلب عند العودة للمتصفح (بشكل آمن لأننا أوقفنا قنوات الـ Realtime)
             retry: 1, 
           },
         },
