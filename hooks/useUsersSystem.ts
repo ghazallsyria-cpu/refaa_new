@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Student, Teacher, Parent, Section, Subject } from '@/types';
@@ -48,11 +49,12 @@ export function useUsersSystem() {
           users (full_name, email, phone, avatar_url),
           sections (id, name, classes (id, name, level)),
           parents (users (full_name))
-        `);
+        `)
+        .limit(5000); // 🚀 السحر هنا: كسر حاجز الـ 1000 طالب الافتراضي وإحضار الجميع
 
       if (error) throw error;
       
-      // 🚀 السحر هنا: الفرز الأبجدي العربي لجميع الطلاب في الموقع
+      // 🚀 الفرز الأبجدي العربي لجميع الطلاب في الموقع
       const sortedData = (data as any[] || []).sort((a, b) => {
         return extractName(a).localeCompare(extractName(b), 'ar');
       });
@@ -84,7 +86,8 @@ export function useUsersSystem() {
             sections (name, classes (name)),
             subjects (name)
           )
-        `);
+        `)
+        .limit(5000); // 🚀 كسر حاجز الـ 1000 للمعلمين أيضاً
 
       if (error) throw error;
 
@@ -116,7 +119,8 @@ export function useUsersSystem() {
           workplace,
           address,
           users (full_name, email, phone, avatar_url)
-        `);
+        `)
+        .limit(5000); // 🚀 كسر حاجز الـ 1000 لأولياء الأمور
 
       if (error) throw error;
 
@@ -139,11 +143,11 @@ export function useUsersSystem() {
     try {
       const { data, error } = await supabase
         .from('sections')
-        .select('id, name, classes(name, level)');
+        .select('id, name, classes(name, level)')
+        .limit(5000); // للحماية المستقبلية
       
       if (error) throw error;
 
-      // 🚀 فرز الفصول أبجدياً (ورقمياً)
       const sortedData = (data as any[] || []).sort((a, b) => {
         const classA = Array.isArray(a.classes) ? a.classes[0]?.name : a.classes?.name;
         const classB = Array.isArray(b.classes) ? b.classes[0]?.name : b.classes?.name;
@@ -162,11 +166,11 @@ export function useUsersSystem() {
     try {
       const { data, error } = await supabase
         .from('subjects')
-        .select('id, name');
+        .select('id, name')
+        .limit(1000);
       
       if (error) throw error;
 
-      // 🚀 فرز المواد أبجدياً
       const sortedData = (data as any[] || []).sort((a, b) => {
         return (a.name || '').localeCompare(b.name || '', 'ar');
       });
@@ -600,3 +604,5 @@ export function useUsersSystem() {
     resetPassword
   };
 }
+
+
