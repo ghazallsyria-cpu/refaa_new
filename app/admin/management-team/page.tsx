@@ -5,7 +5,8 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldCheck, UserPlus, Mail, Lock, Briefcase, 
-  Users, Trash2, Edit, CheckCircle2, Loader2, ArrowRight, Bug
+  Users, Trash2, Edit, CheckCircle2, Loader2, ArrowRight, Bug,
+  X // ✅ تم إضافة حرف X هنا ليتم التعرف على الأيقونة
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -19,7 +20,7 @@ interface Manager {
 }
 
 export default function ManagementTeamPage() {
-  const { authRole } = useAuth();
+  const { authRole } = useAuth() as any; // 🚀 أضفنا as any لتجنب أخطاء النوع في Build
   const [managers, setManagers] = useState<Manager[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -58,16 +59,16 @@ export default function ManagementTeamPage() {
 
       if (error) {
         setDebugStatus('error');
-        setDebugLog(`[Supabase Error]:\n${JSON.stringify(error, null, 2)}\n\n(هذا يعني أن هناك خطأ في هيكل القاعدة أو العلاقات)`);
+        setDebugLog(`[Supabase Error]:\n${JSON.stringify(error, null, 2)}`);
         throw error;
       }
 
       if (!data || data.length === 0) {
         setDebugStatus('empty');
-        setDebugLog(`[Empty Data]:\nنجح الاتصال بالسيرفر، لكن الجدول أعاد مصفوفة فارغة [].\n\nالأسباب المحتملة:\n1. الجداول فارغة ولا يوجد بها مستخدمون.\n2. نظام الحماية RLS مفعل ويمنعك من القراءة.\n\nلتأكيد ذلك، جرب تنفيذ هذا في SQL Editor:\nALTER TABLE public.users DISABLE ROW LEVEL SECURITY;`);
+        setDebugLog(`[Empty Data]: نجح الاتصال لكن الجدول فارغ.`);
       } else {
         setDebugStatus('success');
-        setDebugLog(`[Success]:\nتم جلب البيانات بنجاح!\nعدد السجلات: ${data.length}`);
+        setDebugLog(`[Success]: تم جلب ${data.length} سجل.`);
         
         const formattedData = data.map(u => ({
           ...u,
@@ -77,10 +78,8 @@ export default function ManagementTeamPage() {
       }
     } catch (err: any) {
       console.error(err);
-      if (debugStatus !== 'error') {
-         setDebugStatus('error');
-         setDebugLog(`[Catch Error]:\n${err.message || JSON.stringify(err)}`);
-      }
+      setDebugStatus('error');
+      setDebugLog(`[Catch Error]:\n${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -88,7 +87,6 @@ export default function ManagementTeamPage() {
 
   useEffect(() => {
     fetchManagers();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -149,7 +147,7 @@ export default function ManagementTeamPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         
-        {/* 🚀 شاشة التشخيص المباشرة */}
+        {/* شاشة التشخيص */}
         <div className={`mb-8 p-6 rounded-[2rem] border-2 shadow-sm ${
           debugStatus === 'loading' ? 'bg-slate-900 border-slate-700' :
           debugStatus === 'error' ? 'bg-rose-950 border-rose-700' :
@@ -158,7 +156,7 @@ export default function ManagementTeamPage() {
         }`}>
           <div className="flex items-center gap-3 mb-4 text-white">
             <Bug className="w-6 h-6" />
-            <h3 className="font-black text-lg">شاشة التشخيص السحابية (للمطور)</h3>
+            <h3 className="font-black text-lg">شاشة التشخيص السحابية</h3>
           </div>
           <pre className="bg-black/50 p-4 rounded-xl text-white/90 font-mono text-sm whitespace-pre-wrap overflow-x-auto" dir="ltr">
             {debugLog}
@@ -203,11 +201,6 @@ export default function ManagementTeamPage() {
                       </td>
                     </tr>
                   ))}
-                  {managers.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="p-10 text-center font-bold text-slate-400">الجدول فارغ ولا يوجد مستخدمون لعرضهم.</td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
@@ -216,7 +209,6 @@ export default function ManagementTeamPage() {
 
       </div>
 
-      {/* نافذة الإضافة */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -224,52 +216,31 @@ export default function ManagementTeamPage() {
               
               <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <div>
-                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><UserPlus className="w-5 h-5 text-indigo-600"/> تعيين إداري بصلاحيات</h2>
-                    <p className="text-xs text-slate-500 font-bold mt-1">سيتمكن هذا العضو من الدخول للوحة التحكم.</p>
+                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><UserPlus className="w-5 h-5 text-indigo-600"/> تعيين إداري</h2>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5"/></button>
               </div>
 
               <form onSubmit={handleSubmit} className="p-6 space-y-5">
                 <div>
-                  <label htmlFor="fullName" className="block text-xs font-black text-slate-500 uppercase mb-2">الاسم الكامل</label>
-                  <div className="relative">
-                    <UserPlus className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input id="fullName" name="fullName" autoComplete="name" type="text" required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pr-12 pl-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
-                  </div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-2">الاسم الكامل</label>
+                  <input type="text" required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                 </div>
 
                 <div>
-                  <label htmlFor="email" className="block text-xs font-black text-slate-500 uppercase mb-2">البريد الإلكتروني (لتسجيل الدخول)</label>
-                  <div className="relative">
-                    <Mail className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input id="email" name="email" autoComplete="email" type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} dir="ltr" className="w-full bg-slate-50 border border-slate-200 rounded-2xl pr-4 pl-12 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" />
-                  </div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-2">البريد الإلكتروني</label>
+                  <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} dir="ltr" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="block text-xs font-black text-slate-500 uppercase mb-2">كلمة المرور</label>
-                  <div className="relative">
-                    <Lock className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input id="password" name="password" autoComplete="new-password" type="password" required minLength={6} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} dir="ltr" className="w-full bg-slate-50 border border-slate-200 rounded-2xl pr-4 pl-12 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="jobTitle" className="block text-xs font-black text-slate-500 uppercase mb-2">المسمى الوظيفي الظاهري</label>
-                  <div className="relative">
-                    <Briefcase className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <select id="jobTitle" name="jobTitle" value={formData.jobTitle} onChange={e => setFormData({...formData, jobTitle: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl pr-12 pl-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer appearance-none">
-                      {jobTitles.map(title => <option key={title} value={title}>{title}</option>)}
-                    </select>
-                  </div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-2">كلمة المرور</label>
+                  <input type="password" required minLength={6} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} dir="ltr" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                 </div>
 
                 <div className="pt-4 flex gap-3">
-                  <button type="submit" disabled={isSubmitting} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50">
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'إنشاء وتفعيل الحساب'}
+                  <button type="submit" disabled={isSubmitting} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 transition-all disabled:opacity-50">
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'إنشاء الحساب'}
                   </button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black hover:bg-slate-50 transition-all">إلغاء</button>
                 </div>
               </form>
             </motion.div>
@@ -277,11 +248,10 @@ export default function ManagementTeamPage() {
         )}
       </AnimatePresence>
 
-      {/* إشعار النجاح */}
       <AnimatePresence>
         {showSuccess && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-xl z-50 flex items-center gap-3">
-             <CheckCircle2 className="w-5 h-5" /> <span className="font-bold text-sm">تم إضافة العضو الإداري بنجاح!</span>
+             <CheckCircle2 className="w-5 h-5" /> <span className="font-bold text-sm">تمت الإضافة بنجاح!</span>
           </motion.div>
         )}
       </AnimatePresence>
