@@ -75,7 +75,7 @@ export default function TeachersMonitorPage() {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
       const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = now.getDay() + 1; // الأحد = 1، الاثنين = 2...
+      const currentDbDay = now.getDay() ; // الأحد = 1، الاثنين = 2...
 
       const [
         { data: schedulesDB },
