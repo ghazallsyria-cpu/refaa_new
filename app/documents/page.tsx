@@ -1,11 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useDocumentsSystem, Document } from '../../hooks/useDocumentsSystem';
-import { useAuth } from '../../context/auth-context'; // 🚀 استيراد جدار الحماية
-import { Plus, Search, Edit2, Trash2, FileText, X, Filter, ExternalLink, Calendar, Folder, FileArchive, UploadCloud, Loader2, ArrowLeft } from 'lucide-react';
+import { useDocumentsSystem, Document } from '@/hooks/useDocumentsSystem';
+import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
+import { 
+  Plus, Search, Edit2, Trash2, FileText, X, Filter, 
+  ExternalLink, Calendar, Folder, FileArchive, 
+  UploadCloud, Loader2, ArrowLeft,
+  Link2 as LinkIcon // 🚀 تم تغيير الاسم لتفادي التعارض مع مكون Link
+} from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
+import Image from 'next/image'; // 🚀 استيراد مكون الصور المحسن
 
 const CATEGORY_OPTIONS = [
   { value: 'all', label: 'جميع التصنيفات' },
@@ -42,7 +48,7 @@ export default function DocumentsPage() {
   };
 
   const loadDocuments = useCallback(async () => {
-    // 🚀 لا نجلب البيانات إلا للجهات المسموح لها
+    // 🚀 التحقق من الصلاحية قبل جلب البيانات
     if (authRole !== 'admin' && authRole !== 'management') return;
     
     setLoading(true);
@@ -162,16 +168,22 @@ export default function DocumentsPage() {
   return (
     <div className="space-y-6 relative max-w-7xl mx-auto px-4 py-8 font-cairo" dir="rtl">
       {/* Notification Toast */}
-      {notification && (
-        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-2xl font-black shadow-lg flex items-center gap-3 transition-all ${
-          notification.type === 'success' ? 'bg-emerald-500 text-white border border-emerald-400' : 'bg-red-500 text-white border border-red-400'
-        }`}>
-          <div>{notification.message}</div>
-          <button onClick={() => setNotification(null)} className="text-white/80 hover:text-white bg-white/10 p-1 rounded-lg transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className={`fixed top-4 left-1/2 z-50 px-6 py-3 rounded-2xl font-black shadow-lg flex items-center gap-3 transition-all ${
+            notification.type === 'success' ? 'bg-emerald-500 text-white border border-emerald-400' : 'bg-red-500 text-white border border-red-400'
+          }`}>
+            <div>{notification.message}</div>
+            <button onClick={() => setNotification(null)} className="text-white/80 hover:text-white bg-white/10 p-1 rounded-lg transition-colors">
+              <X className="h-4 w-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
       <Dialog.Root open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
@@ -186,7 +198,7 @@ export default function DocumentsPage() {
                 <X className="h-5 w-5" />
               </Dialog.Close>
             </div>
-            <p className="text-slate-600 mb-8 font-bold leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا المستند؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف الملف من السيرفر.</p>
+            <p className="text-slate-600 mb-8 font-bold leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا المستند؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف الملف من السيرفر نهائياً.</p>
             <div className="flex justify-end gap-3">
               <Dialog.Close asChild>
                 <button className="rounded-2xl bg-slate-50 px-6 py-3 text-sm font-black text-slate-700 hover:bg-slate-100 transition-colors">
@@ -264,7 +276,7 @@ export default function DocumentsPage() {
           <div className="h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
             <FileText className="h-10 w-10 text-slate-300" />
           </div>
-          <h3 className="text-xl font-black text-slate-900 mb-2">لا توجد مستندات</h3>
+          <h3 className="text-xl font-black text-slate-800 mb-2">لا توجد مستندات</h3>
           <p className="text-slate-500 font-bold">لم يتم العثور على مستندات تطابق معايير البحث الحالية.</p>
         </div>
       ) : (
@@ -308,7 +320,7 @@ export default function DocumentsPage() {
                   
                   <div className="mt-auto space-y-3">
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${styles.bg} ${styles.text} border border-${styles.text.split('-')[1]}-200`}>
+                      <span className={`inline-flex items-center rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${styles.bg} ${styles.text} border border-slate-200`}>
                         {getCategoryLabel(doc.category)}
                       </span>
                     </div>
@@ -340,7 +352,7 @@ export default function DocumentsPage() {
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto custom-scrollbar animate-in zoom-in-95 duration-300 border border-slate-100" dir="rtl">
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 border border-slate-100" dir="rtl">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
@@ -374,7 +386,7 @@ export default function DocumentsPage() {
                 <label className="block text-sm font-black text-slate-700 mb-2">التصنيف <span className="text-red-500">*</span></label>
                 <select 
                   required
-                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold outline-none appearance-none cursor-pointer transition-all"
+                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm font-bold outline-none appearance-none cursor-pointer transition-all"
                   value={currentDocument.category || ''}
                   onChange={(e) => setCurrentDocument({...currentDocument, category: e.target.value})}
                 >
@@ -389,7 +401,7 @@ export default function DocumentsPage() {
                 <textarea 
                   rows={3}
                   placeholder="وصف مختصر لمحتوى المستند..." 
-                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold outline-none resize-none transition-all"
+                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm font-bold outline-none resize-none transition-all"
                   value={currentDocument.description || ''}
                   onChange={(e) => setCurrentDocument({...currentDocument, description: e.target.value})}
                 />
