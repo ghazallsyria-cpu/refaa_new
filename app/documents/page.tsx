@@ -7,11 +7,12 @@ import {
   Plus, Search, Edit2, Trash2, FileText, X, Filter, 
   ExternalLink, Calendar, Folder, FileArchive, 
   UploadCloud, Loader2, ArrowLeft,
-  Link2 as LinkIcon // 🚀 تم تغيير الاسم لتفادي التعارض مع مكون Link
+  Link2 as LinkIcon 
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { motion, AnimatePresence } from 'framer-motion'; // 🚀 إضافة الاستيرادات المفقودة هنا
 import Link from 'next/link';
-import Image from 'next/image'; // 🚀 استيراد مكون الصور المحسن
+import Image from 'next/image';
 
 const CATEGORY_OPTIONS = [
   { value: 'all', label: 'جميع التصنيفات' },
@@ -22,7 +23,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function DocumentsPage() {
-  const { authRole, isChecking } = useAuth() as any; // 🚀 تفعيل الحماية
+  const { authRole, isChecking } = useAuth() as any; 
 
   const { loading: systemLoading, fetchDocuments, saveDocument, deleteDocument } = useDocumentsSystem();
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -48,7 +49,6 @@ export default function DocumentsPage() {
   };
 
   const loadDocuments = useCallback(async () => {
-    // 🚀 التحقق من الصلاحية قبل جلب البيانات
     if (authRole !== 'admin' && authRole !== 'management') return;
     
     setLoading(true);
@@ -121,7 +121,7 @@ export default function DocumentsPage() {
 
   const openEditModal = (doc: Document) => {
     setCurrentDocument(doc);
-    setUploadType('link'); // Default to link when editing to show current URL
+    setUploadType('link'); 
     setSelectedFile(null);
     setIsModalOpen(true);
   };
@@ -148,7 +148,6 @@ export default function DocumentsPage() {
     }
   };
 
-  // 🚀 شاشة التحميل وحماية الوصول (Security Guard)
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50/50">
@@ -160,14 +159,12 @@ export default function DocumentsPage() {
     );
   }
 
-  // 🚀 منع المتطفلين من رؤية صفحة المستندات الإدارية
   if (authRole !== 'admin' && authRole !== 'management') {
-    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة للإدارة المدرسية فقط.</div>;
+    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة للإدارة المدرسية فقط.</div>;
   }
 
   return (
     <div className="space-y-6 relative max-w-7xl mx-auto px-4 py-8 font-cairo" dir="rtl">
-      {/* Notification Toast */}
       <AnimatePresence>
         {notification && (
           <motion.div 
@@ -185,7 +182,6 @@ export default function DocumentsPage() {
         )}
       </AnimatePresence>
 
-      {/* Delete Confirmation Modal */}
       <Dialog.Root open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40" />
@@ -254,7 +250,7 @@ export default function DocumentsPage() {
               <Filter className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
             </div>
             <select
-              className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-all font-bold outline-none appearance-none cursor-pointer"
+              className="block w-full rounded-2xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer outline-none"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
@@ -268,7 +264,7 @@ export default function DocumentsPage() {
 
       {loading ? (
         <div className="flex flex-col justify-center items-center py-32 gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
           <p className="text-slate-500 font-bold animate-pulse">جاري تحميل المستندات...</p>
         </div>
       ) : filteredDocuments.length === 0 ? (
@@ -286,7 +282,11 @@ export default function DocumentsPage() {
             const styles = getCategoryStyles(doc.category);
             
             return (
-              <div key={doc.id} className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all hover:shadow-lg hover:border-indigo-200 group">
+              <motion.div 
+                layout
+                key={doc.id} 
+                className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all hover:shadow-lg hover:border-indigo-200 group"
+              >
                 <div className="p-6 flex-1">
                   <div className="flex justify-between items-start mb-6">
                     <div className={`p-4 rounded-2xl shadow-inner ${styles.bg}`}>
@@ -342,7 +342,7 @@ export default function DocumentsPage() {
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -492,7 +492,7 @@ export default function DocumentsPage() {
                   className="rounded-2xl bg-indigo-600 px-10 py-4 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
-                    <><div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> جاري الحفظ...</>
+                    <><Loader2 className="h-5 w-5 animate-spin" /> جاري الحفظ...</>
                   ) : (
                     'تأكيد وحفظ المستند'
                   )}
@@ -502,6 +502,11 @@ export default function DocumentsPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      `}} />
     </div>
   );
 }
