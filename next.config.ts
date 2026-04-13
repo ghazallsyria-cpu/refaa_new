@@ -4,7 +4,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
 
-  // 🚀 هذه الإضافة ستغير أسماء كل الملفات الأساسية مع كل عملية بناء، مما يقتل الكاش الإجباري للمتصفح
+  // 🚀 تغيير المعرف مع كل عملية بناء لإجبار جلب الملفات الجديدة
   generateBuildId: async () => {
     return `build-${new Date().getTime()}`;
   },
@@ -34,16 +34,6 @@ const nextConfig: NextConfig = {
           {
             key: 'Content-Type',
             value: 'application/manifest+json; charset=utf-8',
-          },
-        ],
-      },
-      // 🚀 إجبار المتصفح على عدم حفظ ملف الـ Service worker في الكاش أبداً!
-      {
-        source: '/sw.js',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-cache, no-store, must-revalidate',
           },
         ],
       },
