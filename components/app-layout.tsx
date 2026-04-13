@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
@@ -41,6 +40,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isLivePage = pathname === '/live';
   const isPublicPage = isLoginPage || isResetPasswordPage || isLivePage;
 
+  // 🔄 [بداية كود تجاوز الكاش] - يمكن حذفه بعد استقرار التحديث عند الجميع
+  useEffect(() => {
+    const CURRENT_APP_VERSION = "1.1.0"; // قم بتغيير الرقم لإجبار المتصفحات على التحديث مجدداً
+    const savedVersion = localStorage.getItem('app_refresh_version');
+
+    if (savedVersion !== CURRENT_APP_VERSION) {
+      // مسح الكاش البسيط وتخزين الإصدار الجديد
+      localStorage.setItem('app_refresh_version', CURRENT_APP_VERSION);
+      
+      // إعادة تحميل الصفحة بشكل كامل لجلب ملفات JS الجديدة من السيرفر
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    }
+  }, []);
+  // 🔄 [نهاية كود تجاوز الكاش]
+
   // 1️⃣ تفعيل مستشعرات الأخطاء العالمية وتسجيل PWA
   useEffect(() => {
     // 🚀 تسجيل Service Worker ليتمكن المتصفح من عرض زر "تثبيت التطبيق"
@@ -76,50 +92,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // 2️⃣ تفعيل جهاز البث للرادار (Realtime Presence Broadcaster)
   useEffect(() => {
     // 🛑 🚨 إيقاف الطوارئ: إيقاف الرادار وعمليات Upsert تماماً لإنقاذ السيرفر
-    return; // هذا السطر يمنع الكود بالأسفل من العمل مؤقتاً
-
-    /* ---- الكود الموقوف مؤقتاً بالأسفل ---- */
-    /*
-    // لا نرسل إشارة إذا كان المستخدم في صفحة عامة أو لم يسجل دخوله
-    if (!user || !authRole || isPublicPage) return;
-
-    // الانضمام لغرفة البث المباشر الخاصة بالرادار
-    const room = supabase.channel('global_online_users');
-
-    room.on('presence', { event: 'sync' }, () => {
-      // تم التزامن
-    }).subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        // إرسال بيانات المستخدم للرادار
-        await room.track({
-          user_id: user.id,
-          name: userName || user.email?.split('@')[0] || 'مستخدم',
-          role: authRole,
-          metadata: authRole === 'teacher' ? 'قسم المعلمين' : authRole === 'student' ? 'طالب مسجل' : 'الإدارة العليا',
-          joined_at: new Date().toISOString(),
-        });
-
-        // 🚀 تسجيل التواجد اليومي للمستخدم في قاعدة البيانات
-        try {
-          const today = new Date().toISOString().split('T')[0];
-          await supabase.from('daily_presence').upsert({
-            user_id: user.id,
-            full_name: userName || user.email?.split('@')[0] || 'مستخدم',
-            role: authRole,
-            record_date: today,
-            last_seen: new Date().toISOString()
-          }, { onConflict: 'user_id, record_date' });
-        } catch (error) {
-          console.error("Error updating daily presence:", error);
-        }
-      }
-    });
-
-    // إيقاف البث عند الخروج من الموقع
-    return () => {
-      supabase.removeChannel(room);
-    };
-    */
+    return; 
   }, [user, authRole, userName, isPublicPage]);
 
   // 3️⃣ دالة فحص الصلاحيات
@@ -285,4 +258,3 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
