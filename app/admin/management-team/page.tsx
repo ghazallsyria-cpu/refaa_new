@@ -5,7 +5,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldCheck, UserPlus, Mail, Lock, Briefcase, 
-  Users, Trash2, Edit, CheckCircle2, Loader2, ArrowRight
+  Users, Trash2, Edit, CheckCircle2, Loader2, ArrowRight, Bug
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -23,6 +23,10 @@ export default function ManagementTeamPage() {
   const [managers, setManagers] = useState<Manager[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // 🚀 شاشة التشخيص (Debug State)
+  const [debugLog, setDebugLog] = useState<string>('جاري الاتصال بقاعدة البيانات...');
+  const [debugStatus, setDebugStatus] = useState<'loading' | 'error' | 'empty' | 'success'>('loading');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -45,23 +49,38 @@ export default function ManagementTeamPage() {
 
   const fetchManagers = async () => {
     setLoading(true);
+    setDebugStatus('loading');
     try {
       const { data, error } = await supabase
         .from('users')
         .select('id, full_name, email, role')
         .in('role', ['admin', 'management']);
 
-      if (error) throw error;
+      if (error) {
+        setDebugStatus('error');
+        setDebugLog(`[Supabase Error]:\n${JSON.stringify(error, null, 2)}\n\n(هذا يعني أن هناك خطأ في هيكل القاعدة أو العلاقات)`);
+        throw error;
+      }
 
-      if (data) {
+      if (!data || data.length === 0) {
+        setDebugStatus('empty');
+        setDebugLog(`[Empty Data]:\nنجح الاتصال بالسيرفر، لكن الجدول أعاد مصفوفة فارغة [].\n\nالأسباب المحتملة:\n1. الجداول فارغة ولا يوجد بها مستخدمون.\n2. نظام الحماية RLS مفعل ويمنعك من القراءة.\n\nلتأكيد ذلك، جرب تنفيذ هذا في SQL Editor:\nALTER TABLE public.users DISABLE ROW LEVEL SECURITY;`);
+      } else {
+        setDebugStatus('success');
+        setDebugLog(`[Success]:\nتم جلب البيانات بنجاح!\nعدد السجلات: ${data.length}`);
+        
         const formattedData = data.map(u => ({
           ...u,
           job_title: u.role === 'admin' ? 'المدير العام (المالك)' : 'عضو فريق الإدارة'
         }));
         setManagers(formattedData as Manager[]);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (debugStatus !== 'error') {
+         setDebugStatus('error');
+         setDebugLog(`[Catch Error]:\n${err.message || JSON.stringify(err)}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -69,6 +88,7 @@ export default function ManagementTeamPage() {
 
   useEffect(() => {
     fetchManagers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,8 +149,24 @@ export default function ManagementTeamPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         
+        {/* 🚀 شاشة التشخيص المباشرة */}
+        <div className={`mb-8 p-6 rounded-[2rem] border-2 shadow-sm ${
+          debugStatus === 'loading' ? 'bg-slate-900 border-slate-700' :
+          debugStatus === 'error' ? 'bg-rose-950 border-rose-700' :
+          debugStatus === 'empty' ? 'bg-amber-950 border-amber-700' :
+          'bg-emerald-950 border-emerald-700'
+        }`}>
+          <div className="flex items-center gap-3 mb-4 text-white">
+            <Bug className="w-6 h-6" />
+            <h3 className="font-black text-lg">شاشة التشخيص السحابية (للمطور)</h3>
+          </div>
+          <pre className="bg-black/50 p-4 rounded-xl text-white/90 font-mono text-sm whitespace-pre-wrap overflow-x-auto" dir="ltr">
+            {debugLog}
+          </pre>
+        </div>
+
         {loading ? (
-           <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-indigo-600" /></div>
+           <div className="flex justify-center py-10"><Loader2 className="w-10 h-10 animate-spin text-indigo-600" /></div>
         ) : (
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -167,6 +203,11 @@ export default function ManagementTeamPage() {
                       </td>
                     </tr>
                   ))}
+                  {managers.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-10 text-center font-bold text-slate-400">الجدول فارغ ولا يوجد مستخدمون لعرضهم.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
