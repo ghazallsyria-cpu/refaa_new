@@ -1,9 +1,10 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useUsersSystem } from "@/hooks/useUsersSystem";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw, Zap, Info
 } from "lucide-react";
@@ -44,8 +45,12 @@ const getSchoolTime = () => {
   return new Date(utc + (3 * 3600000));
 };
 
-const getDbDay = (jsDay: number) => {
-  return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
+// 🚀 دالة التوقيت المحلي لضمان عدم خطأ جرينتش (UTC)
+const getLocalDateString = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export default function TeachersMonitorPage() {
@@ -65,7 +70,7 @@ export default function TeachersMonitorPage() {
   useEffect(() => {
     fetchTeachers();
     const st = getSchoolTime();
-    setTodayStr(st.toISOString().split("T")[0]);
+    setTodayStr(getLocalDateString(st)); // استخدام التوقيت المحلي
     setTodayName(DAY_MAP[st.getDay()]);
     setDateLabel(`${st.getDate()} ${MONTH_MAP[st.getMonth()]} ${st.getFullYear()}`);
     setIsWeekend(st.getDay() === 5 || st.getDay() === 6);
@@ -78,9 +83,10 @@ export default function TeachersMonitorPage() {
       const now = getSchoolTime();
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
-      const weekAgoStr = weekAgo.toISOString().split("T")[0];
-      const currentDbDay = now.getDay() + 1;
+      const weekAgoStr = getLocalDateString(weekAgo);
+      const currentDbDay = now.getDay() === 0 ? 1 : now.getDay() === 1 ? 2 : now.getDay() === 2 ? 3 : now.getDay() === 3 ? 4 : now.getDay() === 4 ? 5 : 0;
 
+      // 🛡️ السحر هنا: تخفيف الضغط بنسبة 80% (جلب حصص اليوم فقط) مع كسر حاجز 1000
       const [
         { data: schedulesDB },
         { data: dbPeriods },
@@ -88,11 +94,11 @@ export default function TeachersMonitorPage() {
         { data: assignmentsDB },
         { data: examsDB }
       ] = await Promise.all([
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
-        supabase.from('class_periods').select('period_number, end_time'),
-        supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr),
-        supabase.from('assignments').select('teacher_id').gte('created_at', weekAgoStr),
-        supabase.from('exams').select('teacher_id').gte('created_at', weekAgoStr)
+        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').eq('day_of_week', currentDbDay).limit(5000),
+        supabase.from('class_periods').select('period_number, end_time').limit(100),
+        supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr).limit(10000),
+        supabase.from('assignments').select('teacher_id').gte('created_at', weekAgoStr).limit(10000),
+        supabase.from('exams').select('teacher_id').gte('created_at', weekAgoStr).limit(10000)
       ]);
 
       const periodsMap: Record<string, string> = {};
@@ -103,7 +109,8 @@ export default function TeachersMonitorPage() {
       const safeSchedules = (schedulesDB || []) as any[];
 
       const results: TeacherMonitor[] = allTeachers.map((teacher: any) => {
-        const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(currentDbDay));
+        // لا نحتاج للفلترة باليوم لأننا جلبنا حصص اليوم فقط من قاعدة البيانات
+        const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id));
         const scheduledTotal = daySchedules.length;
 
         let expectedTotal = 0;
@@ -409,3 +416,5 @@ function SearchX({ className }: { className?: string }) {
     </svg>
   );
 }
+
+
