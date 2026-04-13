@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Search, Filter, BookOpen, Users, 
   BarChart2, Clock, MoreVertical, Edit2, 
   Trash2, Eye, Play, FileText, CheckCircle,
-  TrendingUp, ArrowRight, AlertCircle, Lock, Trophy
+  TrendingUp, ArrowRight, AlertCircle, Lock, Trophy, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,7 +28,7 @@ const checkIsLocked = (exam: any) => {
 };
 
 export default function ExamsDashboard() {
-  const { user, authRole, isChecking: authLoading } = useAuth();
+  const { user, authRole, isChecking } = useAuth() as any; // 🚀 تفعيل جدار الحماية
   const { data: exams, loading: contentLoading, error: contentError, refetch: refresh, deleteExamWithMedia } = useExamsSystem();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,23 +42,29 @@ export default function ExamsDashboard() {
 
   const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
 
-  const filteredExams = exams.filter(exam => {
-    if (!exam) return false;
-    const matchesSearch = (exam.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         (exam.subject_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // 🚀 تحسين الأداء (Performance): استخدام useMemo لمنع تقطيع الشاشة أثناء البحث
+  const filteredExams = useMemo(() => {
+    return exams.filter((exam: any) => {
+      if (!exam) return false;
+      const matchesSearch = (exam.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            (exam.subject_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || exam.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [exams, searchTerm, statusFilter]);
 
   // 🚀 الثغرة الأمنية تم إغلاقها: الطالب يرى فقط الاختبارات المنشورة
-  const displayedExams = isTeacherOrAdmin 
-    ? filteredExams 
-    : filteredExams.filter(e => e?.status === 'published');
+  const displayedExams = useMemo(() => {
+    return isTeacherOrAdmin 
+      ? filteredExams 
+      : filteredExams.filter((e: any) => e?.status === 'published');
+  }, [filteredExams, isTeacherOrAdmin]);
 
   const handleDelete = async (examId: string) => {
-    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟')) return;
+    if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الاختبار؟ سيتم حذف جميع إجابات الطلاب ومرفقاته.')) return;
     try {
       await deleteExamWithMedia(examId);
+      if (refresh) refresh();
     } catch (err) {
       console.error('Error deleting exam:', err);
     }
@@ -105,13 +111,19 @@ export default function ExamsDashboard() {
     }
   };
 
-  if (!mounted || authLoading) {
+  // 🚀 شاشة الحماية والتحقق من الصلاحيات لمنع الوميض
+  if (isChecking) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div>
+      <div className="flex h-screen items-center justify-center bg-[#F8FAFC]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
       </div>
     );
   }
+
+  if (!mounted) return null;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24" dir="rtl">
@@ -236,7 +248,7 @@ export default function ExamsDashboard() {
               </div>
               <input 
                 type="text" 
-                className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold" 
+                className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold outline-none" 
                 placeholder="البحث عن اختبار بالاسم أو المادة..." 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)} 
@@ -248,7 +260,7 @@ export default function ExamsDashboard() {
                   <Filter className="h-6 w-6" />
                 </div>
                 <select 
-                  className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold appearance-none" 
+                  className="block w-full rounded-3xl border-0 py-5 pr-14 pl-6 text-slate-900 bg-slate-50/50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-base transition-all font-bold appearance-none outline-none cursor-pointer" 
                   value={statusFilter} 
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -312,13 +324,13 @@ export default function ExamsDashboard() {
                               <motion.button 
                                 whileHover={{ scale: 1.1 }} 
                                 whileTap={{ scale: 0.9 }} 
-                                className="h-12 w-12 flex items-center justify-center rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-all bg-slate-50 border border-slate-100 shrink-0"
+                                className="h-12 w-12 flex items-center justify-center rounded-2xl hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-all bg-slate-50 border border-slate-100 shrink-0 outline-none"
                               >
                                 <MoreVertical className="h-6 w-6" />
                               </motion.button>
                             </DropdownMenu.Trigger>
                             <DropdownMenu.Portal>
-                              <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200">
+                              <DropdownMenu.Content className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-3 min-w-[220px] z-50 animate-in fade-in zoom-in-95 duration-200" dir="rtl">
                                 <DropdownMenu.Item asChild>
                                   <Link href={`/exams/builder/${exam.id}`} className="flex items-center gap-4 px-5 py-4 text-sm font-black text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl outline-none cursor-pointer transition-colors">
                                     <Edit2 className="h-5 w-5" />
@@ -583,5 +595,3 @@ export default function ExamsDashboard() {
     </div>
   );
 }
-
-
