@@ -1,11 +1,12 @@
+
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useUsersSystem } from "@/hooks/useUsersSystem";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  CheckCircle2, FileText, Download, Users, Calendar, Clock, Search, ShieldCheck, Zap, Info
+  CheckCircle2, FileText, Download, Calendar, Clock, Search, ShieldCheck, Zap, Info
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
 
@@ -47,6 +48,14 @@ const getDbDay = (jsDay: number) => {
   return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 };
 
+// 🚀 دالة مساعدة لاستخراج التاريخ بالتوقيت المحلي (تمنع مشكلة جرينتش)
+const getLocalDateString = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function TeachersReportPage() {
   const { teachers: allTeachers, fetchTeachers, loading: usersLoading } = useUsersSystem();
   const [localTeachers, setLocalTeachers] = useState<TeacherReport[]>([]);
@@ -60,12 +69,9 @@ export default function TeachersReportPage() {
   const [isWeekend, setIsWeekend] = useState(false);
 
   useEffect(() => {
-    fetchTeachers(); // ضمان جلب جميع المعلمين بأسمائهم الحقيقية
+    fetchTeachers(); 
     const now = getSchoolTime();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    setTodayStr(`${year}-${month}-${day}`);
+    setTodayStr(getLocalDateString(now));
     setTodayName(DAY_MAP[now.getDay()]);
     setDateLabel(`${now.getDate()} ${MONTH_MAP[now.getMonth()]} ${now.getFullYear()}`);
     setIsWeekend(now.getDay() === 5 || now.getDay() === 6);
@@ -78,18 +84,19 @@ export default function TeachersReportPage() {
       const now = getSchoolTime();
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 7);
-      const weekAgoStr = weekAgo.toISOString().split("T")[0];
+      const weekAgoStr = getLocalDateString(weekAgo);
 
+      // 🚀 السحر هنا: كسر حاجز الـ 1000 لجميع الاستعلامات لضمان جلب كل الحصص وسجلات الغياب
       const [
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period'),
-        supabase.from('class_periods').select('period_number, end_time'),
+        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000), // رفعنا الحد
+        supabase.from('class_periods').select('period_number, end_time').limit(100),
         reportType === "day" 
-          ? supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr)
-          : supabase.from('attendance_records').select('section_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr)
+          ? supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr).limit(10000)
+          : supabase.from('attendance_records').select('section_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr).limit(50000)
       ]);
 
       const periodsMap: Record<string, string> = {};
@@ -110,10 +117,10 @@ export default function TeachersReportPage() {
         for (let i = 0; i < daysToLookBack; i++) {
           const d = new Date(now);
           d.setDate(d.getDate() - i);
-          const dStr = d.toISOString().split('T')[0];
+          const dStr = getLocalDateString(d); // 🚀 استخدام التوقيت المحلي بدلا من toISOString
           const dDay = getDbDay(d.getDay());
 
-          if (dDay >= 1 && dDay <= 5) { // أيام العمل فقط
+          if (dDay >= 1 && dDay <= 5) { 
             const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay));
             
             daySchedules.forEach(sch => {
@@ -134,7 +141,7 @@ export default function TeachersReportPage() {
 
               if (isPassed && isSystemActive) {
                 expectedTotal++;
-                // 🚀 السحر هنا: نعتمد على رقم الفصل والحصة والتاريخ (بدون اسم المعلم) لضمان أن الحصة تم رصدها!
+                
                 const hasRecord = safeAttendance.find(a => 
                   String(a.section_id) === String(sch.section_id) && 
                   String(a.date).split('T')[0] === dStr && 
@@ -429,3 +436,4 @@ export default function TeachersReportPage() {
     </>
   );
 }
+
