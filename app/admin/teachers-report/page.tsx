@@ -26,7 +26,7 @@ interface TeacherReport {
   selected: boolean;
 }
 
-const [search, setSearch] = useState('');
+
 
 const DAY_MAP: Record<number, string> = {
   0: "الأحد", 1: "الاثنين", 2: "الثلاثاء",
@@ -73,7 +73,7 @@ export default function TeachersReportPage() {
   const { teachers: allTeachers, fetchTeachers, loading: usersLoading } = useUsersSystem();
   const [localTeachers, setLocalTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [search, setSearch] = useState('');
   // 🚀 حالات التقرير المخصص
   const [reportType, setReportType] = useState<"day" | "week" | "custom">("day");
   const [startDate, setStartDate] = useState<string>("");
