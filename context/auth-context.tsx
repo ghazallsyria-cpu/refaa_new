@@ -112,7 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
       }
 
-      // 🚀 التحسين هنا: تحديث الحالة فوراً
       const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
       setUser(authResult.user);
       setAuthRole(userData.role as UserRole);
@@ -122,7 +121,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem('authRole', userData.role);
       sessionStorage.setItem('userName', name);
 
-      // تحديث توجيه الصفحة
       router.refresh(); 
 
       if (userData.must_reset_password) {
@@ -318,6 +316,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [rawSettings, authRole]);
 
   useEffect(() => {
+    // 🛑 🚨 إيقاف القناة الحية (Websocket) لتخفيف استهلاك السيرفر ومنع الانهيار
+    return;
+    
+    /* ---- الكود الموقوف ---- 
     if (!user || isPublicPage || authRole === 'admin' || authRole === 'management') return;
 
     const channel = supabase
@@ -334,6 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
+    */
   }, [user, isPublicPage, authRole]);
 
   const signOut = async () => {
@@ -374,6 +377,5 @@ export function useAuth() {
   }
   return context;
 }
-
 
 
