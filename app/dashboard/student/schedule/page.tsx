@@ -7,9 +7,9 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale'; // 🚀 استيراد اللغة العربية لتنسيق الوقت
 import Link from 'next/link';
 
-// 🚀 استخدام المسارات النسبية لتجنب أخطاء البناء
-import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
-import { useAuth } from '../../../context/auth-context';
+// 🚀 استخدام المسارات النسبية الصحيحة لتجنب أخطاء البناء
+import { useDashboardSystem } from '../../../../hooks/useDashboardSystem';
+import { useAuth } from '../../../../context/auth-context';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
