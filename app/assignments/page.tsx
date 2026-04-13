@@ -6,7 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
-import ForumEditor from '@/components/ForumEditor'; // 🚀 استدعاء المحرر الاحترافي
+import ForumEditor from '@/components/ForumEditor';
 import { Question } from '@/types/question';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
@@ -58,9 +58,6 @@ export default function AssignmentsPage() {
   const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editData, setEditData] = useState<any>({});
-
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -92,6 +89,11 @@ export default function AssignmentsPage() {
     }
     if (!currentAssignment.section_ids || currentAssignment.section_ids.length === 0) {
       showNotification('error', 'عذراً، يجب تحديد شعبة واحدة على الأقل لإرسال الواجب إليها');
+      return;
+    }
+    // 🚀 منع الإدارة من الحفظ بدون تحديد المعلم
+    if ((currentRole === 'admin' || currentRole === 'management') && !currentAssignment.teacher_id) {
+      showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
       return;
     }
 
@@ -178,7 +180,7 @@ export default function AssignmentsPage() {
       title: '',
       description: '',
       subject_id: subjects[0]?.id || '',
-      teacher_id: currentRole === 'teacher' ? user?.id || '' : teachers[0]?.id || '',
+      teacher_id: currentRole === 'teacher' ? user?.id : '', // تركها فارغة لتجبر المدير على الاختيار
       due_date: formattedDate,
       section_ids: [],
       file_url: '',
@@ -288,6 +290,9 @@ export default function AssignmentsPage() {
               const needsTeacherGrading = pendingGradesCount > 0;
               const overdue = isOverdue(assignment.due_date!);
               const dueDateObj = new Date(assignment.due_date!);
+              
+              // 🚀 مفتاح الصلاحية السحري: هل يحق لهذا المستخدم تعديل هذا الواجب؟
+              const canEdit = currentRole === 'admin' || currentRole === 'management' || assignment.teacher_id === user?.id;
 
               return (
                 <div key={assignment.id} className="group glass-card rounded-[3rem] border border-white/60 shadow-xl shadow-slate-200/40 hover:shadow-2xl hover:-translate-y-2 transition-all overflow-hidden flex flex-col">
@@ -314,20 +319,24 @@ export default function AssignmentsPage() {
                         >
                           <Eye className="h-5 w-5" />
                         </Link>
-                        <button 
-                          onClick={() => openFullEditModal(assignment)}
-                          className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
-                          title="تعديل الواجب بالكامل"
-                        >
-                          <Edit2 className="h-5 w-5" />
-                        </button>
-                        <button 
-                          onClick={() => setAssignmentToDelete(assignment.id)}
-                          className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
-                          title="حذف الواجب"
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </button>
+                        {canEdit && (
+                          <button 
+                            onClick={() => openFullEditModal(assignment)}
+                            className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
+                            title="تعديل الواجب بالكامل"
+                          >
+                            <Edit2 className="h-5 w-5" />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button 
+                            onClick={() => setAssignmentToDelete(assignment.id)}
+                            className="h-10 w-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm bg-white border border-slate-100"
+                            title="حذف الواجب"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -335,7 +344,6 @@ export default function AssignmentsPage() {
                       {assignment.title}
                     </h3>
                     
-                    {/* 🚀 إخفاء الوصف لأنه قد يحتوي على HTML غير مرتب في البطاقة الصغيرة */}
                     <p className="text-slate-500 font-medium line-clamp-2 mb-8 text-sm leading-relaxed">
                       يرجى فتح الواجب لرؤية التعليمات التفصيلية...
                     </p>
@@ -528,7 +536,6 @@ export default function AssignmentsPage() {
                       />
                     </div>
                   
-                    {/* 🚀 إستخدام ForumEditor للوصف العام للواجب */}
                     <div>
                       <label className="block text-sm font-black text-slate-700 mb-2 mr-1">الوصف والتعليمات التفصيلية</label>
                       <ForumEditor 
@@ -539,7 +546,8 @@ export default function AssignmentsPage() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    {/* 🚀 تعديل التخطيط ليحتوي على حقل المعلم إذا كان المستخدم إدارة */}
+                    <div className={`grid grid-cols-1 gap-6 ${currentRole === 'admin' || currentRole === 'management' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
                       <div>
                         <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المادة <span className="text-red-500">*</span></label>
                         <select 
@@ -565,6 +573,24 @@ export default function AssignmentsPage() {
                           onChange={(e) => setCurrentAssignment({...currentAssignment, due_date: e.target.value})}
                         />
                       </div>
+                      
+                      {/* 🚀 حقل اختيار المعلم السري للإدارة فقط */}
+                      {(currentRole === 'admin' || currentRole === 'management') && (
+                        <div>
+                          <label className="block text-sm font-black text-slate-700 mb-2 mr-1">المعلم المسؤول <span className="text-red-500">*</span></label>
+                          <select 
+                            required
+                            className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-600 sm:text-sm transition-all font-bold appearance-none cursor-pointer"
+                            value={currentAssignment.teacher_id || ''}
+                            onChange={(e) => setCurrentAssignment({...currentAssignment, teacher_id: e.target.value})}
+                          >
+                            <option value="">اختر المعلم...</option>
+                            {teachers.map((t: any) => (
+                              <option key={t.id} value={t.id}>{t.user?.full_name || 'معلم'}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
                     <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
