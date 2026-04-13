@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useUsersSystem } from "@/hooks/useUsersSystem";
 import { motion } from "framer-motion";
 import {
-  CheckCircle2, FileText, Download, Calendar, Clock, Search, ShieldCheck, Zap, Info
+  CheckCircle2, FileText, Download, Calendar, Clock, Search, ShieldCheck, Zap, Info, Filter
 } from "lucide-react";
 import { supabase } from "@/lib/supabase"; 
 
@@ -16,8 +16,8 @@ interface TeacherReport {
   specialization: string;
   recorded: number;
   missed: number;
-  expected: number; // الحصص التي انتهى وقتها ومطالب برصدها
-  scheduled: number; // إجمالي جدوله
+  expected: number;
+  scheduled: number;
   percent: number;
   lastRecorded: string | null;
   status: "ممتاز" | "جيد" | "تحذير" | "حرج";
@@ -48,7 +48,6 @@ const getDbDay = (jsDay: number) => {
   return jsDay === 0 ? 1 : jsDay === 1 ? 2 : jsDay === 2 ? 3 : jsDay === 3 ? 4 : jsDay === 4 ? 5 : 0;
 };
 
-// 🚀 دالة مساعدة لاستخراج التاريخ بالتوقيت المحلي (تمنع مشكلة جرينتش)
 const getLocalDateString = (d: Date) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -56,12 +55,27 @@ const getLocalDateString = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+// 🚀 دالة مساعدة لتوليد مصفوفة من التواريخ بين تاريخين
+const getDatesBetween = (startDate: Date, endDate: Date) => {
+  const dates = [];
+  let currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    dates.push(getLocalDateString(currentDate));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return dates;
+};
+
 export default function TeachersReportPage() {
   const { teachers: allTeachers, fetchTeachers, loading: usersLoading } = useUsersSystem();
   const [localTeachers, setLocalTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [reportType, setReportType] = useState<"day" | "week">("day");
-  const [search, setSearch] = useState("");
+  
+  // 🚀 حالات التقرير المخصص
+  const [reportType, setReportType] = useState<"day" | "week" | "custom">("day");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [customError, setCustomError] = useState<string | null>(null);
 
   const [todayStr, setTodayStr] = useState("");
   const [todayName, setTodayName] = useState("");
@@ -71,32 +85,76 @@ export default function TeachersReportPage() {
   useEffect(() => {
     fetchTeachers(); 
     const now = getSchoolTime();
-    setTodayStr(getLocalDateString(now));
+    const todayFormatted = getLocalDateString(now);
+    setTodayStr(todayFormatted);
     setTodayName(DAY_MAP[now.getDay()]);
     setDateLabel(`${now.getDate()} ${MONTH_MAP[now.getMonth()]} ${now.getFullYear()}`);
     setIsWeekend(now.getDay() === 5 || now.getDay() === 6);
+    
+    // تعيين قيم افتراضية للتاريخ المخصص
+    setEndDate(todayFormatted);
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    setStartDate(getLocalDateString(weekAgo));
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (overrideType?: "day" | "week" | "custom") => {
+    const currentType = overrideType || reportType;
     if (!todayStr || allTeachers.length === 0) return;
+    
     setLoading(true);
+    setCustomError(null);
+
     try {
       const now = getSchoolTime();
-      const weekAgo = new Date(now);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const weekAgoStr = getLocalDateString(weekAgo);
+      let queryStartStr = todayStr;
+      let queryEndStr = todayStr;
+      let datesToProcess: string[] = [todayStr];
 
-      // 🚀 السحر هنا: كسر حاجز الـ 1000 لجميع الاستعلامات لضمان جلب كل الحصص وسجلات الغياب
+      if (currentType === "week") {
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        queryStartStr = getLocalDateString(weekAgo);
+        datesToProcess = getDatesBetween(new Date(queryStartStr), new Date(queryEndStr));
+      } else if (currentType === "custom") {
+        if (!startDate || !endDate) {
+          setCustomError("يرجى تحديد تاريخ البداية والنهاية");
+          setLoading(false);
+          return;
+        }
+        
+        const sDate = new Date(startDate);
+        const eDate = new Date(endDate);
+        
+        if (sDate > eDate) {
+          setCustomError("تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية");
+          setLoading(false);
+          return;
+        }
+
+        // 🛡️ حماية السيرفر: منع استعلام أكثر من 31 يوماً
+        const diffDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 3600 * 24));
+        if (diffDays > 31) {
+          setCustomError("لحماية النظام، أقصى مدة للتقرير المخصص هي 31 يوماً فقط.");
+          setLoading(false);
+          return;
+        }
+
+        queryStartStr = startDate;
+        queryEndStr = endDate;
+        datesToProcess = getDatesBetween(sDate, eDate);
+      }
+
       const [
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000), // رفعنا الحد
+        supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000),
         supabase.from('class_periods').select('period_number, end_time').limit(100),
-        reportType === "day" 
+        currentType === "day" 
           ? supabase.from('attendance_records').select('section_id, date, period, created_at').eq('date', todayStr).limit(10000)
-          : supabase.from('attendance_records').select('section_id, date, period, created_at').gte('date', weekAgoStr).lte('date', todayStr).limit(50000)
+          : supabase.from('attendance_records').select('section_id, date, period, created_at').gte('date', queryStartStr).lte('date', queryEndStr).limit(50000)
       ]);
 
       const periodsMap: Record<string, string> = {};
@@ -107,17 +165,15 @@ export default function TeachersReportPage() {
       const safeSchedules = (schedulesDB || []) as any[];
 
       const results: TeacherReport[] = allTeachers.map((teacher: any) => {
-        const daysToLookBack = reportType === "day" ? 1 : 7;
         let expectedTotal = 0;
         let scheduledTotal = 0;
         let actualRecorded = 0;
         let actualMissed = 0;
         let lastRecorded: string | null = null;
 
-        for (let i = 0; i < daysToLookBack; i++) {
-          const d = new Date(now);
-          d.setDate(d.getDate() - i);
-          const dStr = getLocalDateString(d); // 🚀 استخدام التوقيت المحلي بدلا من toISOString
+        // 🚀 محرك معالجة التواريخ الجديد الديناميكي
+        for (const dStr of datesToProcess) {
+          const d = new Date(dStr);
           const dDay = getDbDay(d.getDay());
 
           if (dDay >= 1 && dDay <= 5) { 
@@ -135,7 +191,7 @@ export default function TeachersReportPage() {
                   pTime.setHours(h, m, 0, 0);
                   if (now > pTime) isPassed = true;
                 }
-              } else {
+              } else if (new Date(dStr) < now) {
                 isPassed = true;
               }
 
@@ -171,7 +227,7 @@ export default function TeachersReportPage() {
         } else if (scheduledTotal === 0) {
           notes = "لا حصص مجدولة";
         } else {
-          if (percent < 60 || (actualMissed > 0 && reportType === "day")) status = "حرج";
+          if (percent < 60 || (actualMissed > 0 && currentType === "day")) status = "حرج";
           else if (percent < 85) status = "تحذير";
           else if (percent < 95) status = "جيد";
         }
@@ -200,14 +256,28 @@ export default function TeachersReportPage() {
       setLocalTeachers(results);
     } catch (e) {
       console.error(e);
+      setCustomError("حدث خطأ أثناء جلب التقرير، يرجى المحاولة مرة أخرى.");
     } finally {
       setLoading(false);
     }
-  }, [reportType, todayStr, allTeachers]);
+  }, [reportType, todayStr, allTeachers, startDate, endDate]);
 
   useEffect(() => {
-    if (todayStr && allTeachers.length > 0) fetchData();
-  }, [fetchData, todayStr, allTeachers]);
+    if (todayStr && allTeachers.length > 0 && reportType !== "custom") {
+      fetchData();
+    }
+  }, [todayStr, allTeachers, reportType]); // أزلنا fetchData من التبعيات لمنع التكرار
+
+  const handleTypeChange = (type: "day" | "week" | "custom") => {
+    setReportType(type);
+    if (type !== "custom") {
+      fetchData(type);
+    }
+  };
+
+  const handleApplyCustomRange = () => {
+    fetchData("custom");
+  };
 
   const toggleSelect = (id: string) => setLocalTeachers(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
   const selectAll = () => setLocalTeachers(prev => prev.map(t => ({ ...t, selected: true })));
@@ -281,21 +351,50 @@ export default function TeachersReportPage() {
         )}
 
         <div className="bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30 flex flex-col xl:flex-row gap-6 justify-between items-start xl:items-center">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full xl:w-auto">
+          <div className="flex flex-col w-full xl:w-auto gap-4">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar className="w-5 h-5" /></div>
               <span className="font-black text-slate-900 text-sm">نطاق التقرير:</span>
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <button onClick={() => setReportType("day")} className={`flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs sm:text-sm font-black transition-all ${reportType === "day" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200 border-transparent" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>
+            <div className="flex flex-wrap gap-2 w-full">
+              <button onClick={() => handleTypeChange("day")} className={`flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs sm:text-sm font-black transition-all ${reportType === "day" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200 border-transparent" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>
                 يومي — {todayName}
               </button>
-              <button onClick={() => setReportType("week")} className={`flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs sm:text-sm font-black transition-all ${reportType === "week" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200 border-transparent" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>
+              <button onClick={() => handleTypeChange("week")} className={`flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs sm:text-sm font-black transition-all ${reportType === "week" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200 border-transparent" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>
                 أسبوعي (7 أيام)
               </button>
+              <button onClick={() => handleTypeChange("custom")} className={`flex-1 sm:flex-none px-6 py-3 rounded-xl text-xs sm:text-sm font-black transition-all ${reportType === "custom" ? "bg-indigo-600 text-white shadow-md shadow-indigo-200 border-transparent" : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"}`}>
+                تاريخ مخصص
+              </button>
             </div>
+
+            {/* 🚀 واجهة التقرير المخصص (تظهر فقط عند اختياره) */}
+            <AnimatePresence>
+              {reportType === "custom" && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex flex-col sm:flex-row items-end gap-3 mt-2 bg-slate-50 p-4 rounded-2xl border border-slate-100 overflow-hidden">
+                  <div className="w-full sm:w-auto">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">من تاريخ</label>
+                    <input type="date" max={todayStr} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full sm:w-40 rounded-xl border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-indigo-500 py-2.5 px-3 outline-none" />
+                  </div>
+                  <div className="w-full sm:w-auto">
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">إلى تاريخ</label>
+                    <input type="date" max={todayStr} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full sm:w-40 rounded-xl border-slate-200 bg-white text-sm font-bold focus:ring-2 focus:ring-indigo-500 py-2.5 px-3 outline-none" />
+                  </div>
+                  <button onClick={handleApplyCustomRange} className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-colors flex items-center justify-center gap-2 shadow-md shadow-indigo-200">
+                    <Filter className="w-4 h-4" /> تطبيق التقرير
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            
+            {customError && (
+              <p className="text-xs font-bold text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-100 mt-2">
+                {customError}
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-3 sm:gap-4 flex-wrap bg-slate-50 p-3 sm:p-4 rounded-2xl border border-slate-100 w-full xl:w-auto justify-center">
+
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap bg-slate-50 p-3 sm:p-4 rounded-2xl border border-slate-100 w-full xl:w-auto justify-center self-end">
             <div className="flex items-center gap-1.5 px-3 border-l border-slate-200 last:border-0"><span className="w-2 h-2 rounded-full bg-emerald-500"></span><span className="text-xs font-bold text-slate-600">ممتاز: <span className="font-black text-emerald-700">{localTeachers.filter(t => t.status === "ممتاز" && t.selected).length}</span></span></div>
             <div className="flex items-center gap-1.5 px-3 border-l border-slate-200 last:border-0"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="text-xs font-bold text-slate-600">تحذير: <span className="font-black text-amber-700">{localTeachers.filter(t => t.status === "تحذير" && t.selected).length}</span></span></div>
             <div className="flex items-center gap-1.5 px-3"><span className="w-2 h-2 rounded-full bg-rose-500"></span><span className="text-xs font-bold text-slate-600">حرج: <span className="font-black text-rose-700">{localTeachers.filter(t => t.status === "حرج" && t.selected).length}</span></span></div>
@@ -405,7 +504,11 @@ export default function TeachersReportPage() {
           </div>
           <h1 className="text-3xl font-black mb-2 tracking-tight text-slate-900">مدرسة الرفعة النموذجية</h1>
           <h2 className="text-xl font-bold text-slate-700 bg-slate-50 inline-block px-6 py-2 rounded-xl border border-slate-200 mt-2">التقرير المعتمد لمتابعة تسجيل الغياب اليومي للمعلمين</h2>
-          <p className="text-sm font-black text-indigo-700 mt-4">{reportType === "day" ? `التقرير اليومي — ${todayName} ${dateLabel}` : `التقرير الأسبوعي الشامل — لآخر 7 أيام`}</p>
+          <p className="text-sm font-black text-indigo-700 mt-4">
+            {reportType === "day" ? `التقرير اليومي — ${todayName} ${dateLabel}` 
+            : reportType === "week" ? `التقرير الأسبوعي الشامل — لآخر 7 أيام`
+            : `تقرير مخصص — من ${startDate} إلى ${endDate}`}
+          </p>
         </div>
         <div className="flex justify-between items-center mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
           <div className="font-black text-slate-900">إجمالي المعلمين المستهدفين: {selectedTeachers.length}</div>
@@ -436,4 +539,6 @@ export default function TeachersReportPage() {
     </>
   );
 }
+
+
 
