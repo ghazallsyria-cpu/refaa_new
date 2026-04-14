@@ -58,15 +58,14 @@ export default function StudentPerformancePage() {
     
     setIsLoading(true);
     try {
-      let student = null;
-      const { data: s1 } = await supabase.from('students').select('*, sections(name, classes(name))').eq('user_id', user.id).maybeSingle();
-      if (s1) student = s1;
-      else {
-        const { data: s2 } = await supabase.from('students').select('*, sections(name, classes(name))').eq('id', user.id).maybeSingle();
-        if (s2) student = s2;
-      }
+      // 🚀 التنظيف הגذري: استخدام id مباشرة بدون خطط بديلة
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .select('*, sections(name, classes(name))')
+        .eq('id', user.id) // ✅ التصحيح هنا
+        .maybeSingle();
 
-      if (!student) {
+      if (studentError || !student) {
         setIsLoading(false);
         return;
       }
