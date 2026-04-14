@@ -49,19 +49,16 @@ export function useAssignmentsSystem() {
     setError(null);
     try {
       const selectQuery = currentRole === 'student' 
-        ? `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
-        : `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
+        ? `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
+        : `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
 
       let query = supabase.from('assignments').select(selectQuery).order('created_at', { ascending: false });
 
       if (currentRole === 'student') {
         let studentProfile = null;
-        const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
-        if (sp1) studentProfile = sp1;
-        else {
-          const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
-          if (sp2) studentProfile = sp2;
-        }
+        // 🚀 الإصلاح: البحث الآمن عن الطالب باستخدام الـ id فقط
+        const { data: sp } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
+        if (sp) studentProfile = sp;
 
         if (studentProfile?.section_id) {
           query = query.eq('assignment_sections.section_id', studentProfile.section_id).eq('status', 'published');
@@ -70,12 +67,9 @@ export function useAssignmentsSystem() {
         }
       } else if (currentRole === 'teacher') {
         let teacherProfile = null;
-        const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (tp1) teacherProfile = tp1;
-        else {
-          const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-          if (tp2) teacherProfile = tp2;
-        }
+        // 🚀 الإصلاح הגذري: البحث الآمن عن المعلم باستخدام الـ id فقط وإزالة البحث المعطوب
+        const { data: tp } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+        if (tp) teacherProfile = tp;
           
         if (teacherProfile) {
           query = query.eq('teacher_id', teacherProfile.id);
@@ -181,7 +175,7 @@ export function useAssignmentsSystem() {
     try {
       const { data: assignmentData, error: assignmentError } = await supabase
         .from('assignments')
-        .select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
+        .select(`*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
         .eq('id', assignmentId)
         .maybeSingle();
 
@@ -200,12 +194,9 @@ export function useAssignmentsSystem() {
 
       if (currentRole === 'student' && user) {
         let studentProfile = null;
-        const { data: sp1 } = await supabase.from('students').select('id').eq('user_id', user.id).maybeSingle();
-        if (sp1) studentProfile = sp1;
-        else {
-          const { data: sp2 } = await supabase.from('students').select('id').eq('id', user.id).maybeSingle();
-          if (sp2) studentProfile = sp2;
-        }
+        // 🚀 الإصلاح: البحث الآمن
+        const { data: sp } = await supabase.from('students').select('id').eq('id', user.id).maybeSingle();
+        if (sp) studentProfile = sp;
 
         if (studentProfile) {
           const { data: subData } = await supabase
@@ -224,7 +215,7 @@ export function useAssignmentsSystem() {
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const { data: subsData } = await supabase
           .from('assignment_submissions')
-          .select(`*, student:students(users(full_name, email), sections(id, name, classes(id, name)))`)
+          .select(`*, student:students(users!fk_students_id(full_name, email), sections(id, name, classes(id, name)))`)
           .eq('assignment_id', assignmentId)
           .order('submitted_at', { ascending: false });
         
@@ -274,7 +265,7 @@ export function useAssignmentsSystem() {
     try {
       const { data: submissionData, error: subError } = await supabase
         .from('assignment_submissions')
-        .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
+        .select(`*, student:students(users!fk_students_id(full_name, email), sections(name, classes(name)))`)
         .eq('id', submissionId)
         .maybeSingle();
         
