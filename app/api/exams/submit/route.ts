@@ -9,21 +9,23 @@ export async function POST(req: Request) {
 
     const adminSupabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
     
-    // 🚀 استلام الوقت timeTaken من الفرونت إند
+    // 🚀 استلام البيانات والوقت من الفرونت إند
     const { examId, answers, score, status, userId, timeTaken } = await req.json(); 
 
-    // 1. تحديد الطالب
+    // 1. تحديد الطالب (🚀 تم الإصلاح الجذري: البحث بـ id مباشرة لأننا تخلصنا من user_id الوهمي)
     let realStudentId = userId;
-    const { data: st } = await adminSupabase.from('students').select('id').eq('user_id', userId).maybeSingle();
-    if (st) realStudentId = st.id;
-    else {
-      const { data: st2 } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
-      if (st2) realStudentId = st2.id;
+    const { data: st, error: stError } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
+    
+    if (stError) throw new Error("حدث خطأ أثناء التحقق من حساب الطالب.");
+    if (st) {
+      realStudentId = st.id;
+    } else {
+      throw new Error("لم يتم العثور على حساب الطالب في قاعدة البيانات.");
     }
 
     const validStatus = (status === 'graded' || status === 'completed') ? status : 'completed';
 
-    // 2. فصل الأسئلة عن الخيارات لمنع انهيار Supabase
+    // 2. فصل الأسئلة عن الخيارات لمنع انهيار الاستعلام في Supabase
     const { data: rawQuestions } = await adminSupabase.from('questions').select('*').eq('exam_id', examId).order('order_index');
     const qIds = (rawQuestions || []).map(q => q.id);
     
