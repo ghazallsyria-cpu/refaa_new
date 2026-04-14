@@ -75,8 +75,8 @@ export function useExamsSystem() {
     try {
       const fetchedData = await withCache(cacheKey, async () => {
         const selectQuery = currentRole === 'student' 
-          ? `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections!inner(section_id, sections(name, classes(name)))`
-          : `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections(section_id, sections(name, classes(name)))`;
+          ? `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), exam_sections!inner(section_id, sections(name, classes(name)))`
+          : `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), exam_sections(section_id, sections(name, classes(name)))`;
 
         let query = supabase.from('exams').select(selectQuery).order('created_at', { ascending: false });
 
@@ -84,12 +84,9 @@ export function useExamsSystem() {
 
         if (currentRole === 'student') {
           let studentProfile = null;
-          const { data: sp1 } = await supabase.from('students').select('id, section_id').eq('user_id', user.id).maybeSingle();
-          if (sp1) studentProfile = sp1;
-          else {
-            const { data: sp2 } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
-            if (sp2) studentProfile = sp2;
-          }
+          // 🚀 الإصلاح: البحث الآمن عن الطالب باستخدام الـ id فقط
+          const { data: sp } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
+          if (sp) studentProfile = sp;
 
           if (studentProfile?.section_id) {
             currentStudentProfileId = studentProfile.id;
@@ -99,16 +96,13 @@ export function useExamsSystem() {
           }
         } else if (currentRole === 'teacher') {
           let teacherProfile = null;
-          const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-          if (tp1) teacherProfile = tp1;
-          else {
-            const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-            if (tp2) teacherProfile = tp2;
-          }
+          // 🚀 الإصلاح الجذري: البحث الآمن عن المعلم باستخدام الـ id فقط وإزالة البحث بـ user_id المعطوب
+          const { data: tp } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+          if (tp) teacherProfile = tp;
             
           if (!teacherProfile && user.user_metadata?.role === 'teacher') {
             const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
-                user_id: user.id,
+                id: user.id, // ✅ استخدام نفس معرّف المستخدم بدلاً من user_id
                 national_id: 'TEMP_' + user.id.substring(0, 8),
                 specialization: 'غير محدد'
               }).select('id').single();
@@ -212,16 +206,14 @@ export function useExamsSystem() {
     try {
       if (currentRole === 'student') {
         let studentProfile = null;
-        const { data: sp1 } = await supabase.from('students').select('section_id').eq('user_id', user.id).maybeSingle();
-        if (sp1) studentProfile = sp1;
-        else {
-          const { data: sp2 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
-          if (sp2) studentProfile = sp2;
-        }
+        // 🚀 الإصلاح: البحث عن الطالب بـ id فقط
+        const { data: sp } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
+        if (sp) studentProfile = sp;
+        
         if (!studentProfile) throw new Error('حساب الطالب غير مكتمل');
       }
 
-      const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name), teacher:teachers(users(full_name))').eq('id', examId).single();
+      const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name))').eq('id', examId).single();
       if (examError) throw examError;
 
       const { data: questionsData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
@@ -290,7 +282,7 @@ export function useExamsSystem() {
       
       let studentsData: any[] = [];
       if (examData?.section_ids && examData.section_ids.length > 0) {
-        const { data: students } = await supabase.from('students').select(`id, users(full_name, email), section:sections(name, classes(name))`).in('section_id', examData.section_ids);
+        const { data: students } = await supabase.from('students').select(`id, users!fk_students_id(full_name, email), section:sections(name, classes(name))`).in('section_id', examData.section_ids);
         if (students) {
           studentsData = students.map((s: any) => ({
             id: s.id,
@@ -301,7 +293,7 @@ export function useExamsSystem() {
         }
       }
 
-      const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
+      const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users!fk_students_id(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
       const { data: qData } = await supabase.from('questions').select('*').eq('exam_id', examId);
       
       let aData: any[] = [];
