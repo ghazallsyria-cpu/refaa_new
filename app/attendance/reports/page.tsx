@@ -39,7 +39,8 @@ export default function AttendanceReportsPage() {
     try {
       let currentTeacherId = null;
       if (authRole === 'teacher') {
-        const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        // 🚀 الإصلاح: البحث عن المعلم باستخدام id بدلاً من user_id
+        const { data: teacherData } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
