@@ -57,12 +57,17 @@ export default function TakeQuiz() {
       let validStudentId = actualUserId;
 
       if (!isPreviewMode) {
-          const { data: sProfile } = await supabase.from('students').select('id').eq('user_id', actualUserId).maybeSingle();
-          if (sProfile) validStudentId = sProfile.id;
-          else {
-              const { data: sProfile2 } = await supabase.from('students').select('id').eq('id', actualUserId).maybeSingle();
-              if (sProfile2) validStudentId = sProfile2.id;
+          // 🚀 الإصلاح الجذري: البحث عن الطالب بـ id مباشرة وإزالة user_id
+          const { data: sProfile } = await supabase
+            .from('students')
+            .select('id')
+            .eq('id', actualUserId) // ✅ التصحيح هنا
+            .maybeSingle();
+            
+          if (sProfile) {
+             validStudentId = sProfile.id;
           }
+          
           setStudentProfileId(validStudentId);
 
           const { count } = await supabase
@@ -106,14 +111,14 @@ export default function TakeQuiz() {
          let qType = q.type;
          
          // 🚀 الإصلاح الآمن: استخدام RegExp بدلاً من النص العادي
-         const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
-         const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
+         const typeRegex = new RegExp('');
+         const globalTypeRegex = new RegExp('', 'g');
          const typeMatch = qContent.match(typeRegex);
          
          if (typeMatch) {
              qType = typeMatch[1];
              qContent = qContent.replace(globalTypeRegex, '');
-         } else if (qContent.includes('<!--[TYPE:file]-->') || qType === 'file_upload') {
+         } else if (qContent.includes('') || qType === 'file_upload') {
              qType = 'file';
              qContent = qContent.replace(globalTypeRegex, '');
          }
