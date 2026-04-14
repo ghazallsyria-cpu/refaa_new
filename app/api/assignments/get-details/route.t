@@ -47,8 +47,9 @@ export async function POST(req: Request) {
         try {
             const { data } = await adminSupabase.from('teachers').select('*').eq('id', String(assignment.teacher_id).trim()).maybeSingle();
             teachers = data;
-            if (teachers?.user_id) {
-                const { data: uData } = await adminSupabase.from('users').select('*').eq('id', String(teachers.user_id).trim()).maybeSingle();
+            // 🚀 الإصلاح الأول: الاعتماد على id المعلم لأنه هو نفسه id المستخدم
+            if (teachers?.id) {
+                const { data: uData } = await adminSupabase.from('users').select('*').eq('id', String(teachers.id).trim()).maybeSingle();
                 users = uData;
             }
         } catch(e) { console.warn("Teacher fetch skipped"); }
@@ -74,7 +75,8 @@ export async function POST(req: Request) {
 
     // 4. جلب التسليمات بناءً على الصلاحية
     if (role === 'student' && userId) {
-        const { data: stData } = await adminSupabase.from('students').select('id').or(`user_id.eq.${userId},id.eq.${userId}`).maybeSingle();
+        // 🚀 الإصلاح الثاني: البحث عن الطالب بـ id فقط دون استخدام or مع user_id
+        const { data: stData } = await adminSupabase.from('students').select('id').eq('id', userId).maybeSingle();
         const stId = stData ? stData.id : userId;
 
         const { data: sub } = await adminSupabase.from('assignment_submissions').select('*').eq('assignment_id', cleanAssignmentId).eq('student_id', stId).maybeSingle();
@@ -109,7 +111,8 @@ export async function POST(req: Request) {
                 const st = studentsData.find((x: any) => x.id === s.student_id);
                 const sec = sectionsData.find((x: any) => x.id === st?.section_id);
                 const cls = classesData.find((x: any) => x.id === sec?.class_id);
-                const stUser = stUsersData.find((x: any) => x.id === st?.user_id);
+                // 🚀 الإصلاح الثالث: استخدام st?.id بدلاً من st?.user_id
+                const stUser = stUsersData.find((x: any) => x.id === st?.id);
 
                 return {
                     ...s,
