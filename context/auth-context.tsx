@@ -146,26 +146,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMustResetPassword(false);
   };
 
-  useEffect(() => {
+useEffect(() => {
     const initAuth = async () => {
       setIsChecking(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setUser(session.user);
-          const cachedRole = sessionStorage.getItem('authRole');
-          const cachedName = sessionStorage.getItem('userName');
-          if (cachedRole) setAuthRole(cachedRole as UserRole);
-          if (cachedName) setUserName(cachedName);
-
-          // 🚀 الحل هنا: إذا كانت الذاكرة نظيفة (لا يوجد Role)، نأمر النظام بانتظار جلب البيانات من السيرفر
-          if (cachedRole && cachedName) {
-             setIsChecking(false); 
-          }
+        // 🚀 التعديل الجوهري: نطلب المستخدم مباشرة من السيرفر لكسر أي جلسة شبح
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser(); 
+        
+        if (supabaseUser) {
+          setUser(supabaseUser);
+          // لا ننهي الفحص هنا، سنتركه ينتهي في الـ useEffect الثاني بعد جلب الـ Role الحقيقي
         } else {
           setUser(null);
-          sessionStorage.removeItem('authRole');
-          sessionStorage.removeItem('userName');
+          sessionStorage.clear();
+          localStorage.clear();
           if (!isPublicPage) router.push('/login');
           setIsChecking(false);
         }
@@ -181,8 +175,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setAuthRole(null);
-        sessionStorage.removeItem('authRole');
-        sessionStorage.removeItem('userName');
+        sessionStorage.clear();
+        localStorage.clear();
         if (!isPublicPage) router.push('/login');
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         if (session?.user) setUser(session.user);
@@ -199,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (authRole && userName && !isLoginPage) return;
+    //if (authRole && userName && !isLoginPage) return;
 
     const fetchUserData = async () => {
       setIsChecking(true);
