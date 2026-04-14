@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -6,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 
 import { User as SupabaseUser } from '@supabase/supabase-js';
-import { User, UserRole } from '@/types';
+import { UserRole } from '@/types';
 
 interface AuthContextType {
   user: SupabaseUser | null;
@@ -27,11 +26,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const extractEmail = (data: any) => {
-  if (!data || !data.users) return null;
-  return Array.isArray(data.users) ? data.users[0]?.email : data.users?.email;
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [authRole, setAuthRole] = useState<UserRole | null>(null);
@@ -43,6 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('platformClosed');
+    }
+  }, []);
+
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
@@ -58,22 +58,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authResult = data;
       lastError = error;
     } else {
-      let extractedEmail = null;
-      try {
-        const { data: studentData } = await supabase.from('students').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-        extractedEmail = extractEmail(studentData);
-        if (!extractedEmail) {
-          const { data: teacherData } = await supabase.from('teachers').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-          extractedEmail = extractEmail(teacherData);
-        }
-        if (!extractedEmail) {
-          const { data: parentData } = await supabase.from('parents').select('id, users!inner(email)').eq('national_id', civilId).maybeSingle();
-          extractedEmail = extractEmail(parentData);
-        }
-      } catch (e) { }
-
+      const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
+      
       const possibleEmails = [];
-      if (extractedEmail) possibleEmails.push(extractedEmail);
+      if (userData?.email) possibleEmails.push(userData.email);
       possibleEmails.push(`${civilId}@alrefaa.edu`);
       possibleEmails.push(`${civilId}@alrifaa.edu`);
 
@@ -112,7 +100,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
       }
 
-      // 🚀 التحسين هنا: تحديث الحالة فوراً
       const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
       setUser(authResult.user);
       setAuthRole(userData.role as UserRole);
@@ -122,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem('authRole', userData.role);
       sessionStorage.setItem('userName', name);
 
-      // تحديث توجيه الصفحة
       router.refresh(); 
 
       if (userData.must_reset_password) {
@@ -135,54 +121,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const requestPasswordReset = async (civilId: string) => {
-    let authEmail = '';
-    
-    const { data: studentData } = await supabase.from('students').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-    authEmail = extractEmail(studentData) || '';
-      
-    if (!authEmail) {
-      const { data: teacherData } = await supabase.from('teachers').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-      authEmail = extractEmail(teacherData) || '';
-    }
-    
-    if (!authEmail) {
-      const { data: parentData } = await supabase.from('parents').select('users!inner(email)').eq('national_id', civilId).maybeSingle();
-      authEmail = extractEmail(parentData) || '';
-    }
+    const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
+    if (!userData?.email) throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
 
-    if (!authEmail) {
-      throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
-    }
-
-    const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+    const { error } = await supabase.auth.resetPasswordForEmail(userData.email, {
       redirectTo: `${window.location.origin}/login/update-password`,
     });
-
     if (error) throw error;
   };
 
   const updatePassword = async (password: string) => {
-    const { error } = await supabase.auth.updateUser({
-      password: password,
-    });
-
+    const { error } = await supabase.auth.updateUser({ password: password });
     if (error) throw error;
   };
 
   const resetPassword = async (password: string) => {
     if (!user) throw new Error('غير مصرح لك بإجراء هذا التغيير');
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: password
-    });
-
+    const { error: updateError } = await supabase.auth.updateUser({ password: password });
     if (updateError) throw updateError;
 
-    const { error: dbError } = await supabase
-      .from('users')
-      .update({ must_reset_password: false })
-      .eq('id', user.id);
-
+    const { error: dbError } = await supabase.from('users').update({ must_reset_password: false }).eq('id', user.id);
     if (dbError) throw dbError;
     
     setMustResetPassword(false);
@@ -199,17 +157,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const cachedName = sessionStorage.getItem('userName');
           if (cachedRole) setAuthRole(cachedRole as UserRole);
           if (cachedName) setUserName(cachedName);
+
+          if (cachedRole && cachedName) {
+             setIsChecking(false); 
+          }
         } else {
           setUser(null);
           sessionStorage.removeItem('authRole');
           sessionStorage.removeItem('userName');
-          if (!isPublicPage) {
-            router.push('/login');
-          }
+          if (!isPublicPage) router.push('/login');
+          setIsChecking(false);
         }
       } catch (error) {
         console.error('Auth init error:', error);
-      } finally {
         setIsChecking(false);
       }
     };
@@ -222,16 +182,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthRole(null);
         sessionStorage.removeItem('authRole');
         sessionStorage.removeItem('userName');
-        if (!isPublicPage) {
-          router.push('/login');
-        }
+        if (!isPublicPage) router.push('/login');
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        if (session?.user) {
-          setUser(session.user);
-        }
-        if (event === 'SIGNED_IN' && isLoginPage) {
-          router.push('/');
-        }
+        if (session?.user) setUser(session.user);
+        if (event === 'SIGNED_IN' && isLoginPage) router.push('/');
       }
     });
 
@@ -244,24 +198,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (authRole && userName && !isLoginPage) {
-      return;
-    }
+    if (authRole && userName && !isLoginPage) return;
 
     const fetchUserData = async () => {
       setIsChecking(true);
       try {
         const [userRes, settingsRes] = await Promise.all([
-          supabase
-            .from('users')
-            .select('role, full_name, must_reset_password')
-            .eq('id', user.id)
-            .single(),
-          !isPublicPage ? supabase
-            .from('platform_settings')
-            .select('*')
-            .limit(1)
-            .maybeSingle() : Promise.resolve({ data: null, error: null })
+          supabase.from('users').select('role, full_name, must_reset_password').eq('id', user.id).maybeSingle(),
+          !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
         ]);
 
         let role = userRes.data?.role;
@@ -278,19 +222,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           sessionStorage.setItem('userName', name);
         }
 
-        if (!isPublicPage) {
-          try {
-            if (!settingsError && settings) {
-              setRawSettings(settings);
-            }
-          } catch (settingsErr) {
-            console.warn('Platform settings error:', settingsErr);
-          }
+        if (!isPublicPage && !settingsError && settings) {
+          setRawSettings(settings);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
       } finally {
-        setIsChecking(false);
+        setIsChecking(false); 
       }
     };
 
@@ -299,10 +237,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!rawSettings) return;
-
     const evaluatePlatformStatus = () => {
       let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
-
       if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
         setPlatformClosed(true);
         setCloseMessage(rawSettings.message || 'المنصة مغلقة حاليا للصيانة');
@@ -313,54 +249,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     evaluatePlatformStatus(); 
     const interval = setInterval(evaluatePlatformStatus, 5000); 
-
     return () => clearInterval(interval);
   }, [rawSettings, authRole]);
-
-  useEffect(() => {
-    if (!user || isPublicPage || authRole === 'admin' || authRole === 'management') return;
-
-    const channel = supabase
-      .channel('platform_settings_listener')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'platform_settings' },
-        (payload) => {
-          setRawSettings(payload.new); 
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, isPublicPage, authRole]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setAuthRole(null);
-    sessionStorage.removeItem('authRole');
-    sessionStorage.removeItem('userName');
-    router.push('/login');
+    sessionStorage.clear();
+    localStorage.clear();
+    window.location.href = '/login?cleared=' + new Date().getTime();
   };
 
   return (
     <AuthContext.Provider value={{ 
-      user, 
-      authRole, 
-      userRole: authRole,
-      userName, 
-      mustResetPassword,
-      isChecking, 
-      isAdminByEmail, 
-      platformClosed, 
-      closeMessage,
-      signOut,
-      signIn,
-      resetPassword,
-      requestPasswordReset,
-      updatePassword
+      user, authRole, userRole: authRole, userName, mustResetPassword,
+      isChecking, isAdminByEmail, platformClosed, closeMessage,
+      signOut, signIn, resetPassword, requestPasswordReset, updatePassword
     }}>
       {children}
     </AuthContext.Provider>
@@ -369,8 +274,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
