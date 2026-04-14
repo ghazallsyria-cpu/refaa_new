@@ -1,4 +1,3 @@
-
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -11,18 +10,8 @@ const nextConfig: NextConfig = {
 
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
+      { protocol: 'https', hostname: 'res.cloudinary.com', port: '', pathname: '/**' },
+      { protocol: 'https', hostname: 'picsum.photos', port: '', pathname: '/**' },
     ],
   },
 
@@ -31,20 +20,21 @@ const nextConfig: NextConfig = {
       {
         source: '/manifest.json',
         headers: [
-          {
-            key: 'Content-Type',
-            value: 'application/manifest+json; charset=utf-8',
-          },
+          { key: 'Content-Type', value: 'application/manifest+json; charset=utf-8' },
         ],
       },
-      // 🚀 إجبار المتصفح على التحقق من الصفحة الرئيسية دائماً
+      // 🚀 إجبار المتصفح على عدم حفظ ملف الانتحار sw.js أبداً
       {
-        source: '/',
+        source: '/sw.js',
         headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-cache, no-store, must-revalidate',
-          },
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate, max-age=0' },
+        ],
+      },
+      // 🚀 إجبار المتصفح على التحقق من كل الصفحات
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
         ],
       },
     ];
@@ -52,5 +42,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
-
