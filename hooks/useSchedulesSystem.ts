@@ -19,6 +19,7 @@ export interface Schedule {
   section_id: string;
   subject_id: string;
   subjects?: { name: string };
+  // 🚀 تحديث الواجهة لتطابق الجسر الجديد
   teachers?: { zoom_link?: string, users: { full_name: string } };
   sections?: { name: string, classes: { name: string } };
 }
@@ -43,7 +44,8 @@ export function useSchedulesSystem() {
       const [sections, subjects, teachers, assignments, periods] = await Promise.all([
         supabase.from('sections').select('id, name, classes(name)').order('name'),
         supabase.from('subjects').select('id, name').order('name'),
-        supabase.from('teachers').select('id, specialization, users(full_name)'),
+        // 🚀 استخدام الجسر الصريح fk_teachers_to_users
+        supabase.from('teachers').select('id, specialization, users!fk_teachers_to_users(full_name)'),
         supabase.from('teacher_sections').select('teacher_id, section_id, subject_id'),
         supabase.from('class_periods').select('*').order('period_number')
       ]);
@@ -66,6 +68,7 @@ export function useSchedulesSystem() {
   const fetchSchedules = useCallback(async (filters: { sectionId?: string, teacherId?: string }): Promise<Schedule[]> => {
     setLoading(true);
     try {
+      // 🚀 تحديث الاستعلام لاستخدام الجسر fk_teachers_to_users
       let query = supabase.from('schedules').select(`
         id, 
         day_of_week, 
@@ -74,7 +77,7 @@ export function useSchedulesSystem() {
         section_id,
         subject_id,
         subjects(name), 
-        teachers(zoom_link, users(full_name)), 
+        teachers(zoom_link, users!fk_teachers_to_users(full_name)), 
         sections(name, classes(name))
       `);
 
@@ -87,6 +90,7 @@ export function useSchedulesSystem() {
 
       const { data, error } = await query.order('day_of_week').order('period');
       if (error) throw error;
+      
       return (data as any[] || []).map(d => ({
         ...d,
         subjects: Array.isArray(d.subjects) ? d.subjects[0] : d.subjects,
@@ -184,7 +188,8 @@ export function useSchedulesSystem() {
     try {
       let query = supabase
         .from('schedules')
-        .select('id, teacher_id, section_id, day_of_week, period, subjects(name), sections(name, classes(name)), teachers(users(full_name))')
+        // 🚀 تحديث الجسر هنا أيضاً
+        .select('id, teacher_id, section_id, day_of_week, period, subjects(name), sections(name, classes(name)), teachers(users!fk_teachers_to_users(full_name))')
         .eq('day_of_week', day)
         .eq('period', period)
         .or(`teacher_id.eq.${teacherId},section_id.eq.${sectionId}`);
@@ -237,7 +242,6 @@ export function useSchedulesSystem() {
       
       const notifications: any[] = [];
 
-      // Add teacher notification
       notifications.push({
         user_id: lesson.teacher_id,
         title: 'تحديث الجدول الدراسي',
@@ -245,7 +249,6 @@ export function useSchedulesSystem() {
         type: 'system'
       });
 
-      // Fetch students in the section
       const { data: students } = await supabase.from('students').select('id').eq('section_id', lesson.section_id);
       if (students) {
         students.forEach(s => {
