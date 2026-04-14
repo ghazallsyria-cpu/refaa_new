@@ -230,13 +230,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .from('users')
             .select('role, full_name, must_reset_password')
             .eq('id', user.id)
-            .single(),
+            .maybeSingle(), // 🚀 تعديل مهم جداً: maybeSingle تمنع رمي الخطأ وتسمح لنا باكتشاف الحساب الوهمي
           !isPublicPage ? supabase
             .from('platform_settings')
             .select('*')
             .limit(1)
             .maybeSingle() : Promise.resolve({ data: null, error: null })
         ]);
+
+        // 🚀 صائد الأشباح الآلي (Ghost Buster): 
+        // إذا كان المستخدم داخل المنصة ولكن ليس له بيانات في جدول Users (بسبب خطأ قديم)
+        // يتم طرده ومسح الكاش آلياً بدون أن يشعر!
+        if (!userRes.data && !isPublicPage) {
+          console.warn("Ghost account detected! Forcing auto-logout and clear...");
+          await supabase.auth.signOut();
+          localStorage.clear();
+          sessionStorage.clear();
+          window.location.href = '/login?cleared=ghost_session';
+          return;
+        }
 
         let role = userRes.data?.role;
         const settings = settingsRes.data;
@@ -291,17 +303,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [rawSettings, authRole]);
 
-  // 🚀 المطرقة النووية: تسجيل خروج يمسح الأخضر واليابس ويجبر المتصفح على جلب الكود الجديد
+  // 🚀 المطرقة النووية اليدوية (إذا استطاع المستخدم ضغط زر تسجيل الخروج)
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setAuthRole(null);
     
-    // مسح عميق جداً لكل ذاكرة المتصفح
     sessionStorage.clear();
     localStorage.clear();
     
-    // توجيه إجباري (Hard Redirect) مع رقم عشوائي لمنع الكاش تماماً
     window.location.href = '/login?cleared=' + new Date().getTime();
   };
 
