@@ -152,7 +152,7 @@ export function useMessagesSystem() {
         .from('students')
         .select(`
           id,
-          users!fk_students_users(id, full_name, role, avatar_url)
+          users(id, full_name, role, avatar_url)
         `)
         .eq('section_id', sectionId);
       

@@ -173,7 +173,7 @@ export default function AttendancePage() {
         .select(`
           id, date, period, status,
           subjects(name),
-          teachers(users!fk_teachers_users(full_name))
+          teachers(users(full_name))
         `)
         .eq('student_id', studentData.id)
         .order('date', { ascending: false })

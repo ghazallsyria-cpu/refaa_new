@@ -39,7 +39,7 @@ export default function AbsenceDeductionsPage() {
         .select(`
           student_id,
           sections(id, name, classes(name)),
-          students(users!fk_students_users(full_name))
+          students(users(full_name))
         `)
         .eq('status', 'absent');
 

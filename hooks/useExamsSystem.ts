@@ -75,8 +75,8 @@ export function useExamsSystem() {
     try {
       const fetchedData = await withCache(cacheKey, async () => {
         const selectQuery = currentRole === 'student' 
-          ? `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), exam_sections!inner(section_id, sections(name, classes(name)))`
-          : `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), exam_sections(section_id, sections(name, classes(name)))`;
+          ? `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections!inner(section_id, sections(name, classes(name)))`
+          : `*, subject:subjects(name), teacher:teachers(users(full_name)), exam_sections(section_id, sections(name, classes(name)))`;
 
         let query = supabase.from('exams').select(selectQuery).order('created_at', { ascending: false });
 
@@ -213,7 +213,7 @@ export function useExamsSystem() {
         if (!studentProfile) throw new Error('حساب الطالب غير مكتمل');
       }
 
-      const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name))').eq('id', examId).single();
+      const { data: examData, error: examError } = await supabase.from('exams').select('*, subject:subjects(name), teacher:teachers(users(full_name))').eq('id', examId).single();
       if (examError) throw examError;
 
       const { data: questionsData } = await supabase.from('questions').select('*, options:question_options(*)').eq('exam_id', examId).order('order_index');
@@ -282,7 +282,7 @@ export function useExamsSystem() {
       
       let studentsData: any[] = [];
       if (examData?.section_ids && examData.section_ids.length > 0) {
-        const { data: students } = await supabase.from('students').select(`id, users!fk_students_users(full_name, email), section:sections(name, classes(name))`).in('section_id', examData.section_ids);
+        const { data: students } = await supabase.from('students').select(`id, users(full_name, email), section:sections(name, classes(name))`).in('section_id', examData.section_ids);
         if (students) {
           studentsData = students.map((s: any) => ({
             id: s.id,
@@ -293,7 +293,7 @@ export function useExamsSystem() {
         }
       }
 
-      const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users!fk_students_users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
+      const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
       const { data: qData } = await supabase.from('questions').select('*').eq('exam_id', examId);
       
       let aData: any[] = [];

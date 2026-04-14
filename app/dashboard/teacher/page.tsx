@@ -151,7 +151,7 @@ export default function TeacherDashboard() {
 
             const { data: absences } = await supabase
               .from('attendance_records')
-              .select('student_id, students(users!fk_students_users(full_name)), sections(name, classes(name))')
+              .select('student_id, students(users(full_name)), sections(name, classes(name))')
               .eq('teacher_id', data.teacher.id)
               .eq('status', 'absent');
 

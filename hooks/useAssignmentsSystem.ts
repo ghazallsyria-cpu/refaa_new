@@ -49,8 +49,8 @@ export function useAssignmentsSystem() {
     setError(null);
     try {
       const selectQuery = currentRole === 'student' 
-        ? `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
-        : `*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
+        ? `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections!inner(section_id, sections(name, classes(name)))`
+        : `*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`;
 
       let query = supabase.from('assignments').select(selectQuery).order('created_at', { ascending: false });
 
@@ -175,7 +175,7 @@ export function useAssignmentsSystem() {
     try {
       const { data: assignmentData, error: assignmentError } = await supabase
         .from('assignments')
-        .select(`*, subject:subjects(name), teacher:teachers(users!fk_teachers_id(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
+        .select(`*, subject:subjects(name), teacher:teachers(users(full_name)), assignment_sections(section_id, sections(name, classes(name)))`)
         .eq('id', assignmentId)
         .maybeSingle();
 
@@ -215,7 +215,7 @@ export function useAssignmentsSystem() {
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const { data: subsData } = await supabase
           .from('assignment_submissions')
-          .select(`*, student:students(users!fk_students_users(full_name, email), sections(id, name, classes(id, name)))`)
+          .select(`*, student:students(users(full_name, email), sections(id, name, classes(id, name)))`)
           .eq('assignment_id', assignmentId)
           .order('submitted_at', { ascending: false });
         
@@ -265,7 +265,7 @@ export function useAssignmentsSystem() {
     try {
       const { data: submissionData, error: subError } = await supabase
         .from('assignment_submissions')
-        .select(`*, student:students(users!fk_students_users(full_name, email), sections(name, classes(name)))`)
+        .select(`*, student:students(users(full_name, email), sections(name, classes(name)))`)
         .eq('id', submissionId)
         .maybeSingle();
         
