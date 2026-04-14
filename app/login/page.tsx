@@ -21,6 +21,22 @@ export default function LoginPage() {
 
   const [schoolData, setSchoolData] = useState({ name: 'مدرسة الرفعة النموذجية', logo_url: '' });
 
+  // 🚀 2. الضربة الوقائية: مسح كاش Supabase القديم المتعارض بمجرد فتح صفحة الدخول
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('sb-')) {
+            localStorage.removeItem(key);
+            console.log('Cleared old Supabase cache:', key);
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error clearing old cache:', err);
+    }
+  }, []);
+
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {
@@ -62,7 +78,7 @@ export default function LoginPage() {
 
       setError(errorMessage);
 
-      // 🚀 2. إرسال الإشارة للرادار فوراً!
+      // 🚀 3. إرسال الإشارة للرادار فوراً!
       // نرسل رقم الهوية (civilId) ضمن الرسالة ليعرف المدير من يحاول الدخول
       systemLogger.log(
         `محاولة دخول فاشلة للرقم المدني: ${civilId} - السبب: ${errorMessage}`, 
