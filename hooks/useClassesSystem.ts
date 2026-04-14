@@ -28,16 +28,23 @@ export function useClassesSystem() {
       let sectionsQuery = supabase.from('sections').select('*').order('name');
       
       if (isTeacher) {
-        const { data: teacherSections } = await supabase
-          .from('teacher_sections')
-          .select('section_id')
-          .eq('teacher_id', user.id);
+        // 🚀 الإصلاح: البحث عن المعلم أولاً لضمان استخدام الـ ID الصحيح من جدول المعلمين
+        const { data: teacherRecord } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
         
-        const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
-        if (sectionIds.length > 0) {
-          sectionsQuery = sectionsQuery.in('id', sectionIds);
+        if (teacherRecord) {
+            const { data: teacherSections } = await supabase
+              .from('teacher_sections')
+              .select('section_id')
+              .eq('teacher_id', teacherRecord.id); // استخدام المعرّف الصحيح للمعلم
+            
+            const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+            if (sectionIds.length > 0) {
+              sectionsQuery = sectionsQuery.in('id', sectionIds);
+            } else {
+              sectionsQuery = sectionsQuery.in('id', ['none']);
+            }
         } else {
-          sectionsQuery = sectionsQuery.in('id', ['none']);
+            sectionsQuery = sectionsQuery.in('id', ['none']); // إذا لم يجد المعلم، لا تعرض فصول
         }
       }
 
