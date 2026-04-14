@@ -26,7 +26,10 @@ export function useDashboardSystem() {
       const [ { data: schedule }, { data: recentExams }, { data: recentAssignments } ] = await Promise.all([
         supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacher.id).order('day_of_week').order('period'),
         supabase.from('exams').select('*, subjects(name)').eq('teacher_id', teacher.id).limit(5),
-        supabase.from('assignments').select('*, subjects(name)').eq('teacher_id', teacher.id).limit(5)
+        supabase.from('assignments').select('*, subjects(name)').eq('teacher_id', teacher.id).limit(5), 
+        // ✅ هذا الجديد
+  supabase.from('sections')
+    .select('id, name, classes(name)')
       ]);
 
       return { teacher, schedule: schedule || [], recentExams: recentExams || [], recentAssignments: recentAssignments || [] };
