@@ -41,12 +41,9 @@ export function useMessagesSystem() {
     try {
       if (currentRole === 'student') {
         let studentData = null;
-        const { data: s1 } = await supabase.from('students').select('section_id').eq('user_id', user.id).maybeSingle();
+        // 🚀 الإصلاح: البحث عن قسم الطالب باستخدام الـ id فقط
+        const { data: s1 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
         if (s1) studentData = s1;
-        else {
-          const { data: s2 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
-          if (s2) studentData = s2;
-        }
 
         if (studentData?.section_id) {
           const { data: teacherSectionsData } = await supabase
@@ -101,12 +98,9 @@ export function useMessagesSystem() {
     if (!user || currentRole !== 'teacher') return;
     try {
       let teacherProfile = null;
-      const { data: tp1 } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-      if (tp1) teacherProfile = tp1;
-      else {
-        const { data: tp2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-        if (tp2) teacherProfile = tp2;
-      }
+      // 🚀 الإصلاح הגذري: إزالة البحث بـ user_id المعطوب، والاعتماد كلياً على الـ id 
+      const { data: tp } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+      if (tp) teacherProfile = tp;
 
       if (!teacherProfile) return;
 
@@ -158,8 +152,7 @@ export function useMessagesSystem() {
         .from('students')
         .select(`
           id,
-          user_id,
-          users(id, full_name, role, avatar_url)
+          users!fk_students_id(id, full_name, role, avatar_url)
         `)
         .eq('section_id', sectionId);
       
@@ -167,9 +160,8 @@ export function useMessagesSystem() {
       
       return data?.map(s => {
         const u = Array.isArray(s.users) ? s.users[0] : s.users;
-        // 🚀 الحل السحري لإسكات TypeScript: تحويل كائن المستخدم إلى unknown أولاً!
         if (u) {
-            return ({ ...u, id: s.user_id || s.id } as unknown) as User;
+            return ({ ...u, id: s.id } as unknown) as User;
         }
         return null;
       }).filter((u): u is User => u !== null) || [];
