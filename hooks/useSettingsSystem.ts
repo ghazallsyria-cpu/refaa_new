@@ -35,13 +35,8 @@ export function useSettingsSystem() {
 
       let zoomLink = '';
       if (userData.role === 'teacher') {
-        let teacherData = null;
-        const { data: t1 } = await supabase.from('teachers').select('zoom_link').eq('user_id', user.id).maybeSingle();
-        if (t1) teacherData = t1;
-        else {
-          const { data: t2 } = await supabase.from('teachers').select('zoom_link').eq('id', user.id).maybeSingle();
-          if (t2) teacherData = t2;
-        }
+        // 🚀 الإصلاح: إزالة البحث بـ user_id والاعتماد مباشرة على id المعلم
+        const { data: teacherData } = await supabase.from('teachers').select('zoom_link').eq('id', user.id).maybeSingle();
 
         if (teacherData) {
           zoomLink = teacherData.zoom_link || '';
