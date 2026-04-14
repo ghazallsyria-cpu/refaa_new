@@ -39,49 +39,33 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* 🚀 تنظيف PWA والكاش عند تغيير النسخة */}
+        {/* 🚀 المكنسة الآلية الصامتة: تعمل في الخلفية دون طرد أو إعادة توجيه */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function () {
-                var version = 'v_ultimate_clear_103';
-
                 try {
-                  var oldVersion = localStorage.getItem('app_super_version');
-
-                  if (oldVersion !== version) {
-
-                    // 1. حذف Service Worker القديم
-                    if ('serviceWorker' in navigator) {
-                      navigator.serviceWorker.getRegistrations().then(function (regs) {
-                        regs.forEach(function (reg) {
-                          reg.unregister();
-                        });
+                  // 1. قتل أي Service Worker قديم مسجل في المتصفح بصمت
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function (regs) {
+                      regs.forEach(function (reg) {
+                        reg.unregister();
+                        console.log('SW cleaned silently');
                       });
-                    }
+                    });
+                  }
 
-                    // 2. حذف كل الكاش
-                    if (window.caches) {
-                      caches.keys().then(function (keys) {
-                        keys.forEach(function (key) {
-                          caches.delete(key);
-                        });
+                  // 2. مسح ملفات الكاش العميقة (PWA Cache) بصمت
+                  if (window.caches) {
+                    caches.keys().then(function (keys) {
+                      keys.forEach(function (key) {
+                        caches.delete(key);
+                        console.log('Cache cleaned silently');
                       });
-                    }
-
-                    // 3. تنظيف التخزين المؤقت
-                    sessionStorage.clear();
-
-                    // 4. حفظ النسخة الجديدة
-                    localStorage.setItem('app_super_version', version);
-
-                    // 5. إعادة توجيه بعد وقت كافي
-                    setTimeout(function () {
-                      window.location.replace('/login?refresh=' + Date.now());
-                    }, 800);
+                    });
                   }
                 } catch (e) {
-                  console.log('SW cleanup skipped:', e);
+                  console.log('Cleanup background task skipped:', e);
                 }
               })();
             `,
