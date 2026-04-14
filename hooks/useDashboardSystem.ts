@@ -101,11 +101,11 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 الإصلاح الجذري للطلاب: البحث باستخدام id وليس user_id
+        // 🚀 الإصلاح: البحث باستخدام id وليس user_id
         const { data: student } = await supabase
           .from('students')
           .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
-          .eq('id', user.id) // ✅ التصحيح هنا
+          .eq('id', user.id)
           .maybeSingle();
         
         if (!student) {
@@ -135,6 +135,7 @@ export function useDashboardSystem() {
           examIds.length > 0 ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
           supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id).limit(5000),
           supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5),
+          // 🚀 إصلاح الربط في الجدول: teachers(users(full_name)) أصبح آمناً الآن
           sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
@@ -157,11 +158,11 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 الإصلاح الجذري للمعلمين: البحث باستخدام id وليس user_id
+        // 🚀 الإصلاح: البحث باستخدام id
         const { data: teacher } = await supabase
           .from('teachers')
           .select('*, users(*)')
-          .eq('id', user.id) // ✅ التصحيح هنا
+          .eq('id', user.id)
           .maybeSingle();
 
         if (!teacher) {
@@ -244,11 +245,10 @@ export function useDashboardSystem() {
   const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
     if (!user) return null;
     try {
-      // 🚀 الإصلاح الجذري للطلاب: التحديث باستخدام id وليس user_id
       const { data, error } = await supabase
         .from('students')
         .update({ next_year_track: track, track_selection_date: new Date().toISOString() })
-        .eq('id', user.id) // ✅ التصحيح هنا
+        .eq('id', user.id)
         .select()
         .maybeSingle();
 
@@ -266,17 +266,16 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
       try {
-        // 🚀 التصحيح للطلاب هنا أيضاً
         const { data: student } = await supabase
           .from('students')
           .select('section_id, sections(name, classes(name))')
-          .eq('id', user.id) // ✅ التصحيح هنا
+          .eq('id', user.id)
           .maybeSingle();
           
         if (!student || !(student as any).section_id) return null;
 
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          // 🚀 وإصلاح الـ Select لجدول المعلمين بداخل جدول الحصص (تم إزالة user_id)
+          // 🚀 إصلاح الربط في الجدول للطالب أيضاً
           supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
@@ -293,11 +292,10 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
       try {
-        // 🚀 التصحيح للمعلمين هنا
         const { data: teacherProfile } = await supabase
           .from('teachers')
           .select('id')
-          .eq('id', user.id) // ✅ التصحيح هنا
+          .eq('id', user.id)
           .maybeSingle();
 
         if (!teacherProfile) return null;
@@ -319,11 +317,10 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`parent_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 التصحيح للآباء هنا أيضاً
         const { data: parentProfile } = await supabase
           .from('parents')
           .select('id')
-          .eq('id', user.id) // ✅ التصحيح هنا
+          .eq('id', user.id)
           .single();
           
         if (!parentProfile) return null;
