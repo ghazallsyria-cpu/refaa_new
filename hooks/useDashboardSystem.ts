@@ -7,28 +7,22 @@ interface StudentQueryResult {
   users: { full_name: string, avatar_url?: string } | { full_name: string, avatar_url?: string }[] | null;
 }
 
-// ==========================================
-// 🚀 محرك الكاش الذكي (In-Memory Cache Engine)
-// ==========================================
 const globalCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // مدة حفظ الكاش: 5 دقائق
+const CACHE_TTL = 5 * 60 * 1000; 
 
 const withCache = async <T>(key: string, fetcher: () => Promise<T>, forceRefresh = false): Promise<T> => {
-  // إذا لم يطلب المستخدم تحديثاً إجبارياً، والبيانات موجودة ولم تنتهِ صلاحيتها
   if (!forceRefresh && globalCache.has(key)) {
     const cached = globalCache.get(key)!;
     if (Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data; // إرجاع البيانات فوراً من الذاكرة (0 ثانية)
+      return cached.data;
     }
   }
   
-  // جلب البيانات من السيرفر إذا لم تكن في الكاش أو انتهت صلاحيتها
   const data = await fetcher();
-  globalCache.set(key, { data, timestamp: Date.now() }); // حفظ في الكاش
+  globalCache.set(key, { data, timestamp: Date.now() }); 
   return data;
 };
 
-// دالة عامة لتفريغ الكاش (إذا احتجنا لذلك مستقبلاً)
 export const clearDashboardCache = () => {
   globalCache.clear();
 };
@@ -133,17 +127,7 @@ export function useDashboardSystem() {
           student = fallbackStudent;
         }
         
-        // 🚀 صائد الأشباح (Ghost Buster) للطالب
-        if (!student) {
-          console.warn("Ghost student account detected! Forcing logout...");
-          await supabase.auth.signOut();
-          if (typeof window !== 'undefined') {
-            localStorage.clear();
-            sessionStorage.clear();
-            window.location.href = '/login?error=invalid_student';
-          }
-          return null;
-        }
+        if (!student) return null;
 
         const sectionId = (student as any).section_id;
 
@@ -182,7 +166,7 @@ export function useDashboardSystem() {
             .from('daily_attendance_summary')
             .select('daily_status')
             .eq('student_id', student.id)
-            .limit(5000), // 🚀 كسر الحاجز
+            .limit(5000),
           supabase
             .from('exam_attempts')
             .select('score, completed_at, exam:exams(title, total_points, subjects(name))')
@@ -223,7 +207,6 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user]);
 
-  // 🚀 إجبار التحديث دائماً للتخلص من كاش الأصفار (forceRefresh = true)
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = true) => { 
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
@@ -246,7 +229,6 @@ export function useDashboardSystem() {
         if (!teacher && user.user_metadata?.role === 'teacher') {
           const { data: newUser, error: userFetchError } = await supabase.from('users').select('full_name, role').eq('id', user.id).single();
           if (!userFetchError && newUser?.role === 'teacher') {
-            // 🚀 الحل العبقري بناءً على بياناتك: إرسال id مطابق للـ user.id
             const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
                 id: user.id,           
                 user_id: user.id,      
@@ -256,33 +238,12 @@ export function useDashboardSystem() {
             
             if (!createError && newTeacher) { 
                 teacher = newTeacher; 
-            } else {
-                // 🚀 صائد الأشباح (Ghost Buster) 
-                console.warn("Ghost teacher account (failed creation)! Forcing logout...");
-                await supabase.auth.signOut();
-                if (typeof window !== 'undefined') {
-                  localStorage.clear();
-                  sessionStorage.clear();
-                  window.location.href = '/login?error=invalid_teacher_creation';
-                }
-                return null;
             }
           }
         }
 
-        // 🚀 صائد الأشباح (Ghost Buster)
-        if (!teacher) {
-            console.warn("Ghost teacher account (not found)! Forcing logout...");
-            await supabase.auth.signOut();
-            if (typeof window !== 'undefined') {
-              localStorage.clear();
-              sessionStorage.clear();
-              window.location.href = '/login?error=teacher_not_found';
-            }
-            return null;
-        }
+        if (!teacher) return null;
 
-        // 🚀 إصلاح الاسم المفقود (مرحباً، أ. م)
         if (teacher.users && Array.isArray(teacher.users)) {
             teacher.users = teacher.users[0] || {};
         }
@@ -290,7 +251,7 @@ export function useDashboardSystem() {
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
           .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
-          .eq('teacher_id', teacher.id).limit(5000); // 🚀 كسر الحاجز
+          .eq('teacher_id', teacher.id).limit(5000); 
         
         const rawSections = (teacherSections?.map(ts => ts.section) || []).filter(Boolean);
         const sections = rawSections.map(s => Array.isArray(s) ? s[0] : s).filter(Boolean);
@@ -305,7 +266,6 @@ export function useDashboardSystem() {
 
         const sectionIds = sections.map((s: any) => s.id);
 
-        // 🚀 كسر الحاجز لكل الجداول المرتبطة
         const [
           { data: recentExams },
           { data: recentAssignments },
@@ -334,7 +294,7 @@ export function useDashboardSystem() {
             .eq('teacher_id', teacher.id)
             .order('day_of_week')
             .order('period')
-            .limit(5000), // 🚀 كسر الحاجز
+            .limit(5000),
           supabase
             .from('class_periods')
             .select('*')
@@ -383,7 +343,7 @@ export function useDashboardSystem() {
         const recentAssIds = assignments.map(a => a.id);
         let submissionsData: any[] = [];
         if (recentAssIds.length > 0) {
-           const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id').in('assignment_id', recentAssIds).limit(10000); // 🚀 كسر الحاجز
+           const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id').in('assignment_id', recentAssIds).limit(10000); 
            submissionsData = subs || [];
         }
 
@@ -459,7 +419,6 @@ export function useDashboardSystem() {
       
       if (error) throw error;
       
-      // 🚀 تفريغ الكاش الخاص بالطالب والمسارات ليرى التحديث فوراً
       globalCache.delete(`student_dashboard_${user.id}`);
       globalCache.delete(`track_stats_all`);
 
@@ -497,7 +456,7 @@ export function useDashboardSystem() {
             .eq('section_id', (student as any).section_id)
             .order('day_of_week')
             .order('period')
-            .limit(5000), // 🚀 كسر الحاجز
+            .limit(5000),
           supabase
             .from('class_periods')
             .select('*')
@@ -539,7 +498,7 @@ export function useDashboardSystem() {
             .eq('teacher_id', teacherProfile.id)
             .order('day_of_week')
             .order('period')
-            .limit(5000), // 🚀 كسر الحاجز
+            .limit(5000),
           supabase
             .from('class_periods')
             .select('*')
@@ -603,7 +562,7 @@ export function useDashboardSystem() {
         let query = supabase
           .from('students')
           .select('next_year_track, sections!inner(class_id)')
-          .not('next_year_track', 'is', null).limit(5000); // 🚀 كسر الحاجز
+          .not('next_year_track', 'is', null).limit(5000);
         
         if (classId) {
           query = query.eq('sections.class_id', classId);
@@ -634,6 +593,6 @@ export function useDashboardSystem() {
     fetchTeacherSchedule,
     updateStudentTrack,
     fetchTrackSelectionStats,
-    clearDashboardCache // 🚀 يمكن استخدامها لتفريغ الكاش يدوياً
+    clearDashboardCache
   };
 }
