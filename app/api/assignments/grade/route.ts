@@ -60,17 +60,17 @@ export async function POST(req: Request) {
     }
 
     // 3. إرسال إشعار للطالب
+    // 🚀 الإصلاح: studentId هو نفسه رقم المستخدم، لا حاجة للبحث عن user_id الوهمي!
     if (studentId) {
-        const { data: stUser } = await adminSupabase.from('students').select('user_id').eq('id', studentId).maybeSingle();
-        if (stUser?.user_id) {
-           await adminSupabase.from('notifications').insert({
-             user_id: stUser.user_id,
-             title: 'تم تقييم الواجب',
-             content: `تم تقييم إجابتك في واجب: ${assignmentTitle}`,
-             type: 'grade',
-             link: '/assignments'
-           });
-        }
+       const { error: notifError } = await adminSupabase.from('notifications').insert({
+         user_id: studentId, // ✅ التصحيح المباشر والسريع هنا
+         title: 'تم تقييم الواجب',
+         content: `تم تقييم إجابتك في واجب: ${assignmentTitle}`,
+         type: 'grade',
+         link: '/assignments'
+       });
+       
+       if(notifError) console.error("فشل إرسال الإشعار للطالب:", notifError);
     }
 
     return NextResponse.json({ success: true, message: 'تم حفظ التقييم بنجاح' });
