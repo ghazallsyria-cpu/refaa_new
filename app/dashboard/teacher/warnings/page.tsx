@@ -45,7 +45,7 @@ export default function TeacherAbsenceEquivalencePage() {
 
       const { data: absences, error } = await supabase
         .from('attendance_records')
-        .select('student_id, section_id, students(users(full_name)), sections(name, classes(name))')
+        .select('student_id, section_id, students(users!fk_students_users(full_name)), sections(name, classes(name))')
         .eq('teacher_id', user.id)
         .eq('status', 'absent');
 

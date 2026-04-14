@@ -44,7 +44,7 @@ export function useTeacherAssignmentsSystem() {
         supabase.from('teachers').select('id, users(full_name)'),
         supabase.from('sections').select('id, name, classes(name)'),
         supabase.from('subjects').select('id, name'),
-        supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teacher:teachers(users(full_name)), section:sections(name, classes(name)), subject:subjects(name)')
+        supabase.from('teacher_sections').select('teacher_id, section_id, subject_id, teacher:teachers(users!fk_teachers_users(full_name)), section:sections(name, classes(name)), subject:subjects(name)')
       ]);
 
       if (tRes.error) throw tRes.error;
@@ -182,7 +182,7 @@ export function useTeacherAssignmentsSystem() {
     try {
       const { data, error } = await supabase
         .from('teacher_sections')
-        .select('teacher_id, section_id, subject_id, teacher:teachers(users(full_name)), section:sections(name, classes(name)), subject:subjects(name)')
+        .select('teacher_id, section_id, subject_id, teacher:teachers(users!fk_teachers_users(full_name)), section:sections(name, classes(name)), subject:subjects(name)')
         .eq('teacher_id', teacherId);
       if (error) throw error;
       return (data as any[] || []).map(a => ({

@@ -184,7 +184,7 @@ export function useSchedulesSystem() {
     try {
       let query = supabase
         .from('schedules')
-        .select('id, teacher_id, section_id, day_of_week, period, subjects(name), sections(name, classes(name)), teachers(users(full_name))')
+        .select('id, teacher_id, section_id, day_of_week, period, subjects(name), sections(name, classes(name)), teachers(users!fk_teachers_users(full_name))')
         .eq('day_of_week', day)
         .eq('period', period)
         .or(`teacher_id.eq.${teacherId},section_id.eq.${sectionId}`);

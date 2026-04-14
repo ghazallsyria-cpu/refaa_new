@@ -282,7 +282,7 @@ export function useExamsSystem() {
       
       let studentsData: any[] = [];
       if (examData?.section_ids && examData.section_ids.length > 0) {
-        const { data: students } = await supabase.from('students').select(`id, users!fk_students_id(full_name, email), section:sections(name, classes(name))`).in('section_id', examData.section_ids);
+        const { data: students } = await supabase.from('students').select(`id, users!fk_students_users(full_name, email), section:sections(name, classes(name))`).in('section_id', examData.section_ids);
         if (students) {
           studentsData = students.map((s: any) => ({
             id: s.id,
@@ -293,7 +293,7 @@ export function useExamsSystem() {
         }
       }
 
-      const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users!fk_students_id(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
+      const { data: attemptsData } = await supabase.from('exam_attempts').select(`*, student:students(id, users!fk_students_users(full_name), section:sections(name, classes(name)))`).eq('exam_id', examId);
       const { data: qData } = await supabase.from('questions').select('*').eq('exam_id', examId);
       
       let aData: any[] = [];

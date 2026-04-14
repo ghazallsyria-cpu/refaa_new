@@ -62,7 +62,7 @@ export default function AdminAbsenceWarningsPage() {
       // 2. جلب جميع سجلات الغياب لجميع الطلاب
       const { data: absences, error } = await supabase
         .from('attendance_records')
-        .select('student_id, section_id, teacher_id, students(users(full_name)), sections(name, classes(name))')
+        .select('student_id, section_id, teacher_id, students(users!fk_students_users(full_name)), sections(name, classes(name))')
         .eq('status', 'absent');
 
       if (error) throw error;

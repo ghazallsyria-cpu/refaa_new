@@ -215,7 +215,7 @@ export function useAssignmentsSystem() {
       } else if (['teacher', 'admin', 'management'].includes(currentRole || '')) {
         const { data: subsData } = await supabase
           .from('assignment_submissions')
-          .select(`*, student:students(users!fk_students_id(full_name, email), sections(id, name, classes(id, name)))`)
+          .select(`*, student:students(users!fk_students_users(full_name, email), sections(id, name, classes(id, name)))`)
           .eq('assignment_id', assignmentId)
           .order('submitted_at', { ascending: false });
         
@@ -265,7 +265,7 @@ export function useAssignmentsSystem() {
     try {
       const { data: submissionData, error: subError } = await supabase
         .from('assignment_submissions')
-        .select(`*, student:students(users!fk_students_id(full_name, email), sections(name, classes(name)))`)
+        .select(`*, student:students(users!fk_students_users(full_name, email), sections(name, classes(name)))`)
         .eq('id', submissionId)
         .maybeSingle();
         
