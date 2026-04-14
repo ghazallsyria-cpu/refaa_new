@@ -15,13 +15,18 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { payload, assignmentId, questions, sectionIds, subjects, userId } = body;
 
+    // 🚀 الإصلاح الجذري: تنظيف البحث عن المعلم ليستخدم id فقط بدون تعقيدات
     let realTeacherId = userId;
-    const { data: tProfile1 } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
-    if (tProfile1?.id) {
-      realTeacherId = tProfile1.id;
-    } else {
-      const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
-      if (tProfile2?.id) realTeacherId = tProfile2.id;
+    const { data: tProfile, error: tError } = await adminSupabase
+      .from('teachers')
+      .select('id')
+      .eq('id', userId) // ✅ التصحيح هنا: استخدام id
+      .maybeSingle();
+      
+    if (tProfile?.id) {
+      realTeacherId = tProfile.id;
+    } else if (tError) {
+      console.warn("لم يتم العثور على المعلم أو حدث خطأ:", tError.message);
     }
 
     const safePayload = {
