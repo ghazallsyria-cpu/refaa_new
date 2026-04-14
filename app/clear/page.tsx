@@ -9,49 +9,50 @@ export default function ClearCachePage() {
   useEffect(() => {
     const nukeEverything = async () => {
       try {
-        // 1. مسح الذاكرة المحلية والجلسات
+        // 1. مسح الذاكرة المحلية والجلسات (بكل قوة)
         localStorage.clear();
         sessionStorage.clear();
 
-        // 2. اقتلاع عمال الخدمة (Service Workers) المسؤولة عن الكاش العنيد في الجوالات
+        // 2. تدمير كل عمال الخدمة (Service Workers) التي تسبب التعليق
         if ('serviceWorker' in navigator) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           for (const registration of registrations) {
             await registration.unregister();
-            console.log('Service Worker unregistered');
+            console.log('Service Worker destroyed');
           }
         }
 
-        // 3. مسح مساحة تخزين الكاش العميقة (Cache API)
+        // 3. مسح مساحة تخزين الكاش العميقة (PWA Cache)
         if ('caches' in window) {
           const cacheNames = await caches.keys();
-          for (const cacheName of cacheNames) {
-            await caches.delete(cacheName);
-            console.log('Cache deleted:', cacheName);
-          }
+          await Promise.all(
+            cacheNames.map((cacheName) => caches.delete(cacheName))
+          );
+          console.log('All caches destroyed');
         }
 
-        // 4. مسح ملفات تعريف الارتباط (Cookies)
+        // 4. مسح ملفات تعريف الارتباط (Cookies) التي قد تحتفظ بجلسة فاسدة
         document.cookie.split(";").forEach((c) => {
           document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
         });
 
-        // 5. إظهار رسالة النجاح
+        // 5. إظهار رسالة النجاح للطفل
         setStatus('success');
 
-        // 6. توجيه إجباري لصفحة الدخول مع رقم عشوائي لمنع المتصفح من العودة للوراء
+        // 6. 🚀 توجيه إجباري وقوي جداً لصفحة الدخول مع منع الرجوع للخلف!
         setTimeout(() => {
-          window.location.replace('/login?rescued=' + new Date().getTime());
-        }, 2000);
+          // إضافة متغير عشوائي قوي جداً في الرابط لكسر أي كاش متبقي في المتصفح
+          window.location.replace('/login?super_clear=' + Date.now() + Math.random());
+        }, 1500);
 
       } catch (error) {
-        console.error('Error during cleanup:', error);
-        // في حال حدوث خطأ، نوجهه على أي حال
-        window.location.replace('/login?forced_rescue=' + new Date().getTime());
+        console.error('Error during massive cleanup:', error);
+        // التوجيه الإجباري حتى لو حدث خطأ
+        window.location.replace('/login?forced_clear=' + Date.now());
       }
     };
 
-    // تشغيل عملية التنظيف بمجرد فتح الصفحة
+    // تشغيل عملية الدمار الشامل بمجرد فتح الصفحة
     nukeEverything();
   }, []);
 
@@ -76,13 +77,13 @@ export default function ClearCachePage() {
         </div>
         
         <h1 className={`text-2xl font-black mb-3 transition-colors ${status === 'loading' ? 'text-slate-800' : 'text-emerald-600'}`}>
-          {status === 'loading' ? 'جاري إصلاح وتحديث المنصة...' : 'تم التحديث بنجاح!'}
+          {status === 'loading' ? 'جاري تحديث المنصة السحري...' : 'تم التحديث بنجاح!'}
         </h1>
         
         <p className="text-slate-500 text-sm font-bold leading-relaxed mb-6">
           {status === 'loading' 
-            ? 'يرجى الانتظار لحظات، نقوم بمسح البيانات القديمة وتجهيز بيئة عمل نظيفة لهاتفك.' 
-            : 'بيئة العمل أصبحت نظيفة تماماً. سيتم تحويلك الآن لتسجيل الدخول.'}
+            ? 'يا بطل، انتظر لحظة واحدة فقط لنجهز لك المنصة...' 
+            : 'أنت جاهز الآن للعودة إلى مدرستك الرقمية!'}
         </p>
 
         {status === 'loading' && (
