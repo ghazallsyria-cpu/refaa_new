@@ -31,31 +31,16 @@ export async function POST(req: Request) {
     if (userError) throw userError;
 
     // 2. تحديث بيانات المعلم الإضافية (مثل رابط زووم)
+    // 🚀 الإصلاح الجذري: البحث والتحديث باستخدام id مباشرة (تم حذف user_id والـ Fallback المعطوب)
     if (role === 'teacher' && zoom_link !== undefined) {
-      // نبحث عن المعلم بدقة (سواء كان المعرف هو id الجدول أو user_id المرتبط به)
-      const { data: teacherData } = await adminSupabase
+      const { error: teacherError } = await adminSupabase
         .from('teachers')
-        .select('id')
-        .or(`id.eq.${userId},user_id.eq.${userId}`)
-        .maybeSingle();
-
-      if (teacherData) {
-        const { error: teacherError } = await adminSupabase
-          .from('teachers')
-          .update({ zoom_link: zoom_link || null })
-          .eq('id', teacherData.id);
+        .update({ zoom_link: zoom_link || null })
+        .eq('id', userId); // ✅ التصحيح هنا
         
-        if (teacherError) throw teacherError;
-      } else {
-        // خطة بديلة (Fallback) إذا لم يجده بالبحث المزدوج
-        const { error: teacherErrorFallback } = await adminSupabase
-          .from('teachers')
-          .update({ zoom_link: zoom_link || null })
-          .eq('user_id', userId);
-          
-        if (teacherErrorFallback) {
-          console.warn("Failed to update teacher zoom link fallback:", teacherErrorFallback);
-        }
+      if (teacherError) {
+        console.error("Failed to update teacher zoom link:", teacherError.message);
+        // نحن لا نوقف تحديث الملف الشخصي بالكامل إذا فشل حفظ رابط الزووم فقط
       }
     }
 
