@@ -291,13 +291,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [rawSettings, authRole]);
 
+  // 🚀 المطرقة النووية: تسجيل خروج يمسح الأخضر واليابس ويجبر المتصفح على جلب الكود الجديد
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setAuthRole(null);
-    sessionStorage.removeItem('authRole');
-    sessionStorage.removeItem('userName');
-    router.push('/login');
+    
+    // مسح عميق جداً لكل ذاكرة المتصفح
+    sessionStorage.clear();
+    localStorage.clear();
+    
+    // توجيه إجباري (Hard Redirect) مع رقم عشوائي لمنع الكاش تماماً
+    window.location.href = '/login?cleared=' + new Date().getTime();
   };
 
   return (
