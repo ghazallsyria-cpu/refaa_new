@@ -16,8 +16,8 @@ import { arSA } from 'date-fns/locale';
 import Image from 'next/image';
 import GrantBadgeModal from '@/components/GrantBadgeModal';
 import { cn } from '@/lib/utils';
-import { useBadgesSystem } from '@/hooks/useBadgesSystem'; // 🚀 استيراد نظام الأوسمة
-import * as Dialog from '@radix-ui/react-dialog'; // 🚀 استيراد نافذة الحوار للتأكيد
+import { useBadgesSystem } from '@/hooks/useBadgesSystem'; 
+import * as Dialog from '@radix-ui/react-dialog'; 
 
 export default function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -25,7 +25,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   
   const router = useRouter();
   const { user, userRole } = useAuth();
-  const { revokeBadge } = useBadgesSystem(); // 🚀 جلب دالة سحب الوسام
+  const { revokeBadge } = useBadgesSystem(); 
   
   const [student, setStudent] = useState<any>(null);
   const [attendance, setAttendance] = useState<any[]>([]);
@@ -39,7 +39,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'exams' | 'assignments'>('overview');
   
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
-  const [badgeToRevoke, setBadgeToRevoke] = useState<{ id: string, name: string } | null>(null); // 🚀 حالة الوسام المراد حذفه
+  const [badgeToRevoke, setBadgeToRevoke] = useState<{ id: string, name: string } | null>(null); 
 
   const fetchStudentData = useCallback(async () => {
     if (!user || !userRole) return;
@@ -72,7 +72,13 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
       let currentTeacherId = null;
       if (userRole === 'teacher') {
-        const { data: teacherData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        // 🚀 الإصلاح: البحث عن المعلم بـ id مباشرة بدلاً من user_id الوهمي
+        const { data: teacherData } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('id', user.id) // ✅ التصحيح هنا
+          .maybeSingle();
+          
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
@@ -156,13 +162,11 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
     fetchStudentData();
   }, [fetchStudentData]);
 
-  // 🚀 دالة تأكيد سحب الوسام
   const confirmRevokeBadge = async () => {
     if (!badgeToRevoke) return;
     try {
       const result = await revokeBadge(badgeToRevoke.id);
       if (result.success) {
-        // تحديث القائمة محلياً لتجربة أسرع
         setStudentBadges(prev => prev.filter(b => b.id !== badgeToRevoke.id));
       } else {
         alert(result.error || 'حدث خطأ أثناء سحب الوسام');
@@ -170,7 +174,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
     } catch (error) {
       console.error(error);
     } finally {
-      setBadgeToRevoke(null); // إغلاق المودال
+      setBadgeToRevoke(null); 
     }
   };
 
@@ -273,7 +277,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* عرض الأوسمة مع خيار الحذف */}
         {studentBadges.length > 0 && (
           <div className="relative z-10 mt-10 pt-6 border-t border-white/10 w-full">
             <h3 className="text-sm sm:text-base font-bold text-indigo-200 mb-4 flex items-center gap-2 justify-center md:justify-start">
@@ -285,7 +288,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                   key={badgeEntry.id || index} 
                   className="flex-shrink-0 bg-white/5 backdrop-blur-md rounded-[2rem] p-5 border border-white/10 flex items-center gap-5 w-[22rem] sm:w-[24rem] hover:bg-white/10 transition-all duration-300 hover:shadow-2xl hover:shadow-white/5 group cursor-default relative overflow-hidden"
                 >
-                  {/* 🚀 زر الحذف المخفي يظهر عند المرور بالماوس لأصحاب الصلاحية */}
                   {(userRole === 'admin' || userRole === 'management' || userRole === 'teacher') && (
                     <button 
                       onClick={(e) => {
@@ -606,7 +608,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         </AnimatePresence>
       </div>
 
-      {/* 🚀 استدعاء مكون نافذة منح الأوسمة */}
       {student && (
         <GrantBadgeModal
           isOpen={isBadgeModalOpen}
@@ -618,7 +619,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         />
       )}
 
-      {/* 🚀 نافذة تأكيد سحب الوسام */}
       <Dialog.Root open={!!badgeToRevoke} onOpenChange={(open) => !open && setBadgeToRevoke(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100]" />
