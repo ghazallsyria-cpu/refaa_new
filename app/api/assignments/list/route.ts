@@ -16,12 +16,13 @@ export async function POST(req: Request) {
     );
 
     // 2. جلب كل الواجبات بدون فلاتر معقدة (لنجلب البيانات الخام أولاً)
+    // 🚀 الإصلاح: إزالة user_id من جدول المعلمين واستخدام id
     const { data: rawAssignments, error } = await adminSupabase
       .from('assignments')
       .select(`
         *,
         subject:subjects(name),
-        teacher:teachers(user_id, users(full_name)),
+        teacher:teachers(id, users(full_name)), 
         assignment_sections(section_id, sections(name, classes(name)))
       `)
       .order('created_at', { ascending: false });
@@ -33,9 +34,13 @@ export async function POST(req: Request) {
     const cleanUserId = String(userId).trim().toLowerCase();
 
     if (role === 'teacher') {
-        // جلب معرفات المعلم (سواء Profile ID أو Auth User ID)
-        const { data: tProfiles } = await adminSupabase.from('teachers').select('id, user_id').or(`user_id.eq.${cleanUserId},id.eq.${cleanUserId}`);
-        const validTeacherIds = tProfiles ? tProfiles.flatMap(t => [String(t.id).toLowerCase(), String(t.user_id).toLowerCase()]) : [cleanUserId];
+        // 🚀 الإصلاح: البحث عن المعلم باستخدام id فقط
+        const { data: tProfiles } = await adminSupabase
+          .from('teachers')
+          .select('id')
+          .eq('id', cleanUserId);
+          
+        const validTeacherIds = tProfiles ? tProfiles.map(t => String(t.id).toLowerCase()) : [cleanUserId];
 
         assignments = assignments.filter(a => {
             const aTeacherId = String(a.teacher_id).toLowerCase();
@@ -43,8 +48,12 @@ export async function POST(req: Request) {
         });
     } 
     else if (role === 'student') {
-        // جلب شعبة الطالب
-        const { data: sProfiles } = await adminSupabase.from('students').select('section_id').or(`user_id.eq.${cleanUserId},id.eq.${cleanUserId}`);
+        // 🚀 الإصلاح: البحث عن الطالب باستخدام id فقط لمعرفة شعبته
+        const { data: sProfiles } = await adminSupabase
+          .from('students')
+          .select('section_id')
+          .eq('id', cleanUserId);
+          
         const studentSectionId = sProfiles && sProfiles.length > 0 ? String(sProfiles[0].section_id).toLowerCase() : null;
 
         assignments = assignments.filter(a => {
