@@ -101,12 +101,12 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
-        // جلب نظيف ومباشر
-        let { data: student } = await supabase.from('students').select('*, users(full_name, avatar_url), sections(id, name, classes(name))').eq('user_id', user.id).maybeSingle();
-        if (!student) {
-          const { data: fallbackStudent } = await supabase.from('students').select('*, users(full_name, avatar_url), sections(id, name, classes(name))').eq('id', user.id).maybeSingle();
-          student = fallbackStudent;
-        }
+        // 🚀 الإصلاح الجذري للطلاب: البحث باستخدام id وليس user_id
+        const { data: student } = await supabase
+          .from('students')
+          .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
+          .eq('id', user.id) // ✅ التصحيح هنا
+          .maybeSingle();
         
         if (!student) {
           return {
@@ -157,14 +157,13 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        let { data: teacher } = await supabase.from('teachers').select('*, users(*)').eq('user_id', user.id).maybeSingle();
-        
-        if (!teacher) {
-          const { data: fallbackTeacher } = await supabase.from('teachers').select('*, users(*)').eq('id', user.id).maybeSingle();
-          teacher = fallbackTeacher;
-        }
+        // 🚀 الإصلاح الجذري للمعلمين: البحث باستخدام id وليس user_id
+        const { data: teacher } = await supabase
+          .from('teachers')
+          .select('*, users(*)')
+          .eq('id', user.id) // ✅ التصحيح هنا
+          .maybeSingle();
 
-        // 🚀 تم حذف كود (INSERT) بالكامل لمنع خطأ 409 والدوامة اللانهائية!
         if (!teacher) {
             return {
               teacher: { id: user.id, users: { full_name: 'حساب المعلم غير مرتبط بالجدول (يرجى مراجعة الإدارة)' } },
@@ -245,11 +244,14 @@ export function useDashboardSystem() {
   const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
     if (!user) return null;
     try {
-      let { data, error } = await supabase.from('students').update({ next_year_track: track, track_selection_date: new Date().toISOString() }).eq('user_id', user.id).select().maybeSingle();
-      if (!data) {
-        const { data: fallbackData, error: fallbackError } = await supabase.from('students').update({ next_year_track: track, track_selection_date: new Date().toISOString() }).eq('id', user.id).select().maybeSingle();
-        data = fallbackData; error = fallbackError;
-      }
+      // 🚀 الإصلاح الجذري للطلاب: التحديث باستخدام id وليس user_id
+      const { data, error } = await supabase
+        .from('students')
+        .update({ next_year_track: track, track_selection_date: new Date().toISOString() })
+        .eq('id', user.id) // ✅ التصحيح هنا
+        .select()
+        .maybeSingle();
+
       if (error) throw error;
       globalCache.delete(`student_dashboard_${user.id}`);
       globalCache.delete(`track_stats_all`);
@@ -264,15 +266,18 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
       try {
-        let { data: student } = await supabase.from('students').select('section_id, sections(name, classes(name))').eq('user_id', user.id).maybeSingle();
-        if (!student) {
-          const { data: s2 } = await supabase.from('students').select('section_id, sections(name, classes(name))').eq('id', user.id).maybeSingle();
-          student = s2;
-        }
+        // 🚀 التصحيح للطلاب هنا أيضاً
+        const { data: student } = await supabase
+          .from('students')
+          .select('section_id, sections(name, classes(name))')
+          .eq('id', user.id) // ✅ التصحيح هنا
+          .maybeSingle();
+          
         if (!student || !(student as any).section_id) return null;
 
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users:user_id(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
+          // 🚀 وإصلاح الـ Select لجدول المعلمين بداخل جدول الحصص (تم إزالة user_id)
+          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
 
@@ -288,11 +293,13 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
       try {
-        let { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
-        if (!teacherProfile) {
-          const { data: t2 } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-          teacherProfile = t2;
-        }
+        // 🚀 التصحيح للمعلمين هنا
+        const { data: teacherProfile } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('id', user.id) // ✅ التصحيح هنا
+          .maybeSingle();
+
         if (!teacherProfile) return null;
 
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
@@ -312,7 +319,13 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`parent_dashboard_${user.id}`, async () => {
       try {
-        const { data: parentProfile } = await supabase.from('parents').select('id').eq('user_id', user.id).single();
+        // 🚀 التصحيح للآباء هنا أيضاً
+        const { data: parentProfile } = await supabase
+          .from('parents')
+          .select('id')
+          .eq('id', user.id) // ✅ التصحيح هنا
+          .single();
+          
         if (!parentProfile) return null;
 
         const [ { data: children }, { data: notifications } ] = await Promise.all([
