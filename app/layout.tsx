@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Arabic } from 'next/font/google';
 import "./globals.css";
@@ -6,6 +5,11 @@ import { QueryProvider } from "@/lib/query-provider";
 import { NotificationProvider } from "@/context/notification-context";
 import { AuthProvider } from "@/context/auth-context";
 import { AppLayout } from "@/components/app-layout";
+
+// 🚀 السلاح النووي لمنع كاش السيرفر (Next.js) - هذا ما نسيته في الكود السابق!
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 const ibmPlexArabic = IBM_Plex_Sans_Arabic({
   subsets: ['arabic', 'latin'],
