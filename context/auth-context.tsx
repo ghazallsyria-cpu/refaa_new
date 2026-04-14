@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -38,6 +37,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
+  // 🚀 تنظيف الذاكرة المؤقتة من إغلاق المنصة
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('platformClosed');
+    }
+  }, []);
+
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
@@ -53,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authResult = data;
       lastError = error;
     } else {
-      // 🚀 إصلاح: العودة للاعتماد على users للبحث عن الإيميل من خلال الرقم المدني
       const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
       
       const possibleEmails = [];
@@ -324,5 +329,3 @@ export function useAuth() {
   }
   return context;
 }
-
-
