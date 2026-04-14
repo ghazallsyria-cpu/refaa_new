@@ -158,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (cachedRole) setAuthRole(cachedRole as UserRole);
           if (cachedName) setUserName(cachedName);
 
+          // 🚀 الحل هنا: إذا كانت الذاكرة نظيفة (لا يوجد Role)، نأمر النظام بانتظار جلب البيانات من السيرفر
           if (cachedRole && cachedName) {
              setIsChecking(false); 
           }
@@ -208,6 +209,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
         ]);
 
+        // صائد الأشباح (تم التأمين ضد أخطاء الشبكة)
+// 🚀 صائد الأشباح المطور للهواتف: 
+        if (!userRes.data && !userRes.error && !isPublicPage) {
+          console.warn("Ghost account detected! Initiating deep mobile clear...");
+          await supabase.auth.signOut();
+          
+          // مسح عميق جداً
+          localStorage.clear();
+          sessionStorage.clear();
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (let reg of regs) await reg.unregister();
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            for (let key of keys) await caches.delete(key);
+          }
+          
+          window.location.replace('/login?cleared=ghost_session');
+          return;
+        }
+
         let role = userRes.data?.role;
         const settings = settingsRes.data;
         const settingsError = settingsRes.error;
@@ -228,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('Error fetching user data:', error);
       } finally {
-        setIsChecking(false); 
+        setIsChecking(false); // 🚀 بعد انتهاء جلب البيانات تماماً، نسمح للصفحة بالفتح
       }
     };
 
