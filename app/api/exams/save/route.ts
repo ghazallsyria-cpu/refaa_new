@@ -8,14 +8,22 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
+    // 🚀 الإصلاح الجذري: تحديد المعلم الصحيح باستخدام id مباشرة
     let finalTeacherId = examData.teacher_id;
     if (!finalTeacherId) {
-        const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('user_id', userId).maybeSingle();
-        if (tProfile) finalTeacherId = tProfile.id;
-        else {
-            const { data: tProfile2 } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
-            if (tProfile2) finalTeacherId = tProfile2.id;
-            else finalTeacherId = userId; 
+        const { data: tProfile, error: tError } = await adminSupabase
+            .from('teachers')
+            .select('id')
+            .eq('id', userId) // ✅ التصحيح هنا
+            .maybeSingle();
+            
+        if (tError) throw new Error("خطأ في التحقق من حساب المعلم: " + tError.message);
+        
+        if (tProfile) {
+            finalTeacherId = tProfile.id;
+        } else {
+            // كخيار أخير إذا فشل كل شيء، نستخدم الـ userId القادم من الواجهة
+            finalTeacherId = userId; 
         }
     }
 
@@ -78,7 +86,7 @@ export async function POST(req: Request) {
         // إذا كان النوع مرفوضاً من قاعدة البيانات، نخفيه في النص ونجعله 'essay'
         if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
             dbType = 'essay'; 
-            qContent += `<!--[TYPE:${frontendType}]-->`;
+            qContent += ``;
         }
 
         const qPayload = {
