@@ -44,14 +44,14 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function () {
-                var version = 'v_ultimate_clear_102';
+                var version = 'v_ultimate_clear_103';
 
                 try {
                   var oldVersion = localStorage.getItem('app_super_version');
 
                   if (oldVersion !== version) {
 
-                    // 1. حذف Service Worker
+                    // 1. حذف Service Worker القديم
                     if ('serviceWorker' in navigator) {
                       navigator.serviceWorker.getRegistrations().then(function (regs) {
                         regs.forEach(function (reg) {
@@ -60,7 +60,7 @@ export default function RootLayout({
                       });
                     }
 
-                    // 2. حذف كاش المتصفح
+                    // 2. حذف كل الكاش
                     if (window.caches) {
                       caches.keys().then(function (keys) {
                         keys.forEach(function (key) {
@@ -69,17 +69,16 @@ export default function RootLayout({
                       });
                     }
 
-                    // 3. تنظيف التخزين المحلي (بدون كسر التنفيذ)
+                    // 3. تنظيف التخزين المؤقت
                     sessionStorage.clear();
-                    localStorage.removeItem('app_super_version');
 
                     // 4. حفظ النسخة الجديدة
                     localStorage.setItem('app_super_version', version);
 
-                    // 5. إعادة تحميل آمنة
+                    // 5. إعادة توجيه بعد وقت كافي
                     setTimeout(function () {
                       window.location.replace('/login?refresh=' + Date.now());
-                    }, 300);
+                    }, 800);
                   }
                 } catch (e) {
                   console.log('SW cleanup skipped:', e);
