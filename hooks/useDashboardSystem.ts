@@ -130,7 +130,17 @@ export function useDashboardSystem() {
           student = fallbackStudent;
         }
         
-        if (!student) return null;
+        // 🚀 صائد الأشباح (Ghost Buster) للطالب
+        if (!student) {
+          console.warn("Ghost student account detected! Forcing logout...");
+          await supabase.auth.signOut();
+          if (typeof window !== 'undefined') {
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = '/login?error=invalid_student';
+          }
+          return null;
+        }
 
         const sectionId = (student as any).section_id;
 
@@ -168,7 +178,8 @@ export function useDashboardSystem() {
           supabase
             .from('daily_attendance_summary')
             .select('daily_status')
-            .eq('student_id', student.id).limit(5000),
+            .eq('student_id', student.id)
+            .limit(5000),
           supabase
             .from('exam_attempts')
             .select('score, completed_at, exam:exams(title, total_points, subjects(name))')
@@ -180,11 +191,13 @@ export function useDashboardSystem() {
             .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))')
             .eq('section_id', sectionId)
             .eq('day_of_week', new Date().getDay() + 1)
-            .order('period').limit(100) : Promise.resolve({ data: [] }),
+            .order('period')
+            .limit(100) : Promise.resolve({ data: [] }),
           supabase
             .from('class_periods')
             .select('*')
-            .order('period_number').limit(100)
+            .order('period_number')
+            .limit(100)
         ]);
 
         const totalDays = attendance?.length || 0;
@@ -207,8 +220,8 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user]);
 
-  // 🚀 إصلاح شامل للوحة المعلم: كسر الحواجز وإصلاح البيانات المفقودة
-  const fetchTeacherDashboardData = useCallback(async (forceRefresh = true) => { // 🚀 إجبار التحديث دائماً للتخلص من كاش الأصفار
+  // 🚀 إصلاح شامل للوحة المعلم: كسر الحواجز، صائد الأشباح، وإصلاح البيانات المفقودة
+  const fetchTeacherDashboardData = useCallback(async (forceRefresh = true) => { // إجبار التحديث دائماً
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
@@ -235,11 +248,34 @@ export function useDashboardSystem() {
                 national_id: 'TEMP_' + user.id.substring(0, 8),
                 specialization: 'غير محدد'
               }).select('*, users(*)').single();
-            if (!createError && newTeacher) { teacher = newTeacher; }
+            
+            if (!createError && newTeacher) { 
+                teacher = newTeacher; 
+            } else {
+                // 🚀 صائد الأشباح (Ghost Buster) - فشل إنشاء المعلم (خطأ 400)
+                console.warn("Ghost teacher account (failed creation)! Forcing logout...");
+                await supabase.auth.signOut();
+                if (typeof window !== 'undefined') {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  window.location.href = '/login?error=invalid_teacher_creation';
+                }
+                return null;
+            }
           }
         }
 
-        if (!teacher) return null;
+        // 🚀 صائد الأشباح (Ghost Buster) - المعلم غير موجود إطلاقاً
+        if (!teacher) {
+            console.warn("Ghost teacher account (not found)! Forcing logout...");
+            await supabase.auth.signOut();
+            if (typeof window !== 'undefined') {
+              localStorage.clear();
+              sessionStorage.clear();
+              window.location.href = '/login?error=teacher_not_found';
+            }
+            return null;
+        }
 
         // 🚀 إصلاح الاسم المفقود (مرحباً، أ. م)
         if (teacher.users && Array.isArray(teacher.users)) {
@@ -249,7 +285,7 @@ export function useDashboardSystem() {
         const { data: teacherSections } = await supabase
           .from('teacher_sections')
           .select('section_id, section:sections(id, name, class_id, classes(id, name), students(count))')
-          .eq('teacher_id', teacher.id).limit(5000); // 🚀 كسر الحاجز
+          .eq('teacher_id', teacher.id).limit(5000); 
         
         const rawSections = (teacherSections?.map(ts => ts.section) || []).filter(Boolean);
         const sections = rawSections.map(s => Array.isArray(s) ? s[0] : s).filter(Boolean);
@@ -293,7 +329,7 @@ export function useDashboardSystem() {
             .eq('teacher_id', teacher.id)
             .order('day_of_week')
             .order('period')
-            .limit(5000), // 🚀 كسر الحاجز
+            .limit(5000), 
           supabase
             .from('class_periods')
             .select('*')
@@ -342,7 +378,7 @@ export function useDashboardSystem() {
         const recentAssIds = assignments.map(a => a.id);
         let submissionsData: any[] = [];
         if (recentAssIds.length > 0) {
-           const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id').in('assignment_id', recentAssIds).limit(10000); // 🚀 كسر الحاجز
+           const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id').in('assignment_id', recentAssIds).limit(10000);
            submissionsData = subs || [];
         }
 
@@ -386,7 +422,7 @@ export function useDashboardSystem() {
         console.error('Error fetching teacher dashboard data:', error);
         throw error;
       }
-    }, forceRefresh); // 🚀 إجبار التحديث دائماً
+    }, forceRefresh); 
   }, [user]);
 
   const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
