@@ -6,7 +6,7 @@ import { NotificationProvider } from "@/context/notification-context";
 import { AuthProvider } from "@/context/auth-context";
 import { AppLayout } from "@/components/app-layout";
 
-// 🚀 السلاح النووي لمنع كاش السيرفر (Next.js) - هذا ما نسيته في الكود السابق!
+// 🚀 السلاح النووي لمنع كاش السيرفر (Next.js)
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
@@ -35,21 +35,41 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className={`${ibmPlexArabic.variable}`} suppressHydrationWarning>
       <head>
-        {/* 🚀 السكربت السحري: يعمل قبل كل شيء لقتل الكاش القديم في هواتف الطلاب */}
+        {/* 🚀 المطرقة النووية: لاقتلاع الكاش والتطبيق القديم (PWA) من جذور الهاتف */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                  for(let registration of registrations) {
-                    registration.unregister();
-                  }
-                });
-              }
-              if (window.caches) {
-                caches.keys().then(function(names) {
-                  for (let name of names) caches.delete(name);
-                });
+              // تغيير هذا الرقم سيؤدي لضربة تنظيف جديدة في كل الهواتف
+              var finalVersion = 'v_ultimate_clear_101';
+              
+              if (localStorage.getItem('app_super_version') !== finalVersion) {
+                // 1. إيقاف واقتلاع "عامل الخدمة" الذي يحفظ الكود القديم في الجوال
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    for(var i=0; i<regs.length; i++) {
+                      regs[i].unregister();
+                    }
+                  });
+                }
+                
+                // 2. مسح مساحة تخزين الكاش العميق (حيث تختبئ الأكواد القديمة)
+                if (window.caches) {
+                  caches.keys().then(function(names) {
+                    for(var j=0; j<names.length; j++) {
+                      caches.delete(names[j]);
+                    }
+                  });
+                }
+
+                // 3. مسح الذاكرة المحلية والجلسات بالكامل (لمسح الأصفار والبيانات المعلقة)
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                // 4. حفظ الإصدار الجديد لكي لا يعلق في حلقة مفرغة
+                localStorage.setItem('app_super_version', finalVersion);
+                
+                // 5. إعادة التوجيه الإجباري من السيرفر مباشرة (تخطي الكاش)
+                window.location.replace('/login?refresh=' + new Date().getTime());
               }
             `,
           }}
