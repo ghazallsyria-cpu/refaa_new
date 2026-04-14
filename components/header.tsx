@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { NotificationsBell } from '@/components/notifications-bell';
-import { PushNotificationToggle } from '@/components/push-notification-toggle';
+
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -112,9 +112,7 @@ export function Header({
 
       <div className="flex items-center gap-3 sm:gap-6">
         <div className="hidden sm:flex items-center gap-3">
-          <PushNotificationToggle />
-          <NotificationsBell />
-        </div>
+
 
         <div className="relative">
           <button
