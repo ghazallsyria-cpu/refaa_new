@@ -73,7 +73,8 @@ export function useDashboardSystem() {
           { data: recentExams },
           { data: recentNotifs }
         ] = await Promise.all([
-          supabase.from('students').select('users(full_name), created_at').order('created_at', { ascending: false }).limit(2),
+          // 🚀 استخدام الجسر الصريح للطلاب
+          supabase.from('students').select('users!fk_students_users(full_name), created_at').order('created_at', { ascending: false }).limit(2),
           supabase.from('documents').select('title, created_at').order('created_at', { ascending: false }).limit(2),
           supabase.from('exams').select('title, created_at').order('created_at', { ascending: false }).limit(2),
           supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
@@ -101,9 +102,10 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
+        // 🚀 استخدام الجسر الصريح للطلاب
         const { data: student, error: studentErr } = await supabase
           .from('students')
-          .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
+          .select('*, users!fk_students_users(full_name, avatar_url), sections(id, name, classes(name))')
           .eq('id', user.id)
           .maybeSingle();
         
@@ -136,7 +138,8 @@ export function useDashboardSystem() {
           examIds.length > 0 ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
           supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id).limit(5000),
           supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5),
-          sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
+          // 🚀 استخدام الجسر الصريح للمعلمين بداخل الجدول
+          sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users!fk_teachers_users(full_name))').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
 
@@ -158,9 +161,10 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
+        // 🚀 استخدام الجسر الصريح للمعلمين
         const { data: teacher, error: teacherErr } = await supabase
           .from('teachers')
-          .select('*, users(*)')
+          .select('*, users!fk_teachers_users(*)')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -276,7 +280,8 @@ export function useDashboardSystem() {
         if (!student || !(student as any).section_id) return null;
 
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
+          // 🚀 استخدام الجسر الصريح للمعلمين
+          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users!fk_teachers_users(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
 
@@ -326,7 +331,8 @@ export function useDashboardSystem() {
         if (!parentProfile) return null;
 
         const [ { data: children }, { data: notifications } ] = await Promise.all([
-          supabase.from('students').select('*, users(full_name), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(1000),
+          // 🚀 استخدام الجسر الصريح للطلاب هنا
+          supabase.from('students').select('*, users!fk_students_users(full_name), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(1000),
           supabase.from('notifications').select('*').eq('type', 'announcement').order('created_at', { ascending: false }).limit(5)
         ]);
 
