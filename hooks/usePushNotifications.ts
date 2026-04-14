@@ -49,7 +49,7 @@ export function usePushNotifications() {
       setPermission(permissionResult);
       if (permissionResult !== 'granted') throw new Error('تم رفض الإشعارات من قبلك، يجب السماح بها من إعدادات المتصفح.');
 
-      const registration = await navigator.serviceWorker.register('/sw.js');
+     // const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
 
       const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
