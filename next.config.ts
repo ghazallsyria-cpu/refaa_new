@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
 
-  // 🚀 تغيير المعرف مع كل عملية بناء لإجبار جلب الملفات الجديدة
+  // 🚀 تغيير المعرف مع كل عملية بناء لإجبار جلب ملفات Next.js الجديدة (ممتاز)
   generateBuildId: async () => {
     return `build-${new Date().getTime()}`;
   },
@@ -23,20 +23,21 @@ const nextConfig: NextConfig = {
           { key: 'Content-Type', value: 'application/manifest+json; charset=utf-8' },
         ],
       },
-      // 🚀 إجبار المتصفح على عدم حفظ ملف الانتحار sw.js أبداً
+      // 🚀 إجبار المتصفح على تحميل "ملف الانتحار" وعدم حفظه أبداً
       {
         source: '/sw.js',
         headers: [
           { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate, max-age=0' },
         ],
       },
-      // 🚀 إجبار المتصفح على التحقق من كل الصفحات
+      // 🚀 في حال كان المتصفح يبحث عن هذا الاسم أيضاً
       {
-        source: '/(.*)',
+        source: '/service-worker.js',
         headers: [
-          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate, max-age=0' },
         ],
-      },
+      }
+      // ❌ تم إزالة الفلتر الشامل '/(.*)' للسماح لـ Next.js بتسريع الصور وملفات التصميم!
     ];
   },
 };
