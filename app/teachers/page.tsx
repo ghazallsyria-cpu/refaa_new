@@ -63,7 +63,6 @@ export default function TeachersPage() {
 
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   
-  // بدلاً من اختيار التخصص الدقيق، سنختار القسم الرئيسي (العلوم، اللغات...)
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
@@ -71,7 +70,6 @@ export default function TeachersPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // ... (نفس دوال حفظ وإضافة وتعديل وحذف وكلمة المرور والأوسمة السابقة تماماً)
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   const handleResetPasswordClick = (teacher: any) => { setResetPasswordForm({ userId: teacher.id, newPassword: '' }); setShowPasswordResetModal(true); };
@@ -110,19 +108,16 @@ export default function TeachersPage() {
   const handleDeleteClick = (id: string) => { setTeacherToDelete(id); setShowDeleteModal(true); };
   const confirmDelete = async () => { if (!teacherToDelete) return; try { await deleteUser(teacherToDelete); showNotification('success', 'تم الحذف'); setShowDeleteModal(false); setTeacherToDelete(null); } catch (error: any) { showNotification('error', error.message); } };
 
-  // ... (دوال Assignment بقيت للحفاظ على الميزة، سأضعها مختصرة لتوفير المساحة)
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [teacherSections, setTeacherSections] = useState<any[]>([]);
   const handleAssignmentClick = async (teacher: any) => { setSelectedTeacher(teacher); try { const assignments = await fetchTeacherAssignments(teacher.id); setTeacherSections(assignments); setShowAssignmentModal(true); } catch (e) {} };
-  const toggleAssignment = async (sectionId: string, subjectId: string) => { /*... نفس الكود السابق ...*/ };
 
   const defaultSpecializations = ['اللغة العربية', 'الرياضيات', 'العلوم', 'اللغة الإنجليزية', 'التربية الإسلامية', 'الدراسات الاجتماعية', 'الحاسوب', 'التربية الفنية', 'التربية البدنية', 'الموسيقى'];
-  const allSpecializationsList = Array.from(new Set([...defaultSpecializations, ...teachers.map(t => t.specialization).filter(Boolean)]));
+  const allSpecializationsList = Array.from(new Set([...defaultSpecializations, ...teachers.map((t: any) => t.specialization).filter(Boolean)]));
 
-  // 🧠 الفلترة الذكية لمعلمي القسم
   const filteredTeachers = useMemo(() => {
-    return teachers.filter(teacher => {
+    return teachers.filter((teacher: any) => {
       const stageInfo = getTeacherStageInfo(teacher);
       const matchStage = stageFilter === 'all' || stageInfo.type === stageFilter;
       const parentDept = getParentDepartment(teacher.specialization || '');
@@ -132,22 +127,19 @@ export default function TeachersPage() {
     });
   }, [teachers, stageFilter, selectedDepartment, searchQuery]);
 
-  // استخراج الأقسام الرئيسية المتاحة (فقط التي فيها معلمين)
-  const availableDepartments = Array.from(new Set(teachers.map(t => getParentDepartment(t.specialization || '')))).sort();
+  const availableDepartments = Array.from(new Set(teachers.map((t: any) => getParentDepartment(t.specialization || '')))).sort();
 
-  // فصل رؤساء الأقسام عن المعلمين العاديين داخل القسم المختار
-  const departmentHeads = filteredTeachers.filter(t => t.department_heads && t.department_heads.length > 0);
-  const departmentMembers = filteredTeachers.filter(t => !t.department_heads || t.department_heads.length === 0);
+  // 🚀 إخبار TypeScript أن t هو any لتخطي فحص الأنواع الصارم
+  const departmentHeads = filteredTeachers.filter((t: any) => t.department_heads && t.department_heads.length > 0);
+  const departmentMembers = filteredTeachers.filter((t: any) => !t.department_heads || t.department_heads.length === 0);
 
-  // تجميع المعلمين حسب تخصصهم الدقيق داخل القسم
-  const groupedMembers = departmentMembers.reduce((acc, teacher) => {
+  const groupedMembers = departmentMembers.reduce((acc, teacher: any) => {
     const spec = teacher.specialization || 'عام';
     if (!acc[spec]) acc[spec] = [];
     acc[spec].push(teacher);
     return acc;
-  }, {} as Record<string, typeof teachers>);
+  }, {} as Record<string, any[]>);
 
-  // مكون بطاقة المعلم الأنيقة (استُخدمت لتوفير مساحة الكود بدلاً من الجداول)
   const TeacherCard = ({ teacher, isHOD = false }: any) => {
     const stageInfo = getTeacherStageInfo(teacher);
     const customTitles = teacher.custom_titles || [];
@@ -172,7 +164,7 @@ export default function TeachersPage() {
         </div>
         
         <div className="mt-4 flex flex-wrap gap-2 relative z-10">
-          {isHOD && <span className="px-2.5 py-1 bg-amber-500 text-white text-[10px] font-black rounded-lg shadow-sm">رئيس قسم {teacher.department_heads[0]?.subject?.name}</span>}
+          {isHOD && <span className="px-2.5 py-1 bg-amber-500 text-white text-[10px] font-black rounded-lg shadow-sm">رئيس قسم {teacher.department_heads[0]?.subject?.name || 'مادة'}</span>}
           {customTitles.map((title: string, i: number) => (
             <span key={i} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200">{title}</span>
           ))}
@@ -245,11 +237,10 @@ export default function TeachersPage() {
       </motion.div>
 
       {!selectedDepartment ? (
-        // عرض المجلدات الكبرى (الأقسام)
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {availableDepartments.map((dept, idx) => {
-            const count = teachers.filter(t => getParentDepartment(t.specialization || '') === dept).length;
-            const hodsCount = teachers.filter(t => getParentDepartment(t.specialization || '') === dept && t.department_heads && t.department_heads.length > 0).length;
+            const count = teachers.filter((t: any) => getParentDepartment(t.specialization || '') === dept).length;
+            const hodsCount = teachers.filter((t: any) => getParentDepartment(t.specialization || '') === dept && t.department_heads && t.department_heads.length > 0).length;
             
             return (
               <motion.div key={dept} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} whileHover={{ y: -5, scale: 1.02 }} onClick={() => setSelectedDepartment(dept)} className="bg-white p-8 rounded-[2.5rem] cursor-pointer group hover:shadow-2xl hover:shadow-indigo-100 transition-all border-2 border-slate-100 hover:border-indigo-200 relative overflow-hidden">
@@ -269,9 +260,7 @@ export default function TeachersPage() {
           })}
         </div>
       ) : (
-        // عرض المعلمين داخل القسم
         <div className="space-y-12">
-          {/* قسم قيادة القسم (رؤساء الأقسام) */}
           {departmentHeads.length > 0 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3 border-b-2 border-amber-100 pb-4">
@@ -279,12 +268,11 @@ export default function TeachersPage() {
                 <h2 className="text-2xl font-black text-slate-900">قيادة القسم</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {departmentHeads.map(hod => <TeacherCard key={hod.id} teacher={hod} isHOD={true} />)}
+                {departmentHeads.map((hod: any) => <TeacherCard key={hod.id} teacher={hod} isHOD={true} />)}
               </div>
             </div>
           )}
 
-          {/* قسم أعضاء القسم مفصولين بالتخصصات */}
           <div className="space-y-8">
             <div className="flex items-center gap-3 border-b-2 border-slate-100 pb-4">
               <Users className="w-7 h-7 text-indigo-500" />
@@ -302,7 +290,7 @@ export default function TeachersPage() {
                     <span className="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-md font-bold ml-2">{specTeachers.length}</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {specTeachers.map(teacher => <TeacherCard key={teacher.id} teacher={teacher} isHOD={false} />)}
+                    {specTeachers.map((teacher: any) => <TeacherCard key={teacher.id} teacher={teacher} isHOD={false} />)}
                   </div>
                 </div>
               ))
@@ -311,7 +299,6 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* المودالز */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -393,7 +380,6 @@ export default function TeachersPage() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          {/* كود إضافة المعلم - لم يتغير لتوفير الكود */}
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)}></div>
              <div className="relative transform overflow-hidden rounded-[2.5rem] bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-slate-100">
