@@ -1,8 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useUsersSystem } from "@/hooks/useUsersSystem";
+import React, { useState, useEffect, useCallback, useMemo } from "react";import { useUsersSystem } from "@/hooks/useUsersSystem";
 import { getParentDepartment } from "@/hooks/useHierarchySystem"; 
 import { motion, AnimatePresence } from "framer-motion";
 
