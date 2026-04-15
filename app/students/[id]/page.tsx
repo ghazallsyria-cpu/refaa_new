@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react';
 import { 
   User, GraduationCap, Calendar, Clock, BookOpen, 
   FileText, CheckCircle2, XCircle, AlertCircle, 
-  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft, SearchX, Trash2, ShieldAlert, Star, Flame
+  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft, SearchX, Trash2, ShieldAlert, Star, Flame, Lock, PenTool
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -34,9 +34,14 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   const [stats, setStats] = useState({ attendanceRate: 0, examsAvg: 0, assignmentsAvg: 0 });
   const [studentBadges, setStudentBadges] = useState<any[]>([]);
   
+  // 🔒 حالات المفكرة السرية
+  const [privateNotes, setPrivateNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'exams' | 'assignments'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'exams' | 'assignments' | 'private_notes'>('overview');
   
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [badgeToRevoke, setBadgeToRevoke] = useState<{ id: string, name: string } | null>(null); 
@@ -77,6 +82,17 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
           .maybeSingle();
           
         if (teacherData) currentTeacherId = teacherData.id;
+      }
+
+      // 🔒 جلب الملاحظات السرية إذا كان المستخدم معلماً
+      if (userRole === 'teacher' && currentTeacherId) {
+        const { data: notesData } = await supabase
+          .from('private_student_notes')
+          .select('*')
+          .eq('student_id', studentId)
+          .eq('teacher_id', currentTeacherId)
+          .order('created_at', { ascending: false });
+        if (notesData) setPrivateNotes(notesData);
       }
 
       let attendanceQuery = supabase
@@ -152,6 +168,23 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
   useEffect(() => { fetchStudentData(); }, [fetchStudentData]);
 
+  // 🔒 حفظ ملاحظة سرية جديدة
+  const handleAddPrivateNote = async () => {
+    if (!newNote.trim() || !user) return;
+    setIsSubmittingNote(true);
+    try {
+      const { data, error } = await supabase.from('private_student_notes').insert([
+        { student_id: studentId, teacher_id: user.id, content: newNote }
+      ]).select().single();
+      
+      if (!error && data) {
+        setPrivateNotes([data, ...privateNotes]);
+        setNewNote('');
+      }
+    } catch (err) { console.error(err); }
+    finally { setIsSubmittingNote(false); }
+  };
+
   const confirmRevokeBadge = async () => {
     if (!badgeToRevoke) return;
     try {
@@ -200,8 +233,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   const className = classData?.name || '';
   const sectionName = student.sections?.name || '';
 
-  // 🧠 الذكاء التحليلي: تحديد حالة الطالب بناءً على بياناته
-  let studentStatus = 'stable'; // مستقر
+  let studentStatus = 'stable';
   let statusText = 'مستقر أكاديمياً';
   let StatusIcon = Activity;
   let heroGradient = 'from-slate-900 via-indigo-900 to-slate-900';
@@ -211,40 +243,35 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
     studentStatus = 'elite';
     statusText = 'نخبة - أداء استثنائي';
     StatusIcon = Star;
-    heroGradient = 'from-amber-600 via-yellow-600 to-amber-700'; // خلفية ملكية ذهبية
+    heroGradient = 'from-amber-600 via-yellow-600 to-amber-700'; 
     badgeColor = 'bg-yellow-500/30 border-yellow-300/50 text-yellow-100 shadow-[0_0_15px_rgba(253,224,71,0.4)]';
   } else if ((stats.examsAvg > 0 && stats.examsAvg < 60) || (stats.attendanceRate > 0 && stats.attendanceRate < 75)) {
     studentStatus = 'warning';
     statusText = 'يحتاج متابعة وإرشاد';
     StatusIcon = ShieldAlert;
-    heroGradient = 'from-rose-800 via-red-800 to-rose-900'; // خلفية تحذيرية حمراء
+    heroGradient = 'from-rose-800 via-red-800 to-rose-900'; 
     badgeColor = 'bg-red-500/30 border-red-400/30 text-red-100 shadow-[0_0_15px_rgba(248,113,113,0.4)]';
   }
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
       
-      {/* 🚀 Header Actions */}
+      {/* Header Actions */}
       <div className="pt-6 flex justify-between items-center">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-black bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all group">
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للقائمة
         </button>
       </div>
 
-      {/* 🚀 Hero Section الديناميكي (يتغير لونه حسب أداء الطالب) */}
+      {/* Hero Section */}
       <div className={cn("relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] p-8 sm:p-12 text-white shadow-2xl transition-colors duration-1000 bg-gradient-to-r", heroGradient)}>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay"></div>
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
         
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-8 text-center md:text-right">
-          
           <div className="relative group shrink-0">
             <div className={cn("h-32 w-32 sm:h-40 sm:w-40 rounded-[2.5rem] overflow-hidden border-4 shadow-2xl backdrop-blur-md flex items-center justify-center transition-transform duration-500 group-hover:scale-105 group-hover:rotate-3", studentStatus === 'elite' ? 'border-yellow-300/50 bg-yellow-500/20' : 'border-white/20 bg-white/10')}>
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-6xl font-black text-white/70 drop-shadow-md">{fullName.charAt(0)}</span>
-              )}
+              {avatarUrl ? <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" /> : <span className="text-6xl font-black text-white/70 drop-shadow-md">{fullName.charAt(0)}</span>}
             </div>
             <div className={cn("absolute -bottom-3 -left-3 w-8 h-8 border-4 border-slate-900 rounded-full z-20 shadow-lg flex items-center justify-center", studentStatus === 'elite' ? 'bg-yellow-400 animate-bounce' : studentStatus === 'warning' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-400')}>
                {studentStatus === 'elite' && <Star className="w-3.5 h-3.5 text-slate-900" fill="currentColor" />}
@@ -253,8 +280,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
           <div className="pt-2 flex-1">
             <div className={cn("inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-xs font-black uppercase tracking-widest mb-4 backdrop-blur-md", badgeColor)}>
-              <StatusIcon className="w-4 h-4" />
-              <span>{statusText}</span>
+              <StatusIcon className="w-4 h-4" /> <span>{statusText}</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black mb-4 tracking-tight drop-shadow-md leading-tight">{fullName}</h1>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
@@ -262,9 +288,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                 <GraduationCap className="w-5 h-5 opacity-70" /> {className} - شعبة {sectionName}
               </span>
               {(userRole === 'admin' || userRole === 'management') && student.national_id && (
-                <span className="flex items-center gap-2 bg-black/20 text-white/90 px-5 py-2.5 rounded-xl text-sm font-bold backdrop-blur-md border border-white/10 font-mono shadow-inner">
-                  الرقم المدني: {student.national_id}
-                </span>
+                <span className="flex items-center gap-2 bg-black/20 text-white/90 px-5 py-2.5 rounded-xl text-sm font-bold backdrop-blur-md border border-white/10 font-mono shadow-inner">الرقم المدني: {student.national_id}</span>
               )}
             </div>
 
@@ -276,7 +300,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
           </div>
         </div>
 
-        {/* 🚀 لوحة الشرف الزجاجية */}
         {studentBadges.length > 0 && (
           <div className="relative z-10 mt-12 pt-8 border-t border-white/10 w-full">
             <h3 className="text-base font-black text-white/90 mb-5 flex items-center gap-2 justify-center md:justify-start drop-shadow-sm">
@@ -285,13 +308,11 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
               {studentBadges.map((badgeEntry, index) => (
                 <div key={badgeEntry.id || index} className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 group relative overflow-hidden">
-                  
                   {(userRole === 'admin' || userRole === 'management' || userRole === 'teacher') && (
                     <button onClick={(e) => { e.stopPropagation(); setBadgeToRevoke({ id: badgeEntry.id, name: badgeEntry.badge?.name }); }} className="absolute top-3 left-3 p-2 bg-rose-500/80 hover:bg-rose-600 text-white rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-md" title="سحب الوسام">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
-
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
                     <div className="absolute inset-0 bg-white/10 rounded-3xl blur-xl group-hover:bg-white/20 transition-colors"></div>
                     {badgeEntry.badge?.image_url ? (
@@ -303,9 +324,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                   <div className="min-w-0 flex-1 text-right">
                     <p className="text-lg font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
                     <p className="text-xs font-bold text-white/70 line-clamp-2 mt-1.5 leading-relaxed" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود والتميز'}</p>
-                    <p className="text-[10px] font-bold text-white/50 mt-3 bg-black/20 w-fit px-3 py-1 rounded-lg border border-white/5">
-                      {format(new Date(badgeEntry.granted_at), 'd MMMM yyyy', { locale: arSA })}
-                    </p>
+                    <p className="text-[10px] font-bold text-white/50 mt-3 bg-black/20 w-fit px-3 py-1 rounded-lg border border-white/5">{format(new Date(badgeEntry.granted_at), 'd MMMM yyyy', { locale: arSA })}</p>
                   </div>
                 </div>
               ))}
@@ -314,7 +333,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
-      {/* 🚀 إحصائيات مع أشرطة تقدم (Progress Bars) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
         {[
           { label: 'نسبة الحضور', value: stats.attendanceRate, icon: CheckCircle2, color: 'emerald' },
@@ -323,26 +341,17 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         ].map((stat, i) => (
           <div key={i} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
             <div className="flex items-center gap-5 mb-5">
-              <div className={`h-14 w-14 shrink-0 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm border border-${stat.color}-100 z-10 relative`}>
-                <stat.icon className="w-7 h-7" />
-              </div>
+              <div className={`h-14 w-14 shrink-0 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm border border-${stat.color}-100 z-10 relative`}><stat.icon className="w-7 h-7" /></div>
               <div className="z-10 relative">
                 <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
                 <p className="text-2xl sm:text-3xl font-black text-slate-900">{stat.value}%</p>
               </div>
             </div>
-            {/* شريط التقدم المرئي */}
             <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden shadow-inner relative z-10 border border-slate-100">
-              <motion.div 
-                initial={{ width: 0 }} 
-                animate={{ width: `${stat.value}%` }} 
-                transition={{ duration: 1.5, ease: "easeOut" }}
-                className={`h-full bg-${stat.color}-500 rounded-full relative`}
-              >
+              <motion.div initial={{ width: 0 }} animate={{ width: `${stat.value}%` }} transition={{ duration: 1.5, ease: "easeOut" }} className={`h-full bg-${stat.color}-500 rounded-full relative`}>
                 <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
               </motion.div>
             </div>
-            {/* إضاءة خلفية عند التمرير */}
             <div className={`absolute -right-10 -top-10 w-32 h-32 bg-${stat.color}-50 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0`}></div>
           </div>
         ))}
@@ -351,17 +360,19 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       {userRole === 'teacher' && (
         <div className="flex items-center gap-3 bg-sky-50/80 backdrop-blur-sm text-sky-700 px-6 py-4 rounded-2xl text-sm font-black border border-sky-100 shadow-sm">
           <Activity className="w-5 h-5 shrink-0 animate-pulse text-sky-500" />
-          <span className="opacity-90">هذه الإحصائيات والسجلات تعكس أداء الطالب في مقرراتك وحصصك الدراسية فقط، للحفاظ على سياسة الخصوصية.</span>
+          <span className="opacity-90">هذه الإحصائيات تعكس أداء الطالب في حصصك فقط، للحفاظ على الخصوصية.</span>
         </div>
       )}
 
-      {/* 🚀 Tabs Navigation */}
+      {/* 🚀 Tabs Navigation - تمت إضافة المفكرة السرية هنا */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide bg-white p-2.5 rounded-[2rem] shadow-sm border border-slate-100 sticky top-4 z-30">
         {[
           { id: 'overview', label: 'نظرة عامة', icon: Activity },
           { id: 'attendance', label: 'سجل الغياب', icon: CalendarDays, count: attendance.length },
           { id: 'exams', label: 'الاختبارات', icon: FileText, count: exams.length },
-          { id: 'assignments', label: 'الواجبات', icon: BookOpen, count: assignments.length }
+          { id: 'assignments', label: 'الواجبات', icon: BookOpen, count: assignments.length },
+          // 🔒 المفكرة تظهر فقط إذا كان المستخدم معلماً
+          ...(userRole === 'teacher' ? [{ id: 'private_notes', label: 'المفكرة السرية', icon: ShieldAlert, count: privateNotes.length }] : [])
         ].map((tab) => (
           <button
             key={tab.id}
@@ -375,23 +386,18 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             <tab.icon className="w-4 h-4" />
             {tab.label}
             {tab.count !== undefined && (
-              <span className={`px-2.5 py-0.5 rounded-lg text-[10px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                {tab.count}
-              </span>
+              <span className={`px-2.5 py-0.5 rounded-lg text-[10px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{tab.count}</span>
             )}
           </button>
         ))}
       </div>
 
-      {/* 🚀 Content Area */}
       <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[400px] overflow-hidden">
         <AnimatePresence mode="wait">
           
           {activeTab === 'overview' && (
             <motion.div key="overview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-8 sm:p-10 space-y-10">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                
-                {/* قسم الغياب المحدث */}
                 <div className="space-y-5">
                   <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
                     <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100"><Calendar className="w-5 h-5"/></div>
@@ -411,8 +417,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                      ))}
                   </div>
                 </div>
-
-                {/* قسم الإنجاز الأكاديمي المحدث */}
                 <div className="space-y-5">
                   <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
                     <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100"><TrendingUp className="w-5 h-5"/></div>
@@ -429,7 +433,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                       </div>
                       <div className="text-2xl font-black text-indigo-600 bg-white px-5 py-2.5 rounded-2xl border border-slate-100 shadow-sm">{stats.examsAvg}%</div>
                     </div>
-                    
                     <div className="bg-slate-50/50 border border-slate-100 p-6 rounded-3xl flex items-center justify-between hover:bg-amber-50 hover:border-amber-200 transition-all group">
                       <div className="flex items-center gap-5">
                         <div className="h-14 w-14 bg-white text-amber-600 rounded-2xl flex items-center justify-center shrink-0 border border-slate-100 shadow-sm group-hover:scale-110 transition-transform"><BookOpen className="w-6 h-6"/></div>
@@ -442,14 +445,10 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                     </div>
                   </div>
                 </div>
-
               </div>
             </motion.div>
           )}
 
-          {/* ... [أكواد الـ Tabs الأخرى (attendance, exams, assignments) تبقى كما هي من الملف الأصلي للحفاظ على وظائفها دون مساس] ... */}
-          {/* اختصاراً للرد، يتم الاحتفاظ بباقي التابات كما هي في الكود الأصلي الذي أرسلته أنت */}
-          
           {activeTab === 'attendance' && (
             <motion.div key="attendance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
               {attendance.length === 0 ? (
@@ -569,13 +568,11 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                                </p>
                              </div>
                            </div>
-                           
                            {submission.feedback && (
                              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 relative mt-auto shadow-inner">
                                <p className="text-sm font-bold text-slate-600 line-clamp-2"><span className="text-indigo-500 font-black">ملاحظتك:</span> {submission.feedback}</p>
                              </div>
                            )}
-                           
                            <div className="mt-4 flex items-center justify-between text-left">
                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{format(new Date(submission.submitted_at), 'dd MMM yyyy', { locale: arSA })}</span>
                              <span className="inline-flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
@@ -591,10 +588,64 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
              </motion.div>
            )}
 
+          {/* 🔒 المفكرة السرية (تظهر فقط للمعلم) */}
+          {activeTab === 'private_notes' && userRole === 'teacher' && (
+            <motion.div key="notes" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
+              <div className="bg-slate-900 rounded-[2.5rem] p-6 sm:p-10 mb-8 text-white relative overflow-hidden shadow-2xl">
+                <div className="absolute -left-10 -top-10 text-white/5"><ShieldAlert className="w-64 h-64 rotate-12" /></div>
+                <div className="relative z-10">
+                  <h3 className="text-3xl font-black mb-3 text-indigo-300 flex items-center gap-3"><Lock className="w-6 h-6"/> مفكرتك السرية (خاص)</h3>
+                  <p className="text-slate-400 font-bold text-base mb-8 max-w-2xl leading-relaxed">
+                    هذه المساحة مشفرة ومخصصة لك فقط. لا يمكن للطالب، ولا لأولياء الأمور، ولا لأي معلم آخر رؤية ما تكتبه هنا. استخدمها لتدوين ملاحظاتك الإرشادية والتقييمية.
+                  </p>
+                  
+                  <div className="bg-white/5 backdrop-blur-xl rounded-[2rem] p-3 border border-white/10 focus-within:border-indigo-400 focus-within:bg-white/10 transition-all shadow-inner">
+                    <textarea 
+                      value={newNote}
+                      onChange={(e) => setNewNote(e.target.value)}
+                      placeholder="دون ملاحظتك حول سلوك أو مستوى الطالب هنا..."
+                      className="w-full bg-transparent text-white placeholder-slate-500 p-5 outline-none resize-none font-bold text-lg"
+                      rows={3}
+                    />
+                    <div className="flex justify-end p-2 border-t border-white/10 mt-2">
+                      <button 
+                        onClick={handleAddPrivateNote}
+                        disabled={isSubmittingNote || !newNote.trim()}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white px-8 py-3 rounded-xl font-black text-sm transition-all disabled:opacity-50 active:scale-95 shadow-lg shadow-indigo-500/20"
+                      >
+                        {isSubmittingNote ? 'جاري التشفير والحفظ...' : 'حفظ الملاحظة 🔒'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {privateNotes.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                    <PenTool className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                    <p className="font-bold text-slate-500 text-lg">لا توجد ملاحظات سرية مدونة حتى الآن.</p>
+                  </div>
+                ) : (
+                  privateNotes.map((note) => (
+                    <div key={note.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row gap-5 hover:border-indigo-200 hover:shadow-md transition-all">
+                      <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0 border border-indigo-100 text-indigo-500"><Lock className="w-6 h-6"/></div>
+                      <div className="flex-1">
+                        <p className="text-slate-700 font-bold text-lg leading-relaxed mb-4">{note.content}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 inline-block shadow-inner">
+                          تم التدوين في: {format(new Date(note.created_at), 'dd MMMM yyyy - hh:mm a', { locale: arSA })}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+
         </AnimatePresence>
       </div>
 
-      {/* مودال منح الوسام */}
       {student && (
         <GrantBadgeModal
           isOpen={isBadgeModalOpen}
@@ -606,7 +657,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         />
       )}
 
-      {/* مودال سحب الوسام بشكل احترافي */}
       <Dialog.Root open={!!badgeToRevoke} onOpenChange={(open) => !open && setBadgeToRevoke(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100]" />
