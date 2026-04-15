@@ -38,14 +38,15 @@ import {
   AlertTriangle,
   LayoutTemplate,
   Crown,
-  UserCircle
+  UserCircle,
+  UserCog
 } from 'lucide-react';
 
 const navigation = [
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
   { name: 'ملف الإدارة', href: '/admin/profile', icon: Crown }, 
-  { name: 'ملفي الشخصي (CV)', href: '/teachers/profile', icon: UserCircle }, // سيتم معالجة الرابط ديناميكياً
-  { name: 'الهيكلية التنظيمية', href: '/hierarchy', icon: LayoutGrid },
+  { name: 'ملفي الشخصي (CV)', href: '/teachers/profile', icon: UserCircle }, 
+  { name: 'الفريق الإداري', href: '/admin/staff', icon: UserCog },
   { name: 'الطلاب', href: '/students', icon: Users },
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
@@ -111,10 +112,9 @@ export function Sidebar({
   }, []);
 
   const filteredNavigation = navigation.filter(item => {
-    // قواعد الظهور الجديدة
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
-    if (item.name === 'الهيكلية التنظيمية') return true; // متاح للجميع
 
     if (authRole === 'admin' || authRole === 'management') return true; 
     if (authRole === 'teacher') return ['لوحة التحكم', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
@@ -197,7 +197,6 @@ export function Sidebar({
           {filteredNavigation.map((item, idx) => {
             let itemHref = item.href;
             
-            // تحويل الروابط ديناميكياً
             if (item.name === 'لوحة التحكم') {
               if (authRole === 'student') itemHref = '/dashboard/student';
               else if (authRole === 'teacher') itemHref = '/dashboard/teacher';
@@ -213,7 +212,7 @@ export function Sidebar({
             const isRadarBtn = item.name === 'الرادار الرقمي' || item.name === 'رصد الغياب الآلي';
             const isBadgeBtn = item.name === 'إدارة الأوسمة';
             const isForumBtn = item.name === 'المنتديات' || item.name === 'هيدر المنتديات';
-            const isGoldBtn = item.name === 'ملف الإدارة' || item.name === 'ملفي الشخصي (CV)';
+            const isGoldBtn = item.name === 'ملف الإدارة' || item.name === 'ملفي الشخصي (CV)' || item.name === 'الفريق الإداري';
 
             return (
               <motion.div key={item.name} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.02 }}>
