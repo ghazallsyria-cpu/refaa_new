@@ -104,7 +104,7 @@ export default function TeachersPage() {
       setSubmittingEdit(true);
       const payload: any = { 
         full_name: editForm.full_name, email: editForm.email, phone: editForm.phone, specialization: editForm.specialization, zoom_link: editForm.zoom_link, 
-        custom_titles: editForm.custom_titles.split('،').map(s => s.trim()).filter(Boolean)
+        custom_titles: editForm.custom_titles.split('،').map((s: string) => s.trim()).filter(Boolean)
       };
       if (editForm.national_id !== editingTeacher.national_id) payload.national_id = editForm.national_id;
 
@@ -223,11 +223,13 @@ export default function TeachersPage() {
            {isHOD && <span className="px-2 py-1 bg-amber-500 text-white text-[9px] font-black rounded-md">رئيس قسم {teacher.department_heads[0]?.subject?.name}</span>}
            {(teacher.custom_titles || []).map((t: string, i: number) => <span key={i} className="px-2 py-1 bg-slate-100 text-slate-500 text-[9px] font-bold rounded-md">{t}</span>)}
         </div>
-        <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
+        
+        {/* 🚀 الإصلاح: إزالة group-hover في الشاشات الصغيرة لكي تظهر دائماً في الموبايل */}
+        <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
            <button onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
-           <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all"><BookOpen size={14}/></button>
-           <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all"><Award size={14}/></button>
-           <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14}/></button>
+           <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
+           <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
+           <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
         </div>
       </motion.div>
     );
@@ -274,7 +276,6 @@ export default function TeachersPage() {
             {Object.entries(groupedMembers).map(([spec, specTeachers]: [string, any]) => (
               <div key={spec} className="bg-slate-50/50 p-6 rounded-[2.5rem] border border-slate-200 space-y-6">
                 <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100"><div className="w-2 h-2 rounded-full bg-indigo-500"></div><h3 className="font-black text-slate-800 text-sm">تخصص: {spec}</h3></div>
-                {/* 🚀 السطر الذي تم إصلاحه هنا */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{(specTeachers as any[]).map((t: any) => <TeacherCard key={t.id} teacher={t}/>)}</div>
               </div>
             ))}
@@ -282,7 +283,7 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* نافذة التعديل */}
+      {/* 🚀 نافذة التعديل مع عودة الحقول المفقودة */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8">
@@ -292,6 +293,12 @@ export default function TeachersPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الاسم</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
+                  
+                  {/* الحقول المضافة من جديد */}
+                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
+                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
+                  <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رابط زووم (Zoom Link)</label><input type="url" value={editForm.zoom_link} onChange={e => setEditForm({...editForm, zoom_link: e.target.value})} className="w-full px-4 py-3 bg-indigo-50/50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" placeholder="https://zoom.us/j/..."/></div>
+
                   <div className="sm:col-span-2 space-y-1.5">
                     <label className="text-xs font-black text-slate-400 mr-2">التخصص</label>
                     <select value={editForm.specialization} onChange={e => setEditForm({...editForm, specialization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold outline-none">
@@ -313,7 +320,7 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* نافذة الإضافة */}
+      {/* 🚀 نافذة الإضافة مع الحقول */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -328,7 +335,12 @@ export default function TeachersPage() {
                       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                         <input type="text" placeholder="الاسم الرباعي *" value={addForm.full_name} onChange={(e) => setAddForm({...addForm, full_name: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                         <input type="text" placeholder="الرقم المدني *" value={addForm.national_id} onChange={(e) => setAddForm({...addForm, national_id: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
-                        <select value={addForm.specialization} onChange={(e) => setAddForm({...addForm, specialization: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none">
+                        
+                        <input type="text" placeholder="رقم الهاتف" value={addForm.phone} onChange={(e) => setAddForm({...addForm, phone: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+                        <input type="email" placeholder="البريد الإلكتروني" value={addForm.email} onChange={(e) => setAddForm({...addForm, email: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+                        <input type="url" placeholder="رابط زووم (Zoom Link)" value={addForm.zoom_link} onChange={(e) => setAddForm({...addForm, zoom_link: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-indigo-50/50 ring-1 ring-indigo-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+
+                        <select value={addForm.specialization} onChange={(e) => setAddForm({...addForm, specialization: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none">
                            <option value="">اختر التخصص</option>
                            {allSpecializationsList.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -336,7 +348,7 @@ export default function TeachersPage() {
                    </form>
                 </div>
                 <div className="bg-slate-50/80 px-6 py-6 flex flex-row-reverse gap-3">
-                   <button onClick={handleAddSubmit} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black">إضافة</button>
+                   <button onClick={handleAddSubmit} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black">إضافة المعلم</button>
                 </div>
              </div>
           </div>
