@@ -314,18 +314,22 @@ export function useUsersSystem() {
     } catch (err: unknown) { throw err; }
   }, []);
 
-  const resetPassword = useCallback(async (userId: string, newPassword?: string): Promise<{ success: boolean, newPassword?: string }> => {
+    const resetPassword = useCallback(async (userId: string, newPassword?: string): Promise<{ success: boolean, newPassword?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/users/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ userId, newPassword })
+        // إرسال البيانات بدقة كما كانت في نظامك القديم
+        body: JSON.stringify({ userId, newPassword: newPassword || '' })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'فشل التغيير');
+      
       return { success: true, newPassword: data.newPassword || newPassword };
-    } catch (err: unknown) { throw err; }
+    } catch (err: unknown) { 
+      throw err; 
+    }
   }, []);
 
   const fetchStudentProfile = useCallback(async (studentId: string): Promise<any> => {
