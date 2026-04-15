@@ -33,20 +33,22 @@ const getTeacherStageInfo = (teacher: any) => {
 export default function TeachersPage() {
   const { user } = useAuth(); 
   const {
-    teachers, subjects, loading: usersLoading,
+    teachers, subjects, sections, loading: usersLoading,
     fetchTeachers, fetchSections, fetchSubjects, addTeacher, updateTeacher, deleteUser, resetPassword
   } = useUsersSystem();
 
   const {
-    loading: assignmentsLoading, fetchTeacherAssignments, saveAssignments: assignTeacherToSections,
+    loading: assignmentsLoading, fetchTeacherAssignments, saveAssignments: assignTeacherToSections, deleteAssignment: removeTeacherAssignment
   } = useTeacherAssignmentsSystem();
 
   const isDataLoading = usersLoading || assignmentsLoading;
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<'all' | 'middle' | 'high' | 'both' | 'unassigned'>('all');
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<any>(null);
+  
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [teacherForBadge, setTeacherForBadge] = useState<{id: string, name: string} | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
@@ -69,7 +71,8 @@ export default function TeachersPage() {
   const handleResetPasswordClick = (teacher: any) => { setResetPasswordForm({ userId: teacher.id, newPassword: '' }); setShowPasswordResetModal(true); };
   const handleResetPasswordSubmit = async () => { try { const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); showNotification('success', `كلمة المرور الجديدة: ${result.newPassword}`); setShowPasswordResetModal(false); } catch (error: any) { showNotification('error', error.message); } };
 
-  const handleAddSubmit = async () => { try { await addTeacher(addForm); showNotification('success', 'تمت إضافة المعلم'); setShowAddModal(false); } catch (e: any) { showNotification('error', e.message); } };
+  const [submitting, setSubmitting] = useState(false);
+  const handleAddSubmit = async () => { if (submitting) return; if (!addForm.full_name || !addForm.national_id) { showNotification('error', 'يرجى تعبئة الحقول الإلزامية'); return; } try { setSubmitting(true); const result = await addTeacher(addForm); showNotification('success', `تم إضافة المعلم (كلمة المرور: ${result.password})`); setShowAddModal(false); setAddForm({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '' }); } catch (error: any) { showNotification('error', error.message); } finally { setSubmitting(false); } };
 
   const handleEditClick = (teacher: any) => {
     setEditingTeacher(teacher);
@@ -90,20 +93,27 @@ export default function TeachersPage() {
     setShowEditModal(true);
   };
 
+  // 🚀 الدالة التي كانت مفقودة وتم إرجاعها
+  const handleGrantBadgeClick = (teacher: any) => {
+    setTeacherForBadge({ id: teacher.id, name: teacher.users?.full_name || 'معلم غير معروف' });
+    setIsBadgeModalOpen(true);
+  };
+
+  const [submittingEdit, setSubmittingEdit] = useState(false);
   const handleEditSubmit = async () => {
     try {
+      setSubmittingEdit(true);
       const payload: any = { 
         full_name: editForm.full_name, email: editForm.email, phone: editForm.phone, specialization: editForm.specialization, zoom_link: editForm.zoom_link, 
         custom_titles: editForm.custom_titles.split('،').map(s => s.trim()).filter(Boolean)
       };
-      // حماية الرقم المدني: نرسله فقط إذا تم تغييره
       if (editForm.national_id !== editingTeacher.national_id) payload.national_id = editForm.national_id;
 
       const hodData = { isHead: editForm.isHOD, subject_id: editForm.hod_subject_id, stage_name: editForm.hod_stage };
       await updateTeacher(editingTeacher.id, editingTeacher.national_id, payload, hodData);
       showNotification('success', 'تم التحديث بنجاح');
       setShowEditModal(false);
-    } catch (e: any) { showNotification('error', e.message); }
+    } catch (e: any) { showNotification('error', e.message); } finally { setSubmittingEdit(false); }
   };
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -111,9 +121,61 @@ export default function TeachersPage() {
   const handleDeleteClick = (id: string) => { setTeacherToDelete(id); setShowDeleteModal(true); };
   const confirmDelete = async () => { try { await deleteUser(teacherToDelete!); showNotification('success', 'تم الحذف'); setShowDeleteModal(false); } catch (e: any) { showNotification('error', e.message); } };
 
+  // إعدادات نافذة تعيين الفصول
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
-  const handleAssignmentClick = async (teacher: any) => { setSelectedTeacher(teacher); await fetchTeacherAssignments(teacher.id); setShowAssignmentModal(true); };
+  const [teacherSections, setTeacherSections] = useState<any[]>([]);
+  const [bulkAssignData, setBulkAssignData] = useState<{ section_ids: string[], subject_ids: string[] }>({ section_ids: [], subject_ids: [] });
+
+  const handleAssignmentClick = async (teacher: any) => {
+    setSelectedTeacher(teacher);
+    setBulkAssignData({ section_ids: [], subject_ids: [] });
+    try {
+      const assignments = await fetchTeacherAssignments(teacher.id);
+      setTeacherSections(assignments);
+      setShowAssignmentModal(true);
+    } catch (e) { showNotification('error', 'حدث خطأ أثناء جلب التعيينات'); }
+  };
+
+  const handleBulkAssign = async () => {
+    if (bulkAssignData.section_ids.length === 0 || bulkAssignData.subject_ids.length === 0) {
+      showNotification('error', 'يرجى اختيار فصل واحد ومادة واحدة على الأقل'); return;
+    }
+    const newAssignments: any[] = [];
+    bulkAssignData.section_ids.forEach(sid => {
+      bulkAssignData.subject_ids.forEach(subid => {
+        newAssignments.push({ teacher_id: selectedTeacher.id, section_id: sid, subject_id: subid });
+      });
+    });
+    try {
+      await assignTeacherToSections(newAssignments);
+      const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
+      setTeacherSections(refreshed);
+      setBulkAssignData({ section_ids: [], subject_ids: [] });
+      showNotification('success', 'تم التعيين بنجاح');
+      fetchTeachers(); 
+    } catch (e: any) { showNotification('error', 'فشل التعيين'); }
+  };
+
+  const toggleBulkSection = (id: string) => { setBulkAssignData(prev => ({ ...prev, section_ids: prev.section_ids.includes(id) ? prev.section_ids.filter(sid => sid !== id) : [...prev.section_ids, id] })); };
+  const toggleBulkSubject = (id: string) => { setBulkAssignData(prev => ({ ...prev, subject_ids: prev.subject_ids.includes(id) ? prev.subject_ids.filter(sid => sid !== id) : [...prev.subject_ids, id] })); };
+
+  const toggleAssignment = async (sectionId: string, subjectId: string) => {
+    const existing = teacherSections.find(ts => ts.section_id === sectionId && ts.subject_id === subjectId);
+    try {
+      if (existing) {
+        await removeTeacherAssignment(selectedTeacher.id, sectionId, subjectId);
+        setTeacherSections(teacherSections.filter(ts => !(ts.section_id === sectionId && ts.subject_id === subjectId)));
+        showNotification('success', 'تم إزالة التعيين');
+      } else {
+        await assignTeacherToSections([{ teacher_id: selectedTeacher.id, section_id: sectionId, subject_id: subjectId }]);
+        const refreshed = await fetchTeacherAssignments(selectedTeacher.id);
+        setTeacherSections(refreshed);
+        showNotification('success', 'تم الإضافة');
+      }
+      fetchTeachers();
+    } catch (e: any) { showNotification('error', 'حدث خطأ'); }
+  };
 
   useEffect(() => { fetchTeachers(); fetchSections(); fetchSubjects(); }, [fetchTeachers, fetchSections, fetchSubjects]);
 
@@ -132,10 +194,20 @@ export default function TeachersPage() {
   const departmentHeads = filteredTeachers.filter((t: any) => t.department_heads?.length > 0);
   const departmentMembers = filteredTeachers.filter((t: any) => !t.department_heads || t.department_heads.length === 0);
 
+  const groupedMembers = departmentMembers.reduce((acc, teacher: any) => {
+    const spec = teacher.specialization || 'عام';
+    if (!acc[spec]) acc[spec] = [];
+    acc[spec].push(teacher);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const defaultSpecializations = ['اللغة العربية', 'الرياضيات', 'العلوم', 'اللغة الإنجليزية', 'التربية الإسلامية', 'الدراسات الاجتماعية', 'الحاسوب', 'التربية الفنية', 'التربية البدنية', 'الموسيقى'];
+  const allSpecializationsList = Array.from(new Set([...defaultSpecializations, ...teachers.map((t: any) => t.specialization).filter(Boolean)]));
+
   const TeacherCard = ({ teacher, isHOD = false }: any) => {
     const stageInfo = getTeacherStageInfo(teacher);
     return (
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`p-6 rounded-[2rem] bg-white border ${isHOD ? 'border-amber-200 shadow-lg shadow-amber-50' : 'border-slate-100 shadow-sm'} relative overflow-hidden group`}>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`p-6 rounded-[2rem] bg-white border ${isHOD ? 'border-amber-200 shadow-lg shadow-amber-50' : 'border-slate-100 shadow-sm'} relative overflow-hidden group hover:-translate-y-1 transition-all`}>
         <div className="flex justify-between items-start relative z-10">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -143,7 +215,7 @@ export default function TeachersPage() {
               {isHOD && <Crown className="absolute -top-2 -right-2 h-6 w-6 text-yellow-500" />}
             </div>
             <div>
-              <h3 className="font-black text-slate-900 leading-tight">{teacher.users?.full_name}</h3>
+              <h3 className={`font-black leading-tight ${isHOD ? 'text-amber-900' : 'text-slate-900'}`}>{teacher.users?.full_name}</h3>
               <p className="text-[10px] font-bold text-slate-400 mt-1">{teacher.national_id}</p>
             </div>
           </div>
@@ -155,6 +227,7 @@ export default function TeachersPage() {
         </div>
         <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
            <button onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
+           <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all"><BookOpen size={14}/></button>
            <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all"><Award size={14}/></button>
            <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14}/></button>
         </div>
@@ -189,24 +262,23 @@ export default function TeachersPage() {
             <motion.div key={dept} whileHover={{ y: -5 }} onClick={() => setSelectedDepartment(dept)} className="bg-white p-8 rounded-[2.5rem] cursor-pointer border-2 border-slate-50 hover:border-indigo-100 transition-all text-center group">
               <div className="h-20 w-20 rounded-3xl bg-indigo-50 flex items-center justify-center text-indigo-600 mx-auto mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-all"><Folder size={32}/></div>
               <h3 className="text-xl font-black text-slate-800">{dept}</h3>
-              <p className="text-xs font-bold text-slate-400 mt-2">عرض الأعضاء والرؤساء</p>
             </motion.div>
           ))}
         </div>
       ) : (
         <div className="space-y-12">
           <button onClick={() => setSelectedDepartment(null)} className="flex items-center gap-2 text-indigo-600 font-black text-sm hover:underline"><ChevronLeft size={18}/> العودة لجميع الأقسام</button>
-          
           {departmentHeads.length > 0 && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-black text-amber-700 flex items-center gap-2 px-4"><Crown/> رئاسة القسم</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{departmentHeads.map(hod => <TeacherCard key={hod.id} teacher={hod} isHOD={true}/>)}</div>
-            </div>
+            <div className="space-y-6"><h2 className="text-xl font-black text-amber-700 flex items-center gap-2 px-4"><Crown/> رئاسة القسم</h2><div className="grid grid-cols-1 md:grid-cols-3 gap-6">{departmentHeads.map((hod: any) => <TeacherCard key={hod.id} teacher={hod} isHOD={true}/>)}</div></div>
           )}
-
           <div className="space-y-6">
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-4"><Users/> أعضاء القسم</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{departmentMembers.map(m => <TeacherCard key={m.id} teacher={m}/>)}</div>
+            {Object.entries(groupedMembers).map(([spec, specTeachers]) => (
+              <div key={spec} className="bg-slate-50/50 p-6 rounded-[2.5rem] border border-slate-200 space-y-6">
+                <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100"><div className="w-2 h-2 rounded-full bg-indigo-500"></div><h3 className="font-black text-slate-800 text-sm">تخصص: {spec}</h3></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{specTeachers.map((t: any) => <TeacherCard key={t.id} teacher={t}/>)}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -225,7 +297,7 @@ export default function TeachersPage() {
                     <label className="text-xs font-black text-slate-400 mr-2">التخصص</label>
                     <select value={editForm.specialization} onChange={e => setEditForm({...editForm, specialization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold outline-none">
                       <option value="">اختر التخصص</option>
-                      {Object.keys(DEPARTMENT_MAPPINGS).map(d => <option key={d} value={d}>{d}</option>)}
+                      {allSpecializationsList.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                 </div>
@@ -242,9 +314,107 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* المودالز الأخرى (Add/Delete/Badge) بقيت كما هي في الكود السابق */}
-      {teacherForBadge && <GrantBadgeModal isOpen={isBadgeModalOpen} onClose={() => { setIsBadgeModalOpen(false); setTeacherForBadge(null); }} recipientId={teacherForBadge.id} recipientName={teacherForBadge.name} granterId={user?.id || 'admin'} />}
+      {/* نافذة الإضافة */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAddModal(false)}></div>
+             <div className="relative transform overflow-hidden rounded-[2.5rem] bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-slate-100">
+                <div className="bg-white px-6 sm:px-10 pb-8 pt-8 sm:pt-10">
+                   <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+                      <h3 className="text-xl font-black text-slate-900">إضافة معلم جديد</h3>
+                      <button onClick={() => setShowAddModal(false)}><X className="h-6 w-6 text-slate-400" /></button>
+                   </div>
+                   <form className="space-y-6">
+                      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                        <input type="text" placeholder="الاسم الرباعي *" value={addForm.full_name} onChange={(e) => setAddForm({...addForm, full_name: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
+                        <input type="text" placeholder="الرقم المدني *" value={addForm.national_id} onChange={(e) => setAddForm({...addForm, national_id: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
+                        <select value={addForm.specialization} onChange={(e) => setAddForm({...addForm, specialization: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none">
+                           <option value="">اختر التخصص</option>
+                           {allSpecializationsList.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                   </form>
+                </div>
+                <div className="bg-slate-50/80 px-6 py-6 flex flex-row-reverse gap-3">
+                   <button onClick={handleAddSubmit} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black">إضافة</button>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة التعيين السريع للفصول والمواد */}
+      {showAssignmentModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAssignmentModal(false)}></div>
+            <div className="relative transform overflow-hidden rounded-[2.5rem] bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-4xl border border-slate-100">
+              <div className="bg-white px-6 sm:px-10 pb-8 pt-8 sm:pt-10">
+                <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+                  <h3 className="text-xl font-black text-slate-900">تعيين الفصول: {selectedTeacher?.users?.full_name}</h3>
+                  <button onClick={() => setShowAssignmentModal(false)}><X className="h-6 w-6 text-slate-400" /></button>
+                </div>
+                
+                <div className="space-y-8 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="bg-amber-50 rounded-[2rem] p-6 border border-amber-100">
+                    <h4 className="text-sm font-black text-amber-900 mb-4">التعيين المتعدد السريع</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div>
+                        <label className="text-xs font-black text-amber-800 mb-2 block">حدد المواد</label>
+                        <div className="flex flex-wrap gap-2">
+                          {subjects.map((s:any) => <button key={s.id} onClick={() => toggleBulkSubject(s.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${bulkAssignData.subject_ids.includes(s.id) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}>{s.name}</button>)}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-black text-amber-800 mb-2 block">حدد الفصول</label>
+                        <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                          {sections.map((s:any) => <button key={s.id} onClick={() => toggleBulkSection(s.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${bulkAssignData.section_ids.includes(s.id) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}>{s.classes?.name} - {s.name}</button>)}
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={handleBulkAssign} className="w-full py-3 bg-amber-500 text-white rounded-xl font-black shadow-md hover:bg-amber-600 transition-all">تنفيذ التعيين المتعدد</button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {sections.map((sec:any) => (
+                      <div key={sec.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <h4 className="font-black text-slate-800 text-sm mb-3">{sec.classes?.name} - {sec.name}</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {subjects.map((sub:any) => {
+                            const isAssigned = teacherSections.some(ts => ts.section_id === sec.id && ts.subject_id === sub.id);
+                            return <button key={sub.id} onClick={() => toggleAssignment(sec.id, sub.id)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${isAssigned ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}>{sub.name}</button>
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-slate-50/80 px-6 py-6 border-t border-slate-100 flex justify-end">
+                <button onClick={() => setShowAssignmentModal(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-xl font-black">إغلاق النافذة</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* نافذة تغيير كلمة المرور */}
+      {showPasswordResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
+            <h3 className="text-xl font-black mb-4">تغيير كلمة المرور</h3>
+            <input type="text" placeholder="كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none mb-6 text-center" />
+            <div className="flex gap-3">
+              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl hover:bg-indigo-700">حفظ</button>
+              <button onClick={() => setShowPasswordResetModal(false)} className="flex-1 bg-slate-100 text-slate-700 font-black py-3 rounded-xl">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60"><div className="bg-white p-8 rounded-3xl text-center"><h3 className="text-xl font-black mb-4">تأكيد الحذف</h3><div className="flex gap-4"><button onClick={confirmDelete} className="bg-rose-600 text-white px-8 py-2 rounded-xl font-black flex-1">حذف نهائي</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-500 px-8 py-2 rounded-xl font-black flex-1">تراجع</button></div></div></div>}
+      {teacherForBadge && <GrantBadgeModal isOpen={isBadgeModalOpen} onClose={() => { setIsBadgeModalOpen(false); setTeacherForBadge(null); }} recipientId={teacherForBadge.id} recipientName={teacherForBadge.name} granterId={user?.id || 'admin'} />}
     </div>
   );
 }
