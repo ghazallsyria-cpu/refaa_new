@@ -3,9 +3,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
-
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { UserRole } from '@/types';
+
+// 🚀 استيراد الأيقونات والحركات لصفحة الإغلاق الفخمة
+import { Settings, ShieldAlert, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface AuthContextType {
   user: SupabaseUser | null;
@@ -146,16 +149,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMustResetPassword(false);
   };
 
-useEffect(() => {
+  useEffect(() => {
     const initAuth = async () => {
       setIsChecking(true);
       try {
-        // 🚀 التعديل الجوهري: نطلب المستخدم مباشرة من السيرفر لكسر أي جلسة شبح
         const { data: { user: supabaseUser } } = await supabase.auth.getUser(); 
         
         if (supabaseUser) {
           setUser(supabaseUser);
-          // لا ننهي الفحص هنا، سنتركه ينتهي في الـ useEffect الثاني بعد جلب الـ Role الحقيقي
         } else {
           setUser(null);
           sessionStorage.clear();
@@ -193,8 +194,6 @@ useEffect(() => {
       return;
     }
 
-    //if (authRole && userName && !isLoginPage) return;
-
     const fetchUserData = async () => {
       setIsChecking(true);
       try {
@@ -203,13 +202,10 @@ useEffect(() => {
           !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
         ]);
 
-        // صائد الأشباح (تم التأمين ضد أخطاء الشبكة)
-// 🚀 صائد الأشباح المطور للهواتف: 
         if (!userRes.data && !userRes.error && !isPublicPage) {
           console.warn("Ghost account detected! Initiating deep mobile clear...");
           await supabase.auth.signOut();
           
-          // مسح عميق جداً
           localStorage.clear();
           sessionStorage.clear();
           if ('serviceWorker' in navigator) {
@@ -245,7 +241,7 @@ useEffect(() => {
       } catch (error) {
         console.error('Error fetching user data:', error);
       } finally {
-        setIsChecking(false); // 🚀 بعد انتهاء جلب البيانات تماماً، نسمح للصفحة بالفتح
+        setIsChecking(false); 
       }
     };
 
@@ -258,7 +254,7 @@ useEffect(() => {
       let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
       if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
         setPlatformClosed(true);
-        setCloseMessage(rawSettings.message || 'المنصة مغلقة حاليا للصيانة');
+        setCloseMessage(rawSettings.message || 'نحن الآن خلف الكواليس نجهز لكم عالمنا الرقمي الجديد بميزات خرافية تليق بكم.');
       } else {
         setPlatformClosed(false);
       }
@@ -277,6 +273,67 @@ useEffect(() => {
     localStorage.clear();
     window.location.href = '/login?cleared=' + new Date().getTime();
   };
+
+  // 🚀 شاشة الإغلاق الفخمة (Maintenance Screen)
+  if (platformClosed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 relative overflow-hidden font-cairo" dir="rtl">
+        {/* مؤثرات بصرية خلفية مذهلة */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-overlay"></div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }} 
+          animate={{ opacity: 1, scale: 1 }} 
+          transition={{ duration: 0.5 }}
+          className="relative z-10 max-w-2xl w-full p-4"
+        >
+          <div className="bg-white/10 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 border border-white/10 shadow-2xl shadow-black/50 text-center">
+            
+            <div className="flex justify-center mb-8 relative">
+              <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 rounded-full"></div>
+              <div className="h-24 w-24 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] border border-white/20 flex items-center justify-center shadow-inner relative z-10 animate-bounce">
+                <Settings className="h-10 w-10 text-white animate-spin-slow" style={{ animationDuration: '4s' }} />
+              </div>
+            </div>
+            
+            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4 leading-tight">
+              المنصة في وضع <span className="text-transparent bg-clip-text bg-gradient-to-l from-indigo-400 to-emerald-400">التطوير والصيانة</span>
+            </h1>
+            
+            {/* 🚀 هنا يظهر النص العادي الذي يكتبه المدير، لكن بتنسيق فخم جداً وبخط عريض! */}
+            <div className="bg-black/30 p-6 rounded-3xl border border-white/10 mb-8 shadow-inner relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-emerald-500 opacity-50"></div>
+              <p className="text-lg sm:text-xl font-bold text-indigo-50 leading-relaxed whitespace-pre-wrap relative z-10">
+                {closeMessage}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-right mb-8">
+              <div className="bg-white/5 p-5 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors">
+                <h4 className="font-black text-indigo-300 text-lg mb-1">✨ واجهات جديدة</h4>
+                <p className="text-xs font-bold text-slate-300">نعمل على تحسين تجربة الاستخدام لتكون أسرع وأكثر فخامة.</p>
+              </div>
+              <div className="bg-white/5 p-5 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors">
+                <h4 className="font-black text-emerald-300 text-lg mb-1">⚡ أداء صاروخي</h4>
+                <p className="text-xs font-bold text-slate-300">تحديث قواعد البيانات وتطوير الميزات لخدمتكم بشكل أفضل.</p>
+              </div>
+            </div>
+
+            <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/5 rounded-full border border-white/10 shadow-sm">
+              <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></div>
+              <span className="text-xs sm:text-sm font-black text-amber-200 uppercase tracking-widest flex items-center gap-2">
+                <Clock className="w-4 h-4" /> يرجى المحاولة لاحقاً
+              </span>
+            </div>
+            
+            <button onClick={signOut} className="block w-full mt-6 text-sm font-bold text-slate-400 hover:text-white transition-colors underline decoration-dotted">تسجيل الخروج والعودة للرئيسية</button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={{ 
