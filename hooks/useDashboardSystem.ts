@@ -231,8 +231,15 @@ export function useDashboardSystem() {
 
         return { 
           teacher, sections, schedule: schedule || [], periods: periods || [], messages: messages || [], assignmentStats,
-          recentExams: (recentExams || []).map(e => ({...e, subject_name: e.subject?.name || 'مادة'})),
-          recentAssignments: (recentAssignments || []).map(a => ({...a, subject_name: a.subject?.name || 'مادة'})),
+          // 🚀 تم إصلاح خطأ TypeScript هنا بالتعامل مع المصفوفات بأمان
+          recentExams: (recentExams || []).map((e: any) => ({
+            ...e, 
+            subject_name: (Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name) || 'مادة'
+          })),
+          recentAssignments: (recentAssignments || []).map((a: any) => ({
+            ...a, 
+            subject_name: (Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name) || 'مادة'
+          })),
           stats: { totalStudents: studentsCount || 0, totalExams: recentExams?.length || 0, totalAssignments: recentAssignments?.length || 0, avgAttendance, absenceRate }
         };
       } catch (error) { console.error('Final Dashboard Error:', error); return null; }
