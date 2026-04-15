@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, GraduationCap, Crown, BookOpen, FileText, ChevronLeft, 
-  Briefcase, Layers, Edit3, Save, X, Quote, Link as LinkIcon, Award, Star
+  Briefcase, Layers, Edit3, Save, X, Quote, Link as LinkIcon, Award, Star,
+  Plus, AlertCircle // 🚀 تم إضافة الأيقونتين المفقودتين هنا!
 } from 'lucide-react';
 import { useProfileSystem } from '@/hooks/useProfileSystem';
 import { getParentDepartment } from '@/hooks/useHierarchySystem'; 
