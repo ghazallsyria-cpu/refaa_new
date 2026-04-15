@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// 🧠 القاموس الذكي لتداخل الأقسام (يمكنك التعديل عليه لإضافة مواد أخرى)
+// 🧠 القاموس الذكي لتداخل الأقسام: يربط المادة بالقسم الأم
 export const DEPARTMENT_MAPPINGS: Record<string, string[]> = {
   'العلوم': ['العلوم', 'الفيزياء', 'الكيمياء', 'الأحياء', 'الجيولوجيا', 'علم الأرض'],
   'الدراسات الاجتماعية': ['الدراسات الاجتماعية', 'التاريخ', 'الجغرافيا', 'الفلسفة', 'علم النفس', 'الاجتماعيات', 'التربية الوطنية'],
@@ -15,9 +15,9 @@ export const DEPARTMENT_MAPPINGS: Record<string, string[]> = {
   'الموسيقى': ['الموسيقى', 'موسيقى'],
 };
 
-// دالة لمعرفة القسم الأب (الرئيسي) لأي تخصص
-export const getParentDepartment = (specialization: string) => {
-  if (!specialization) return 'أخرى';
+// دالة لاستخراج القسم الرئيسي لأي تخصص
+export const getParentDepartment = (specialization: string | null) => {
+  if (!specialization) return 'عام';
   for (const [dept, specs] of Object.entries(DEPARTMENT_MAPPINGS)) {
     if (specs.includes(specialization) || specialization.includes(dept)) return dept;
   }
@@ -30,23 +30,23 @@ export function useHierarchySystem() {
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. جلب الإدارة المدرسية فقط (استثناء المبرمج admin)
+      // 1. جلب الإدارة المدرسية (استثناء الأدمن المبرمج)
       const { data: admins } = await supabase
         .from('users')
         .select('id, full_name, avatar_url, role')
         .eq('role', 'management');
 
-      // 2. جلب رؤساء الأقسام
+      // 2. جلب رؤساء الأقسام مع الجسر الآمن
       const { data: departmentHeads } = await supabase
         .from('department_heads')
         .select('*, teacher:teachers(id, users!teachers_id_fkey(full_name, avatar_url, email)), subject:subjects(id, name)');
 
-      // 3. جلب جميع المعلمين
+      // 3. جلب جميع المعلمين مع تخصصاتهم وفصولهم
       const { data: teachers } = await supabase
         .from('teachers')
         .select('id, custom_titles, specialization, users!teachers_id_fkey(full_name, avatar_url, email), teacher_sections(section:sections(classes(name)))');
 
-      // تحديد مرحلة المعلم
+      // خوارزمية تحديد المرحلة (متوسط/ثانوي)
       const getTeacherStage = (teacher: any) => {
         let hasMiddle = false;
         let hasHigh = false;
@@ -64,19 +64,17 @@ export function useHierarchySystem() {
       const processedTeachers = (teachers || []).map((t: any) => ({
         ...t,
         stage: getTeacherStage(t),
-        parentDepartment: getParentDepartment(t.specialization) // 🚀 تحديد القسم الأم تلقائياً
+        parentDepartment: getParentDepartment(t.specialization)
       }));
-
-      const supervisors = processedTeachers.filter(t => t.custom_titles && t.custom_titles.length > 0);
 
       return {
         admins: admins || [],
         departmentHeads: departmentHeads || [],
         teachers: processedTeachers,
-        supervisors
+        supervisors: processedTeachers.filter(t => t.custom_titles && t.custom_titles.length > 0)
       };
     } catch (error) {
-      console.error('Error fetching hierarchy:', error);
+      console.error('Hierarchy Error:', error);
       throw error;
     } finally {
       setLoading(false);
