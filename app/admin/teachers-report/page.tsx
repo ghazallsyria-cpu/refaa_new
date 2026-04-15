@@ -217,7 +217,7 @@ export default function TeachersReportPage() {
   useEffect(() => { if (todayStr && allTeachers.length > 0 && reportType !== "custom") fetchData(); }, [todayStr, allTeachers, reportType]);
 
   const handleTypeChange = (type: "day" | "week" | "custom") => { setReportType(type); if (type !== "custom") fetchData(type); };
-
+  const handleApplyCustomRange = () => { fetchData("custom"); };
   const toggleSelect = (id: string) => setLocalTeachers(prev => prev.map(t => t.id === id ? { ...t, selected: !t.selected } : t));
   const selectAll = () => setLocalTeachers(prev => prev.map(t => ({ ...t, selected: true })));
   const deselectAll = () => setLocalTeachers(prev => prev.map(t => ({ ...t, selected: false })));
