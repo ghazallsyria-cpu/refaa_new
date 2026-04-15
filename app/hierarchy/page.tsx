@@ -2,10 +2,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link'; // 🚀 استيراد Link الرسمي من Next.js
+import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Users, GraduationCap, Crown, Shield, ChevronDown } from 'lucide-react';
-import { useHierarchySystem, DEPARTMENT_MAPPINGS } from '@/hooks/useHierarchySystem';
+import { Users, GraduationCap, Crown, Shield, ChevronDown, Network, Award } from 'lucide-react';
+import { useHierarchySystem, getTeachersUnderHOD } from '@/hooks/useHierarchySystem'; // 🚀 استيراد الخوارزمية الذكية
 
 export default function HierarchyPage() {
   const { loading, fetchHierarchyData } = useHierarchySystem();
@@ -16,161 +16,217 @@ export default function HierarchyPage() {
   }, [fetchHierarchyData]);
 
   if (loading || !data) {
-    return <div className="flex h-[80vh] items-center justify-center"><div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent shadow-lg shadow-indigo-200"></div></div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent shadow-lg shadow-indigo-200"></div>
+          <p className="text-slate-500 font-bold uppercase tracking-widest text-sm animate-pulse">جاري رسم الخريطة الإدارية...</p>
+        </div>
+      </div>
+    );
   }
 
-  const getTeachersUnderHOD = (hod: any) => {
-    const hodSubjectName = hod.subject?.name;
-    const subSubjects = DEPARTMENT_MAPPINGS[hodSubjectName] || [hodSubjectName]; 
+  // 🚀 تصميم كارد فخم ومرن لجميع المستويات
+  const UserCard = ({ user, role, icon: Icon, color, isHOD = false, isAdmin = false, subRole = '', href }: any) => {
+    const isImage = user?.avatar_url && user.avatar_url.trim() !== '';
+    
+    // إعدادات الألوان الديناميكية
+    const colors: any = {
+      indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200', glow: 'group-hover:shadow-indigo-500/20' },
+      emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', glow: 'group-hover:shadow-emerald-500/20' },
+      amber: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', glow: 'group-hover:shadow-amber-500/20' },
+    };
+    const c = colors[color] || colors.indigo;
 
-    return data.teachers.filter((t: any) => {
-      if (t.id === hod.teacher_id) return false; 
-      
-      const matchSubject = subSubjects.includes(t.specialization) || t.specialization?.includes(hodSubjectName);
-      const matchStage = hod.stage_name === 'الكل' || t.stage === hod.stage_name || t.stage === 'مشترك';
-      
-      return matchSubject && matchStage;
-    });
-  };
-
-  // 🚀 تحويل الكارد ليدعم رابط (href) باستخدام مكون Link
-  const UserCard = ({ user, role, icon: Icon, color, isHOD = false, isAdmin = false, subRole = '', href }: any) => (
-    <Link href={href || '#'} className="block relative z-20 group">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        className={`relative bg-white p-6 rounded-[2rem] shadow-sm border border-${color}-100 group-hover:shadow-2xl group-hover:-translate-y-2 group-hover:border-${color}-300 transition-all duration-300 text-center flex flex-col items-center w-64 cursor-pointer`}
-      >
-        {isAdmin && <Crown className="absolute -top-5 text-yellow-400 h-10 w-10 drop-shadow-lg animate-bounce" />}
-        {isHOD && <Crown className="absolute -top-3 -right-2 text-amber-500 h-7 w-7 drop-shadow-md" />}
-        
-        <div className={`h-24 w-24 rounded-[1.5rem] bg-gradient-to-br from-${color}-50 to-white border-2 border-${color}-200 flex items-center justify-center mb-4 overflow-hidden shadow-inner group-hover:scale-105 transition-transform`}>
-          {user?.avatar_url ? (
-             <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
-          ) : (
-             <span className={`text-3xl font-black text-${color}-600`}>{user?.full_name?.charAt(0) || <Icon className="h-10 w-10" />}</span>
-          )}
-        </div>
-        <h3 className={`font-black text-lg text-slate-900 leading-tight mb-1 truncate w-full group-hover:text-${color}-600 transition-colors`}>{user?.full_name || 'مستخدم'}</h3>
-        <p className={`text-xs font-black px-4 py-1.5 rounded-xl bg-${color}-50 text-${color}-700 mt-2 shadow-sm border border-${color}-100`}>{role}</p>
-        {subRole && <p className="text-[10px] font-bold text-slate-400 mt-2 truncate w-full">{subRole}</p>}
-      </motion.div>
-    </Link>
-  );
-
-  return (
-    <div className="max-w-[90rem] mx-auto px-4 py-12 font-cairo overflow-x-hidden" dir="rtl">
-      <div className="text-center mb-20 space-y-4 relative z-10">
-        <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight bg-clip-text text-transparent bg-gradient-to-l from-indigo-600 to-emerald-600 drop-shadow-sm">الهيكلية التنظيمية المدرسية</h1>
-        <p className="text-slate-500 font-bold text-lg">الخريطة الإدارية والأقسام التعليمية التفاعلية</p>
-      </div>
-
-      <div className="flex flex-col items-center space-y-16 relative">
-        
-        {/* المستوى 1: الإدارة العليا */}
-        <div className="flex flex-col items-center relative z-20">
-          <div className="flex flex-wrap justify-center gap-8">
-            {data.admins.length > 0 ? data.admins.map((admin: any) => (
-              <UserCard 
-                key={admin.id} 
-                user={admin} 
-                role="الإدارة العليا" 
-                icon={Shield} 
-                color="indigo" 
-                isAdmin={true} 
-                href="/admin/profile" // 🚀 توجيه المدير لصفحته
-              />
-            )) : (
-              <div className="px-8 py-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-800 font-black shadow-sm">لم يتم تعيين حسابات إدارية (Management) بعد</div>
+    return (
+      <Link href={href || '#'} className="block relative z-20 group outline-none">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className={`relative bg-white/80 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-sm border border-slate-100 group-hover:shadow-2xl group-hover:-translate-y-3 transition-all duration-500 text-center flex flex-col items-center w-72 cursor-pointer ${c.glow} z-10`}
+        >
+          {isAdmin && <Crown className="absolute -top-6 text-yellow-400 h-12 w-12 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-bounce z-20" />}
+          {isHOD && <Award className="absolute -top-4 -right-3 text-amber-500 h-10 w-10 drop-shadow-md z-20" />}
+          
+          {/* هالة مضيئة خلف الصورة */}
+          <div className="absolute top-8 w-24 h-24 bg-white rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
+          
+          <div className={`h-28 w-28 rounded-[2rem] ${c.bg} border-4 border-white flex items-center justify-center mb-5 overflow-hidden shadow-inner group-hover:scale-110 transition-transform duration-500 relative z-10 ring-1 ring-slate-100`}>
+            {isImage ? (
+               <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+            ) : (
+               <span className={`text-4xl font-black ${c.text}`}>{user?.full_name?.charAt(0) || <Icon className="h-12 w-12" />}</span>
             )}
           </div>
-          <div className="w-1 h-16 bg-gradient-to-b from-indigo-200 to-slate-200 mt-6 rounded-full"></div>
-        </div>
+          
+          <h3 className="font-black text-xl text-slate-900 leading-tight mb-2 truncate w-full group-hover:text-indigo-600 transition-colors">{user?.full_name || 'مستخدم'}</h3>
+          <p className={`text-xs font-black px-4 py-1.5 rounded-xl ${c.bg} ${c.text} mt-2 shadow-inner border border-white`}>{role}</p>
+          {subRole && <p className="text-[11px] font-bold text-slate-400 mt-3 truncate w-full border-t border-slate-100 pt-3">{subRole}</p>}
+        </motion.div>
+      </Link>
+    );
+  };
 
-        {/* المستوى 2: المشرفون (المهام الخاصة) */}
-        {data.supervisors.length > 0 && (
-          <div className="flex flex-col items-center relative w-full z-10">
-            <div className="absolute top-0 w-[80%] h-1 bg-slate-200 rounded-full"></div>
-            <div className="flex flex-wrap justify-center gap-8 pt-10">
-              {data.supervisors.map((sup: any) => (
-                <div key={sup.id} className="relative flex flex-col items-center">
-                  <div className="absolute -top-10 w-1 h-10 bg-slate-200 rounded-full"></div>
-                  <UserCard 
-                    user={sup.users} 
-                    role={(sup.custom_titles || []).join(' + ')} 
-                    subRole={`التخصص الأساسي: ${sup.specialization}`} 
-                    icon={Users} 
-                    color="emerald" 
-                    href={`/teachers/${sup.id}`} // 🚀 توجيه المشرف لصفحته
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="w-1 h-20 bg-gradient-to-b from-slate-200 to-amber-200 mt-6 rounded-full"></div>
-          </div>
-        )}
-
-        {/* المستوى 3: رؤساء الأقسام ومعلميهم (الشجرة المتداخلة) */}
-        <div className="w-full relative">
-           <div className="absolute top-0 w-[95%] left-[2.5%] h-1 bg-amber-200 rounded-full shadow-[0_0_10px_rgba(251,191,36,0.5)]"></div>
-           
-           <div className="flex flex-wrap justify-center gap-x-12 gap-y-20 pt-12 items-start">
-             {data.departmentHeads.map((hod: any, idx: number) => {
-               const underTeachers = getTeachersUnderHOD(hod);
-               return (
-                 <div key={idx} className="relative flex flex-col items-center w-[320px]">
-                   <div className="absolute -top-12 w-1 h-12 bg-amber-200 rounded-full"></div>
-                   
-                   {/* بطاقة رئيس القسم الفخمة */}
-                   <div className="relative z-20">
-                     <UserCard 
-                        user={hod.teacher?.users} 
-                        role={`رئيس قسم ${hod.subject?.name}`} 
-                        subRole={`المرحلة: ${hod.stage_name}`}
-                        icon={GraduationCap} 
-                        color="amber" 
-                        isHOD={true} 
-                        href={`/teachers/${hod.teacher_id}`} // 🚀 توجيه رئيس القسم لصفحته
-                     />
-                   </div>
-
-                   {/* المعلمون التابعون له (مع توضيح تخصصهم الدقيق) */}
-                   {underTeachers.length > 0 && (
-                     <div className="flex flex-col items-center mt-6 w-full relative z-10">
-                       <ChevronDown className="text-amber-300 h-8 w-8 mb-3 animate-bounce" />
-                       <div className="w-full bg-slate-50/80 backdrop-blur-md rounded-[2rem] p-5 border border-slate-200 shadow-inner space-y-3 relative before:absolute before:inset-0 before:ring-1 before:ring-inset before:ring-black/5 before:rounded-[2rem]">
-                         <div className="text-center mb-4">
-                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">أعضاء القسم ({underTeachers.length})</span>
-                         </div>
-                         {underTeachers.map((t: any) => (
-                           // 🚀 استخدام مكون Link الرسمي للمعلمين الصغار
-                           <Link 
-                             href={`/teachers/${t.id}`} 
-                             key={t.id} 
-                             className="flex items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:border-indigo-300 transition-all group cursor-pointer hover:-translate-y-0.5"
-                           >
-                             <div className="h-12 w-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 font-black text-lg border border-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:scale-105 transition-all shrink-0 overflow-hidden">
-                               {t.users?.avatar_url ? <img src={t.users.avatar_url} className="w-full h-full object-cover" alt="img"/> : t.users?.full_name?.charAt(0)}
-                             </div>
-                             <div className="flex-1 min-w-0">
-                               <p className="text-sm font-black text-slate-800 truncate group-hover:text-indigo-700 transition-colors">{t.users?.full_name}</p>
-                               <div className="flex gap-2 mt-1">
-                                 <span className="text-[9px] font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md truncate border border-slate-200/50">{t.specialization}</span>
-                                 <span className="text-[9px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-500 rounded-md border border-indigo-100/50">{t.stage}</span>
-                               </div>
-                             </div>
-                           </Link>
-                         ))}
-                       </div>
-                     </div>
-                   )}
-                 </div>
-               );
-             })}
-           </div>
-        </div>
-
+  return (
+    <div className="min-h-screen bg-[#f8fafc] relative overflow-x-hidden font-cairo" dir="rtl">
+      
+      {/* 🚀 خلفية سينمائية متحركة */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] right-[-5%] w-[40rem] h-[40rem] bg-indigo-400/10 rounded-full blur-[100px] animate-[pulse_8s_ease-in-out_infinite]"></div>
+        <div className="absolute bottom-[-10%] left-[-5%] w-[40rem] h-[40rem] bg-amber-400/10 rounded-full blur-[100px] animate-[pulse_8s_ease-in-out_infinite] delay-1000"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03]"></div>
       </div>
+
+      <div className="max-w-[100rem] mx-auto px-4 py-16 sm:py-24 relative z-10">
+        
+        <div className="text-center mb-24 space-y-6">
+          <div className="inline-flex items-center justify-center p-4 bg-white rounded-3xl shadow-sm border border-slate-100 mb-2">
+            <Network className="w-10 h-10 text-indigo-600" />
+          </div>
+          <h1 className="text-4xl sm:text-6xl font-black text-slate-900 tracking-tight bg-clip-text text-transparent bg-gradient-to-l from-indigo-800 to-blue-600 drop-shadow-sm">
+            شجرة الرفعة التنظيمية
+          </h1>
+          <p className="text-slate-500 font-bold text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
+            الخريطة الإدارية والأكاديمية المعتمدة. اضغط على أي بطاقة لاستعراض الملف المهني.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center relative">
+          
+          {/* المستوى 1: الإدارة العليا */}
+          <div className="flex flex-col items-center relative z-30">
+            <div className="flex flex-wrap justify-center gap-8">
+              {data.admins.length > 0 ? data.admins.map((admin: any) => (
+                <UserCard 
+                  key={admin.id} 
+                  user={admin} 
+                  role="مدير المدرسة" 
+                  icon={Shield} 
+                  color="indigo" 
+                  isAdmin={true} 
+                  href="/admin/profile" 
+                />
+              )) : (
+                <div className="px-10 py-5 bg-indigo-50 border border-indigo-100 rounded-3xl text-indigo-800 font-black shadow-sm">لم يتم تعيين حسابات الإدارة العليا بعد</div>
+              )}
+            </div>
+            {/* خط الربط النازل */}
+            <div className="w-1.5 h-24 bg-gradient-to-b from-indigo-300 to-slate-200 mt-4 rounded-full shadow-inner"></div>
+          </div>
+
+          {/* المستوى 2: المشرفون التربويون */}
+          {data.supervisors.length > 0 && (
+            <div className="flex flex-col items-center relative w-full z-20">
+              {/* خط الربط الأفقي */}
+              <div className="absolute top-0 w-[60%] h-1.5 bg-slate-200 rounded-full shadow-inner"></div>
+              
+              <div className="flex flex-wrap justify-center gap-10 pt-12">
+                {data.supervisors.map((sup: any) => (
+                  <div key={sup.id} className="relative flex flex-col items-center group">
+                    {/* خط الربط النازل لكل مشرف */}
+                    <div className="absolute -top-12 w-1.5 h-12 bg-slate-200 rounded-full group-hover:bg-emerald-300 transition-colors"></div>
+                    <UserCard 
+                      user={sup.users} 
+                      role={(sup.custom_titles || []).join(' + ')} 
+                      subRole={`تخصص: ${sup.specialization}`} 
+                      icon={Users} 
+                      color="emerald" 
+                      href={`/teachers/${sup.id}`} 
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="w-1.5 h-32 bg-gradient-to-b from-slate-200 to-amber-300 mt-4 rounded-full shadow-inner"></div>
+            </div>
+          )}
+
+          {/* المستوى 3: رؤساء الأقسام ومعلميهم (الشجرة المتداخلة الذكية) */}
+          <div className="w-full relative z-10">
+             {/* خط المظلة الأفقي لرؤساء الأقسام */}
+             <div className="absolute top-0 w-[90%] left-[5%] h-1.5 bg-gradient-to-r from-transparent via-amber-300 to-transparent rounded-full opacity-70"></div>
+             
+             <div className="flex flex-wrap justify-center gap-x-8 gap-y-28 pt-16 items-start">
+               {data.departmentHeads.map((hod: any, idx: number) => {
+                 // 🚀 استخدام الخوارزمية الذكية الجديدة للفرز
+                 const underTeachers = getTeachersUnderHOD(hod, data.teachers);
+                 
+                 return (
+                   <div key={idx} className="relative flex flex-col items-center w-[340px] group/dept">
+                     {/* خط الربط النازل لرئيس القسم */}
+                     <div className="absolute -top-16 w-1.5 h-16 bg-gradient-to-b from-amber-300 to-amber-200 rounded-full group-hover/dept:shadow-[0_0_10px_rgba(251,191,36,0.8)] transition-shadow"></div>
+                     
+                     {/* بطاقة رئيس القسم الفخمة */}
+                     <div className="relative z-20">
+                       <UserCard 
+                          user={hod.teacher?.users} 
+                          role={`رئيس قسم ${hod.subject?.name}`} 
+                          subRole={`المرحلة: ${hod.stage_name}`}
+                          icon={GraduationCap} 
+                          color="amber" 
+                          isHOD={true} 
+                          href={`/teachers/${hod.teacher_id}`} 
+                       />
+                     </div>
+
+                     {/* المعلمون التابعون له */}
+                     {underTeachers.length > 0 && (
+                       <div className="flex flex-col items-center mt-6 w-full relative z-10">
+                         <ChevronDown className="text-amber-400 h-10 w-10 mb-4 animate-bounce drop-shadow-sm" />
+                         
+                         <div className="w-full bg-white/60 backdrop-blur-2xl rounded-[2.5rem] p-6 border border-white/80 shadow-xl shadow-slate-200/50 space-y-3 relative overflow-hidden group-hover/dept:border-amber-200/50 transition-colors duration-500">
+                           <div className="absolute inset-0 bg-gradient-to-b from-slate-50/50 to-transparent pointer-events-none"></div>
+                           
+                           <div className="text-center mb-5 relative z-10">
+                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-white px-4 py-1.5 rounded-full shadow-sm border border-slate-100">
+                               أعضاء القسم ({underTeachers.length})
+                             </span>
+                           </div>
+                           
+                           <div className="space-y-3 relative z-10 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                             {underTeachers.map((t: any, i: number) => {
+                               const isTeacherImage = t.users?.avatar_url && t.users.avatar_url.trim() !== '';
+                               return (
+                                 <Link 
+                                   href={`/teachers/${t.id}`} 
+                                   key={t.id} 
+                                   className="flex items-center gap-4 bg-white p-3.5 rounded-[1.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 hover:border-indigo-300 transition-all duration-300 group/item hover:-translate-y-1"
+                                 >
+                                   <div className="h-14 w-14 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 font-black text-xl border border-slate-100 group-hover/item:bg-indigo-50 group-hover/item:text-indigo-600 transition-colors shrink-0 overflow-hidden shadow-inner">
+                                     {isTeacherImage ? (
+                                       <img src={t.users.avatar_url} className="w-full h-full object-cover" alt={t.users.full_name}/>
+                                     ) : (
+                                       t.users?.full_name?.charAt(0) || 'أ'
+                                     )}
+                                   </div>
+                                   <div className="flex-1 min-w-0">
+                                     <p className="text-sm font-black text-slate-900 truncate group-hover/item:text-indigo-700 transition-colors">{t.users?.full_name}</p>
+                                     <div className="flex gap-2 mt-1.5">
+                                       <span className="text-[9px] font-bold px-2 py-0.5 bg-slate-50 text-slate-500 rounded border border-slate-100 truncate">{t.specialization}</span>
+                                       <span className="text-[9px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded border border-indigo-100">{t.stage}</span>
+                                     </div>
+                                   </div>
+                                 </Link>
+                               );
+                             })}
+                           </div>
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                 );
+               })}
+             </div>
+          </div>
+
+        </div>
+      </div>
+      
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
     </div>
   );
 }
