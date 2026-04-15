@@ -6,8 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { UserRole } from '@/types';
 
-// 🚀 استيراد الأيقونات والحركات لصفحة الإغلاق الفخمة
-import { Settings, ShieldAlert, Clock } from 'lucide-react';
+import { Settings, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface AuthContextType {
@@ -254,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
       if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
         setPlatformClosed(true);
-        setCloseMessage(rawSettings.message || 'نحن الآن خلف الكواليس نجهز لكم عالمنا الرقمي الجديد بميزات خرافية تليق بكم.');
+        setCloseMessage(rawSettings.message || '<div class="text-center text-white">المنصة مغلقة للصيانة</div>');
       } else {
         setPlatformClosed(false);
       }
@@ -274,11 +273,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/login?cleared=' + new Date().getTime();
   };
 
-  // 🚀 شاشة الإغلاق الفخمة (Maintenance Screen)
   if (platformClosed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 relative overflow-hidden font-cairo" dir="rtl">
-        {/* مؤثرات بصرية خلفية مذهلة */}
+        {/* مؤثرات بصرية خلفية مذهلة (خارجية فقط) */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}></div>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-overlay"></div>
@@ -287,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           initial={{ opacity: 0, scale: 0.9 }} 
           animate={{ opacity: 1, scale: 1 }} 
           transition={{ duration: 0.5 }}
-          className="relative z-10 max-w-2xl w-full p-4"
+          className="relative z-10 max-w-3xl w-full p-4"
         >
           <div className="bg-white/10 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 border border-white/10 shadow-2xl shadow-black/50 text-center">
             
@@ -298,37 +296,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             
-            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4 leading-tight">
+            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-8 leading-tight">
               المنصة في وضع <span className="text-transparent bg-clip-text bg-gradient-to-l from-indigo-400 to-emerald-400">التطوير والصيانة</span>
             </h1>
             
-            {/* 🚀 هنا يظهر النص العادي الذي يكتبه المدير، لكن بتنسيق فخم جداً وبخط عريض! */}
-            <div className="bg-black/30 p-6 rounded-3xl border border-white/10 mb-8 shadow-inner relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-emerald-500 opacity-50"></div>
-              <p className="text-lg sm:text-xl font-bold text-indigo-50 leading-relaxed whitespace-pre-wrap relative z-10">
-                {closeMessage}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-right mb-8">
-              <div className="bg-white/5 p-5 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors">
-                <h4 className="font-black text-indigo-300 text-lg mb-1">✨ واجهات جديدة</h4>
-                <p className="text-xs font-bold text-slate-300">نعمل على تحسين تجربة الاستخدام لتكون أسرع وأكثر فخامة.</p>
-              </div>
-              <div className="bg-white/5 p-5 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors">
-                <h4 className="font-black text-emerald-300 text-lg mb-1">⚡ أداء صاروخي</h4>
-                <p className="text-xs font-bold text-slate-300">تحديث قواعد البيانات وتطوير الميزات لخدمتكم بشكل أفضل.</p>
-              </div>
-            </div>
-
-            <div className="inline-flex items-center gap-3 px-6 py-3 bg-white/5 rounded-full border border-white/10 shadow-sm">
-              <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></div>
-              <span className="text-xs sm:text-sm font-black text-amber-200 uppercase tracking-widest flex items-center gap-2">
-                <Clock className="w-4 h-4" /> يرجى المحاولة لاحقاً
-              </span>
-            </div>
+            {/* 🚀 السحر يبدأ هنا: هذا السطر سيقوم بتشغيل أكواد الـ HTML التي يكتبها الإدمن! */}
+            <div 
+              className="w-full relative z-10 text-right"
+              dangerouslySetInnerHTML={{ __html: closeMessage }} 
+            />
             
-            <button onClick={signOut} className="block w-full mt-6 text-sm font-bold text-slate-400 hover:text-white transition-colors underline decoration-dotted">تسجيل الخروج والعودة للرئيسية</button>
+            <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white transition-colors underline decoration-dotted">تسجيل الخروج والعودة للرئيسية</button>
           </div>
         </motion.div>
       </div>
