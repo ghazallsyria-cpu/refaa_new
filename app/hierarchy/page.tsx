@@ -2,11 +2,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation'; // 🚀 1. استيراد الراوتر
 import { motion } from 'framer-motion';
 import { Users, GraduationCap, Crown, Shield, ChevronDown } from 'lucide-react';
 import { useHierarchySystem, DEPARTMENT_MAPPINGS } from '@/hooks/useHierarchySystem';
 
 export default function HierarchyPage() {
+  const router = useRouter(); // 🚀 2. تفعيل الراوتر
   const { loading, fetchHierarchyData } = useHierarchySystem();
   const [data, setData] = useState<any>(null);
 
@@ -21,7 +23,7 @@ export default function HierarchyPage() {
   // 🧠 فلترة ذكية للمعلمين تحت رئيس القسم (تراعي تداخل المواد)
   const getTeachersUnderHOD = (hod: any) => {
     const hodSubjectName = hod.subject?.name;
-    const subSubjects = DEPARTMENT_MAPPINGS[hodSubjectName] || [hodSubjectName]; // إذا كان رئيس قسم العلوم، سيعتبر مسؤولاً عن الفيزياء والكيمياء...
+    const subSubjects = DEPARTMENT_MAPPINGS[hodSubjectName] || [hodSubjectName]; 
 
     return data.teachers.filter((t: any) => {
       if (t.id === hod.teacher_id) return false; 
@@ -33,8 +35,17 @@ export default function HierarchyPage() {
     });
   };
 
+  // 🚀 3. تحويل الكارد إلى زر تفاعلي (أضفنا onClick و cursor-pointer)
   const UserCard = ({ user, role, icon: Icon, color, isHOD = false, isAdmin = false, subRole = '' }: any) => (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`relative bg-white p-6 rounded-[2rem] shadow-sm border border-${color}-100 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 text-center flex flex-col items-center w-64 z-10`}>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }} 
+      animate={{ opacity: 1, y: 0 }} 
+      onClick={() => {
+        if (isAdmin) router.push('/admin/profile'); // إذا كان مدير يذهب لصفحته
+        else if (user?.id) router.push(`/teachers/${user.id}`); // إذا كان معلم أو مشرف يذهب لصفحته
+      }}
+      className={`relative bg-white p-6 rounded-[2rem] shadow-sm border border-${color}-100 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 text-center flex flex-col items-center w-64 z-10 cursor-pointer`}
+    >
       {isAdmin && <Crown className="absolute -top-5 text-yellow-400 h-10 w-10 drop-shadow-lg animate-bounce" />}
       {isHOD && <Crown className="absolute -top-3 -right-2 text-amber-500 h-7 w-7 drop-shadow-md" />}
       
@@ -120,7 +131,11 @@ export default function HierarchyPage() {
                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">أعضاء القسم ({underTeachers.length})</span>
                          </div>
                          {underTeachers.map((t: any) => (
-                           <div key={t.id} className="flex items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
+                           <div 
+                             key={t.id} 
+                             onClick={() => router.push(`/teachers/${t.id}`)} // 🚀 4. جعل المعلمين الصغار قابلين للنقر
+                             className="flex items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group cursor-pointer"
+                           >
                              <div className="h-12 w-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 font-black text-lg border border-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors shrink-0">
                                {t.users?.full_name?.charAt(0)}
                              </div>
