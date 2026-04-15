@@ -73,7 +73,7 @@ export function useDashboardSystem() {
           { data: recentExams },
           { data: recentNotifs }
         ] = await Promise.all([
-          supabase.from('students').select('users(full_name), created_at').order('created_at', { ascending: false }).limit(2),
+          supabase.from('students').select('users!fk_students_users(full_name), created_at').order('created_at', { ascending: false }).limit(2),
           supabase.from('documents').select('title, created_at').order('created_at', { ascending: false }).limit(2),
           supabase.from('exams').select('title, created_at').order('created_at', { ascending: false }).limit(2),
           supabase.from('notifications').select('title, created_at').eq('type', 'announcement').order('created_at', { ascending: false }).limit(2)
@@ -101,10 +101,9 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 الإصلاح: البحث باستخدام id وليس user_id
         const { data: student } = await supabase
           .from('students')
-          .select('*, users(full_name, avatar_url), sections(id, name, classes(name))')
+          .select('*, users!fk_students_users(full_name, avatar_url), sections(id, name, classes(name))')
           .eq('id', user.id)
           .maybeSingle();
         
@@ -135,8 +134,7 @@ export function useDashboardSystem() {
           examIds.length > 0 ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
           supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id).limit(5000),
           supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5),
-          // 🚀 إصلاح الربط في الجدول: teachers(users(full_name)) أصبح آمناً الآن
-          sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
+          sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users!fk_teachers_users(full_name))').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
 
@@ -158,10 +156,9 @@ export function useDashboardSystem() {
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 الإصلاح: البحث باستخدام id
         const { data: teacher } = await supabase
           .from('teachers')
-          .select('*, users(*)')
+          .select('*, users!fk_teachers_users(*)')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -169,7 +166,7 @@ export function useDashboardSystem() {
             return {
               teacher: { id: user.id, users: { full_name: 'حساب المعلم غير مرتبط بالجدول (يرجى مراجعة الإدارة)' } },
               sections: [], recentExams: [], recentAssignments: [], schedule: [], periods: [], messages: [], assignmentStats: [],
-              stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0 }
+              stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 100, absenceRate: 0 }
             };
         }
 
@@ -192,7 +189,8 @@ export function useDashboardSystem() {
 
         const [
           { data: recentExams }, { data: recentAssignments }, { data: schedule }, { data: periods }, { data: messages },
-          { count: studentsCount }, { count: examsCount }, { count: assignmentsCount }
+          { count: studentsCount }, { count: examsCount }, { count: assignmentsCount },
+          { data: attendanceRecords } // 🚀 الجلب الجديد لسجلات الحضور للمعلم
         ] = await Promise.all([
           supabase.from('exams').select(`id, title, created_at, start_time, subject:subjects(name), exam_sections(section:sections(name, classes(name)))`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
           supabase.from('assignments').select(`id, title, due_date, subject:subjects(name), assignment_sections(section_id, section:sections(name, classes(name)))`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
@@ -201,8 +199,17 @@ export function useDashboardSystem() {
           supabase.from('messages').select('id, subject, content, created_at, is_read, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
           sectionIds.length > 0 ? supabase.from('students').select('id', { count: 'exact', head: true }).in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
           supabase.from('exams').select('id', { count: 'exact', head: true }).eq('teacher_id', teacher.id),
-          supabase.from('assignments').select('id', { count: 'exact', head: true }).eq('teacher_id', teacher.id)
+          supabase.from('assignments').select('id', { count: 'exact', head: true }).eq('teacher_id', teacher.id),
+          supabase.from('attendance_records').select('status').eq('teacher_id', teacher.id) // 🚀 استعلام سجلات المعلم
         ]);
+
+        // 🚀 العملية الحسابية الذكية لاستخراج نسبة الحضور والغياب لطلاب المعلم
+        const totalAttendance = attendanceRecords?.length || 0;
+        const presentCount = attendanceRecords?.filter(a => a.status === 'present').length || 0;
+        const absentCount = attendanceRecords?.filter(a => a.status === 'absent').length || 0;
+        
+        const avgAttendance = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 100;
+        const absenceRate = totalAttendance > 0 ? Math.round((absentCount / totalAttendance) * 100) : 0;
 
         const exams = (recentExams || []).map((e: any) => {
           const sec = Array.isArray(e.exam_sections) ? e.exam_sections[0]?.section : e.exam_sections?.section;
@@ -234,7 +241,23 @@ export function useDashboardSystem() {
           return { title: 'إنجاز الواجبات النشطة', className: `${classObj?.name || ''} - ${section.name}`, percentage, submissionCount: actualSubmissions, totalStudents: expectedSubmissions };
         }).filter(Boolean);
 
-        return { teacher, sections, recentExams: exams, recentAssignments: assignments, schedule: schedule || [], periods: periods || [], messages: messages || [], assignmentStats, stats: { totalStudents: studentsCount || 0, totalExams: examsCount || 0, totalAssignments: assignmentsCount || 0 } };
+        return { 
+          teacher, 
+          sections, 
+          recentExams: exams, 
+          recentAssignments: assignments, 
+          schedule: schedule || [], 
+          periods: periods || [], 
+          messages: messages || [], 
+          assignmentStats, 
+          stats: { 
+            totalStudents: studentsCount || 0, 
+            totalExams: examsCount || 0, 
+            totalAssignments: assignmentsCount || 0,
+            avgAttendance, // 🚀 الأرقام الحقيقية تُرسل هنا
+            absenceRate    // 🚀 الأرقام الحقيقية تُرسل هنا
+          } 
+        };
       } catch (error) {
         console.error('Error fetching teacher dashboard data:', error);
         throw error;
@@ -275,8 +298,7 @@ export function useDashboardSystem() {
         if (!student || !(student as any).section_id) return null;
 
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          // 🚀 إصلاح الربط في الجدول للطالب أيضاً
-          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
+          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users!fk_teachers_users(full_name))').eq('section_id', (student as any).section_id).order('day_of_week').order('period').limit(5000),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
 
@@ -326,7 +348,7 @@ export function useDashboardSystem() {
         if (!parentProfile) return null;
 
         const [ { data: children }, { data: notifications } ] = await Promise.all([
-          supabase.from('students').select('*, users(full_name), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(1000),
+          supabase.from('students').select('*, users!fk_students_users(full_name), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(1000),
           supabase.from('notifications').select('*').eq('type', 'announcement').order('created_at', { ascending: false }).limit(5)
         ]);
 
