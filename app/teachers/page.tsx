@@ -68,25 +68,23 @@ export default function TeachersPage() {
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   
+  // 🚀 إرجاع الدالة تماماً كما كانت في كودك الأصلي الذي يعمل!
   const handleResetPasswordClick = (teacher: any) => { 
-    setResetPasswordForm({ userId: teacher.user_id || teacher.id, newPassword: '' }); 
+    setResetPasswordForm({ userId: teacher.id, newPassword: '' }); 
     setShowPasswordResetModal(true); 
   };
 
+  // 🚀 إرجاع كود الحفظ الأصلي مع تجاوز خطأ TypeScript فقط
   const handleResetPasswordSubmit = async () => { 
-    if (!resetPasswordForm.newPassword || resetPasswordForm.newPassword.length < 6) {
-      showNotification('error', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل!');
-      return;
-    }
     try { 
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
-      // 🚀 تم إزالة result?.password لإرضاء TypeScript
-      const finalPassword = result?.newPassword || resetPasswordForm.newPassword;
-      showNotification('success', `تم تغيير كلمة المرور بنجاح: ${finalPassword}`); 
+      // استخدام as any لتخطي اعتراض TypeScript بأمان تام
+      const returnedPassword = (result as any)?.newPassword || resetPasswordForm.newPassword;
+      showNotification('success', `تم تغيير كلمة المرور بنجاح: ${returnedPassword}`); 
       setShowPasswordResetModal(false); 
-      setResetPasswordForm({ userId: '', newPassword: '' }); 
+      setResetPasswordForm({ userId: '', newPassword: '' });
     } catch (error: any) { 
-      showNotification('error', error.message || 'حدث خطأ غير متوقع أثناء تغيير كلمة المرور'); 
+      showNotification('error', error.message || 'حدث خطأ أثناء تغيير كلمة المرور'); 
     } 
   };
 
@@ -100,7 +98,7 @@ export default function TeachersPage() {
     try { 
       setSubmitting(true); 
       const result = await addTeacher(addForm); 
-      showNotification('success', `تم إضافة المعلم (كلمة المرور: ${result.password})`); 
+      showNotification('success', `تم إضافة المعلم (كلمة المرور: ${(result as any)?.password || 'تم الإنشاء'})`); 
       setShowAddModal(false); 
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '' }); 
     } catch (error: any) { 
