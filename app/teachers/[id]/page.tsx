@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -6,13 +7,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, GraduationCap, Crown, BookOpen, FileText, ChevronLeft, 
   Briefcase, Layers, Edit3, Save, X, Quote, Link as LinkIcon, Award, Star,
-  Plus, AlertCircle // 🚀 تم إضافة الأيقونتين المفقودتين هنا!
+  Plus, AlertCircle, Heart, MessageCircleHeart, Send // 🚀 أيقونات دفتر الذكريات
 } from 'lucide-react';
 import { useProfileSystem } from '@/hooks/useProfileSystem';
 import { getParentDepartment } from '@/hooks/useHierarchySystem'; 
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase';
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
 
-// قاموس الثيمات الفخمة
 const THEMES: Record<string, { bg: string, text: string, border: string, name: string }> = {
   royal: { bg: 'from-indigo-600 to-blue-700', text: 'text-indigo-600', border: 'border-indigo-200', name: 'أزرق ملكي' },
   emerald: { bg: 'from-emerald-500 to-teal-700', text: 'text-emerald-600', border: 'border-emerald-200', name: 'أخضر زمردي' },
@@ -31,7 +34,6 @@ export default function TeacherProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // حالة الإعدادات الشخصية (JSONB)
   const [profileSettings, setProfileSettings] = useState({
     theme: 'royal',
     bio: '',
@@ -39,6 +41,11 @@ export default function TeacherProfilePage() {
     youtube: '',
     linkedin: ''
   });
+
+  // 🌸 حالات دفتر الذكريات
+  const [memories, setMemories] = useState<any[]>([]);
+  const [newMemory, setNewMemory] = useState('');
+  const [isSubmittingMemory, setIsSubmittingMemory] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -54,12 +61,38 @@ export default function TeacherProfilePage() {
           });
         }
       });
+      fetchMemories();
     }
   }, [id, fetchTeacherProfile]);
 
+  // جلب الذكريات
+  const fetchMemories = async () => {
+    const { data } = await supabase
+      .from('teacher_memories')
+      .select('*, author:users(full_name, avatar_url, role)')
+      .eq('teacher_id', id)
+      .order('created_at', { ascending: false });
+    if (data) setMemories(data);
+  };
+
+  // تدوين ذكرى جديدة
+  const handleAddMemory = async () => {
+    if (!newMemory.trim() || !user || !id) return;
+    setIsSubmittingMemory(true);
+    try {
+      const { error } = await supabase.from('teacher_memories').insert([
+        { teacher_id: id, author_id: user.id, content: newMemory }
+      ]);
+      if (!error) {
+        setNewMemory('');
+        fetchMemories();
+      }
+    } catch (err) { console.error(err); }
+    finally { setIsSubmittingMemory(false); }
+  };
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
-    // تنظيف الإنجازات الفارغة
     const cleanedSettings = {
       ...profileSettings,
       achievements: profileSettings.achievements.filter(a => a.trim() !== '')
@@ -87,8 +120,6 @@ export default function TeacherProfilePage() {
   const sectionsTaught = data.teacher_sections || [];
   const parentDept = getParentDepartment(data.specialization);
   const activeTheme = THEMES[profileSettings.theme] || THEMES['royal'];
-  
-  // السماح بالتعديل إذا كان الزائر هو المعلم نفسه أو كان الزائر مدير النظام
   const canEdit = user?.id === data.id || user?.role === 'admin' || user?.role === 'management';
 
   return (
@@ -107,7 +138,7 @@ export default function TeacherProfilePage() {
         )}
       </div>
 
-      {/* 👑 الهيدر الفخم (يتغير لونه حسب الثيم المختار) */}
+      {/* 👑 الهيدر الفخم */}
       <motion.div layout className={`relative rounded-[3rem] p-1 shadow-2xl mb-10 overflow-hidden bg-gradient-to-r ${activeTheme.bg}`}>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
         <div className="absolute -top-24 -left-24 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
@@ -196,11 +227,10 @@ export default function TeacherProfilePage() {
         )}
       </AnimatePresence>
 
-      {/* 🚀 قسم عرض المحتوى الإبداعي (إذا كان موجوداً) */}
+      {/* 🚀 قسم عرض المحتوى الإبداعي */}
       {(profileSettings.bio || profileSettings.achievements.filter(a => a).length > 0 || profileSettings.youtube || profileSettings.linkedin) && !isEditing && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
           
-          {/* النبذة والفلسفة */}
           {profileSettings.bio && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`lg:col-span-2 bg-gradient-to-br ${activeTheme.bg} p-8 rounded-[2.5rem] shadow-lg text-white relative overflow-hidden`}>
               <Quote className="absolute -left-4 -top-4 w-32 h-32 opacity-10 rotate-180 pointer-events-none" />
@@ -209,7 +239,6 @@ export default function TeacherProfilePage() {
             </motion.div>
           )}
 
-          {/* الإنجازات والروابط */}
           <div className={`space-y-6 ${!profileSettings.bio ? 'lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8 space-y-0' : ''}`}>
             {profileSettings.achievements.filter(a => a).length > 0 && (
               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -237,7 +266,7 @@ export default function TeacherProfilePage() {
         </div>
       )}
 
-      {/* 📊 القسم الأكاديمي (الإنتاجية والفصول) */}
+      {/* 📊 القسم الأكاديمي */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="space-y-8">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
@@ -283,6 +312,62 @@ export default function TeacherProfilePage() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 🌸 قسم دفتر الذكريات وحائط الوداد */}
+      <div className="mt-12 bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 rounded-[3rem] p-8 sm:p-12 shadow-inner border border-rose-100 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-rose-200/40 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-200/40 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-md mb-4 border-4 border-rose-100 text-rose-500">
+              <Heart className="w-10 h-10 animate-pulse" fill="currentColor" />
+            </div>
+            <h2 className="text-3xl font-black text-slate-800 mb-2">حائط الذكريات والوداد</h2>
+            <p className="text-slate-500 font-bold text-sm">مساحة لطلاب وزملاء الأستاذ لترك بصمة لا تُنسى وكلمة طيبة تبقى للأبد.</p>
+          </div>
+
+          {/* صندوق كتابة ذكرى جديدة (مسموح للجميع عدا المعلم صاحب الصفحة) */}
+          {user && user.id !== id && (
+            <div className="bg-white/60 backdrop-blur-md p-6 rounded-3xl border border-white shadow-sm mb-10 max-w-2xl mx-auto focus-within:shadow-md transition-shadow">
+              <textarea 
+                value={newMemory}
+                onChange={(e) => setNewMemory(e.target.value)}
+                placeholder="اكتب رسالة شكر، موقف جميل، أو ذكرى لا تنساها مع المعلم..."
+                className="w-full h-32 bg-white/80 border border-rose-100 rounded-2xl p-4 text-slate-700 font-bold outline-none focus:ring-2 focus:ring-rose-300 resize-none transition-all"
+              ></textarea>
+              <div className="flex justify-end mt-4">
+                <button disabled={!newMemory.trim() || isSubmittingMemory} onClick={handleAddMemory} className="bg-gradient-to-r from-rose-400 to-orange-400 text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-rose-200 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all disabled:opacity-50">
+                  {isSubmittingMemory ? 'جاري التدوين...' : <><Send className="w-4 h-4" /> تدوين الذكرى</>}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* عرض الذكريات كروت زجاجية */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {memories.length === 0 ? (
+               <div className="col-span-full text-center py-10 text-slate-400 font-bold">كونوا أول من يترك ذكرى طيبة للأستاذ 🌸</div>
+            ) : (
+              memories.map((memory) => (
+                <div key={memory.id} className="bg-white/80 backdrop-blur-sm p-6 rounded-[2rem] shadow-sm border border-white hover:shadow-md transition-all group relative">
+                  <Quote className="absolute top-4 right-4 w-12 h-12 text-rose-100 rotate-180 -z-10 group-hover:scale-110 transition-transform" />
+                  <p className="text-slate-700 font-bold text-sm leading-relaxed mb-6 relative z-10 whitespace-pre-wrap">"{memory.content}"</p>
+                  <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+                    <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden shrink-0 flex items-center justify-center font-black text-slate-400">
+                       {memory.author?.avatar_url ? <img src={memory.author.avatar_url} className="w-full h-full object-cover" alt="author"/> : memory.author?.full_name?.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-800 text-sm">{memory.author?.full_name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{memory.author?.role === 'teacher' ? 'زميل المهنة' : memory.author?.role === 'student' ? 'طالب' : 'إدارة'} • {format(new Date(memory.created_at), 'd MMM yyyy', { locale: arSA })}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
