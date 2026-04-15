@@ -38,9 +38,9 @@ export function useUsersSystem() {
         .from('students')
         .select(`
           id, national_id, gender, parent_id, section_id, next_year_track, track_selection_date,
-          users (full_name, email, phone, avatar_url),
+          users!students_id_fkey (full_name, email, phone, avatar_url),
           sections (id, name, classes (id, name, level)),
-          parents (users (full_name))
+          parents (users!fk_parents_users (full_name))
         `)
         .limit(5000);
 
@@ -59,12 +59,12 @@ export function useUsersSystem() {
     setLoading(true);
     setError(null);
     try {
-      // 🚀 تم إضافة جلب المسميات وجدول رؤساء الأقسام هنا
+      // 🚀 الجسور الآمنة مضافة هنا لمنع اختفاء البيانات
       const { data, error } = await supabase
         .from('teachers')
         .select(`
           id, specialization, zoom_link, custom_titles,
-          users (full_name, email, phone, avatar_url),
+          users!teachers_id_fkey (full_name, email, phone, avatar_url),
           department_heads (id, subject_id, stage_name, subjects(name)),
           teacher_sections (section_id, subject_id, sections (name, classes (name)), subjects (name))
         `)
@@ -87,7 +87,7 @@ export function useUsersSystem() {
     try {
       const { data, error } = await supabase
         .from('parents')
-        .select('id, national_id, job_title, workplace, address, users (full_name, email, phone, avatar_url)')
+        .select('id, national_id, job_title, workplace, address, users!fk_parents_users (full_name, email, phone, avatar_url)')
         .limit(5000);
 
       if (error) throw error;
@@ -182,7 +182,6 @@ export function useUsersSystem() {
     } catch (err: unknown) { console.error('Error adding teacher:', err); throw err; }
   }, [fetchTeachers]);
 
-  // 🚀 تم تحديث هذه الدالة لتستقبل المسميات وتحفظها في الجداول
   const updateTeacher = useCallback(async (
     teacherId: string, 
     oldNationalId: string, 
@@ -213,14 +212,11 @@ export function useUsersSystem() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to update teacher');
 
-      // 🚀 حفظ المسميات الإضافية مباشرة في الجدول تحسباً لتجاهلها في الـ API
       if (updateData.custom_titles !== undefined) {
         await supabase.from('teachers').update({ custom_titles: updateData.custom_titles }).eq('id', teacherId);
       }
 
-      // 🚀 إدارة منصب "رئيس القسم" بشكل ذكي ومباشر
       if (hodData !== undefined) {
-        // نحذف التعيين القديم لضمان عدم وجود تكرار
         await supabase.from('department_heads').delete().eq('teacher_id', teacherId);
         
         if (hodData.isHead && hodData.subject_id) {
@@ -238,7 +234,6 @@ export function useUsersSystem() {
     } catch (err: unknown) { console.error('Error updating teacher:', err); throw err; }
   }, [fetchTeachers]);
 
-  // ... (باقي دوال addParent و deleteUser تبقى كما هي بدون تغيير لتوفير المساحة)
   const addParent = useCallback(async (parentData: any): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -313,7 +308,7 @@ export function useUsersSystem() {
 
   const fetchStudentProfile = useCallback(async (studentId: string): Promise<any> => {
     try {
-      const { data: student, error } = await supabase.from('students').select('*, users(*), sections(*, classes(*))').eq('id', studentId).single();
+      const { data: student, error } = await supabase.from('students').select('*, users!students_id_fkey(*), sections(*, classes(*))').eq('id', studentId).single();
       if (error) throw error;
       return { student, attendanceStats: null, absentDates: [], recentGrades: [] };
     } catch (err: unknown) { throw err; }
