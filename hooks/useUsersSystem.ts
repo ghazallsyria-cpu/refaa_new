@@ -216,16 +216,23 @@ export function useUsersSystem() {
         await supabase.from('teachers').update({ custom_titles: updateData.custom_titles }).eq('id', teacherId);
       }
 
+// 🚀 إدارة وتحديث منصب "رئيس القسم" بأمان
       if (hodData !== undefined) {
+        // 1. مسح المنصب القديم إن وجد (لتجنب التكرار)
         await supabase.from('department_heads').delete().eq('teacher_id', teacherId);
         
+        // 2. إضافة المنصب الجديد إذا كان التحديد مفعلاً
         if (hodData.isHead && hodData.subject_id) {
           const { error: hodError } = await supabase.from('department_heads').insert({
             teacher_id: teacherId,
             subject_id: hodData.subject_id,
             stage_name: hodData.stage_name
           });
-          if (hodError) console.error("Error assigning HOD:", hodError);
+          
+          if (hodError) {
+            console.error("HOD Error:", hodError);
+            throw new Error("فشل تعيين رئيس القسم، يرجى المحاولة مرة أخرى.");
+          }
         }
       }
 
