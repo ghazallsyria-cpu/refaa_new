@@ -68,23 +68,19 @@ export default function TeachersPage() {
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   
-  // 🚀 إرجاع الدالة تماماً كما كانت في كودك الأصلي الذي يعمل!
+  // 🚀 الدالة الأصلية التي كانت تعمل بنجاح (مأخوذة من الكود القديم الخاص بك)
   const handleResetPasswordClick = (teacher: any) => { 
     setResetPasswordForm({ userId: teacher.id, newPassword: '' }); 
     setShowPasswordResetModal(true); 
   };
-
-  // 🚀 إرجاع كود الحفظ الأصلي مع تجاوز خطأ TypeScript فقط
+  
   const handleResetPasswordSubmit = async () => { 
     try { 
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
-      // استخدام as any لتخطي اعتراض TypeScript بأمان تام
-      const returnedPassword = (result as any)?.newPassword || resetPasswordForm.newPassword;
-      showNotification('success', `تم تغيير كلمة المرور بنجاح: ${returnedPassword}`); 
+      showNotification('success', `كلمة المرور الجديدة: ${result.newPassword}`); 
       setShowPasswordResetModal(false); 
-      setResetPasswordForm({ userId: '', newPassword: '' });
     } catch (error: any) { 
-      showNotification('error', error.message || 'حدث خطأ أثناء تغيير كلمة المرور'); 
+      showNotification('error', error.message); 
     } 
   };
 
@@ -98,13 +94,11 @@ export default function TeachersPage() {
     try { 
       setSubmitting(true); 
       const result = await addTeacher(addForm); 
-      showNotification('success', `تم إضافة المعلم (كلمة المرور: ${(result as any)?.password || 'تم الإنشاء'})`); 
+      showNotification('success', `تم إضافة المعلم (كلمة المرور: ${(result as any).password})`); 
       setShowAddModal(false); 
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '' }); 
     } catch (error: any) { 
-      let msg = error.message;
-      if (msg?.includes('national_id_key')) msg = 'الرقم المدني مسجل مسبقاً!';
-      showNotification('error', msg); 
+      showNotification('error', error.message); 
     } finally { 
       setSubmitting(false); 
     } 
@@ -136,15 +130,6 @@ export default function TeachersPage() {
 
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const handleEditSubmit = async () => {
-    if (editForm.isHOD && !editForm.hod_subject_id) {
-      showNotification('error', 'يرجى اختيار القسم / المادة التي سيرأسها المعلم أولاً!');
-      return;
-    }
-    if (!editForm.national_id || editForm.national_id.trim() === '') {
-      showNotification('error', 'الرقم المدني مطلوب ولا يمكن تركه فارغاً!');
-      return;
-    }
-
     try {
       setSubmittingEdit(true);
       const payload: any = { 
@@ -153,27 +138,17 @@ export default function TeachersPage() {
         phone: editForm.phone, 
         specialization: editForm.specialization, 
         zoom_link: editForm.zoom_link, 
-        national_id: editForm.national_id.trim(), 
         custom_titles: editForm.custom_titles.split('،').map((s: string) => s.trim()).filter(Boolean)
       };
+      if (editForm.national_id !== editingTeacher.national_id) payload.national_id = editForm.national_id;
 
-      const hodData = { 
-        isHead: editForm.isHOD, 
-        subject_id: editForm.hod_subject_id, 
-        stage_name: editForm.hod_stage 
-      };
-      
+      const hodData = { isHead: editForm.isHOD, subject_id: editForm.hod_subject_id, stage_name: editForm.hod_stage };
       await updateTeacher(editingTeacher.id, editingTeacher.national_id, payload, hodData);
-      
-      showNotification('success', 'تم حفظ التعديلات وتحديث المناصب بنجاح!');
+      showNotification('success', 'تم التحديث بنجاح');
       setShowEditModal(false);
-      fetchTeachers(); 
+      fetchTeachers();
     } catch (e: any) { 
-      let errorMsg = e.message || 'حدث خطأ غير متوقع أثناء الحفظ';
-      if (errorMsg.includes('teachers_national_id_key') || errorMsg.includes('users_national_id_key')) {
-        errorMsg = 'الرقم المدني الذي أدخلته مسجل مسبقاً لمعلم آخر في النظام!';
-      }
-      showNotification('error', errorMsg); 
+      showNotification('error', e.message); 
     } finally { 
       setSubmittingEdit(false); 
     }
@@ -288,12 +263,13 @@ export default function TeachersPage() {
            {(teacher.custom_titles || []).map((t: string, i: number) => <span key={i} className="px-2 py-1 bg-slate-100 text-slate-500 text-[9px] font-bold rounded-md">{t}</span>)}
         </div>
         
+        {/* أزرار الإدارة ثابتة على الموبايل وتظهر عند التمرير على الديسكتوب */}
         <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-           <button type="button" onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
-           <button type="button" onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
-           <button type="button" onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
-           <button type="button" onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
-           <button type="button" onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
+           <button onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
+           <button onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
+           <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
+           <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
+           <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
         </div>
       </motion.div>
     );
@@ -347,6 +323,7 @@ export default function TeachersPage() {
         </div>
       )}
 
+      {/* نافذة التعديل */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8">
@@ -356,7 +333,6 @@ export default function TeachersPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الاسم</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
-                  
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
                   <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رابط زووم (Zoom Link)</label><input type="url" value={editForm.zoom_link} onChange={e => setEditForm({...editForm, zoom_link: e.target.value})} className="w-full px-4 py-3 bg-indigo-50/50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" placeholder="https://zoom.us/j/..."/></div>
@@ -377,16 +353,12 @@ export default function TeachersPage() {
                 </div>
               </form>
             </div>
-            <div className="p-8 bg-slate-50 flex flex-row-reverse gap-3">
-              <button disabled={submittingEdit} onClick={handleEditSubmit} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">
-                {submittingEdit ? 'جاري الحفظ...' : 'حفظ البيانات'}
-              </button>
-              <button onClick={() => setShowEditModal(false)} className="px-6 py-4 bg-white text-slate-500 rounded-2xl font-black border border-slate-200">إلغاء</button>
-            </div>
+            <div className="p-8 bg-slate-50 flex flex-row-reverse gap-3"><button disabled={submittingEdit} onClick={handleEditSubmit} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">{submittingEdit ? 'جاري الحفظ...' : 'حفظ البيانات'}</button><button onClick={() => setShowEditModal(false)} className="px-6 py-4 bg-white text-slate-500 rounded-2xl font-black border border-slate-200">إلغاء</button></div>
           </motion.div>
         </div>
       )}
 
+      {/* نافذة الإضافة */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -421,6 +393,7 @@ export default function TeachersPage() {
         </div>
       )}
       
+      {/* نافذة التعيين السريع */}
       {showAssignmentModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -475,28 +448,17 @@ export default function TeachersPage() {
         </div>
       )}
 
+      {/* نافذة تغيير كلمة المرور */}
       {showPasswordResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
-            <div className="mx-auto w-16 h-16 bg-sky-50 text-sky-600 flex items-center justify-center rounded-2xl mb-4">
-              <Key size={32} />
-            </div>
-            <h3 className="text-xl font-black mb-2 text-slate-900">تغيير كلمة المرور</h3>
-            <p className="text-xs text-slate-500 font-bold mb-6">اكتب كلمة المرور الجديدة في الأسفل. (يجب أن تتكون من 6 أحرف أو أرقام على الأقل).</p>
-            
-            <input 
-              type="text" 
-              placeholder="اكتب كلمة المرور الجديدة..." 
-              value={resetPasswordForm.newPassword} 
-              onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} 
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-bold focus:ring-2 focus:ring-sky-500 outline-none mb-6 text-center shadow-inner text-lg" 
-              dir="ltr"
-            />
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
+            <h3 className="text-xl font-black mb-4">تغيير كلمة المرور</h3>
+            <input type="text" placeholder="كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none mb-6 text-center" />
             <div className="flex gap-3">
-              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-sky-600 text-white font-black py-3.5 rounded-xl hover:bg-sky-700 shadow-md shadow-sky-200 transition-all active:scale-95">حفظ التغيير</button>
-              <button onClick={() => { setShowPasswordResetModal(false); setResetPasswordForm({ userId: '', newPassword: '' }); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-3.5 rounded-xl hover:bg-slate-200 transition-all">إلغاء</button>
+              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl hover:bg-indigo-700">حفظ</button>
+              <button onClick={() => setShowPasswordResetModal(false)} className="flex-1 bg-slate-100 text-slate-700 font-black py-3 rounded-xl">إلغاء</button>
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
 
