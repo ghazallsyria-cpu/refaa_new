@@ -68,8 +68,29 @@ export default function TeachersPage() {
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   
-  const handleResetPasswordClick = (teacher: any) => { setResetPasswordForm({ userId: teacher.id, newPassword: '' }); setShowPasswordResetModal(true); };
-  const handleResetPasswordSubmit = async () => { try { const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); showNotification('success', `كلمة المرور الجديدة: ${result.newPassword}`); setShowPasswordResetModal(false); } catch (error: any) { showNotification('error', error.message); } };
+  // 🚀 الدالة المصلحة والذكية لفتح نافذة كلمة المرور
+  const handleResetPasswordClick = (teacher: any) => { 
+    setResetPasswordForm({ userId: teacher.user_id || teacher.id, newPassword: '' }); 
+    setShowPasswordResetModal(true); 
+  };
+
+  // 🚀 الدالة المصلحة والآمنة 100% لحفظ كلمة المرور دون انهيار
+  const handleResetPasswordSubmit = async () => { 
+    if (!resetPasswordForm.newPassword || resetPasswordForm.newPassword.length < 6) {
+      showNotification('error', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل!');
+      return;
+    }
+    try { 
+      const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
+      // التقاط كلمة المرور بشكل آمن سواء كانت من السيرفر أو من الحقل مباشرة لتجنب خطأ undefined
+      const finalPassword = result?.newPassword || result?.password || resetPasswordForm.newPassword;
+      showNotification('success', `تم تغيير كلمة المرور بنجاح: ${finalPassword}`); 
+      setShowPasswordResetModal(false); 
+      setResetPasswordForm({ userId: '', newPassword: '' }); // تصفير الحقل
+    } catch (error: any) { 
+      showNotification('error', error.message || 'حدث خطأ غير متوقع أثناء تغيير كلمة المرور'); 
+    } 
+  };
 
   const [submitting, setSubmitting] = useState(false);
   const handleAddSubmit = async () => { 
@@ -130,7 +151,6 @@ export default function TeachersPage() {
 
     try {
       setSubmittingEdit(true);
-      
       const payload: any = { 
         full_name: editForm.full_name, 
         email: editForm.email, 
@@ -273,12 +293,11 @@ export default function TeachersPage() {
         </div>
         
         <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-           <button onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
-           {/* 🚀 الزر العائد: تغيير كلمة المرور */}
-           <button onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
-           <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
-           <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
-           <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
+           <button type="button" onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
+           <button type="button" onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
+           <button type="button" onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
+           <button type="button" onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
+           <button type="button" onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
         </div>
       </motion.div>
     );
@@ -460,16 +479,29 @@ export default function TeachersPage() {
         </div>
       )}
 
+      {/* 🚀 نافذة تغيير كلمة المرور بعد التعديل */}
       {showPasswordResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
-            <h3 className="text-xl font-black mb-4">تغيير كلمة المرور</h3>
-            <input type="text" placeholder="كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none mb-6 text-center" />
-            <div className="flex gap-3">
-              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-indigo-600 text-white font-black py-3 rounded-xl hover:bg-indigo-700">حفظ</button>
-              <button onClick={() => setShowPasswordResetModal(false)} className="flex-1 bg-slate-100 text-slate-700 font-black py-3 rounded-xl">إلغاء</button>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
+            <div className="mx-auto w-16 h-16 bg-sky-50 text-sky-600 flex items-center justify-center rounded-2xl mb-4">
+              <Key size={32} />
             </div>
-          </div>
+            <h3 className="text-xl font-black mb-2 text-slate-900">تغيير كلمة المرور</h3>
+            <p className="text-xs text-slate-500 font-bold mb-6">اكتب كلمة المرور الجديدة في الأسفل. (يجب أن تتكون من 6 أحرف أو أرقام على الأقل).</p>
+            
+            <input 
+              type="text" 
+              placeholder="اكتب كلمة المرور الجديدة..." 
+              value={resetPasswordForm.newPassword} 
+              onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-bold focus:ring-2 focus:ring-sky-500 outline-none mb-6 text-center shadow-inner text-lg" 
+              dir="ltr"
+            />
+            <div className="flex gap-3">
+              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-sky-600 text-white font-black py-3.5 rounded-xl hover:bg-sky-700 shadow-md shadow-sky-200 transition-all active:scale-95">حفظ التغيير</button>
+              <button onClick={() => { setShowPasswordResetModal(false); setResetPasswordForm({ userId: '', newPassword: '' }); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-3.5 rounded-xl hover:bg-slate-200 transition-all">إلغاء</button>
+            </div>
+          </motion.div>
         </div>
       )}
 
