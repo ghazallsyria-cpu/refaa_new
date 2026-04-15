@@ -1,278 +1,380 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Users, BookOpen, Calendar, CheckCircle2, 
-  Clock, FileText, Plus, Search, 
-  TrendingUp, BarChart2, UserCheck, MessageSquare,
-  Heart, Bell, Award, ShieldCheck, Loader2
+  Users, BookOpen, Calendar, CheckCircle2, Clock, FileText, 
+  GraduationCap, TrendingUp, AlertTriangle, Award, ChevronLeft, 
+  Play, Star, ShieldAlert, XCircle, Activity, Loader2
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import AnnouncementsWidget from '@/components/AnnouncementsWidget';
-import { useDashboardSystem } from '@/hooks/useDashboardSystem';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
+import Image from 'next/image';
+import { cn } from '@/lib/utils';
+import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 
 export default function ParentDashboard() {
-  const { authRole, isChecking } = useAuth(); // 🚀 استيراد جدار الحماية
-  
+  const { user, authRole, isChecking } = useAuth() as any;
   const [parentData, setParentData] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [activeChildId, setActiveChildId] = useState<string | null>(null);
+  
+  // 🧠 بيانات الابن النشط
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [badges, setBadges] = useState<any[]>([]);
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<any[]>([]);
+  const [stats, setStats] = useState({ attendanceRate: 100, examsAvg: 0, assignmentsAvg: 0, absentCount: 0 });
+  
   const [loading, setLoading] = useState(true);
-  const { fetchParentDashboardData } = useDashboardSystem();
+  const [childLoading, setChildLoading] = useState(false);
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    // 🚀 منع جلب البيانات إذا لم يكن المستخدم ولي أمر
-    if (authRole !== 'parent' && authRole !== 'admin' && authRole !== 'management') return;
-    
+  useEffect(() => {
+    setMounted(true);
+    setCurrentTime(new Date());
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 1. جلب بيانات ولي الأمر وأبنائه
+  const fetchParentData = useCallback(async () => {
+    if (!user?.id || authRole !== 'parent') return;
     try {
       setLoading(true);
-      const data = await fetchParentDashboardData();
+      // جلب بيانات الأب
+      const { data: pData } = await supabase
+        .from('parents')
+        .select('*, users(full_name, email, avatar_url)')
+        .eq('id', user.id)
+        .maybeSingle();
       
-      if (data) {
-        setChildren(data.children);
-        setNotifications(data.notifications);
-        // Assuming parent profile is part of the user session or can be derived
-        // For now, we use the first child's parent info if needed, or just keep it simple
+      if (pData) setParentData(pData);
+
+      // جلب بيانات الأبناء
+      const { data: cData } = await supabase
+        .from('students')
+        .select('*, users(full_name, avatar_url), sections(name, classes(name))')
+        .eq('parent_id', user.id);
+
+      if (cData && cData.length > 0) {
+        setChildren(cData);
+        setActiveChildId(cData[0].id); // تعيين الابن الأول كافتراضي
       }
-    } catch (error) {
-      console.error('Error fetching parent dashboard data:', error);
+    } catch (e) {
+      console.error('Error fetching parent data:', e);
     } finally {
       setLoading(false);
     }
-  }, [fetchParentDashboardData, authRole]);
+  }, [user, authRole]);
 
   useEffect(() => {
-    // 🚀 لا نجلب البيانات إلا بعد التأكد التام من الجلسة
-    if (!isChecking) {
-      fetchData();
+    if (!isChecking) fetchParentData();
+  }, [fetchParentData, isChecking]);
+
+  // 2. جلب بيانات الابن المختار
+  const fetchActiveChildData = useCallback(async (childId: string) => {
+    if (!childId) return;
+    try {
+      setChildLoading(true);
+      
+      // جلب الغياب
+      const { data: attData } = await supabase
+        .from('attendance_records')
+        .select('*, subjects(name)')
+        .eq('student_id', childId)
+        .order('date', { ascending: false });
+      
+      setAttendance(attData || []);
+
+      // جلب الاختبارات
+      const { data: exData } = await supabase
+        .from('exam_attempts')
+        .select('id, score, status, completed_at, exams(id, title, max_score, total_marks, subjects(name))')
+        .eq('student_id', childId)
+        .eq('status', 'graded')
+        .order('completed_at', { ascending: false });
+      
+      setExams(exData || []);
+
+      // جلب الواجبات
+      const { data: assData } = await supabase
+        .from('assignment_submissions')
+        .select('id, grade, status, submitted_at, feedback, assignments(id, title, total_marks, subjects(name), assignment_questions(points))')
+        .eq('student_id', childId)
+        .eq('status', 'graded')
+        .order('submitted_at', { ascending: false });
+      
+      setAssignments(assData || []);
+
+      // جلب الأوسمة
+      const { data: bdgData } = await supabase
+        .from('student_badges')
+        .select('*, badge:badges(*)')
+        .eq('student_id', childId)
+        .order('granted_at', { ascending: false });
+      
+      setBadges(bdgData || []);
+
+      // جلب فترات الحصص (لأننا سنحتاجها في الجدول)
+      const { data: perData } = await supabase.from('periods').select('*').order('period_number', { ascending: true });
+      setPeriods(perData || []);
+
+      // جلب جدول اليوم للابن
+      const activeChild = children.find(c => c.id === childId);
+      if (activeChild?.section_id) {
+        const today = new Date().getDay() + 1; // الأحد = 1 في المنصة
+        const { data: schData } = await supabase
+          .from('schedules')
+          .select('*, subjects(name), teachers(id, users(full_name))')
+          .eq('section_id', activeChild.section_id)
+          .eq('day_of_week', today)
+          .order('period', { ascending: true });
+        
+        setSchedule(schData || []);
+      }
+
+      // 🧠 الحسابات التحليلية
+      let absentCount = 0;
+      let attRate = 100;
+      if (attData && attData.length > 0) {
+        absentCount = attData.filter(a => a.status === 'absent').length;
+        const presents = attData.filter(a => a.status === 'present' || a.status === 'late').length;
+        attRate = Math.round((presents / attData.length) * 100);
+      }
+
+      let exAvg = 0;
+      if (exData && exData.length > 0) {
+        let totalPct = 0;
+        exData.forEach((e: any) => {
+          const max = e.exams?.total_marks || e.exams?.max_score || 100;
+          totalPct += ((e.score || 0) / max) * 100;
+        });
+        exAvg = Math.round(totalPct / exData.length);
+      }
+
+      let assAvg = 0;
+      if (assData && assData.length > 0) {
+        let totalPct = 0;
+        assData.forEach((a: any) => {
+          const qs = a.assignments?.assignment_questions;
+          const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
+          const max = calcMax > 0 ? calcMax : (a.assignments?.total_marks || 100);
+          totalPct += ((a.grade || 0) / max) * 100;
+        });
+        assAvg = Math.round(totalPct / assData.length);
+      }
+
+      setStats({ attendanceRate: attRate, examsAvg: exAvg, assignmentsAvg: assAvg, absentCount });
+
+    } catch (e) {
+      console.error('Error fetching active child data:', e);
+    } finally {
+      setChildLoading(false);
     }
-  }, [fetchData, isChecking]);
+  }, [children]);
 
-  // 🚀 شاشة التحميل وحماية الوصول (Security Guard)
-  if (isChecking) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50/50">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق وتأمين الصلاحيات...</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (activeChildId) fetchActiveChildData(activeChildId);
+  }, [activeChildId, fetchActiveChildData]);
 
-  // 🚀 منع المتطفلين من رؤية لوحة أولياء الأمور
-  if (authRole !== 'parent' && authRole !== 'admin' && authRole !== 'management') {
-    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة لأولياء الأمور وإدارة المدرسة فقط.</div>;
-  }
+  const activeChild = useMemo(() => children.find(c => c.id === activeChildId), [children, activeChildId]);
 
-  if (loading) {
-    return (
-      <div className="flex h-[80vh] items-center justify-center bg-slate-50/50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري تحميل لوحة التحكم...</p>
-        </div>
-      </div>
-    );
-  }
+  // دوال الجدول الدراسي
+  const isCurrentClass = useCallback((period: number) => {
+    if (!currentTime) return false;
+    const periodInfo = periods.find(p => p.period_number === period);
+    if (!periodInfo) return false;
+    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+    const [endH, endM] = periodInfo.end_time.split(':').map(Number);
+    const now = currentTime;
+    const start = new Date(now); start.setHours(startH, startM, 0);
+    const end = new Date(now); end.setHours(endH, endM, 0);
+    return now >= start && now <= end;
+  }, [currentTime, periods]);
+
+  const isNextClass = useCallback((period: number) => {
+    if (!currentTime) return false;
+    const periodInfo = periods.find(p => p.period_number === period);
+    if (!periodInfo) return false;
+    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
+    const now = currentTime;
+    const start = new Date(now); start.setHours(startH, startM, 0);
+    const diff = (start.getTime() - now.getTime()) / (1000 * 60);
+    return diff > 0 && diff <= 60;
+  }, [currentTime, periods]);
+
+  const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
+    if (!dateStr || !mounted) return fallback;
+    try {
+      return format(new Date(dateStr), formatStr, { locale: arSA });
+    } catch (e) { return fallback; }
+  };
+
+  if (isChecking || loading) return <div className="flex h-[80vh] items-center justify-center font-cairo"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>;
+  if (authRole !== 'parent') return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة لأولياء الأمور فقط.</div>;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6" 
-      dir="rtl"
-    >
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 shadow-inner">
-            <Users className="h-8 w-8 text-indigo-600" />
-          </div>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-12 max-w-7xl mx-auto px-4 font-cairo pt-6" dir="rtl">
+      
+      {/* 👑 Hero Section */}
+      <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 p-8 sm:p-12 text-white shadow-2xl">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
+        
+        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-8 text-center md:text-right">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">مرحباً بك مجدداً</h1>
-            <p className="text-slate-500 mt-1 font-bold">تابع تقدم أبنائك الدراسي وحضورهم اليومي.</p>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest mb-4 backdrop-blur-sm shadow-sm">
+              <Users className="w-3.5 h-3.5 text-blue-300" /> لوحة تحكم ولي الأمر
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-black mb-3 tracking-tight drop-shadow-md">أهلاً بك، {parentData?.users?.full_name?.split(' ')[0]} 👋</h1>
+            <p className="text-indigo-100 text-sm sm:text-lg font-bold bg-black/20 w-fit px-4 py-2 rounded-2xl backdrop-blur-sm border border-white/10 shadow-inner">
+              نحن هنا لنبقيك على اطلاع دائم بمسيرة أبنائك التعليمية.
+            </p>
           </div>
-        </div>
-        <div className="flex gap-3">
-          <button className="relative p-3 rounded-2xl bg-slate-50 text-slate-600 shadow-sm border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-rose-500 border-2 border-white animate-pulse"></span>
-          </button>
-          <Link 
-            href="/messages"
-            className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95"
-          >
-            <MessageSquare className="h-4 w-4" />
-            تواصل مع المدرسة
-          </Link>
         </div>
       </div>
 
-      {/* Children Overview Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {children.length === 0 ? (
-          <div className="lg:col-span-2 text-center py-20 bg-white rounded-[3rem] border border-dashed border-slate-300 shadow-sm">
-             <div className="mx-auto h-20 w-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100">
-               <Users className="h-10 w-10 text-slate-300" />
-             </div>
-             <h3 className="text-2xl font-black text-slate-800 mb-2">لا يوجد أبناء مسجلين</h3>
-             <p className="text-slate-500 font-bold">يرجى مراجعة إدارة المدرسة لربط حسابك بملفات أبنائك.</p>
-          </div>
-        ) : (
-          children.map((child) => (
-            <div key={child.id} className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden group hover:shadow-xl hover:shadow-indigo-100/50 transition-all hover:-translate-y-1">
-              <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm flex items-center justify-center text-white font-black text-xl ring-2 ring-white group-hover:scale-110 transition-transform">
-                    {child.users?.full_name?.charAt(0) || 'ط'}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-slate-900 group-hover:text-indigo-600 transition-colors">{child.users?.full_name}</h2>
-                    <p className="text-xs font-bold text-slate-500 mt-1 bg-white px-2 py-0.5 rounded-md inline-block border border-slate-200 shadow-sm">
-                      {child.sections?.classes?.name} - {child.sections?.name}
-                    </p>
-                  </div>
-                </div>
-                <Link 
-                  href={`/dashboard/student?id=${child.id}`}
-                  className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 shadow-sm border border-slate-100 transition-all active:scale-95"
-                  title="عرض التفاصيل"
-                >
-                  <TrendingUp className="h-5 w-5" />
-                </Link>
-              </div>
-              
-              <div className="p-6 grid grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-100 text-center shadow-sm">
-                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">نسبة الحضور</p>
-                  <p className="text-2xl font-black text-emerald-700">96%</p>
-                </div>
-                <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-100 text-center shadow-sm">
-                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">المعدل العام</p>
-                  <p className="text-2xl font-black text-indigo-700">88.5</p>
-                </div>
-                <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-100 text-center shadow-sm">
-                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">الترتيب</p>
-                  <p className="text-2xl font-black text-amber-700">5</p>
-                </div>
-              </div>
-
-              <div className="px-6 pb-6">
-                <div className="p-5 rounded-[1.5rem] bg-slate-50 border border-slate-100">
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm font-black text-slate-900">آخر التقييمات</p>
-                    <Award className="h-5 w-5 text-amber-500" />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                      <span className="text-slate-600 font-bold">الرياضيات <span className="text-[10px] text-slate-400 font-medium ml-1">(اختبار شهري)</span></span>
-                      <span className="font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">95/100</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                      <span className="text-slate-600 font-bold">اللغة العربية <span className="text-[10px] text-slate-400 font-medium ml-1">(مشاركة)</span></span>
-                      <span className="font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">10/10</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Notifications */}
-        <div className="lg:col-span-2 bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all">
-          <div className="p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/50">
-            <h2 className="text-xl font-black text-slate-900 flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-inner">
-                <Bell className="h-5 w-5 text-indigo-600" />
-              </div>
-              تنبيهات هامة
-            </h2>
-          </div>
-          <div className="divide-y divide-slate-100 bg-slate-50/30">
-            {notifications.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 font-bold text-sm bg-white m-6 rounded-3xl border border-dashed border-slate-200">
-                 لا توجد تنبيهات حالياً
-              </div>
-            ) : (
-              notifications.map((note) => (
-                <div key={note.id} className="p-6 flex items-start gap-4 hover:bg-white transition-colors group cursor-pointer">
-                  <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-sm group-hover:scale-110 transition-transform ${
-                    note.type === 'warning' ? 'bg-red-50 text-red-600 border-red-100' :
-                    note.type === 'success' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                    'bg-indigo-50 text-indigo-600 border-indigo-100'
-                  }`}>
-                    {note.type === 'warning' ? <ShieldCheck className="h-5 w-5" /> : 
-                     note.type === 'success' ? <Award className="h-5 w-5" /> : 
-                     <Bell className="h-5 w-5" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-1">
-                      <p className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors truncate">{note.title}</p>
-                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md whitespace-nowrap mr-2 border border-slate-200">{note.date}</span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-500 mt-1 truncate">الابن: {note.student}</p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+      {children.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-3xl border border-slate-200">
+          <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h2 className="text-2xl font-black text-slate-700 mb-2">لا يوجد أبناء مرتبطين</h2>
+          <p className="text-slate-500 font-bold">يرجى مراجعة إدارة المدرسة لربط حسابات أبنائك بملفك الشخصي.</p>
         </div>
-
-        {/* Quick Links & Support */}
-        <div className="space-y-8">
-          
-          {/* Announcements Widget */}
-          <AnnouncementsWidget authRole="parent" />
-
-          <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-200 p-6 sm:p-8 hover:shadow-lg transition-all">
-            <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">روابط سريعة</h2>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <Link href="/reports" className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center transition-all group hover:-translate-y-1">
-                <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:bg-indigo-50 border border-slate-100 group-hover:border-indigo-100 transition-colors">
-                  <FileText className="h-5 w-5 text-slate-400 group-hover:text-indigo-600" />
+      ) : (
+        <>
+          {/* 🔄 Smart Child Switcher */}
+          <div className="flex items-center gap-4 overflow-x-auto pb-4 custom-scrollbar">
+            {children.map(child => (
+              <button 
+                key={child.id} 
+                onClick={() => setActiveChildId(child.id)}
+                className={cn(
+                  "flex items-center gap-4 p-3 pr-4 rounded-2xl transition-all duration-300 min-w-[200px] shrink-0 border-2",
+                  activeChildId === child.id ? "bg-white border-indigo-500 shadow-xl scale-105" : "bg-slate-50 border-transparent hover:border-indigo-200 hover:bg-white"
+                )}
+              >
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-inner", activeChildId === child.id ? "bg-indigo-100 text-indigo-600" : "bg-slate-200 text-slate-500")}>
+                  {child.users?.avatar_url ? <img src={child.users.avatar_url} className="w-full h-full rounded-xl object-cover" alt="child"/> : child.users?.full_name?.charAt(0)}
                 </div>
-                <span className="text-xs font-black text-slate-700">التقارير</span>
-              </Link>
-              <Link href="/calendar" className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 hover:shadow-md text-center transition-all group hover:-translate-y-1">
-                <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:bg-indigo-50 border border-slate-100 group-hover:border-indigo-100 transition-colors">
-                  <Calendar className="h-5 w-5 text-slate-400 group-hover:text-indigo-600" />
+                <div className="text-right">
+                  <h3 className={cn("font-black text-sm truncate max-w-[120px]", activeChildId === child.id ? "text-indigo-900" : "text-slate-600")}>{child.users?.full_name?.split(' ')[0]} {child.users?.full_name?.split(' ')[1]}</h3>
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">{child.sections?.classes?.name} - {child.sections?.name}</p>
                 </div>
-                <span className="text-xs font-black text-slate-700">التقويم</span>
-              </Link>
-              <Link href="/fees" className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-amber-200 hover:shadow-md text-center transition-all group hover:-translate-y-1">
-                <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:bg-amber-50 border border-slate-100 group-hover:border-amber-100 transition-colors">
-                  <Award className="h-5 w-5 text-slate-400 group-hover:text-amber-600" />
-                </div>
-                <span className="text-xs font-black text-slate-700">الرسوم</span>
-              </Link>
-              <Link href="/settings" className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-emerald-200 hover:shadow-md text-center transition-all group hover:-translate-y-1">
-                <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:bg-emerald-50 border border-slate-100 group-hover:border-emerald-100 transition-colors">
-                  <ShieldCheck className="h-5 w-5 text-slate-400 group-hover:text-emerald-600" />
-                </div>
-                <span className="text-xs font-black text-slate-700">الإعدادات</span>
-              </Link>
-            </div>
-          </div>
-
-          <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-xl shadow-indigo-200 relative overflow-hidden group">
-            <div className="relative z-10">
-              <h3 className="font-black text-xl mb-3">هل تحتاج للمساعدة؟</h3>
-              <p className="text-indigo-100 text-sm mb-6 font-bold leading-relaxed">فريق الدعم الفني والإداري متواجد دائماً للإجابة على استفساراتكم وملاحظاتكم.</p>
-              <button className="w-full py-4 bg-white text-indigo-600 rounded-2xl font-black text-sm hover:bg-indigo-50 transition-all shadow-lg active:scale-95">
-                تحدث معنا الآن
               </button>
-            </div>
-            <Heart className="absolute -bottom-6 -right-6 h-32 w-32 text-indigo-500/30 rotate-12 group-hover:scale-110 transition-transform duration-500" />
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/50 rounded-full blur-3xl -mt-10 -mr-10"></div>
+            ))}
           </div>
-        </div>
-      </div>
+
+          <AnimatePresence mode="wait">
+            {childLoading ? (
+              <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center py-20">
+                <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+              </motion.div>
+            ) : activeChild && (
+              <motion.div key={activeChild.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
+                
+                {/* 🚨 نظام الإنذارات (Danger Zone) */}
+                {stats.absentCount >= 5 && (
+                  <div className="bg-gradient-to-r from-rose-600 to-rose-700 rounded-3xl p-6 text-white shadow-lg shadow-rose-500/20 border-2 border-rose-400/50 flex items-center justify-between flex-col sm:flex-row gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0 border border-white/20 animate-pulse"><AlertTriangle className="w-6 h-6 text-yellow-300" /></div>
+                      <div>
+                        <h3 className="font-black text-lg mb-1">تنبيه غياب رسمي</h3>
+                        <p className="text-sm font-bold text-rose-100">تجاوز {activeChild.users?.full_name?.split(' ')[0]} الحد المسموح للغياب ({stats.absentCount} حصص). يرجى مراجعة الإدارة.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 📊 إحصائيات الأداء */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                  {[
+                    { label: 'نسبة الحضور', value: `${stats.attendanceRate}%`, icon: CheckCircle2, color: 'emerald', bg: 'bg-emerald-500' },
+                    { label: 'متوسط الاختبارات', value: `${stats.examsAvg}%`, icon: FileText, color: 'indigo', bg: 'bg-indigo-500' },
+                    { label: 'متوسط الواجبات', value: `${stats.assignmentsAvg}%`, icon: BookOpen, color: 'amber', bg: 'bg-amber-500' }
+                  ].map((stat, i) => (
+                    <div key={i} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all group overflow-hidden relative">
+                      <div className="flex items-center gap-5 mb-5 relative z-10">
+                        <div className={`h-14 w-14 shrink-0 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}><stat.icon className="w-7 h-7" /></div>
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                          <p className="text-3xl font-black text-slate-900">{stat.value}</p>
+                        </div>
+                      </div>
+                      <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden shadow-inner relative z-10">
+                        <motion.div initial={{ width: 0 }} animate={{ width: stat.value }} transition={{ duration: 1.5, ease: "easeOut" }} className={`h-full ${stat.bg} rounded-full`}></motion.div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 🏆 حائط الفخر الأكاديمي (الأوسمة) */}
+                {badges.length > 0 && (
+                  <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+                    <div className="relative z-10">
+                      <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2"><Award className="text-yellow-400 w-6 h-6"/> حائط التميز والفخر</h3>
+                      <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
+                        {badges.map((b) => (
+                          <div key={b.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex items-center gap-4 min-w-[280px]">
+                            <div className="w-16 h-16 relative shrink-0"><Image src={b.badge?.image_url} alt="Badge" fill className="object-contain drop-shadow-xl" unoptimized/></div>
+                            <div>
+                              <p className="text-white font-black text-sm">{b.badge?.name}</p>
+                              <p className="text-indigo-200 text-[10px] font-bold mt-1 line-clamp-2">{b.reason}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 📅 جدول اليوم المباشر */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 sm:p-8">
+                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Clock className="text-indigo-500"/> الجدول الدراسي اليوم</h3>
+                    <div className="space-y-4">
+                      {schedule.length === 0 ? (
+                         <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 font-bold text-sm">لا توجد حصص مجدولة لليوم.</div>
+                      ) : (
+                        schedule.map((item, i) => {
+                          const current = isCurrentClass(item.period);
+                          const next = isNextClass(item.period);
+                          return (
+                            <div key={i} className={cn("p-4 rounded-2xl border transition-all flex items-center gap-4", current ? "bg-indigo-50 border-indigo-200 shadow-md scale-[1.02]" : "bg-slate-50 border-slate-100")}>
+                              <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shrink-0", current ? "bg-indigo-600 text-white shadow-lg" : "bg-white text-slate-500 border border-slate-200")}>
+                                {current ? <Play className="w-5 h-5 animate-pulse" /> : item.period}
+                              </div>
+                              <div className="flex-1">
+                                <p className={cn("font-black text-lg line-clamp-1", current ? "text-indigo-900" : "text-slate-800")}>{item.subjects?.name}</p>
+                                <p className="text-xs font-bold text-slate-500 mt-1">أ. {item.teachers?.users?.full_name}</p>
+                              </div>
+                              {current && <span className="px-3 py-1 bg-indigo-500 text-white text-[10px] font-black rounded-lg animate-pulse whitespace-nowrap">الآن</span>}
+                              {next && !current && <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-lg whitespace-nowrap">القادمة</span>}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 📰 الإعلانات والمستجدات (يتم جلبها عبر الـ Component الجاهز) */}
+                  <div className="space-y-6">
+                    <AnnouncementsWidget authRole="parent" />
+                  </div>
+                </div>
+
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
+      )}
     </motion.div>
   );
 }
