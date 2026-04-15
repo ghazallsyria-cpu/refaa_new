@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -473,8 +474,7 @@ export default function TeachersPage() {
 
                       <div className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                         <input type="checkbox" id="isHOD" checked={editForm.isHOD} onChange={(e) => setEditForm({...editForm, isHOD: e.target.checked})} className="w-5 h-5 rounded text-amber-600 focus:ring-amber-500 border-slate-300" />
-                        <label htmlFor="isHOD" className="text-sm font-black text-slate-800 cursor-pointer select-none">تعيين هذا المعلم كـ "رئيس قسم"</label>
-                      </div>
+<label htmlFor="isHOD" className="text-sm font-black text-slate-800 cursor-pointer select-none">تعيين هذا المعلم كرئيس قسم</label>                      </div>
 
                       {editForm.isHOD && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
