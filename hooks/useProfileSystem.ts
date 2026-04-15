@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// نظام كاش بسيط لمنع تكرار التحميل عند التنقل
 const profileCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; 
 
@@ -18,12 +17,11 @@ const withCache = async <T>(key: string, fetcher: () => Promise<T>, forceRefresh
 export function useProfileSystem() {
   const [loading, setLoading] = useState(false);
 
-  // 1. جلب السيرة الذاتية الأكاديمية للمعلم
-  const fetchTeacherProfile = useCallback(async (teacherId: string) => {
+  // 1. جلب بيانات المعلم (بما فيها مساحته الإبداعية)
+  const fetchTeacherProfile = useCallback(async (teacherId: string, forceRefresh = false) => {
     setLoading(true);
     try {
       return await withCache(`teacher_profile_${teacherId}`, async () => {
-        // جلب بيانات المعلم، مناصبه، فصوله، ورئيس قسمه إن وجد
         const { data: teacher, error } = await supabase
           .from('teachers')
           .select(`
@@ -37,14 +35,13 @@ export function useProfileSystem() {
 
         if (error) throw error;
 
-        // جلب إحصائيات سريعة لإنتاجية المعلم (الواجبات والاختبارات التي أنشأها)
         const [ { count: examsCount }, { count: assignmentsCount } ] = await Promise.all([
           supabase.from('exams').select('id', { count: 'exact', head: true }).eq('teacher_id', teacherId),
           supabase.from('assignments').select('id', { count: 'exact', head: true }).eq('teacher_id', teacherId)
         ]);
 
         return { ...teacher, stats: { exams: examsCount || 0, assignments: assignmentsCount || 0 } };
-      });
+      }, forceRefresh);
     } catch (error) {
       console.error('Error fetching teacher profile:', error);
       return null;
@@ -53,19 +50,34 @@ export function useProfileSystem() {
     }
   }, []);
 
-  // 2. جلب صفحة مدير المدرسة ورؤيته
-  const fetchAdminProfile = useCallback(async (userId: string) => {
+  // 2. تحديث المساحة الإبداعية للمعلم (Themes, Bio, Links)
+  const updateTeacherProfileSettings = useCallback(async (teacherId: string, newSettings: any) => {
+    try {
+      const { error } = await supabase
+        .from('teachers')
+        .update({ profile_settings: newSettings })
+        .eq('id', teacherId);
+
+      if (error) throw error;
+      profileCache.delete(`teacher_profile_${teacherId}`); // مسح الكاش ليتحدث فوراً
+      return true;
+    } catch (error) {
+      console.error('Error updating profile settings:', error);
+      return false;
+    }
+  }, []);
+
+  // 3. جلب بيانات المدير
+  const fetchAdminProfile = useCallback(async (userId: string, forceRefresh = false) => {
     setLoading(true);
     try {
       return await withCache(`admin_profile_${userId}`, async () => {
         const [ { data: admin }, { data: settings } ] = await Promise.all([
           supabase.from('users').select('*').eq('id', userId).single(),
-          // نستخدم platform_settings لتخزين كلمة المدير ورؤية المدرسة!
           supabase.from('platform_settings').select('message, school_name, logo_url').limit(1).single()
         ]);
-
         return { admin, schoolSettings: settings };
-      });
+      }, forceRefresh);
     } catch (error) {
       console.error('Error fetching admin profile:', error);
       return null;
@@ -74,11 +86,11 @@ export function useProfileSystem() {
     }
   }, []);
 
-  // 3. تحديث كلمة/فلسفة المدير
+  // 4. تحديث كلمة المدير
   const updateAdminVision = useCallback(async (newMessage: string) => {
     try {
-      await supabase.from('platform_settings').update({ message: newMessage }).neq('id', '00000000-0000-0000-0000-000000000000'); // يحدّث الصف الموجود
-      profileCache.clear(); // مسح الكاش ليظهر التحديث
+      await supabase.from('platform_settings').update({ message: newMessage }).neq('id', '00000000-0000-0000-0000-000000000000'); 
+      profileCache.clear(); 
       return true;
     } catch (error) {
       console.error('Error updating vision:', error);
@@ -86,5 +98,5 @@ export function useProfileSystem() {
     }
   }, []);
 
-  return { loading, fetchTeacherProfile, fetchAdminProfile, updateAdminVision };
+  return { loading, fetchTeacherProfile, updateTeacherProfileSettings, fetchAdminProfile, updateAdminVision };
 }
