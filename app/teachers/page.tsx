@@ -119,7 +119,6 @@ export default function TeachersPage() {
 
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const handleEditSubmit = async () => {
-    // 🚀 حماية الواجهة الأمامية
     if (editForm.isHOD && !editForm.hod_subject_id) {
       showNotification('error', 'يرجى اختيار القسم / المادة التي سيرأسها المعلم أولاً!');
       return;
@@ -132,15 +131,13 @@ export default function TeachersPage() {
     try {
       setSubmittingEdit(true);
       
-      // 🚀 الحل السحري: نرسل الرقم المدني دائماً في الـ payload حتى لو لم يتغير
-      // لكي لا يقرأه الـ Hook في الخلفية على أنه undefined ويظن أنه تم مسحه!
       const payload: any = { 
         full_name: editForm.full_name, 
         email: editForm.email, 
         phone: editForm.phone, 
         specialization: editForm.specialization, 
         zoom_link: editForm.zoom_link, 
-        national_id: editForm.national_id.trim(), // 👈 هنا مربط الفرس! إرسال دائم للرقم.
+        national_id: editForm.national_id.trim(), 
         custom_titles: editForm.custom_titles.split('،').map((s: string) => s.trim()).filter(Boolean)
       };
 
@@ -154,7 +151,7 @@ export default function TeachersPage() {
       
       showNotification('success', 'تم حفظ التعديلات وتحديث المناصب بنجاح!');
       setShowEditModal(false);
-      fetchTeachers(); // 🚀 تحديث الواجهة فوراً لترى الشجرة تترتب
+      fetchTeachers(); 
     } catch (e: any) { 
       let errorMsg = e.message || 'حدث خطأ غير متوقع أثناء الحفظ';
       if (errorMsg.includes('teachers_national_id_key') || errorMsg.includes('users_national_id_key')) {
@@ -277,6 +274,8 @@ export default function TeachersPage() {
         
         <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
            <button onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
+           {/* 🚀 الزر العائد: تغيير كلمة المرور */}
+           <button onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
            <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
            <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
            <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
@@ -373,7 +372,6 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* نافذة الإضافة */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -408,7 +406,6 @@ export default function TeachersPage() {
         </div>
       )}
       
-      {/* نوافذ التعيين السريع للفصول والمواد */}
       {showAssignmentModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
