@@ -11,7 +11,7 @@ export function useHierarchySystem() {
       const { data: admins } = await supabase
         .from('users')
         .select('id, full_name, avatar_url, role')
-        .in('role', ['admin', 'management']);
+        .in('role', [ 'management']);
 
       // 2. جلب رؤساء الأقسام
       const { data: departmentHeads } = await supabase
