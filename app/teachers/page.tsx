@@ -93,7 +93,6 @@ export default function TeachersPage() {
     setShowEditModal(true);
   };
 
-  // 🚀 الدالة التي كانت مفقودة وتم إرجاعها
   const handleGrantBadgeClick = (teacher: any) => {
     setTeacherForBadge({ id: teacher.id, name: teacher.users?.full_name || 'معلم غير معروف' });
     setIsBadgeModalOpen(true);
@@ -121,7 +120,6 @@ export default function TeachersPage() {
   const handleDeleteClick = (id: string) => { setTeacherToDelete(id); setShowDeleteModal(true); };
   const confirmDelete = async () => { try { await deleteUser(teacherToDelete!); showNotification('success', 'تم الحذف'); setShowDeleteModal(false); } catch (e: any) { showNotification('error', e.message); } };
 
-  // إعدادات نافذة تعيين الفصول
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [teacherSections, setTeacherSections] = useState<any[]>([]);
@@ -273,10 +271,11 @@ export default function TeachersPage() {
           )}
           <div className="space-y-6">
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 px-4"><Users/> أعضاء القسم</h2>
-            {Object.entries(groupedMembers).map(([spec, specTeachers]) => (
+            {Object.entries(groupedMembers).map(([spec, specTeachers]: [string, any]) => (
               <div key={spec} className="bg-slate-50/50 p-6 rounded-[2.5rem] border border-slate-200 space-y-6">
                 <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100"><div className="w-2 h-2 rounded-full bg-indigo-500"></div><h3 className="font-black text-slate-800 text-sm">تخصص: {spec}</h3></div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{specTeachers.map((t: any) => <TeacherCard key={t.id} teacher={t}/>)}</div>
+                {/* 🚀 السطر الذي تم إصلاحه هنا */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{(specTeachers as any[]).map((t: any) => <TeacherCard key={t.id} teacher={t}/>)}</div>
               </div>
             ))}
           </div>
@@ -343,7 +342,7 @@ export default function TeachersPage() {
           </div>
         </div>
       )}
-
+      
       {/* نافذة التعيين السريع للفصول والمواد */}
       {showAssignmentModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
