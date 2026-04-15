@@ -73,7 +73,6 @@ export default function TeachersPage() {
     setShowPasswordResetModal(true); 
   };
   
-  // 🚀 الدالة الأصلية 100% لتغيير كلمة المرور مع تجاوز فحص TypeScript
   const handleResetPasswordSubmit = async () => { 
     try { 
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
@@ -87,7 +86,6 @@ export default function TeachersPage() {
 
   const [submitting, setSubmitting] = useState(false);
   
-  // 🚀 الدالة الأصلية 100% لإضافة المعلم مع تجاوز فحص TypeScript
   const handleAddSubmit = async () => { 
     if (submitting) return; 
     if (!addForm.full_name || !addForm.national_id) { showNotification('error', 'يرجى تعبئة الحقول الإلزامية'); return; } 
@@ -99,7 +97,9 @@ export default function TeachersPage() {
       setShowAddModal(false); 
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '' }); 
     } catch (error: any) { 
-      showNotification('error', error.message); 
+      let msg = error.message;
+      if (msg?.includes('national_id_key')) msg = 'الرقم المدني مسجل مسبقاً!';
+      showNotification('error', msg); 
     } finally { 
       setSubmitting(false); 
     } 
@@ -124,13 +124,15 @@ export default function TeachersPage() {
     setShowEditModal(true);
   };
 
-  // 🚀 الدالة الأصلية 100% للتعديل
+  // 🚀 تم إضافة هذا السطر المفقود
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
   const handleEditSubmit = async () => {
     try {
       setSubmittingEdit(true);
       const payload: any = { 
         full_name: editForm.full_name, email: editForm.email, phone: editForm.phone, specialization: editForm.specialization, zoom_link: editForm.zoom_link, 
-        custom_titles: editForm.custom_titles.split('،').map(s => s.trim()).filter(Boolean)
+        custom_titles: editForm.custom_titles.split('،').map((s: string) => s.trim()).filter(Boolean)
       };
       if (editForm.national_id !== editingTeacher.national_id) payload.national_id = editForm.national_id;
 
@@ -138,7 +140,12 @@ export default function TeachersPage() {
       await updateTeacher(editingTeacher.id, editingTeacher.national_id, payload, hodData);
       showNotification('success', 'تم التحديث بنجاح');
       setShowEditModal(false);
-    } catch (e: any) { showNotification('error', e.message); } finally { setSubmittingEdit(false); }
+      fetchTeachers();
+    } catch (e: any) { 
+      showNotification('error', e.message); 
+    } finally { 
+      setSubmittingEdit(false); 
+    }
   };
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -250,13 +257,12 @@ export default function TeachersPage() {
            {(teacher.custom_titles || []).map((t: string, i: number) => <span key={i} className="px-2 py-1 bg-slate-100 text-slate-500 text-[9px] font-bold rounded-md">{t}</span>)}
         </div>
         
-        {/* 🚀 إظهار الأزرار على الموبايل دائماً، وعند المرور في الشاشات الكبيرة */}
         <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-           <button onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
-           <button onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
-           <button onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all"><BookOpen size={14}/></button>
-           <button onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all"><Award size={14}/></button>
-           <button onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14}/></button>
+           <button type="button" onClick={() => handleEditClick(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل</button>
+           <button type="button" onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all" title="تغيير كلمة المرور"><Key size={14}/></button>
+           <button type="button" onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all" title="تعيين الفصول"><BookOpen size={14}/></button>
+           <button type="button" onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all" title="منح وسام"><Award size={14}/></button>
+           <button type="button" onClick={() => handleDeleteClick(teacher.id)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all" title="حذف"><Trash2 size={14}/></button>
         </div>
       </motion.div>
     );
@@ -310,7 +316,6 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* 🚀 نافذة التعديل تحتوي على الحقول المفقودة مجدداً */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8">
@@ -320,8 +325,6 @@ export default function TeachersPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الاسم</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
-                  
-                  {/* الحقول المضافة للبيانات الإضافية */}
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
                   <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رابط زووم (Zoom Link)</label><input type="url" value={editForm.zoom_link} onChange={e => setEditForm({...editForm, zoom_link: e.target.value})} className="w-full px-4 py-3 bg-indigo-50/50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" placeholder="https://zoom.us/j/..."/></div>
@@ -342,12 +345,16 @@ export default function TeachersPage() {
                 </div>
               </form>
             </div>
-            <div className="p-8 bg-slate-50 flex flex-row-reverse gap-3"><button onClick={handleEditSubmit} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">حفظ البيانات</button><button onClick={() => setShowEditModal(false)} className="px-6 py-4 bg-white text-slate-500 rounded-2xl font-black border border-slate-200">إلغاء</button></div>
+            <div className="p-8 bg-slate-50 flex flex-row-reverse gap-3">
+              <button disabled={submittingEdit} onClick={handleEditSubmit} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50">
+                {submittingEdit ? 'جاري الحفظ...' : 'حفظ البيانات'}
+              </button>
+              <button onClick={() => setShowEditModal(false)} className="px-6 py-4 bg-white text-slate-500 rounded-2xl font-black border border-slate-200">إلغاء</button>
+            </div>
           </motion.div>
         </div>
       )}
 
-      {/* نافذة الإضافة */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -363,7 +370,6 @@ export default function TeachersPage() {
                         <input type="text" placeholder="الاسم الرباعي *" value={addForm.full_name} onChange={(e) => setAddForm({...addForm, full_name: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                         <input type="text" placeholder="الرقم المدني *" value={addForm.national_id} onChange={(e) => setAddForm({...addForm, national_id: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                         
-                        {/* الحقول المضافة للبيانات الإضافية */}
                         <input type="text" placeholder="رقم الهاتف" value={addForm.phone} onChange={(e) => setAddForm({...addForm, phone: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
                         <input type="email" placeholder="البريد الإلكتروني" value={addForm.email} onChange={(e) => setAddForm({...addForm, email: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
                         <input type="url" placeholder="رابط زووم (Zoom Link)" value={addForm.zoom_link} onChange={(e) => setAddForm({...addForm, zoom_link: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-indigo-50/50 ring-1 ring-indigo-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
@@ -376,14 +382,13 @@ export default function TeachersPage() {
                    </form>
                 </div>
                 <div className="bg-slate-50/80 px-6 py-6 flex flex-row-reverse gap-3">
-                   <button onClick={handleAddSubmit} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black">إضافة</button>
+                   <button disabled={submitting} onClick={handleAddSubmit} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black disabled:opacity-50">إضافة المعلم</button>
                 </div>
              </div>
           </div>
         </div>
       )}
       
-      {/* نافذة التعيين السريع للفصول والمواد */}
       {showAssignmentModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
@@ -438,7 +443,6 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* نافذة تغيير كلمة المرور */}
       {showPasswordResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
@@ -453,6 +457,7 @@ export default function TeachersPage() {
       )}
 
       {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60"><div className="bg-white p-8 rounded-3xl text-center"><h3 className="text-xl font-black mb-4">تأكيد الحذف</h3><div className="flex gap-4"><button onClick={confirmDelete} className="bg-rose-600 text-white px-8 py-2 rounded-xl font-black flex-1">حذف نهائي</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-500 px-8 py-2 rounded-xl font-black flex-1">تراجع</button></div></div></div>}
+      
       {teacherForBadge && <GrantBadgeModal isOpen={isBadgeModalOpen} onClose={() => { setIsBadgeModalOpen(false); setTeacherForBadge(null); }} recipientId={teacherForBadge.id} recipientName={teacherForBadge.name} granterId={user?.id || 'admin'} />}
     </div>
   );
