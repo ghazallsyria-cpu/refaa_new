@@ -131,18 +131,18 @@ export default function TeachersPage() {
 
     try {
       setSubmittingEdit(true);
+      
+      // 🚀 الحل السحري: نرسل الرقم المدني دائماً في الـ payload حتى لو لم يتغير
+      // لكي لا يقرأه الـ Hook في الخلفية على أنه undefined ويظن أنه تم مسحه!
       const payload: any = { 
         full_name: editForm.full_name, 
         email: editForm.email, 
         phone: editForm.phone, 
         specialization: editForm.specialization, 
         zoom_link: editForm.zoom_link, 
+        national_id: editForm.national_id.trim(), // 👈 هنا مربط الفرس! إرسال دائم للرقم.
         custom_titles: editForm.custom_titles.split('،').map((s: string) => s.trim()).filter(Boolean)
       };
-      
-      if (editForm.national_id.trim() !== editingTeacher.national_id) {
-        payload.national_id = editForm.national_id.trim();
-      }
 
       const hodData = { 
         isHead: editForm.isHOD, 
