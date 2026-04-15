@@ -1,4 +1,3 @@
-
 'use client';
 
 import Link from 'next/link';
@@ -36,11 +35,13 @@ import {
   LayoutGrid,
   Compass,
   AlertTriangle,
-  LayoutTemplate // 🚀 تم استيراد أيقونة الهيدر
+  LayoutTemplate,
+  Crown // 🚀 تم استيراد أيقونة التاج لملف الإدارة
 } from 'lucide-react';
 
 const navigation = [
   { name: 'لوحة التحكم', href: '/', icon: LayoutDashboard },
+  { name: 'ملف الإدارة', href: '/admin/profile', icon: Crown }, // 🚀 تمت إضافة صفحة المدير هنا
   { name: 'الطلاب', href: '/students', icon: Users },
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
@@ -55,7 +56,7 @@ const navigation = [
   { name: 'الفصول', href: '/classes', icon: School },
   { name: 'المواد الدراسية', href: '/subjects', icon: BookOpen },
   { name: 'إدارة المنتديات', href: '/admin/forums-management', icon: LayoutGrid },
-  { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate }, // 🚀 تمت إضافة الصفحة هنا (للمدير فقط)
+  { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
   { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
   { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
@@ -203,11 +204,11 @@ export function Sidebar({
 
             const isActive = pathname === itemHref || (itemHref !== '/' && pathname?.startsWith(itemHref));
             
-            // 🚀 تم دمج الإنذارات مع قرارات الخصم لتأخذ لوناً مميزاً
             const isSpecialBtn = item.name === 'قرارات الخصم' || item.name === 'إنذارات الغياب';
             const isRadarBtn = item.name === 'الرادار الرقمي' || item.name === 'رصد الغياب الآلي';
             const isBadgeBtn = item.name === 'إدارة الأوسمة';
             const isForumBtn = item.name === 'المنتديات' || item.name === 'هيدر المنتديات';
+            const isAdminProfileBtn = item.name === 'ملف الإدارة';
 
             return (
               <motion.div
@@ -227,6 +228,7 @@ export function Sidebar({
                       ? isSpecialBtn ? "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30" 
                         : isRadarBtn ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30"
                         : isBadgeBtn ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30"
+                        : isAdminProfileBtn ? "bg-gradient-to-r from-amber-500 to-yellow-600 text-white shadow-lg shadow-amber-500/30"
                         : "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30" 
                       : "hover:bg-white/5 hover:text-white text-slate-400",
                     isForumBtn && !isActive && "text-indigo-300 hover:text-indigo-100"
@@ -239,7 +241,7 @@ export function Sidebar({
                       isActive ? "text-white scale-110" 
                         : isSpecialBtn ? "group-hover:text-rose-400" 
                         : isRadarBtn ? "group-hover:text-emerald-400" 
-                        : isBadgeBtn ? "group-hover:text-amber-400 group-hover:scale-110" 
+                        : isBadgeBtn || isAdminProfileBtn ? "group-hover:text-amber-400 group-hover:scale-110" 
                         : isForumBtn ? "group-hover:text-indigo-400 group-hover:scale-110"
                         : "group-hover:text-indigo-400 group-hover:scale-110"
                     )}
@@ -288,5 +290,3 @@ export function Sidebar({
     </div>
   );
 }
-
-
