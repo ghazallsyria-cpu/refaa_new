@@ -59,11 +59,10 @@ export function useUsersSystem() {
     setLoading(true);
     setError(null);
     try {
-      // 🚀 الجسور الآمنة مضافة هنا لمنع اختفاء البيانات
       const { data, error } = await supabase
         .from('teachers')
         .select(`
-          id, specialization, zoom_link, custom_titles,
+          id, specialization, zoom_link, custom_titles, national_id,
           users!teachers_id_fkey (full_name, email, phone, avatar_url),
           department_heads (id, subject_id, stage_name, subjects(name)),
           teacher_sections (section_id, subject_id, sections (name, classes (name)), subjects (name))
@@ -81,13 +80,18 @@ export function useUsersSystem() {
     }
   }, []);
 
+  // 🚀 التحديث الجوهري 1: جلب الأبناء المرتبطين بولي الأمر
   const fetchParents = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       const { data, error } = await supabase
         .from('parents')
-        .select('id, national_id, job_title, workplace, address, users!fk_parents_users (full_name, email, phone, avatar_url)')
+        .select(`
+          id, national_id, job_title, workplace, address, 
+          users!fk_parents_users (full_name, email, phone, avatar_url),
+          students (id, users!students_id_fkey(full_name)) 
+        `)
         .limit(5000);
 
       if (error) throw error;
@@ -182,65 +186,49 @@ export function useUsersSystem() {
     } catch (err: unknown) { console.error('Error adding teacher:', err); throw err; }
   }, [fetchTeachers]);
 
-  const updateTeacher = useCallback(async (
-    teacherId: string, 
-    oldNationalId: string, 
-    updateData: any, 
-    hodData?: { isHead: boolean, subject_id: string, stage_name: string }
-  ): Promise<{ success: boolean }> => {
+  const updateTeacher = async (id: string, oldNationalId: string, payload: any, hodData?: any) => {
     try {
-      const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
-      let newEmail = updateData.email;
+      const userUpdate: any = {
+        full_name: payload.full_name,
+        email: payload.email,
+        phone: payload.phone,
+      };
+      if (payload.national_id) userUpdate.national_id = payload.national_id;
 
-      if (nationalIdChanged) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/api/users/update-national-id', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ userId: teacherId, newNationalId: updateData.national_id }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني');
-        newEmail = result.newEmail;
-      }
+      const { error: userErr } = await supabase.from('users').update(userUpdate).eq('id', id);
+      if (userErr) throw userErr;
 
-      const response = await fetch('/api/users/update-teacher', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teacherId, updateData, newEmail }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to update teacher');
+      const teacherUpdate: any = {
+        specialization: payload.specialization,
+        zoom_link: payload.zoom_link,
+        custom_titles: payload.custom_titles,
+      };
+      if (payload.national_id) teacherUpdate.national_id = payload.national_id;
 
-      if (updateData.custom_titles !== undefined) {
-        await supabase.from('teachers').update({ custom_titles: updateData.custom_titles }).eq('id', teacherId);
-      }
+      const { error: teacherErr } = await supabase.from('teachers').update(teacherUpdate).eq('id', id);
+      if (teacherErr) throw teacherErr;
 
-// 🚀 إدارة وتحديث منصب "رئيس القسم" بأمان
       if (hodData !== undefined) {
-        // 1. مسح المنصب القديم إن وجد (لتجنب التكرار)
-        await supabase.from('department_heads').delete().eq('teacher_id', teacherId);
-        
-        // 2. إضافة المنصب الجديد إذا كان التحديد مفعلاً
+        await supabase.from('department_heads').delete().eq('teacher_id', id);
         if (hodData.isHead && hodData.subject_id) {
-          const { error: hodError } = await supabase.from('department_heads').insert({
-            teacher_id: teacherId,
+          const { error: hodErr } = await supabase.from('department_heads').insert({
+            teacher_id: id,
             subject_id: hodData.subject_id,
-            stage_name: hodData.stage_name
+            stage_name: hodData.stage_name || 'الكل'
           });
-          
-          if (hodError) {
-            console.error("HOD Error:", hodError);
-            throw new Error("فشل تعيين رئيس القسم، يرجى المحاولة مرة أخرى.");
-          }
+          if (hodErr) throw hodErr;
         }
       }
 
       await fetchTeachers();
-      return { success: true };
-    } catch (err: unknown) { console.error('Error updating teacher:', err); throw err; }
-  }, [fetchTeachers]);
+      return true;
+    } catch (error) {
+      console.error('Update Teacher Error:', error);
+      throw error;
+    }
+  };
 
+  // 🚀 التحديث الجوهري 2: إضافة ولي الأمر وربط الأبناء بطريقة آمنة
   const addParent = useCallback(async (parentData: any): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -248,22 +236,37 @@ export function useUsersSystem() {
       const response = await fetch('/api/users/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ email: safeEmail, password: '123456', full_name: parentData.full_name, national_id: parentData.national_id, phone: parentData.phone, role: 'parent', job_title: parentData.job_title, workplace: parentData.workplace }),
+        body: JSON.stringify({ 
+          email: safeEmail, 
+          password: '123456', 
+          full_name: parentData.full_name, 
+          national_id: parentData.national_id, 
+          phone: parentData.phone, 
+          role: 'parent', 
+          job_title: parentData.job_title, 
+          address: parentData.address 
+        }),
       });
+      
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'فشل إنشاء حساب ولي الأمر');
+      
+      // ربط الطلاب المحددين بهذا الأب
       if (parentData.student_ids && parentData.student_ids.length > 0) {
         await supabase.from('students').update({ parent_id: data.user.id }).in('id', parentData.student_ids);
       }
+      
       await fetchParents();
       return { success: true, password: data.password };
     } catch (err: unknown) { throw err; }
   }, [fetchParents]);
 
+  // 🚀 التحديث الجوهري 3: تحديث بيانات الأب وإدارة ارتباطات الأبناء بذكاء
   const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any): Promise<{ success: boolean }> => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
       let newEmail = updateData.email;
+      
       if (nationalIdChanged) {
         const { data: { session } } = await supabase.auth.getSession();
         const response = await fetch('/api/users/update-national-id', {
@@ -275,13 +278,25 @@ export function useUsersSystem() {
         if (!response.ok) throw new Error(result.error || 'فشل التحديث');
         newEmail = result.newEmail;
       }
+
+      // فصل الأبناء من الكائن قبل الإرسال للـ API الذي لا يقبل مصفوفات
+      const { student_ids, ...pureUpdateData } = updateData;
+
       const response = await fetch('/api/users/update-parent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parentId, updateData, newEmail }),
+        body: JSON.stringify({ parentId, updateData: pureUpdateData, newEmail }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to update parent');
+
+      // 🔥 فك ارتباط الأبناء القدامى ثم ربط الجدد لضمان الدقة
+      await supabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
+      
+      if (student_ids && student_ids.length > 0) {
+        await supabase.from('students').update({ parent_id: parentId }).in('id', student_ids);
+      }
+
       await fetchParents();
       return { success: true };
     } catch (err: unknown) { throw err; }
