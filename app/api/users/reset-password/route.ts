@@ -5,7 +5,7 @@ export async function POST(request: Request) {
   try {
     let { userId, newPassword } = await request.json();
 
-    // 🚀 الإصلاح الأول: تنظيف كلمة المرور من أي مسافات خفية لتجنب فشل الدخول
+    // تنظيف كلمة المرور من أي مسافات منسوخة بالخطأ
     if (newPassword) {
       newPassword = newPassword.trim();
     }
@@ -14,96 +14,55 @@ export async function POST(request: Request) {
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Missing Supabase credentials: URL or Service Role Key');
-      return NextResponse.json({ 
-        error: 'إعدادات النظام غير مكتملة: يرجى إضافة SUPABASE_SERVICE_ROLE_KEY في إعدادات المنصة (Settings -> Secrets)' 
-      }, { status: 500 });
+      return NextResponse.json({ error: 'إعدادات النظام غير مكتملة.' }, { status: 500 });
     }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 🚀 التوليد التلقائي إذا ترك الإدمن الحقل فارغاً
+    // 1. توليد كلمة مرور تلقائية من الرقم المدني إذا ترك المدير الحقل فارغاً
     if (!newPassword || newPassword === '') {
-      const { data: studentData } = await supabaseAdmin.from('students').select('national_id').eq('id', userId).maybeSingle();
-      const { data: teacherData } = await supabaseAdmin.from('teachers').select('national_id').eq('id', userId).maybeSingle();
-      const { data: parentData } = await supabaseAdmin.from('parents').select('national_id').eq('id', userId).maybeSingle();
-      
-      const nationalId = studentData?.national_id || teacherData?.national_id || parentData?.national_id;
-      
-      if (nationalId) {
-        newPassword = `${nationalId}123`;
+      const { data: userRecord } = await supabaseAdmin
+        .from('users')
+        .select('national_id')
+        .eq('id', userId)
+        .single();
+        
+      if (userRecord?.national_id) {
+        newPassword = `${userRecord.national_id}123`;
       } else {
-        newPassword = 'User@123456'; 
+        newPassword = 'User@123456';
       }
     }
 
-    // التحقق من صلاحيات المدير
+    // التحقق من صلاحيات الإدارة
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authCheckError } = await supabaseAdmin.auth.getUser(token);
     
-    if (authCheckError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (authCheckError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: adminData } = await supabaseAdmin.from('users').select('role').eq('id', user.id).single();
+    if (adminData?.role !== 'admin' && adminData?.role !== 'management') {
+      return NextResponse.json({ error: `Forbidden.` }, { status: 403 });
     }
 
-    const { data: userData } = await supabaseAdmin.from('users').select('role').eq('id', user.id).single();
-    
-    if (userData?.role !== 'admin' && userData?.role !== 'management') {
-      return NextResponse.json({ error: `Forbidden: Only admins can reset passwords.` }, { status: 403 });
-    }
-
-    // 1. تحديث كلمة المرور في نظام المصادقة (التشفير يتم تلقائياً هنا)
+    // 2. 🚀 التحديث الآمن: تحديث كلمة المرور **فقط** دون المساس بالإيميل
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      password: newPassword,
+      password: newPassword
     });
     
     if (authError) {
-      // إذا لم يكن المستخدم موجوداً في نظام المصادقة، نقوم بإعادة إنشائه
-      if (authError.message.toLowerCase().includes('database error loading user') || authError.message.toLowerCase().includes('not found')) {
-        const { data: targetUser } = await supabaseAdmin.from('users').select('email, full_name').eq('id', userId).single();
-          
-        if (targetUser && targetUser.email) {
-          const { error: createError } = await supabaseAdmin.auth.admin.createUser({
-            id: userId,
-            email: targetUser.email,
-            password: newPassword,
-            email_confirm: true,
-            user_metadata: { full_name: targetUser.full_name }
-          });
-          
-          if (createError) {
-            return NextResponse.json({ error: `فشل في إعادة إنشاء حساب المستخدم: ${createError.message}` }, { status: 500 });
-          }
-        } else {
-          return NextResponse.json({ error: `Auth Error: ${authError.message}` }, { status: 500 });
-        }
-      } else {
-        return NextResponse.json({ error: `Auth Error: ${authError.message}` }, { status: 500 });
-      }
+      return NextResponse.json({ error: `خطأ في نظام المصادقة: ${authError.message}` }, { status: 500 });
     }
 
-    // 🚀 الإصلاح الثاني: جعلها false لكي يتمكن المعلم من استخدام المنصة فوراً دون إجباره على تغييرها مجدداً
-    const { error: userError } = await supabaseAdmin
-      .from('users')
-      .update({ must_reset_password: false })
-      .eq('id', userId);
-      
-    if (userError) {
-      console.error('Database update error:', userError);
-      return NextResponse.json({ error: `Database Error: ${userError.message}` }, { status: 500 });
-    }
+    // 3. فك قفل تغيير كلمة المرور لكي لا يدخل المعلم في حلقة مفرغة عند تسجيل الدخول
+    await supabaseAdmin.from('users').update({ must_reset_password: false }).eq('id', userId);
 
     return NextResponse.json({ message: 'Password reset successfully', newPassword });
   } catch (error: any) {
-    console.error('Error resetting password:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
