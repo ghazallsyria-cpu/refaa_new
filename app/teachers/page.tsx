@@ -99,20 +99,43 @@ export default function TeachersPage() {
   };
 
   const [submittingEdit, setSubmittingEdit] = useState(false);
-  const handleEditSubmit = async () => {
+const handleEditSubmit = async () => {
+    // 🚀 الحماية الذكية: منع الحفظ إذا تم تفعيل "رئيس قسم" بدون اختيار المادة
+    if (editForm.isHOD && !editForm.hod_subject_id) {
+      showNotification('error', 'يرجى اختيار القسم / المادة التي سيرأسها المعلم أولاً!');
+      return;
+    }
+
     try {
       setSubmittingEdit(true);
       const payload: any = { 
-        full_name: editForm.full_name, email: editForm.email, phone: editForm.phone, specialization: editForm.specialization, zoom_link: editForm.zoom_link, 
+        full_name: editForm.full_name, 
+        email: editForm.email, 
+        phone: editForm.phone, 
+        specialization: editForm.specialization, 
+        zoom_link: editForm.zoom_link, 
         custom_titles: editForm.custom_titles.split('،').map((s: string) => s.trim()).filter(Boolean)
       };
-      if (editForm.national_id !== editingTeacher.national_id) payload.national_id = editForm.national_id;
+      
+      // لا نرسل الرقم المدني إلا إذا تم تغييره
+      if (editForm.national_id !== editingTeacher.national_id) {
+        payload.national_id = editForm.national_id;
+      }
 
-      const hodData = { isHead: editForm.isHOD, subject_id: editForm.hod_subject_id, stage_name: editForm.hod_stage };
+      const hodData = { 
+        isHead: editForm.isHOD, 
+        subject_id: editForm.hod_subject_id, 
+        stage_name: editForm.hod_stage 
+      };
+      
       await updateTeacher(editingTeacher.id, editingTeacher.national_id, payload, hodData);
-      showNotification('success', 'تم التحديث بنجاح');
+      showNotification('success', 'تم حفظ التعديلات وتحديث المناصب بنجاح!');
       setShowEditModal(false);
-    } catch (e: any) { showNotification('error', e.message); } finally { setSubmittingEdit(false); }
+    } catch (e: any) { 
+      showNotification('error', e.message || 'حدث خطأ غير متوقع أثناء الحفظ'); 
+    } finally { 
+      setSubmittingEdit(false); 
+    }
   };
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
