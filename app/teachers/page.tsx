@@ -68,13 +68,11 @@ export default function TeachersPage() {
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   
-  // 🚀 الدالة المصلحة والذكية لفتح نافذة كلمة المرور
   const handleResetPasswordClick = (teacher: any) => { 
     setResetPasswordForm({ userId: teacher.user_id || teacher.id, newPassword: '' }); 
     setShowPasswordResetModal(true); 
   };
 
-  // 🚀 الدالة المصلحة والآمنة 100% لحفظ كلمة المرور دون انهيار
   const handleResetPasswordSubmit = async () => { 
     if (!resetPasswordForm.newPassword || resetPasswordForm.newPassword.length < 6) {
       showNotification('error', 'كلمة المرور يجب أن تكون 6 أحرف على الأقل!');
@@ -82,11 +80,11 @@ export default function TeachersPage() {
     }
     try { 
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
-      // التقاط كلمة المرور بشكل آمن سواء كانت من السيرفر أو من الحقل مباشرة لتجنب خطأ undefined
-      const finalPassword = result?.newPassword || result?.password || resetPasswordForm.newPassword;
+      // 🚀 تم إزالة result?.password لإرضاء TypeScript
+      const finalPassword = result?.newPassword || resetPasswordForm.newPassword;
       showNotification('success', `تم تغيير كلمة المرور بنجاح: ${finalPassword}`); 
       setShowPasswordResetModal(false); 
-      setResetPasswordForm({ userId: '', newPassword: '' }); // تصفير الحقل
+      setResetPasswordForm({ userId: '', newPassword: '' }); 
     } catch (error: any) { 
       showNotification('error', error.message || 'حدث خطأ غير متوقع أثناء تغيير كلمة المرور'); 
     } 
@@ -479,7 +477,6 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* 🚀 نافذة تغيير كلمة المرور بعد التعديل */}
       {showPasswordResetModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
