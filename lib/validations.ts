@@ -5,7 +5,8 @@ const nullableString = z.string().nullable().optional().transform(v => v ?? null
 const nullableNumber = z.number().nullable().optional().transform(v => v ?? null);
 const nullableBoolean = z.boolean().nullable().optional().transform(v => v ?? null);
 
-export const UserRoleSchema = z.enum(['admin', 'teacher', 'student', 'parent', 'management']);
+// 🚀 التعديل الوحيد هنا: إضافة 'staff' إلى قائمة الأدوار المسموحة
+export const UserRoleSchema = z.enum(['admin', 'teacher', 'student', 'parent', 'management', 'staff']);
 
 export const UserSchema = z.object({
   id: z.string().uuid(),
