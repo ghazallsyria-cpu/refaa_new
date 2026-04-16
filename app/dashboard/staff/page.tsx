@@ -18,11 +18,11 @@ export default function StaffDashboardPage() {
   const [staffData, setStaffData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🚀 استخدام Hook النظام
   const { students: allStudents, fetchStudents, addParent } = useUsersSystem();
 
+  // 🚀 النظام الجديد: قائمة بالطلاب المختارين (للإخوة)
   const [searchStudentId, setSearchStudentId] = useState('');
-  const [foundStudent, setFoundStudent] = useState<any>(null);
+  const [selectedStudents, setSelectedStudents] = useState<any[]>([]);
   
   const [parentForm, setParentForm] = useState({ 
     full_name: '', 
@@ -59,77 +59,81 @@ export default function StaffDashboardPage() {
     if (!isChecking) loadWorkspace();
   }, [user, isChecking, fetchStudents]);
 
-  const handleSearchStudent = (e: React.FormEvent) => {
+  // 🚀 دالة البحث وإضافة الطالب لقائمة الإخوة
+  const handleAddStudentToList = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchStudentId) return;
+    
     setLinkStatus({type: 'loading', msg: 'جاري البحث...'});
+    
     const student = allStudents.find(s => s.national_id === searchStudentId);
+    
     if (student) {
-      setFoundStudent(student);
-      const parts = student.users?.full_name?.split(' ') || [];
-      const defaultName = parts.length > 2 ? `${parts[1]} ${parts[2]} ${parts[3] || ''}`.trim() : '';
-      setParentForm(prev => ({ ...prev, full_name: defaultName }));
-      setLinkStatus({type: 'idle', msg: ''});
+      // التأكد من عدم إضافة نفس الطالب مرتين
+      if (selectedStudents.some(s => s.id === student.id)) {
+        setLinkStatus({type: 'error', msg: 'هذا الطالب مضاف للقائمة بالفعل.'});
+        return;
+      }
+
+      setSelectedStudents(prev => [...prev, student]);
+      
+      // استنتاج اسم الأب من أول طالب مضاف لتسهيل الكتابة
+      if (selectedStudents.length === 0) {
+        const parts = student.users?.full_name?.split(' ') || [];
+        const defaultName = parts.length > 2 ? `${parts[1]} ${parts[2]} ${parts[3] || ''}`.trim() : '';
+        setParentForm(prev => ({ ...prev, full_name: defaultName }));
+      }
+      
+      setSearchStudentId('');
+      setLinkStatus({type: 'success', msg: `تمت إضافة ${student.users?.full_name} للقائمة.`});
+      setTimeout(() => setLinkStatus({type: 'idle', msg: ''}), 2000);
     } else {
-      setFoundStudent(null);
-      setLinkStatus({type: 'error', msg: 'لم يتم العثور على طالب.'});
+      setLinkStatus({type: 'error', msg: 'لم يتم العثور على طالب بهذا الرقم المدني.'});
     }
   };
 
-  // 🚀 الدالة الفولاذية بعد إزالة الخطأ البرمجي
+  // إزالة طالب من القائمة
+  const handleRemoveStudent = (studentId: string) => {
+    setSelectedStudents(prev => prev.filter(s => s.id !== studentId));
+  };
+
+  // 🚀 دالة إنشاء ولي الأمر وربطه بكل القائمة
   const handleCreateParent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!foundStudent || !parentForm.national_id) return;
+    if (selectedStudents.length === 0 || !parentForm.national_id) {
+      setLinkStatus({type: 'error', msg: 'يرجى إضافة طالب واحد على الأقل وإدخال الرقم المدني لولي الأمر.'});
+      return;
+    }
 
-    setLinkStatus({type: 'loading', msg: 'جاري تسجيل البيانات والربط...'});
+    setLinkStatus({type: 'loading', msg: 'جاري تسجيل البيانات والربط الشامل...'});
 
     try {
-      // 1. هل المستخدم موجود في النظام؟
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id, full_name')
-        .eq('national_id', parentForm.national_id)
-        .maybeSingle();
+      // 1. استخدام صلاحيات الآدمن (addParent) لضمان تجاوز مشكلة الـ RLS وحسابات الأشباح
+      // بما أننا نرسل مصفوفة student_ids، ستقوم الأداة بإنشاء الأب (إذا كان جديداً) وربطه بكل الطلاب
+      const payload = {
+        ...parentForm,
+        student_ids: selectedStudents.map(s => s.id) // 👈 السر هنا: نرسل كل الإخوة معاً
+      };
 
-      if (existingUser) {
-        // 🌟 حالة الأب الموجود مسبقاً
-        const targetParentId = existingUser.id;
-        await supabase.from('parents').upsert({ 
-          id: targetParentId, 
-          national_id: parentForm.national_id,
-          job_title: parentForm.job_title || '',
-          address: parentForm.address || ''
-        }, { onConflict: 'id' });
-        
-        // ربط الطالب يدوياً لأننا لم نستخدم أداة المدير هنا
-        await supabase.from('students').update({ parent_id: targetParentId }).eq('id', foundStudent.id);
-        
-        setLinkStatus({type: 'success', msg: `تم ربط الطالب بولي الأمر (${existingUser.full_name}) بنجاح.`});
-      } else {
-        // 🌟 حالة ولي أمر جديد كلياً
-        if (!parentForm.full_name) {
-          setLinkStatus({type: 'error', msg: 'يرجى إدخال اسم ولي الأمر.'});
-          return;
-        }
-        
-        // الأداة الخاصة بك ستتكفل بالإنشاء والربط معاً لأننا نمرر student_ids!
-        const result = await addParent({
-          ...parentForm,
-          student_ids: [foundStudent.id]
-        });
-        
-        setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر بنجاح. كلمة المرور: ${result.password}`});
-      }
-
+      const result = await addParent(payload);
+      
+      setLinkStatus({type: 'success', msg: `تم اعتماد الملف وربط جميع الأبناء بنجاح! كلمة المرور: ${result.password || 'محتفظ بها مسبقاً'}`});
+      
       setTimeout(() => {
-        setFoundStudent(null);
+        setSelectedStudents([]);
         setSearchStudentId('');
         setParentForm({ full_name: '', national_id: '', phone: '', email: '', job_title: '', address: '' });
         setLinkStatus({type: 'idle', msg: ''});
       }, 5000);
 
     } catch (err: any) {
-      setLinkStatus({type: 'error', msg: err.message || 'فشلت العملية.'});
+      console.error("Error connecting parent:", err);
+      // معالجة الرسالة المزعجة وتوجيه الستاف بذكاء
+      if (err.message?.includes('already been registered')) {
+        setLinkStatus({type: 'error', msg: 'ولي الأمر مسجل مسبقاً في النظام. يرجى توجيه ولي الأمر لاستخدام حسابه الحالي، أو مراجعة المدير لتحديث ملفه.'});
+      } else {
+        setLinkStatus({type: 'error', msg: err.message || 'فشلت العملية.'});
+      }
     }
   };
 
@@ -166,39 +170,53 @@ export default function StaffDashboardPage() {
           <h2 className="text-xl font-black text-slate-800 px-2 flex items-center gap-2"><Settings className="w-5 h-5 text-indigo-500"/> أدوات مساحة العمل المعتمدة لك</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* أداة ربط أولياء الأمور - القلب النابض */}
+            
+            {/* 🚀 أداة ربط أولياء الأمور (تم تحديثها لدعم الأبناء المتعددين) */}
             {hasPerm('link_parents') && (
               <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 sm:p-8 rounded-[2.5rem] shadow-xl text-white md:col-span-2 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="flex items-start justify-between mb-6 relative z-10">
                   <div>
                     <h3 className="font-black text-2xl mb-2 flex items-center gap-3"><UserPlus className="w-6 h-6 text-indigo-300"/> مكتب استقبال أولياء الأمور</h3>
-                    <p className="text-indigo-200 text-sm font-bold opacity-90">تسجيل ملف كامل لولي الأمر وربطه الفوري بملف الطالب.</p>
+                    <p className="text-indigo-200 text-sm font-bold opacity-90">يمكنك البحث وإضافة أكثر من طالب (إخوة) ثم ربطهم جميعاً بملف ولي أمر واحد.</p>
                   </div>
                 </div>
                 
                 <div className="space-y-6 relative z-10">
+                  
+                  {/* خطوة 1: البحث وإضافة الطلاب للقائمة */}
                   <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/20">
-                    <form onSubmit={handleSearchStudent} className="flex flex-col sm:flex-row gap-3">
+                    <form onSubmit={handleAddStudentToList} className="flex flex-col sm:flex-row gap-3">
                       <div className="relative flex-1">
                         <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-300" />
-                        <input type="text" required value={searchStudentId} onChange={(e) => setSearchStudentId(e.target.value)} placeholder="الرقم المدني للطالب..." className="w-full bg-slate-900/30 border border-indigo-400/30 text-white placeholder:text-indigo-300 rounded-xl py-3.5 pr-12 pl-4 font-bold outline-none focus:border-indigo-400 transition-all text-lg" dir="ltr" style={{ textAlign: 'right' }} />
+                        <input type="text" value={searchStudentId} onChange={(e) => setSearchStudentId(e.target.value)} placeholder="الرقم المدني للطالب..." className="w-full bg-slate-900/30 border border-indigo-400/30 text-white placeholder:text-indigo-300 rounded-xl py-3.5 pr-12 pl-4 font-bold outline-none focus:bg-slate-900/50 focus:border-indigo-400 transition-all text-lg" dir="ltr" style={{ textAlign: 'right' }} />
                       </div>
-                      <button type="submit" disabled={linkStatus.type === 'loading' || !!foundStudent} className="bg-indigo-500 text-white font-black px-8 py-3.5 rounded-xl hover:bg-indigo-400 active:scale-95 disabled:opacity-50 shadow-lg shadow-indigo-500/20">تحديد الطالب</button>
+                      <button type="submit" disabled={linkStatus.type === 'loading' || !searchStudentId} className="bg-indigo-500 text-white font-black px-8 py-3.5 rounded-xl hover:bg-indigo-400 active:scale-95 disabled:opacity-50 shadow-lg shadow-indigo-500/20 whitespace-nowrap">
+                        إضافة للقائمة
+                      </button>
                     </form>
                   </div>
 
+                  {/* خطوة 2: عرض قائمة الطلاب وإدخال بيانات الأب */}
                   <AnimatePresence>
-                    {foundStudent && (
+                    {selectedStudents.length > 0 && (
                       <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-white text-slate-900 p-6 sm:p-8 rounded-3xl shadow-2xl">
-                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                          <div className="flex items-center gap-3">
-                            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><UserCheck className="w-6 h-6" /></div>
-                            <div><div className="text-xs font-bold text-slate-400">الطالب المستهدف</div><div className="font-black text-lg text-slate-800">{foundStudent.users?.full_name}</div></div>
+                        
+                        {/* قائمة الإخوة المختارين */}
+                        <div className="mb-6 pb-6 border-b border-slate-100">
+                          <h4 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-3">الطلاب المراد ربطهم ({selectedStudents.length})</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedStudents.map(student => (
+                              <div key={student.id} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl border border-indigo-100">
+                                <UserCheck className="w-4 h-4 text-indigo-500"/>
+                                <span className="font-bold text-sm">{student.users?.full_name?.split(' ')[0]}</span>
+                                <button onClick={() => handleRemoveStudent(student.id)} className="ml-1 text-indigo-400 hover:text-rose-500"><X className="w-4 h-4"/></button>
+                              </div>
+                            ))}
                           </div>
-                          <button onClick={() => {setFoundStudent(null); setLinkStatus({type:'idle',msg:''})}} className="p-2 text-slate-400 hover:text-rose-500 rounded-lg"><X className="w-5 h-5"/></button>
                         </div>
 
+                        {/* نموذج بيانات الأب */}
                         <form onSubmit={handleCreateParent} className="space-y-5">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">الاسم الكامل لولي الأمر</label><input type="text" required value={parentForm.full_name} onChange={e => setParentForm({...parentForm, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
@@ -206,18 +224,26 @@ export default function StaffDashboardPage() {
                             <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">رقم الهاتف</label><input type="text" value={parentForm.phone} onChange={e => setParentForm({...parentForm, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none text-left" dir="ltr" /></div>
                             <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">البريد الإلكتروني</label><input type="email" value={parentForm.email} onChange={e => setParentForm({...parentForm, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none text-left" dir="ltr" /></div>
                           </div>
-                          <button type="submit" disabled={linkStatus.type === 'loading'} className="w-full bg-emerald-500 text-white font-black px-6 py-4 rounded-xl hover:bg-emerald-600 active:scale-95 disabled:opacity-70 flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 mt-4 text-lg">{linkStatus.type === 'loading' ? <Loader2 className="w-6 h-6 animate-spin"/> : <><PlusCircle className="w-6 h-6"/> تسجيل الحساب واعتماد الربط</>}</button>
+                          <button type="submit" disabled={linkStatus.type === 'loading'} className="w-full bg-emerald-500 text-white font-black px-6 py-4 rounded-xl hover:bg-emerald-600 active:scale-95 disabled:opacity-70 flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 mt-4 text-lg">
+                            {linkStatus.type === 'loading' ? <Loader2 className="w-6 h-6 animate-spin"/> : <><PlusCircle className="w-6 h-6"/> تسجيل واعتماد ربط {selectedStudents.length > 1 ? 'الأبناء' : 'الابن'}</>}
+                          </button>
                         </form>
                       </motion.div>
                     )}
                   </AnimatePresence>
 
-                  <AnimatePresence>{linkStatus.msg && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className={`overflow-hidden rounded-xl border mt-4 ${linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : linkStatus.type === 'error' ? 'bg-rose-500/20 border-rose-400/30 text-rose-100' : 'bg-white/5 text-indigo-100'}`}><div className="p-4 font-bold text-sm leading-relaxed">{linkStatus.msg}</div></motion.div>)}</AnimatePresence>
+                  <AnimatePresence>
+                    {linkStatus.msg && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className={`overflow-hidden rounded-xl border mt-4 ${linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : linkStatus.type === 'error' ? 'bg-rose-500/20 border-rose-400/30 text-rose-100' : 'bg-white/5 text-indigo-100'}`}>
+                        <div className="p-4 font-bold text-sm leading-relaxed">{linkStatus.msg}</div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             )}
 
-            {/* باقي الأدوات */}
+            {/* باقي الأدوات (مثال) */}
             {hasPerm('view_students') && (
               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                 <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Users className="w-6 h-6"/></div>
@@ -228,7 +254,7 @@ export default function StaffDashboardPage() {
           </div>
         </div>
 
-        {/* التعاميم */}
+        {/* التعاميم والمساحة المشتركة */}
         <div className="space-y-6">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
              <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-black mb-6 w-fit border border-slate-200"><Sparkles className="w-4 h-4"/> مساحة مشتركة</div>
