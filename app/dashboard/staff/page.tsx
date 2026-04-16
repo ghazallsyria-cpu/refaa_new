@@ -78,7 +78,7 @@ export default function StaffDashboardPage() {
     }
   };
 
-  // 🚀 دالة ربط ولي الأمر بالطالب
+  // 🚀 دالة ربط ولي الأمر بالطالب (تم تنظيفها من user_id لتطابق قاعدة البيانات)
   const handleLinkParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!foundStudent || !parentCivilId) return;
@@ -90,7 +90,7 @@ export default function StaffDashboardPage() {
       let parentId = null;
       const { data: existingParent } = await supabase
         .from('parents')
-        .select('id, user_id')
+        .select('id') // 👈 تم إزالة user_id
         .eq('national_id', parentCivilId)
         .maybeSingle();
 
@@ -120,7 +120,7 @@ export default function StaffDashboardPage() {
         // إضافة بيانات ولي الأمر في جدول parents
         const { data: newParent, error: parentInsertError } = await supabase
           .from('parents')
-          .insert({ id: result.user.id, user_id: result.user.id, national_id: parentCivilId })
+          .insert({ id: result.user.id, national_id: parentCivilId }) // 👈 تم إزالة user_id
           .select()
           .single();
           
