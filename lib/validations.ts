@@ -39,7 +39,6 @@ export const SubjectSchema = z.object({
   created_at: z.string().optional(),
 });
 
-// 🚀 السطر المعدل للسماح بحفظ أسئلة المقارنة والترويسة!
 export const QuestionTypeSchema = z.enum(['text', 'paragraph', 'multiple_choice', 'checkbox', 'true_false', 'comparison', 'section_header', 'multi_select', 'essay', 'fill_in_blank', 'open']);
 
 export const TeacherSectionSchema = z.object({
@@ -328,11 +327,12 @@ export const SavePeriodRequestSchema = z.object({
   end_time: z.string().regex(/^\d{2}:\d{2}$/),
 });
 
+// 🚀 تمت إضافة staff هنا أيضاً لضمان استقرار الإعلانات
 export const SaveAnnouncementRequestSchema = z.object({
   id: z.string().uuid().optional().nullable(),
   title: z.string().min(3),
   content: z.string().min(10),
-  target_role: z.enum(['all', 'student', 'teacher', 'parent', 'management', 'admin']),
+  target_role: z.enum(['all', 'student', 'teacher', 'parent', 'management', 'admin', 'staff']),
   image_url: z.string().url().optional().nullable().or(z.string().length(0)),
 });
 
