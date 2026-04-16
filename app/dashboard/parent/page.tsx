@@ -19,10 +19,8 @@ import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 
 // ==========================================
-// 🎨 مكونات الرسوم البيانية الداخلية (بدون مكتبات خارجية)
+// 🎨 مكونات الرسوم البيانية الداخلية
 // ==========================================
-
-// 1. مؤشر التقدم الدائري (للمواد)
 const CircularProgress = ({ value, colorClass, strokeClass }: { value: number, colorClass: string, strokeClass: string }) => {
   const radius = 28;
   const circumference = 2 * Math.PI * radius;
@@ -52,16 +50,16 @@ export default function ParentDashboard() {
   const [children, setChildren] = useState<any[]>([]);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   
-  // 🧠 بيانات الابن النشط
+  // 🧠 حالات البيانات
   const [attendance, setAttendance] = useState<any[]>([]);
-  const [exams, setExams] = useState<any[]>([]);
-  const [assignments, setAssignments] = useState<any[]>([]);
   const [badges, setBadges] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [stats, setStats] = useState({ attendanceRate: 100, examsAvg: 0, assignmentsAvg: 0, absentCount: 0 });
   
   const [subjectPerformance, setSubjectPerformance] = useState<any[]>([]);
+  const [detailedTasks, setDetailedTasks] = useState<any[]>([]); // 🚀 السجل التفصيلي الجديد
+  
   const [loading, setLoading] = useState(true);
   const [childLoading, setChildLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -99,12 +97,6 @@ export default function ParentDashboard() {
       const { data: attData } = await supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', childId).order('date', { ascending: false });
       setAttendance(attData || []);
 
-      const { data: exData } = await supabase.from('exam_attempts').select('id, score, status, completed_at, exams(id, title, max_score, total_marks, subjects(name))').eq('student_id', childId).eq('status', 'graded').order('completed_at', { ascending: false });
-      setExams(exData || []);
-
-      const { data: assData } = await supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(id, title, total_marks, subjects(name), assignment_questions(points))').eq('student_id', childId).eq('status', 'graded').order('submitted_at', { ascending: false });
-      setAssignments(assData || []);
-
       const { data: bdgData } = await supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', childId).order('granted_at', { ascending: false });
       setBadges(bdgData || []);
 
@@ -112,58 +104,85 @@ export default function ParentDashboard() {
       setPeriods(perData || []);
 
       const activeChild = children.find(c => c.id === childId);
-      if (activeChild?.section_id) {
-        const today = new Date().getDay() + 1;
-        const { data: schData } = await supabase.from('schedules').select('*, subjects(id, name), teachers(id, users(full_name, avatar_url))').eq('section_id', activeChild.section_id).eq('day_of_week', today).order('period', { ascending: true });
-        setSchedule(schData || []);
+      if (!activeChild?.section_id) return;
 
-        // 🚀 جلب جميع مواد الفصل لبناء المصفوفة
-        const { data: allSubjects } = await supabase.from('schedules').select('subjects(id, name), teachers(id, users(full_name, avatar_url))').eq('section_id', activeChild.section_id);
-        const uniqueSubjects = Array.from(new Map(allSubjects?.map((item: any) => [item.subjects?.id, item])).values());
-        
-        const performancePromises = uniqueSubjects.map(async (item: any) => {
-          const subId = item.subjects?.id;
-          if (!subId) return null;
-          const filteredExams = exData?.filter((e: any) => e.exams?.subjects?.id === subId) || [];
-          const filteredAssignments = assData?.filter((a: any) => a.assignments?.subjects?.id === subId) || [];
-          return {
-            ...item,
-            exams: filteredExams,
-            assignments: filteredAssignments,
-            average: calculateAverage([...filteredExams, ...filteredAssignments])
-          };
+      const today = new Date().getDay() + 1;
+      const { data: schData } = await supabase.from('schedules').select('*, subjects(id, name), teachers(id, users(full_name, avatar_url))').eq('section_id', activeChild.section_id).eq('day_of_week', today).order('period', { ascending: true });
+      setSchedule(schData || []);
+
+      // 🚀 جلب جميع الاختبارات والواجبات بدون تصفية الحالة لجلب (الأصفار والمنسيات)
+      const { data: exData } = await supabase.from('exam_attempts').select('id, score, status, completed_at, exams(title, total_marks, max_score, subjects(id, name))').eq('student_id', childId);
+      const { data: assData } = await supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(title, total_marks, subjects(id, name))').eq('student_id', childId);
+
+      // بناء السجل التفصيلي المدمج (للعرض في القائمة السفلية)
+      const allTasks: any[] = [];
+      
+      assData?.forEach((sub: any) => {
+        allTasks.push({
+          id: `ass_${sub.id}`, type: 'assignment',
+          title: sub.assignments?.title || 'واجب غير معروف',
+          subject: sub.assignments?.subjects?.name || 'عام',
+          score: sub.grade || 0,
+          max: sub.assignments?.total_marks || 100,
+          date: sub.submitted_at || new Date().toISOString(),
+          isZero: sub.grade === 0
         });
-        const results = (await Promise.all(performancePromises)).filter(Boolean);
-        setSubjectPerformance(results);
-      }
+      });
 
+      exData?.forEach((att: any) => {
+        allTasks.push({
+          id: `ex_${att.id}`, type: 'exam',
+          title: att.exams?.title || 'اختبار غير معروف',
+          subject: att.exams?.subjects?.name || 'عام',
+          score: att.score || 0,
+          max: att.exams?.total_marks || att.exams?.max_score || 100,
+          date: att.completed_at || new Date().toISOString(),
+          isZero: att.score === 0
+        });
+      });
+
+      // ترتيب المهام من الأحدث للأقدم
+      allTasks.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setDetailedTasks(allTasks);
+
+      // بناء مصفوفة المواد (للرسوم الدائرية)
+      const { data: allSubjects } = await supabase.from('schedules').select('subjects(id, name), teachers(id, users(full_name, avatar_url))').eq('section_id', activeChild.section_id);
+      const uniqueSubjects = Array.from(new Map(allSubjects?.map((item: any) => [item.subjects?.id, item])).values());
+      
+      const performancePromises = uniqueSubjects.map(async (item: any) => {
+        const subId = item.subjects?.id;
+        if (!subId) return null;
+        // هنا نحسب المتوسطات للمهام المكتملة فعلياً
+        const filteredExams = exData?.filter((e: any) => e.exams?.subjects?.id === subId && e.status === 'graded') || [];
+        const filteredAssignments = assData?.filter((a: any) => a.assignments?.subjects?.id === subId && a.status === 'graded') || [];
+        return {
+          ...item,
+          exams: filteredExams,
+          assignments: filteredAssignments,
+          average: calculateAverage([...filteredExams, ...filteredAssignments])
+        };
+      });
+      
+      const results = (await Promise.all(performancePromises)).filter(Boolean);
+      setSubjectPerformance(results);
+
+      // حسابات الإحصائيات العامة
       let absentCount = 0; let attRate = 100;
       if (attData && attData.length > 0) {
         absentCount = attData.filter(a => a.status === 'absent').length;
         const presents = attData.filter(a => a.status === 'present' || a.status === 'late').length;
         attRate = Math.round((presents / attData.length) * 100);
       }
-      let exAvg = 0;
-      if (exData && exData.length > 0) {
-        let totalPct = 0;
-        exData.forEach((e: any) => {
-          const max = e.exams?.total_marks || e.exams?.max_score || 100;
-          totalPct += ((e.score || 0) / max) * 100;
-        });
-        exAvg = Math.round(totalPct / exData.length);
-      }
-      let assAvg = 0;
-      if (assData && assData.length > 0) {
-        let totalPct = 0;
-        assData.forEach((a: any) => {
-          const qs = a.assignments?.assignment_questions;
-          const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
-          const max = calcMax > 0 ? calcMax : (a.assignments?.total_marks || 100);
-          totalPct += ((a.grade || 0) / max) * 100;
-        });
-        assAvg = Math.round(totalPct / assData.length);
-      }
-      setStats({ attendanceRate: attRate, examsAvg: exAvg, assignmentsAvg: assAvg, absentCount });
+
+      const gradedExams = exData?.filter(e => e.status === 'graded') || [];
+      const gradedAss = assData?.filter(a => a.status === 'graded') || [];
+      
+      setStats({ 
+        attendanceRate: attRate, 
+        examsAvg: calculateAverage(gradedExams), 
+        assignmentsAvg: calculateAverage(gradedAss), 
+        absentCount 
+      });
 
     } catch (e) { console.error(e); } finally { setChildLoading(false); }
   }, [children]);
@@ -210,7 +229,7 @@ export default function ParentDashboard() {
     if (items.length === 0) return 0;
     const total = items.reduce((acc, curr) => {
       const score = curr.score || curr.grade || 0;
-      const max = curr.exams?.total_marks || curr.assignments?.total_marks || 100;
+      const max = curr.exams?.total_marks || curr.exams?.max_score || curr.assignments?.total_marks || 100;
       return acc + (score / max);
     }, 0);
     return Math.round((total / items.length) * 100);
@@ -234,7 +253,7 @@ export default function ParentDashboard() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24 max-w-7xl mx-auto px-4 font-cairo pt-6 space-y-10" dir="rtl">
       
-      {/* 🔝 الهيدر: اختيار الابن والترحيب */}
+      {/* 🔝 الهيدر */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-6 sm:p-8 rounded-[3rem] shadow-xl shadow-slate-200/40 border border-slate-100">
          <div className="text-center md:text-right flex items-center gap-6">
             <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-200 hidden sm:flex">
@@ -270,21 +289,20 @@ export default function ParentDashboard() {
         ) : activeChild && (
           <motion.div key={activeChild.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-10">
             
-            {/* 🚨 نظام الإنذارات (Danger Zone) */}
+            {/* 🚨 إنذار الغياب */}
             {stats.absentCount >= 5 && (
               <div className="bg-gradient-to-r from-rose-600 to-rose-700 rounded-3xl p-6 text-white shadow-lg shadow-rose-500/20 border-2 border-rose-400/50 flex items-center justify-between flex-col sm:flex-row gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0 border border-white/20 animate-pulse"><AlertTriangle className="w-6 h-6 text-yellow-300" /></div>
                   <div>
                     <h3 className="font-black text-lg mb-1">تنبيه تراكم غياب</h3>
-                    <p className="text-sm font-bold text-rose-100">تجاوز {activeChild.users?.full_name?.split(' ')[0]} الحد المسموح للغياب ({stats.absentCount} حصص). نرجو متابعة الأمر والتواصل مع الأخصائي.</p>
+                    <p className="text-sm font-bold text-rose-100">تجاوز {activeChild.users?.full_name?.split(' ')[0]} الحد المسموح للغياب ({stats.absentCount} حصص). نرجو التواصل مع الأخصائي.</p>
                   </div>
                 </div>
-                <button className="bg-white text-rose-700 px-6 py-2.5 rounded-xl font-black shadow-md hover:bg-rose-50 transition-colors whitespace-nowrap">تواصل الآن</button>
               </div>
             )}
 
-            {/* 📊 رادار الأداء والمؤشرات العامة (رسوم بيانية حية) */}
+            {/* 📊 رادار الأداء العام */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 { label: 'مؤشر الالتزام بالحضور', value: stats.attendanceRate, icon: Target, color: 'emerald' },
@@ -307,14 +325,15 @@ export default function ParentDashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               
-              {/* 📚 العمود الأيمن: مصفوفة إتقان المواد (8 أعمدة) */}
-              <div className="lg:col-span-8 space-y-8">
+              {/* 📚 العمود الأيمن (8 أعمدة) */}
+              <div className="lg:col-span-8 space-y-12">
                 
+                {/* مصفوفة الإتقان الأكاديمي */}
                 <section>
                   <div className="flex items-center justify-between mb-6 px-2">
                     <div>
                       <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3"><BookOpen className="text-indigo-500 w-7 h-7"/> مصفوفة الإتقان الأكاديمي</h2>
-                      <p className="text-sm font-bold text-slate-500 mt-1">نظرة تفصيلية لأداء الطالب في كل مادة بشكل مستقل.</p>
+                      <p className="text-sm font-bold text-slate-500 mt-1">نظرة تفصيلية لمتوسط أداء الطالب في كل مادة.</p>
                     </div>
                   </div>
 
@@ -322,7 +341,6 @@ export default function ParentDashboard() {
                     {subjectPerformance.map((item, idx) => (
                       <motion.div key={idx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        
                         <div className="flex items-start justify-between mb-5">
                           <div className="flex items-center gap-4">
                             <div className="w-14 h-14 rounded-[1.2rem] bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-xl border border-indigo-100">{item.average}%</div>
@@ -333,11 +351,10 @@ export default function ParentDashboard() {
                           </div>
                           <button className="w-10 h-10 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center hover:bg-indigo-50 hover:text-indigo-600 transition-colors tooltip" title="مراسلة المعلم"><MessageCircle className="w-4 h-4"/></button>
                         </div>
-
                         <div className="space-y-3 bg-slate-50 rounded-2xl p-4 border border-slate-100">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-emerald-500"/><span className="text-xs font-black text-slate-600">الواجبات</span></div>
-                            <span className="text-xs font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg">{item.assignments.length} تم التسليم</span>
+                            <span className="text-xs font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg">{item.assignments.length} تم التقييم</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2"><Award className="w-4 h-4 text-indigo-500"/><span className="text-xs font-black text-slate-600">الاختبارات</span></div>
@@ -349,7 +366,56 @@ export default function ParentDashboard() {
                   </div>
                 </section>
 
-                {/* 🏆 حائط الفخر الأكاديمي (الأوسمة) */}
+                {/* 🚀 الميزة الجديدة: السجل التفصيلي للاختبارات والواجبات (بما فيها المنسية) */}
+                <section>
+                  <div className="flex items-center justify-between mb-6 px-2">
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3"><FileText className="text-indigo-500 w-7 h-7"/> سجل المهام والتقييمات المفصل</h2>
+                      <p className="text-sm font-bold text-slate-500 mt-1">يُظهر هذا السجل درجات كل واجب واختبار بالاسم، وينبهك للمهام التي انتهى وقتها ولم تُقدم.</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+                    {detailedTasks.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400 font-bold text-sm">لا يوجد مهام مسجلة حتى الآن.</div>
+                    ) : (
+                      <div className="divide-y divide-slate-50">
+                        {detailedTasks.slice(0, 10).map((task) => ( // عرض آخر 10 مهام
+                          <div key={task.id} className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors group">
+                            <div className="flex items-center gap-4">
+                              <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border", task.type === 'exam' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100')}>
+                                {task.type === 'exam' ? <Award className="w-6 h-6"/> : <BookOpen className="w-6 h-6"/>}
+                              </div>
+                              <div>
+                                <h4 className="font-black text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{task.title}</h4>
+                                <div className="flex items-center flex-wrap gap-2 mt-1.5">
+                                  <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md uppercase tracking-widest">{task.subject}</span>
+                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3"/> {safeFormat(task.date, 'dd MMMM yyyy')}</span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="shrink-0">
+                              {task.isZero ? (
+                                <div className="bg-rose-50 border border-rose-200 px-5 py-2 rounded-xl text-center shadow-sm">
+                                  <span className="block text-rose-700 font-black text-sm mb-0.5">لم يُنجز (انتهى الوقت)</span>
+                                  <span className="block text-rose-500 font-bold text-xs">تم رصد صفر ({task.score} / {task.max})</span>
+                                </div>
+                              ) : (
+                                <div className="bg-emerald-50 border border-emerald-200 px-6 py-2 rounded-xl text-center shadow-sm">
+                                  <span className="block text-emerald-700 font-black text-[10px] uppercase tracking-widest mb-0.5">الدرجة المعتمدة</span>
+                                  <span className="block text-emerald-600 font-black text-xl">{task.score} <span className="text-xs text-emerald-400">/ {task.max}</span></span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* 🏆 حائط الفخر */}
                 {badges.length > 0 && (
                   <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
@@ -371,10 +437,10 @@ export default function ParentDashboard() {
                 )}
               </div>
 
-              {/* 💬 العمود الأيسر: جسر التواصل + نبض اليوم (4 أعمدة) */}
+              {/* 💬 العمود الأيسر (4 أعمدة) */}
               <div className="lg:col-span-4 space-y-8">
                 
-                {/* 🌟 نبض اليوم المباشر (Timeline Design) */}
+                {/* 🌟 نبض اليوم */}
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-black text-slate-800 flex items-center gap-2"><Heart className="w-5 h-5 text-rose-500 animate-pulse fill-rose-100" /> نبض اليوم</h3>
@@ -392,9 +458,7 @@ export default function ParentDashboard() {
                         
                         return (
                           <div key={idx} className="relative">
-                            {/* نقطة الخط الزمني */}
                             <div className={`absolute -right-[31px] w-4 h-4 rounded-full border-4 border-white ${current ? 'bg-indigo-500 animate-pulse' : style.bg.replace('bg-', 'bg-').replace('50', '400')}`}></div>
-                            
                             <div className={cn("p-4 rounded-2xl border transition-all", current ? "bg-indigo-50 border-indigo-200 shadow-md" : "bg-white border-slate-100 hover:border-slate-200")}>
                               <div className="flex items-start justify-between mb-2">
                                 <div>
@@ -412,7 +476,7 @@ export default function ParentDashboard() {
                   )}
                 </div>
 
-                {/* 🎧 جسر التواصل الموحد */}
+                {/* 🎧 جسر التواصل */}
                 <div className="bg-gradient-to-br from-slate-50 to-white p-6 rounded-[2.5rem] shadow-sm border border-slate-200">
                    <div className="flex items-center gap-3 mb-6">
                       <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><Headphones className="w-5 h-5"/></div>
@@ -421,7 +485,6 @@ export default function ParentDashboard() {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">لمن توجه رسالتك؟</p>
                       </div>
                    </div>
-
                    <div className="space-y-3">
                       {[
                         { label: 'إدارة المدرسة', role: 'admin', icon: ShieldCheck, color: 'indigo' },
@@ -437,7 +500,6 @@ export default function ParentDashboard() {
                         </button>
                       ))}
                    </div>
-
                    <div className="mt-6 pt-6 border-t border-slate-200 border-dashed">
                       <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-100/50 relative">
                         <div className="absolute -top-3 -right-2 text-3xl">📝</div>
