@@ -51,7 +51,6 @@ export default function ParentDashboard() {
   const fetchAcademicData = useCallback(async (childId: string) => {
     setChildLoading(true);
     try {
-      // جلب جميع المواد المسجلة للطالب عبر فصله
       const activeChild = children.find(c => c.id === childId);
       if (!activeChild?.section_id) return;
 
@@ -60,13 +59,15 @@ export default function ParentDashboard() {
         .select('subjects(id, name), teachers(id, users(full_name, avatar_url))')
         .eq('section_id', activeChild.section_id);
 
-      // تنظيف المواد المكررة في الجدول
-      const uniqueSubjects = Array.from(new Map(subjects?.map(item => [item.subjects.id, item])).values());
+      // 🚀 حل خطأ TypeScript: استخدام "as any" للتعامل مع هيكل Supabase
+      const uniqueSubjects = Array.from(new Map(subjects?.map((item: any) => [item.subjects?.id, item])).values());
 
       // لكل مادة، نجلب الواجبات والاختبارات
       const performancePromises = uniqueSubjects.map(async (item: any) => {
-        const subId = item.subjects.id;
+        const subId = item.subjects?.id;
         
+        if (!subId) return null; // حماية إضافية
+
         // جلب درجات الاختبارات لهذه المادة
         const { data: examScores } = await supabase
           .from('exam_attempts')
@@ -81,8 +82,8 @@ export default function ParentDashboard() {
           .eq('student_id', childId)
           .eq('status', 'graded');
 
-        const filteredExams = examScores?.filter((e: any) => e.exams.subjects.id === subId) || [];
-        const filteredAssignments = assignmentScores?.filter((a: any) => a.assignments.subjects.id === subId) || [];
+        const filteredExams = examScores?.filter((e: any) => e.exams?.subjects?.id === subId) || [];
+        const filteredAssignments = assignmentScores?.filter((a: any) => a.assignments?.subjects?.id === subId) || [];
 
         return {
           ...item,
@@ -92,7 +93,7 @@ export default function ParentDashboard() {
         };
       });
 
-      const results = await Promise.all(performancePromises);
+      const results = (await Promise.all(performancePromises)).filter(Boolean); // تنظيف الـ nulls
       setSubjectPerformance(results);
 
     } catch (e) { console.error(e); } finally { setChildLoading(false); }
@@ -161,7 +162,7 @@ export default function ParentDashboard() {
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-lg shadow-indigo-200">{item.average}%</div>
                         <div>
-                          <h3 className="font-black text-slate-800 text-lg">{item.subjects.name}</h3>
+                          <h3 className="font-black text-slate-800 text-lg">{item.subjects?.name}</h3>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">أ. {item.teachers?.users?.full_name}</p>
                         </div>
                       </div>
@@ -241,7 +242,6 @@ export default function ParentDashboard() {
              <div className="mt-8 pt-8 border-t border-slate-100">
                 <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
                   <h4 className="text-indigo-900 font-black text-sm mb-2 flex items-center gap-2"><Heart className="w-4 h-4 fill-indigo-200"/> ملاحظة من المعلم</h4>
-                  {/* 🚀 تم حل الخطأ هنا باستخدام الأقواس {"..."} */}
                   <p className="text-indigo-700/80 text-xs font-bold leading-relaxed italic">
                     {"أحمد أظهر تميزاً لافتاً في مادة الفيزياء هذا الأسبوع، نرجو الاستمرار في تشجيعه على حل التجارب العملية."}
                   </p>
