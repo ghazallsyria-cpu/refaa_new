@@ -2,15 +2,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion'; // 🚀 تمت إضافة AnimatePresence هنا
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
-// 🚀 تمت إضافة جميع الأيقونات الناقصة هنا (Settings, Building2, Calculator, HeartPulse, Activity)
 import { 
   Shield, Users, Loader2, Sparkles, 
   FileText, Bell, CheckCircle, Search, 
   UserPlus, AlertTriangle, CalendarDays, GraduationCap, ClipboardList,
-  Settings, Building2, Calculator, HeartPulse, Activity
+  Settings, Building2, Calculator, HeartPulse, Activity, UserCheck, PlusCircle
 } from 'lucide-react';
 
 export default function StaffDashboardPage() {
@@ -18,7 +17,9 @@ export default function StaffDashboardPage() {
   const [staffData, setStaffData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // حالة لتطبيق "ربط ولي الأمر" المصغر
+  // 🚀 حالات تطبيق "ربط ولي الأمر"
+  const [searchStudentId, setSearchStudentId] = useState('');
+  const [foundStudent, setFoundStudent] = useState<any>(null);
   const [parentCivilId, setParentCivilId] = useState('');
   const [linkStatus, setLinkStatus] = useState<{type: 'idle'|'loading'|'success'|'error', msg: string}>({type: 'idle', msg: ''});
 
@@ -33,7 +34,6 @@ export default function StaffDashboardPage() {
           .single();
           
         if (!error && data) {
-          // ضمان وجود كائن الصلاحيات حتى لو كان فارغاً
           data.permissions = data.permissions || {};
           setStaffData(data);
         }
@@ -47,17 +47,106 @@ export default function StaffDashboardPage() {
     if (!isChecking) loadWorkspace();
   }, [user, isChecking]);
 
-  // محاكاة لدالة ربط ولي الأمر بالطالب
+  // 🚀 دالة البحث عن الطالب
+  const handleSearchStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchStudentId) return;
+    
+    setLinkStatus({type: 'loading', msg: 'جاري البحث عن الطالب...'});
+    setFoundStudent(null);
+    setParentCivilId('');
+
+    try {
+      // البحث عن الطالب وجلب بياناته الأساسية
+      const { data, error } = await supabase
+        .from('students')
+        .select('id, national_id, parent_id, users(full_name)')
+        .eq('national_id', searchStudentId)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (!data) {
+        setLinkStatus({type: 'error', msg: 'لم يتم العثور على طالب بهذا الرقم المدني.'});
+        return;
+      }
+
+      setFoundStudent(data);
+      setLinkStatus({type: 'idle', msg: ''});
+    } catch (err: any) {
+      setLinkStatus({type: 'error', msg: 'حدث خطأ أثناء البحث.'});
+    }
+  };
+
+  // 🚀 دالة ربط ولي الأمر بالطالب
   const handleLinkParent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!parentCivilId) return;
-    setLinkStatus({type: 'loading', msg: 'جاري البحث في السجلات...'});
-    
-    setTimeout(() => {
-      setLinkStatus({type: 'success', msg: `تم تفعيل حساب ولي الأمر (${parentCivilId}) بنجاح وربطه بالطلاب.`});
+    if (!foundStudent || !parentCivilId) return;
+
+    setLinkStatus({type: 'loading', msg: 'جاري تسجيل وربط ولي الأمر...'});
+
+    try {
+      // 1. هل ولي الأمر موجود مسبقاً؟
+      let parentId = null;
+      const { data: existingParent } = await supabase
+        .from('parents')
+        .select('id, user_id')
+        .eq('national_id', parentCivilId)
+        .maybeSingle();
+
+      if (existingParent) {
+        parentId = existingParent.id;
+      } else {
+        // 2. إذا لم يكن موجوداً، نقوم بإنشاء حساب جديد له
+        const email = `${parentCivilId}@alrefaa.edu`;
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // استخدام الـ API الذي أنشأناه لإنشاء المستخدمين لضمان تسجيله في Auth
+        const response = await fetch('/api/users/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ 
+            email: email, 
+            password: '123456', 
+            full_name: `ولي أمر ${foundStudent.users?.full_name}`, // اسم مبدئي
+            national_id: parentCivilId, 
+            role: 'parent' 
+          }),
+        });
+        
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
+        // إضافة بيانات ولي الأمر في جدول parents
+        const { data: newParent, error: parentInsertError } = await supabase
+          .from('parents')
+          .insert({ id: result.user.id, user_id: result.user.id, national_id: parentCivilId })
+          .select()
+          .single();
+          
+        if (parentInsertError) throw parentInsertError;
+        parentId = newParent.id;
+      }
+
+      // 3. ربط الطالب بـ parent_id
+      const { error: linkError } = await supabase
+        .from('students')
+        .update({ parent_id: parentId })
+        .eq('id', foundStudent.id);
+
+      if (linkError) throw linkError;
+
+      setLinkStatus({type: 'success', msg: `تم بنجاح! تم ربط الطالب (${foundStudent.users?.full_name}) بولي الأمر.`});
+      setFoundStudent(null);
+      setSearchStudentId('');
       setParentCivilId('');
+      
+      // إخفاء رسالة النجاح بعد 4 ثواني
       setTimeout(() => setLinkStatus({type: 'idle', msg: ''}), 4000);
-    }, 1500);
+
+    } catch (err: any) {
+      setLinkStatus({type: 'error', msg: err.message || 'فشلت عملية الربط.'});
+    }
   };
 
   if (isChecking || loading) {
@@ -71,13 +160,9 @@ export default function StaffDashboardPage() {
 
   if (!staffData) return null;
 
-  // 🧠 مساعد للتحقق من الصلاحيات
   const hasPerm = (key: string) => staffData.permissions[key] === true;
-
-  // التحقق مما إذا كان الموظف لا يملك أي صلاحيات على الإطلاق
   const hasNoPermissions = Object.values(staffData.permissions).every(val => val === false) || Object.keys(staffData.permissions).length === 0;
 
-  // الوحدات المصغرة (تم نقلها لداخل المكون لتجنب مشاكل النطاق)
   const FinanceModule = () => (
     <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 rounded-[2.5rem] text-white shadow-xl hover:shadow-2xl transition-all duration-300">
       <Calculator className="w-12 h-12 mb-4 opacity-80" />
@@ -137,7 +222,6 @@ export default function StaffDashboardPage() {
       className="pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6" 
       dir="rtl"
     >
-      {/* 💳 الترحيب والبطاقة الشخصية */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 sm:p-10 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden mb-8">
         <div className="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 z-0"></div>
         <div className="flex items-center gap-6 z-10 w-full md:w-auto">
@@ -163,8 +247,6 @@ export default function StaffDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* 🚀 العمود الأيمن/الوسط: الأدوات المبنية على الصلاحيات */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-xl font-black text-slate-800 px-2 flex items-center gap-2">
             <Settings className="w-5 h-5 text-indigo-500"/> أدوات مساحة العمل المعتمدة لك
@@ -179,7 +261,6 @@ export default function StaffDashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* الوحدات المخصصة حسب القسم (تظهر فقط إذا كان للموظف صلاحيات) */}
               {staffData.job_category === 'قيادة عليا' && <div className="col-span-full"><LeadershipModule /></div>}
               {staffData.job_category === 'رعاية وإرشاد' && <div className="col-span-full"><GuidanceModule /></div>}
               {staffData.job_category === 'إدارة ومالية' && <div className="col-span-full"><FinanceModule /></div>}
@@ -197,7 +278,6 @@ export default function StaffDashboardPage() {
                 </div>
               )}
 
-              {/* 🛠️ أداة: إدارة الغياب */}
               {hasPerm('manage_attendance') && (
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                   <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><ClipboardList className="w-6 h-6"/></div>
@@ -207,7 +287,6 @@ export default function StaffDashboardPage() {
                 </div>
               )}
 
-              {/* 🛠️ أداة: الإنذارات والتقارير */}
               {hasPerm('issue_warnings') && (
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                   <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><AlertTriangle className="w-6 h-6"/></div>
@@ -217,55 +296,108 @@ export default function StaffDashboardPage() {
                 </div>
               )}
 
-              {/* 🛠️ أداة: ربط أولياء الأمور */}
+              {/* 🚀 🛠️ أداة: ربط أولياء الأمور (مُحَدثة لتبحث عن الطالب أولاً) */}
               {hasPerm('link_parents') && (
-                <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-[2rem] shadow-lg text-white md:col-span-2">
-                  <div className="flex items-start justify-between mb-6">
+                <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-[2rem] shadow-lg text-white md:col-span-2 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+                  
+                  <div className="flex items-start justify-between mb-6 relative z-10">
                     <div>
                       <h3 className="font-black text-xl mb-1 flex items-center gap-2"><UserPlus className="w-5 h-5 text-indigo-300"/> مكتب استقبال أولياء الأمور</h3>
-                      <p className="text-indigo-200 text-xs font-bold">إضافة رقم مدني لولي أمر لتمكينه من الدخول ومتابعة أبنائه.</p>
+                      <p className="text-indigo-200 text-xs font-bold">ابحث عن الطالب أولاً، ثم قم بربطه برقم هوية ولي أمره.</p>
                     </div>
                   </div>
                   
-                  <form onSubmit={handleLinkParent} className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-300" />
-                      <input 
-                        type="text" 
-                        required
-                        value={parentCivilId}
-                        onChange={(e) => setParentCivilId(e.target.value)}
-                        placeholder="أدخل الرقم المدني لولي الأمر..." 
-                        className="w-full bg-white/10 border border-white/20 text-white placeholder:text-indigo-300 rounded-xl py-3.5 pr-10 pl-4 font-bold outline-none focus:bg-white/20 transition-all"
-                        dir="ltr"
-                        style={{ textAlign: 'right' }}
-                      />
-                    </div>
-                    <button 
-                      type="submit" 
-                      disabled={linkStatus.type === 'loading'}
-                      className="bg-white text-indigo-700 font-black px-6 py-3.5 rounded-xl hover:bg-indigo-50 transition-colors active:scale-95 disabled:opacity-70 whitespace-nowrap flex justify-center items-center"
-                    >
-                      {linkStatus.type === 'loading' ? <Loader2 className="w-5 h-5 animate-spin"/> : 'بحث وربط'}
-                    </button>
-                  </form>
-
-                  <AnimatePresence>
-                    {linkStatus.msg && (
-                      <motion.div 
-                        initial={{ opacity: 0, height: 0 }} 
-                        animate={{ opacity: 1, height: 'auto' }} 
-                        exit={{ opacity: 0, height: 0 }}
-                        className={`mt-4 overflow-hidden rounded-lg border ${linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : 'bg-white/10 border-white/20 text-indigo-100'}`}
+                  <div className="space-y-4 relative z-10">
+                    {/* خطوة 1: البحث عن الطالب */}
+                    <form onSubmit={handleSearchStudent} className="flex flex-col sm:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-300" />
+                        <input 
+                          type="text" 
+                          required
+                          value={searchStudentId}
+                          onChange={(e) => setSearchStudentId(e.target.value)}
+                          placeholder="أدخل الرقم المدني للطالب..." 
+                          className="w-full bg-white/10 border border-white/20 text-white placeholder:text-indigo-300 rounded-xl py-3.5 pr-10 pl-4 font-bold outline-none focus:bg-white/20 transition-all"
+                          dir="ltr"
+                          style={{ textAlign: 'right' }}
+                        />
+                      </div>
+                      <button 
+                        type="submit" 
+                        disabled={linkStatus.type === 'loading' || !!foundStudent}
+                        className="bg-indigo-500 text-white border border-indigo-400/50 font-black px-6 py-3.5 rounded-xl hover:bg-indigo-400 transition-colors active:scale-95 disabled:opacity-50 whitespace-nowrap flex justify-center items-center"
                       >
-                        <div className="px-4 py-2.5 text-sm font-bold">{linkStatus.msg}</div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        {linkStatus.type === 'loading' && !foundStudent ? <Loader2 className="w-5 h-5 animate-spin"/> : 'بحث عن الطالب'}
+                      </button>
+                    </form>
+
+                    {/* خطوة 2: ظهور الطالب وحقل إدخال ولي الأمر */}
+                    <AnimatePresence>
+                      {foundStudent && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }} 
+                          animate={{ opacity: 1, y: 0 }} 
+                          className="bg-white/10 border border-white/20 p-5 rounded-xl backdrop-blur-sm"
+                        >
+                          <div className="flex items-center gap-3 mb-4 pb-4 border-b border-white/10">
+                            <div className="p-2 bg-emerald-500/20 text-emerald-300 rounded-lg"><UserCheck className="w-5 h-5" /></div>
+                            <div>
+                              <div className="text-xs font-bold text-indigo-200 mb-0.5">الطالب المحدد</div>
+                              <div className="font-black text-white">{foundStudent.users?.full_name}</div>
+                            </div>
+                            {foundStudent.parent_id && (
+                              <span className="mr-auto text-[10px] font-black bg-amber-500/20 text-amber-200 px-2 py-1 rounded-md">
+                                لديه ولي أمر مسبقاً (سيتم استبداله)
+                              </span>
+                            )}
+                          </div>
+
+                          <form onSubmit={handleLinkParent} className="flex flex-col sm:flex-row gap-3">
+                            <input 
+                              type="text" 
+                              required
+                              value={parentCivilId}
+                              onChange={(e) => setParentCivilId(e.target.value)}
+                              placeholder="الرقم المدني لولي الأمر..." 
+                              className="flex-1 bg-white border border-white/50 text-slate-900 placeholder:text-slate-400 rounded-xl py-3 px-4 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                              dir="ltr"
+                              style={{ textAlign: 'right' }}
+                            />
+                            <button 
+                              type="submit" 
+                              disabled={linkStatus.type === 'loading'}
+                              className="bg-emerald-500 text-white font-black px-6 py-3 rounded-xl hover:bg-emerald-600 transition-colors active:scale-95 disabled:opacity-70 whitespace-nowrap flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20"
+                            >
+                              {linkStatus.type === 'loading' ? <Loader2 className="w-5 h-5 animate-spin"/> : <><PlusCircle className="w-5 h-5"/> ربط واعتـمـاد</>}
+                            </button>
+                          </form>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* رسائل التنبيه والنجاح */}
+                    <AnimatePresence>
+                      {linkStatus.msg && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }} 
+                          animate={{ opacity: 1, height: 'auto' }} 
+                          exit={{ opacity: 0, height: 0 }}
+                          className={`overflow-hidden rounded-lg border ${
+                            linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : 
+                            linkStatus.type === 'error' ? 'bg-rose-500/20 border-rose-400/30 text-rose-100' :
+                            'bg-white/5 border-white/10 text-indigo-100'
+                          }`}
+                        >
+                          <div className="px-4 py-2.5 text-sm font-bold">{linkStatus.msg}</div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               )}
 
-              {/* 🛠️ أداة: إدارة الجداول */}
               {hasPerm('manage_schedules') && (
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                   <div className="w-12 h-12 bg-fuchsia-50 text-fuchsia-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><CalendarDays className="w-6 h-6"/></div>
@@ -275,7 +407,6 @@ export default function StaffDashboardPage() {
                 </div>
               )}
 
-              {/* 🛠️ أداة: السجل الأكاديمي */}
               {hasPerm('view_grades') && (
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                   <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><GraduationCap className="w-6 h-6"/></div>
@@ -289,7 +420,6 @@ export default function StaffDashboardPage() {
           )}
         </div>
 
-        {/* 🏢 العمود الأيسر: المساحة المشتركة والتعليمات (تظهر للجميع) */}
         <div className="space-y-6">
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
              <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest mb-6 w-fit border border-slate-200">
