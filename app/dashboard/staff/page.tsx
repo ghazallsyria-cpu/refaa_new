@@ -18,21 +18,19 @@ export default function StaffDashboardPage() {
   const [staffData, setStaffData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🚀 استخدام Hook النظام لجلب دالة إضافة ولي الأمر الرسمية
+  // 🚀 استخدام Hook النظام
   const { students: allStudents, fetchStudents, addParent } = useUsersSystem();
 
-  // حالات تطبيق "ربط ولي الأمر"
   const [searchStudentId, setSearchStudentId] = useState('');
   const [foundStudent, setFoundStudent] = useState<any>(null);
   
-  // 🚀 تحديث الـ State ليشمل كل الحقول المطلوبة لتجنب خطأ TypeScript
   const [parentForm, setParentForm] = useState({ 
     full_name: '', 
     national_id: '', 
     phone: '', 
     email: '',
-    job_title: '', // تم إضافتها هنا
-    address: ''    // تم إضافتها هنا
+    job_title: '', 
+    address: ''    
   });
 
   const [linkStatus, setLinkStatus] = useState<{type: 'idle'|'loading'|'success'|'error', msg: string}>({type: 'idle', msg: ''});
@@ -78,7 +76,7 @@ export default function StaffDashboardPage() {
     }
   };
 
-  // 🚀 الدالة الفولاذية المعدلة بالكامل لحل مشكلة الحساب المكرر والظهور عند المدير
+  // 🚀 الدالة الفولاذية بعد إزالة الخطأ البرمجي
   const handleCreateParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!foundStudent || !parentForm.national_id) return;
@@ -93,35 +91,34 @@ export default function StaffDashboardPage() {
         .eq('national_id', parentForm.national_id)
         .maybeSingle();
 
-      let targetParentId = null;
-
       if (existingUser) {
-        // 🌟 حالة الأب الموجود مسبقاً (حل مشكلة الابن الثاني وحساب الشبح)
-        targetParentId = existingUser.id;
+        // 🌟 حالة الأب الموجود مسبقاً
+        const targetParentId = existingUser.id;
         await supabase.from('parents').upsert({ 
           id: targetParentId, 
           national_id: parentForm.national_id,
           job_title: parentForm.job_title || '',
           address: parentForm.address || ''
         }, { onConflict: 'id' });
+        
+        // ربط الطالب يدوياً لأننا لم نستخدم أداة المدير هنا
+        await supabase.from('students').update({ parent_id: targetParentId }).eq('id', foundStudent.id);
+        
         setLinkStatus({type: 'success', msg: `تم ربط الطالب بولي الأمر (${existingUser.full_name}) بنجاح.`});
       } else {
-        // 🌟 حالة ولي أمر جديد كلياً (استخدام Hook الإدارة الرسمي)
+        // 🌟 حالة ولي أمر جديد كلياً
         if (!parentForm.full_name) {
           setLinkStatus({type: 'error', msg: 'يرجى إدخال اسم ولي الأمر.'});
           return;
         }
+        
+        // الأداة الخاصة بك ستتكفل بالإنشاء والربط معاً لأننا نمرر student_ids!
         const result = await addParent({
           ...parentForm,
           student_ids: [foundStudent.id]
         });
-        targetParentId = result.user?.id;
+        
         setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر بنجاح. كلمة المرور: ${result.password}`});
-      }
-
-      // 3. ربط الطالب (للتأكد)
-      if (targetParentId) {
-        await supabase.from('students').update({ parent_id: targetParentId }).eq('id', foundStudent.id);
       }
 
       setTimeout(() => {
@@ -220,7 +217,7 @@ export default function StaffDashboardPage() {
               </div>
             )}
 
-            {/* باقي الأدوات (مثال) */}
+            {/* باقي الأدوات */}
             {hasPerm('view_students') && (
               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                 <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Users className="w-6 h-6"/></div>
