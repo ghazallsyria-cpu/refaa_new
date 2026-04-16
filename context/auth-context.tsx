@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.setItem('userName', name);
 
       router.refresh(); 
-
+/*
       if (userData.must_reset_password) {
         setMustResetPassword(true);
         router.push('/reset-password');
@@ -121,7 +121,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
   };
+*/
+      ////////////////////////////////////////////////ُEhab -->>> rediriction by role to dashboard 
 
+      if (userData.must_reset_password) {
+        setMustResetPassword(true);
+        router.push('/reset-password');
+      } else {
+        // 🚀 توجيه ذكي حسب الرتبة بدلاً من التوجيه الأعمى للرئيسية
+        if (userData.role === 'admin' || userData.role === 'management') {
+          router.push('/admin/dashboard');
+        } else if (userData.role === 'teacher') {
+          router.push('/dashboard/teacher');
+        } else if (userData.role === 'student') {
+          router.push('/dashboard/student');
+        } else if (userData.role === 'staff') {
+          router.push('/dashboard/staff'); // 👈 هنا يكمن السحر للموظف الجديد
+        } else {
+          router.push('/'); // الاحتياطي
+        }
+      }
+
+      //////////////////////////////////////////////////
   const requestPasswordReset = async (civilId: string) => {
     const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
     if (!userData?.email) throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
