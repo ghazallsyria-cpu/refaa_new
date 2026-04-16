@@ -225,7 +225,7 @@ export default function ParentDashboard() {
                 ].map((target, i) => (
                   <button 
                     key={i} 
-                    className="w-full group flex items-center justify-between p-4 bg-slate-50 hover:bg-white hover:shadow-lg hover:ring-2 hover:ring-indigo-500/10 rounded-2xl transition-all border border-transparent hover:border-indigo-100"
+                    className={`w-full group flex items-center justify-between p-4 bg-slate-50 hover:bg-white hover:shadow-lg hover:ring-2 hover:ring-${target.color}-500/10 rounded-2xl transition-all border border-transparent hover:border-${target.color}-100`}
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-xl bg-${target.color}-100 text-${target.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}>
@@ -241,7 +241,10 @@ export default function ParentDashboard() {
              <div className="mt-8 pt-8 border-t border-slate-100">
                 <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
                   <h4 className="text-indigo-900 font-black text-sm mb-2 flex items-center gap-2"><Heart className="w-4 h-4 fill-indigo-200"/> ملاحظة من المعلم</h4>
-                  <p className="text-indigo-700/80 text-xs font-bold leading-relaxed italic">"أحمد أظهر تميزاً لافتاً في مادة الفيزياء هذا الأسبوع، نرجو الاستمرار في تشجيعه على حل التجارب العملية."</p>
+                  {/* 🚀 تم حل الخطأ هنا باستخدام الأقواس {"..."} */}
+                  <p className="text-indigo-700/80 text-xs font-bold leading-relaxed italic">
+                    {"أحمد أظهر تميزاً لافتاً في مادة الفيزياء هذا الأسبوع، نرجو الاستمرار في تشجيعه على حل التجارب العملية."}
+                  </p>
                 </div>
              </div>
           </div>
