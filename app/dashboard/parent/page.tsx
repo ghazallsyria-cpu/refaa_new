@@ -1,10 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, Clock, FileText, 
   GraduationCap, TrendingUp, AlertTriangle, Award, ChevronLeft, 
-  Play, Star, ShieldAlert, XCircle, Activity, Loader2
+  Play, Star, ShieldAlert, XCircle, Activity, Loader2, Heart, Coffee
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -48,7 +49,6 @@ export default function ParentDashboard() {
     if (!user?.id || authRole !== 'parent') return;
     try {
       setLoading(true);
-      // جلب بيانات الأب
       const { data: pData } = await supabase
         .from('parents')
         .select('*, users(full_name, email, avatar_url)')
@@ -57,7 +57,6 @@ export default function ParentDashboard() {
       
       if (pData) setParentData(pData);
 
-      // جلب بيانات الأبناء
       const { data: cData } = await supabase
         .from('students')
         .select('*, users(full_name, avatar_url), sections(name, classes(name))')
@@ -65,7 +64,7 @@ export default function ParentDashboard() {
 
       if (cData && cData.length > 0) {
         setChildren(cData);
-        setActiveChildId(cData[0].id); // تعيين الابن الأول كافتراضي
+        setActiveChildId(cData[0].id);
       }
     } catch (e) {
       console.error('Error fetching parent data:', e);
@@ -84,7 +83,6 @@ export default function ParentDashboard() {
     try {
       setChildLoading(true);
       
-      // جلب الغياب
       const { data: attData } = await supabase
         .from('attendance_records')
         .select('*, subjects(name)')
@@ -93,7 +91,6 @@ export default function ParentDashboard() {
       
       setAttendance(attData || []);
 
-      // جلب الاختبارات
       const { data: exData } = await supabase
         .from('exam_attempts')
         .select('id, score, status, completed_at, exams(id, title, max_score, total_marks, subjects(name))')
@@ -103,7 +100,6 @@ export default function ParentDashboard() {
       
       setExams(exData || []);
 
-      // جلب الواجبات
       const { data: assData } = await supabase
         .from('assignment_submissions')
         .select('id, grade, status, submitted_at, feedback, assignments(id, title, total_marks, subjects(name), assignment_questions(points))')
@@ -113,7 +109,6 @@ export default function ParentDashboard() {
       
       setAssignments(assData || []);
 
-      // جلب الأوسمة
       const { data: bdgData } = await supabase
         .from('student_badges')
         .select('*, badge:badges(*)')
@@ -122,14 +117,12 @@ export default function ParentDashboard() {
       
       setBadges(bdgData || []);
 
-      // جلب فترات الحصص (لأننا سنحتاجها في الجدول)
       const { data: perData } = await supabase.from('periods').select('*').order('period_number', { ascending: true });
       setPeriods(perData || []);
 
-      // جلب جدول اليوم للابن
       const activeChild = children.find(c => c.id === childId);
       if (activeChild?.section_id) {
-        const today = new Date().getDay() + 1; // الأحد = 1 في المنصة
+        const today = new Date().getDay() + 1; // الأحد = 1
         const { data: schData } = await supabase
           .from('schedules')
           .select('*, subjects(name), teachers(id, users(full_name))')
@@ -140,7 +133,7 @@ export default function ParentDashboard() {
         setSchedule(schData || []);
       }
 
-      // 🧠 الحسابات التحليلية
+      // حسابات الإحصائيات
       let absentCount = 0;
       let attRate = 100;
       if (attData && attData.length > 0) {
@@ -186,7 +179,13 @@ export default function ParentDashboard() {
 
   const activeChild = useMemo(() => children.find(c => c.id === activeChildId), [children, activeChildId]);
 
-  // دوال الجدول الدراسي
+  // 🚀 استخراج غياب وحضور اليوم فقط
+  const todaysAttendance = useMemo(() => {
+    if (!mounted) return [];
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    return attendance.filter(a => a.date && a.date.startsWith(todayStr));
+  }, [attendance, mounted]);
+
   const isCurrentClass = useCallback((period: number) => {
     if (!currentTime) return false;
     const periodInfo = periods.find(p => p.period_number === period);
@@ -217,8 +216,22 @@ export default function ParentDashboard() {
     } catch (e) { return fallback; }
   };
 
+  // 🚀 دالة تحدد تصميم وشكل حالة الحضور
+  const getAttendanceStyle = (status: string | undefined | null) => {
+    switch(status) {
+      case 'present': return { text: 'حاضر وتسلّم حصته', bg: 'bg-emerald-50', border: 'border-emerald-200', textCol: 'text-emerald-700', icon: CheckCircle2, iconCol: 'text-emerald-500' };
+      case 'absent': return { text: 'لم يتواجد بالحصة', bg: 'bg-rose-50', border: 'border-rose-200', textCol: 'text-rose-700', icon: XCircle, iconCol: 'text-rose-500' };
+      case 'late': return { text: 'حضر متأخراً', bg: 'bg-amber-50', border: 'border-amber-200', textCol: 'text-amber-700', icon: Clock, iconCol: 'text-amber-500' };
+      case 'excused': return { text: 'مستأذن بعذر', bg: 'bg-sky-50', border: 'border-sky-200', textCol: 'text-sky-700', icon: ShieldAlert, iconCol: 'text-sky-500' };
+      default: return { text: 'لم تُسجل بعد', bg: 'bg-slate-50', border: 'border-slate-100', textCol: 'text-slate-400', icon: Clock, iconCol: 'text-slate-300' };
+    }
+  };
+
   if (isChecking || loading) return <div className="flex h-[80vh] items-center justify-center font-cairo"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>;
   if (authRole !== 'parent') return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة لأولياء الأمور فقط.</div>;
+
+  // التحقق من انتهاء الدوام (بعد الساعة 2 ظهراً مثلاً)
+  const isDayEnded = mounted && currentTime && currentTime.getHours() >= 14;
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-12 max-w-7xl mx-auto px-4 font-cairo pt-6" dir="rtl">
@@ -279,14 +292,82 @@ export default function ParentDashboard() {
             ) : activeChild && (
               <motion.div key={activeChild.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
                 
+                {/* 🌟 نبض اليوم المباشر (الميزة الجديدة المذهلة) */}
+                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-lg shadow-indigo-100/50 border border-indigo-50 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10"></div>
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 relative z-10">
+                    <div>
+                      <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+                        <Heart className="w-6 h-6 text-rose-500 animate-pulse fill-rose-100" />
+                        نبض اليوم المباشر
+                      </h3>
+                      <p className="text-sm font-bold text-slate-500 mt-1">نطمئنك على {activeChild.users?.full_name?.split(' ')[0]} لحظة بلحظة طوال اليوم الدراسي.</p>
+                    </div>
+                    <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-2xl font-black text-sm border border-indigo-100 shadow-sm whitespace-nowrap">
+                      {safeFormat(new Date(), 'EEEE، d MMMM')}
+                    </div>
+                  </div>
+
+                  {schedule.length === 0 ? (
+                     <div className="text-center py-10 bg-slate-50 rounded-3xl border border-dashed border-slate-200 text-slate-400 font-bold text-sm flex flex-col items-center justify-center gap-2">
+                       <Coffee className="w-10 h-10 text-slate-300" />
+                       عطلة سعيدة! لا يوجد دوام مسجل لليوم.
+                     </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* الخط الزمني للحصص */}
+                      <div className="flex gap-4 overflow-x-auto pb-6 pt-2 custom-scrollbar snap-x">
+                        {schedule.map((lesson, idx) => {
+                          // محاولة إيجاد سجل الحضور لهذه الحصة (إما بالاسم أو بالتسلسل)
+                          const attendanceRecord = todaysAttendance.find(a => a.subjects?.name === lesson.subjects?.name) || todaysAttendance[idx];
+                          const style = getAttendanceStyle(attendanceRecord?.status);
+                          
+                          return (
+                            <div key={idx} className={`snap-center min-w-[180px] p-5 rounded-[2rem] border-2 ${style.bg} ${style.border} relative shrink-0 transition-transform hover:-translate-y-1`}>
+                              <div className={`w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 ${style.iconCol}`}>
+                                <style.icon className="w-5 h-5" />
+                              </div>
+                              <h4 className="font-black text-slate-800 mb-1">{lesson.subjects?.name}</h4>
+                              <p className="text-[10px] font-bold text-slate-500 mb-3">الحصة {lesson.period}</p>
+                              
+                              <div className={`text-xs font-black px-3 py-1.5 rounded-lg bg-white/60 border ${style.border} ${style.textCol} inline-block`}>
+                                {style.text}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* ملخص نهاية اليوم الحنون */}
+                      {isDayEnded && (
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl p-6 text-white shadow-lg shadow-emerald-500/20 flex flex-col sm:flex-row items-center gap-5">
+                          <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-sm">
+                            <Star className="w-7 h-7 text-yellow-300 fill-yellow-300" />
+                          </div>
+                          <div className="text-center sm:text-right">
+                            <h4 className="font-black text-lg mb-1">انتهى اليوم الدراسي بسلام!</h4>
+                            <p className="text-emerald-50 font-bold text-sm">
+                              {todaysAttendance.some(a => a.status === 'absent') 
+                                ? `لاحظنا غياب ${activeChild.users?.full_name?.split(' ')[0]} عن بعض الحصص اليوم، نتمنى أن يكون المانع خيراً وبصحة وعافية.`
+                                : `أتم ابنكم البطل ${activeChild.users?.full_name?.split(' ')[0]} يومه الدراسي بنجاح وحضور كامل. نفخر بوجوده معنا!`
+                              }
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* 🚨 نظام الإنذارات (Danger Zone) */}
                 {stats.absentCount >= 5 && (
                   <div className="bg-gradient-to-r from-rose-600 to-rose-700 rounded-3xl p-6 text-white shadow-lg shadow-rose-500/20 border-2 border-rose-400/50 flex items-center justify-between flex-col sm:flex-row gap-4">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0 border border-white/20 animate-pulse"><AlertTriangle className="w-6 h-6 text-yellow-300" /></div>
                       <div>
-                        <h3 className="font-black text-lg mb-1">تنبيه غياب رسمي</h3>
-                        <p className="text-sm font-bold text-rose-100">تجاوز {activeChild.users?.full_name?.split(' ')[0]} الحد المسموح للغياب ({stats.absentCount} حصص). يرجى مراجعة الإدارة.</p>
+                        <h3 className="font-black text-lg mb-1">تنبيه تراكم غياب</h3>
+                        <p className="text-sm font-bold text-rose-100">تجاوز {activeChild.users?.full_name?.split(' ')[0]} الحد المسموح للغياب ({stats.absentCount} حصص). نرجو متابعة الأمر.</p>
                       </div>
                     </div>
                   </div>
@@ -295,9 +376,9 @@ export default function ParentDashboard() {
                 {/* 📊 إحصائيات الأداء */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                   {[
-                    { label: 'نسبة الحضور', value: `${stats.attendanceRate}%`, icon: CheckCircle2, color: 'emerald', bg: 'bg-emerald-500' },
+                    { label: 'الالتزام بالحضور', value: `${stats.attendanceRate}%`, icon: CheckCircle2, color: 'emerald', bg: 'bg-emerald-500' },
                     { label: 'متوسط الاختبارات', value: `${stats.examsAvg}%`, icon: FileText, color: 'indigo', bg: 'bg-indigo-500' },
-                    { label: 'متوسط الواجبات', value: `${stats.assignmentsAvg}%`, icon: BookOpen, color: 'amber', bg: 'bg-amber-500' }
+                    { label: 'إنجاز الواجبات', value: `${stats.assignmentsAvg}%`, icon: BookOpen, color: 'amber', bg: 'bg-amber-500' }
                   ].map((stat, i) => (
                     <div key={i} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all group overflow-hidden relative">
                       <div className="flex items-center gap-5 mb-5 relative z-10">
@@ -335,13 +416,13 @@ export default function ParentDashboard() {
                   </div>
                 )}
 
-                {/* 📅 جدول اليوم المباشر */}
+                {/* 📅 جدول الغد / الأيام القادمة */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 sm:p-8">
-                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Clock className="text-indigo-500"/> الجدول الدراسي اليوم</h3>
+                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Clock className="text-indigo-500"/> ترتيب الحصص</h3>
                     <div className="space-y-4">
                       {schedule.length === 0 ? (
-                         <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 font-bold text-sm">لا توجد حصص مجدولة لليوم.</div>
+                         <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 font-bold text-sm">الجدول فارغ حالياً.</div>
                       ) : (
                         schedule.map((item, i) => {
                           const current = isCurrentClass(item.period);
@@ -364,7 +445,7 @@ export default function ParentDashboard() {
                     </div>
                   </div>
 
-                  {/* 📰 الإعلانات والمستجدات (يتم جلبها عبر الـ Component الجاهز) */}
+                  {/* 📰 الإعلانات والمستجدات */}
                   <div className="space-y-6">
                     <AnnouncementsWidget authRole="parent" />
                   </div>
