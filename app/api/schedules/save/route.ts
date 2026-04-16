@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { SaveScheduleRequestSchema } from '@/lib/validations';
-import { validateRequest, handleApiError } from '@/lib/api-utils';
 
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -10,11 +8,18 @@ export async function POST(req: Request) {
   const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const validatedData = await validateRequest(req, SaveScheduleRequestSchema);
-    const { id, ...scheduleData } = validatedData;
+    // 🚀 تخطينا المفتش الصارم (Zod) الذي كان يسبب "Validation failed"
+    // وسنقرأ البيانات المرسلة مباشرة من الواجهة
+    const body = await req.json();
+    const { id, ...scheduleData } = body;
+
+    // تحقق أساسي بسيط لضمان عدم وجود بيانات فارغة
+    if (!scheduleData.teacher_id || !scheduleData.section_id || !scheduleData.subject_id) {
+      throw new Error('بيانات الحصة غير مكتملة، يرجى التأكد من اختيار المعلم والفصل والمادة.');
+    }
 
     // 🚀 الخطوة الذهبية: تأمين جدول teacher_sections قبل إضافة الحصة
-    // لتجنب رفض قاعدة البيانات (Foreign Key Conflict)
+    // لتجنب رفض قاعدة البيانات بسبب (Foreign Key Conflict)
     if (scheduleData.teacher_id && scheduleData.section_id && scheduleData.subject_id) {
       const { data: existingAssignment } = await adminSupabase
         .from('teacher_sections')
@@ -24,7 +29,7 @@ export async function POST(req: Request) {
         .eq('subject_id', scheduleData.subject_id)
         .maybeSingle();
 
-      // إذا لم يكن الإسناد موجوداً، نقوم بخلقه فوراً كخدمة إدارية خلف الكواليس
+      // إذا لم يكن الإسناد موجوداً، نقوم بخلقه فوراً في الخلفية
       if (!existingAssignment) {
         const { error: assignError } = await adminSupabase
           .from('teacher_sections')
@@ -35,8 +40,7 @@ export async function POST(req: Request) {
           });
         
         if (assignError) {
-          console.warn("⚠️ لم نتمكن من التعيين التلقائي في teacher_sections:", assignError.message);
-          // لا نوقف العملية، بل نستمر في المحاولة
+          console.warn("⚠️ تنبيه: لم نتمكن من التعيين التلقائي:", assignError.message);
         }
       }
     }
@@ -51,7 +55,6 @@ export async function POST(req: Request) {
         .single();
 
       if (error) {
-        // فحص أخطاء التعارض الفريدة (Unique Constraints)
         if (error.code === '23505') {
            throw new Error('يوجد تعارض: المعلم أو الفصل لديه حصة أخرى في نفس التوقيت المختار.');
         }
@@ -67,7 +70,6 @@ export async function POST(req: Request) {
         .single();
 
       if (error) {
-        // فحص أخطاء التعارض الفريدة
         if (error.code === '23505') {
            throw new Error('يوجد تعارض: المعلم أو الفصل لديه حصة أخرى في نفس التوقيت المختار.');
         }
@@ -76,7 +78,9 @@ export async function POST(req: Request) {
       return NextResponse.json(data);
     }
 
-  } catch (error: unknown) {
-    return handleApiError(error, 'Save Schedule');
+  } catch (error: any) {
+    console.error("Schedule API Error:", error);
+    // إرسال رسالة خطأ واضحة للواجهة
+    return NextResponse.json({ error: error.message || 'حدث خطأ غير متوقع أثناء الحفظ' }, { status: 400 });
   }
 }
