@@ -7,7 +7,7 @@ import {
   GraduationCap, TrendingUp, AlertTriangle, Award, MessageCircle,
   Play, Star, ShieldAlert, XCircle, Activity, Loader2, Heart, 
   ChevronDown, Send, UserCheck, ShieldCheck, Headphones,
-  BarChart3, Target, Sparkles, Zap
+  BarChart3, Target, Sparkles, Zap, Coffee 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
