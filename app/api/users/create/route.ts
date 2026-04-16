@@ -48,7 +48,11 @@ export async function POST(request: Request) {
     if (userData?.role !== 'admin' && userData?.role !== 'management'&& userData?.role !== 'staff') {
       return NextResponse.json({ error: 'Forbidden: Only admins can create users' }, { status: 403 });
     }
-
+      // منع الكادر الإداري من ترقية مستخدمين لمدراء
+    if (userData?.role === 'staff' && (role === 'admin' || role === 'management' || role === 'staff')) {
+      return NextResponse.json({ error: 'Forbidden: Staff can only create students or parents' }, { status: 403 });
+    }
+    
     // 🚀 الحل الجذري: نعتمد كلمة المرور المرسلة، أو نفرض 123456 كافتراضي 
     const generatedPassword = rawBody.password || validatedData.password || '123456';
     const generatedEmail = email || `${national_id}@alrefaa.edu`;
