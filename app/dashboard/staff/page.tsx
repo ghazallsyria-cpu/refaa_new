@@ -20,7 +20,6 @@ export default function StaffDashboardPage() {
 
   const { students: allStudents, fetchStudents } = useUsersSystem();
 
-  // نظام إضافة الإخوة للقائمة
   const [searchStudentId, setSearchStudentId] = useState('');
   const [selectedStudents, setSelectedStudents] = useState<any[]>([]);
   
@@ -73,7 +72,6 @@ export default function StaffDashboardPage() {
     setSelectedStudents(prev => prev.filter(s => s.id !== studentId));
   };
 
-  // 🚀 الدالة الفولاذية لإنشاء وربط ولي الأمر (تعتمد على جدول parents السليم)
   const handleCreateParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedStudents.length === 0 || !parentForm.national_id) {
@@ -83,21 +81,28 @@ export default function StaffDashboardPage() {
     setLinkStatus({type: 'loading', msg: 'جاري التحقق والتسجيل والربط الشامل...'});
 
     try {
-      // 1. نبحث في جدول parents (السليم) وليس users لمعرفة هل الأب موجود أم لا
+      // 1. نبحث أولاً عن الـ id في جدول parents (السليم)
       const { data: existingParent } = await supabase
         .from('parents')
-        .select('id, users(full_name)')
+        .select('id')
         .eq('national_id', parentForm.national_id)
         .maybeSingle();
 
       let targetParentId = null;
 
       if (existingParent) {
-        // 🌟 الأب موجود مسبقاً! (نحل مشكلة الابن الثاني والثالث)
         targetParentId = existingParent.id;
-        setLinkStatus({type: 'success', msg: `تم إيجاد حساب ولي الأمر (${existingParent.users?.full_name || 'مسجل مسبقاً'}) وجاري ربط الأبناء...`});
+        
+        // 🚀 جلب الاسم بشكل آمن لتجنب خطأ TypeScript
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name')
+          .eq('id', targetParentId)
+          .maybeSingle();
+
+        const parentName = userData?.full_name || 'مسجل مسبقاً';
+        setLinkStatus({type: 'success', msg: `تم إيجاد حساب ولي الأمر (${parentName}) وجاري ربط الأبناء...`});
       } else {
-        // 🌟 أب جديد كلياً
         if (!parentForm.full_name) {
           setLinkStatus({type: 'error', msg: 'ولي الأمر جديد، يرجى إدخال اسمه الكامل.'}); return;
         }
@@ -105,7 +110,6 @@ export default function StaffDashboardPage() {
         const email = parentForm.email || `${parentForm.national_id}@alrefaa.edu`;
         const { data: { session } } = await supabase.auth.getSession();
 
-        // 🚀 نستخدم الـ API المباشر لضمان إنشاء الحساب بدقة متناهية
         const response = await fetch('/api/users/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
@@ -124,7 +128,6 @@ export default function StaffDashboardPage() {
 
         targetParentId = result.user.id;
 
-        // 🚀 نفرض زرع البيانات في جدول parents لكي يقرأها المدير
         await supabase.from('parents').upsert({
           id: targetParentId,
           national_id: parentForm.national_id,
@@ -135,7 +138,6 @@ export default function StaffDashboardPage() {
         setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر وربط الأبناء بنجاح! (كلمة المرور: 123456)`});
       }
 
-      // 🚀 الخطوة الذهبية: نربط جميع الطلاب الموجودين في القائمة بضربة واحدة!
       if (targetParentId) {
         const studentIds = selectedStudents.map(s => s.id);
         const { error: linkError } = await supabase
