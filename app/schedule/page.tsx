@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -91,7 +92,6 @@ export default function SchedulePage() {
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
 
-  // إتاحة كافة الخيارات بمرونة تامة للمدير
   const availableSections = sections;
   const modalAvailableTeachers = teachers;
   const availableSubjects = subjects;
@@ -100,7 +100,6 @@ export default function SchedulePage() {
     fetchFilters();
   }, [fetchFilters]);
 
-  // تحصين دالة التبديل (Swap)
   const handleSwap = async (targetDay: number, targetPeriod: number, targetSlot: any | null) => {
     if (!swappingFrom || !isAdmin) return;
 
@@ -156,7 +155,6 @@ export default function SchedulePage() {
     }
   };
 
-  // تحصين دالة الإضافة والتعديل
   const handleAddSchedule = async () => {
     if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) {
       alert('يرجى تعبئة جميع الحقول المطلوبة (المعلم، الفصل، المادة). ⚠️');
@@ -166,7 +164,6 @@ export default function SchedulePage() {
     const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
 
     try {
-      // 1. محاولة كشف التعارض بشكل معزول (حتى لا يوقف الإضافة في حال فشله)
       try {
         const conflicts = await checkConflicts(
           Number(selectedSlot.day), 
@@ -199,7 +196,6 @@ export default function SchedulePage() {
         console.warn("⚠️ تم تجاوز محرك التعارض لتسهيل حفظ الحصة", conflictError);
       }
 
-      // 2. تجهيز البيانات الصارمة (Strict Casting)
       const payload: any = {
         teacher_id: String(formData.teacher_id),
         section_id: String(formData.section_id),
@@ -465,15 +461,24 @@ export default function SchedulePage() {
   // ==========================================
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 print:m-0 print:p-0" dir="rtl">
+      
+      {/* 🖨️ ستايلات الطباعة المحدثة للحفاظ على الألوان والترتيب */}
       <style jsx global>{`
         @media print {
-          @page { size: landscape; margin: 1cm; }
-          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; }
+          @page { size: landscape; margin: 1.5cm; }
+          body, html { 
+            background: white !important; 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important;
+          }
           .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          .print-table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
-          .print-table th, .print-table td { border: 1px solid black !important; padding: 4px !important; text-align: center !important; vertical-align: middle !important; word-wrap: break-word !important; }
-          .print-table th { background-color: #f1f5f9 !important; font-weight: bold !important; }
+          a { text-decoration: none !important; }
+          
+          /* إجبار المتصفح على عرض الخلفيات الملونة للجدول */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
       `}</style>
       
@@ -500,7 +505,7 @@ export default function SchedulePage() {
           onClick={handlePrint}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg hover:bg-slate-800 transition-all active:scale-95 w-full sm:w-auto"
         >
-          <Printer className="h-4 w-4" /> طباعة الجدول
+          <Printer className="h-4 w-4" /> طباعة الجدول (PDF)
         </button>
       </div>
 
@@ -882,55 +887,107 @@ export default function SchedulePage() {
               </div>
             </div>
 
-            <div className="hidden print:block p-4 font-cairo">
-              <table className="print-table table-fixed w-full">
-                <thead>
-                  <tr>
-                    <th className="w-24 bg-slate-100 py-3">اليوم / الحصة</th>
-                    {periods.map(p => <th key={p.id} className="py-3 bg-slate-50">الحصة {p.period_number}<br/><span className="text-[10px] font-normal">{p.start_time.slice(0, 5)}</span></th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {DAYS.map((day) => (
-                    <tr key={day.id}>
-                      <td className="font-bold bg-slate-50">{day.name}</td>
-                      {periods.map(p => {
-                        const period = p.period_number;
-                        const slot = scheduleData.find(s => 
-                          String(s.day_of_week) === String(day.id) && 
-                          String(s.period) === String(period) && 
-                          (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
-                        );
+            {/* ======================================================== */}
+            {/* 🖨️ قسم الطباعة الجديد (تصميم PDF الفاخر المخصص للورق) */}
+            {/* ======================================================== */}
+            <div className="hidden print:block p-2 font-cairo">
+              {/* Header */}
+              <div className="flex justify-between items-end border-b-4 border-indigo-600 pb-4 mb-6">
+                <div>
+                  <h1 className="text-3xl font-black text-indigo-900 mb-2">الجدول الدراسي الأكاديمي</h1>
+                  <h2 className="text-xl font-bold text-slate-700 bg-slate-100 inline-block px-4 py-1.5 rounded-lg border border-slate-200">
+                    {viewType === 'teacher' 
+                      ? `المعلم: ${teachers.find(t => String(t.id) === String(selectedId))?.users?.full_name || ''}` 
+                      : `الفصل: ${sections.find(s => String(s.id) === String(selectedId))?.classes?.name} - ${sections.find(s => String(s.id) === String(selectedId))?.name}`}
+                  </h2>
+                </div>
+                <div className="text-left flex flex-col items-end">
+                  <div className="flex items-center gap-2 text-indigo-600 mb-2 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100">
+                     <Calendar className="w-5 h-5" />
+                     <span className="font-black text-sm">العام الدراسي الحالي</span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-500">تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+              </div>
 
-                        return (
-                          <td key={p.id} className="h-24">
-                            {slot ? (
-                              <div className="flex flex-col items-center justify-center h-full gap-2">
-                                <div className="font-bold text-sm text-slate-900 border-b border-slate-300 pb-1 w-full text-center">{slot.subjects?.name}</div>
-                                <div className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded w-full text-center">
-                                  {viewType === 'teacher' 
-                                    ? `${Array.isArray(slot.sections?.classes) ? slot.sections?.classes[0]?.name : slot.sections?.classes?.name} - ${slot.sections?.name}`
-                                    : slot.teachers?.users?.full_name}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-slate-300 text-xs">-</div>
-                            )}
-                          </td>
-                        );
-                      })}
+              {/* Table */}
+              <div className="rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="w-28 bg-indigo-600 text-white py-4 border-b-2 border-l-2 border-indigo-700 font-black text-center align-middle">
+                        اليوم / الحصة
+                      </th>
+                      {periods.map(p => (
+                        <th key={p.id} className="py-4 bg-indigo-50 border-b-2 border-l-2 border-slate-200 text-indigo-900 text-center align-middle last:border-l-0">
+                          <div className="font-black text-sm mb-1">الحصة {p.period_number}</div>
+                          <div className="text-[11px] font-bold text-indigo-500 bg-white inline-block px-2 py-0.5 rounded-md border border-indigo-100">
+                            {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
+                          </div>
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {DAYS.map((day, index) => (
+                      <tr key={day.id}>
+                        <td className={`font-black text-center border-l-2 border-slate-200 text-slate-800 py-4 align-middle ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                          {day.name}
+                        </td>
+                        {periods.map((p) => {
+                          const period = p.period_number;
+                          const slot = scheduleData.find(s => 
+                            String(s.day_of_week) === String(day.id) && 
+                            String(s.period) === String(period) && 
+                            (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId))
+                          );
+
+                          return (
+                            <td key={p.id} className={`h-28 border-l-2 border-t-2 border-slate-200 p-2 align-middle last:border-l-0 ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
+                              {slot ? (
+                                <div className="flex flex-col items-center justify-center h-full gap-1.5 bg-white rounded-xl p-2.5 border border-slate-200 shadow-sm w-full">
+                                  <div className="font-black text-sm text-indigo-900 text-center leading-tight">
+                                    {slot.subjects?.name}
+                                  </div>
+                                  <div className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md text-center w-full truncate border border-slate-200/60">
+                                    {viewType === 'teacher' 
+                                      ? `${Array.isArray(slot.sections?.classes) ? slot.sections?.classes[0]?.name : slot.sections?.classes?.name} - ${slot.sections?.name}`
+                                      : slot.teachers?.users?.full_name}
+                                  </div>
+                                  {slot.teachers?.zoom_link && (
+                                    <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md mt-1 w-full" style={{ textDecoration: 'none' }}>
+                                      <Video className="w-3 h-3" /> رابط زوم
+                                    </a>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center h-full opacity-30">
+                                  <BookOpen className="w-4 h-4 text-slate-400 mb-1" />
+                                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">فراغ</span>
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               
-              <div className="mt-8 pt-6 border-t-2 border-slate-900 flex justify-between items-center">
-                <div className="text-right">
-                  <p className="text-sm font-black text-slate-900">تطبيق الرفعة النموذجي</p>
-                  <p className="text-xs font-bold text-slate-500 mt-1">نسخة معتمدة للجدول الدراسي</p>
+              {/* Footer */}
+              <div className="mt-8 pt-4 border-t-2 border-slate-800 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                   <div className="w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-lg shadow-sm">R</div>
+                   <div>
+                     <p className="text-sm font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
+                     <p className="text-[10px] font-bold text-slate-500">نظام الإدارة الأكاديمية المتكامل</p>
+                   </div>
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-bold text-slate-500">تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</p>
+                  <p className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                    نسخة معتمدة للجدول الدراسي
+                  </p>
                 </div>
               </div>
             </div>
