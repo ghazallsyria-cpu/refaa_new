@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, FileDown } from 'lucide-react';
+import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, FileDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
@@ -38,8 +38,9 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // 🖨️ حالة الطباعة الذكية
+  // 🖨️ حالات الطباعة الذكية المستحدثة
   const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'all-sections'>('single');
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
 
   const currentDayOfWeek = new Date().getDay() + 1;
   const defaultTab = (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) ? currentDayOfWeek : 1;
@@ -262,19 +263,19 @@ export default function SchedulePage() {
     fetchSchedule();
   }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
-  // 🖨️ دوال الطباعة الفاخرة
-  const handlePrintSingle = () => {
-    setPrintMode('single');
-    setTimeout(() => window.print(), 200);
-  };
-
-  const handlePrintAll = (mode: 'all-teachers' | 'all-sections') => {
-    setShowAllSchedules(true); // إجبار تحميل كل البيانات
+  // 🖨️ محرك الطباعة الذكي (يضمن تحميل الـ DOM قبل فتح النافذة)
+  const executePrint = (mode: 'single' | 'all-teachers' | 'all-sections') => {
+    setIsPreparingPrint(true);
     setPrintMode(mode);
-    // ننتظر قليلاً لكي يتم جلب البيانات ورسم الـ DOM
+    if (mode !== 'single') {
+      setShowAllSchedules(true);
+    }
+    
+    // إعطاء React وقتاً كافياً لرسم الجداول في الذاكرة (لتفادي الصفحة البيضاء)
     setTimeout(() => {
       window.print();
-    }, 1000);
+      setIsPreparingPrint(false);
+    }, 1500);
   };
 
   // ==========================================
@@ -451,11 +452,7 @@ export default function SchedulePage() {
     );
   }
 
-  // ==========================================
-  // 🚀 ADMIN / TEACHER VIEW (شاشة المعلم والمدير)
-  // ==========================================
-  
-  // دالة صغيرة لترتيب الأيام للطباعة
+  // دالة تصفية الجداول حسب نوع الطباعة المختار
   const getEntitySchedule = (entityId: string, entityType: 'teacher' | 'section') => {
     return scheduleData.filter(s => 
       entityType === 'teacher' ? String(s.teacher_id) === String(entityId) : String(s.section_id) === String(entityId)
@@ -464,44 +461,81 @@ export default function SchedulePage() {
 
   const entitiesToPrint = printMode === 'all-teachers' ? teachers : printMode === 'all-sections' ? sections : [{ id: selectedId }];
 
+  // ==========================================
+  // 🚀 ADMIN / TEACHER VIEW (مدمج مع الطباعة المبتكرة)
+  // ==========================================
   return (
     <div dir="rtl">
-      {/* 🖨️ ستايلات الطباعة الجذرية - تحويل الصفحة لوثيقة PDF فاخرة */}
+      {/* 🖨️ ستايلات الطباعة العميقة لمعالجة عيوب iOS و Safari */}
       <style jsx global>{`
         @media print {
-          @page { size: landscape; margin: 15mm; }
-          html, body, main, #__next {
+          @page { size: A4 landscape; margin: 10mm; }
+          
+          /* إجبار هيكل التطبيق على التمدد وإلغاء أي قص (Overflow) */
+          html, body, #__next, main {
             height: auto !important;
-            min-height: auto !important;
+            min-height: 100% !important;
             overflow: visible !important;
             background-color: white !important;
             color: black !important;
             font-family: 'Cairo', sans-serif !important;
           }
           
-          /* إخفاء الواجهة العادية بالكامل */
+          /* إخفاء الواجهة العادية بالكامل في الطباعة */
           .web-content { display: none !important; }
           
-          /* عرض قسم الطباعة */
-          #print-area { display: block !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+          /* إظهار قسم الطباعة ككيان مستقل ومستمر */
+          #print-area { 
+            display: block !important; 
+            width: 100% !important; 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            visibility: visible !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+          }
           
-          /* فواصل الصفحات لطباعة المتعدد */
-          .page-break { page-break-after: always !important; break-after: page !important; }
-          .page-break:last-child { page-break-after: auto !important; break-after: auto !important; }
+          .page-break { page-break-inside: avoid !important; page-break-after: always !important; }
+          .page-break:last-child { page-break-after: auto !important; }
+          tr { page-break-inside: avoid !important; }
           
-          /* الألوان والخطوط الإجبارية */
+          /* إجبار الألوان - السمة الأهم للمتصفحات */
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           
-          /* تصميم الجدول المعماري الفخم */
-          .print-table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
-          .print-table th, .print-table td { border: 1px solid #cbd5e1 !important; padding: 8px !important; text-align: center !important; vertical-align: middle !important; word-wrap: break-word !important; }
-          .print-table th { background-color: #f8fafc !important; color: #1e1b4b !important; font-weight: 900 !important; font-size: 14px !important; }
-          .print-table td { height: 110px !important; } /* ارتفاع مناسب لمنع قص النص */
+          /* تصميم الجدول المرن ليحتوي النصوص الطويلة دون قص */
+          .print-table { 
+            width: 100% !important; 
+            border-collapse: separate !important; 
+            border-spacing: 0 !important;
+            border-radius: 16px !important;
+            border: 2px solid #e2e8f0 !important;
+          }
+          .print-table th, .print-table td { 
+            border: 1px solid #e2e8f0 !important; 
+            padding: 12px 6px !important; 
+            text-align: center !important; 
+            vertical-align: middle !important; 
+            word-wrap: break-word !important; 
+            white-space: normal !important; /* السماح بالتفاف النص */
+          }
+          .print-table th { background-color: #f8fafc !important; color: #1e1b4b !important; font-weight: 900 !important; font-size: 13px !important; }
           
-          /* إصلاح الروابط داخل الـ PDF */
-          a[href] { text-decoration: none !important; cursor: pointer !important; }
+          /* حفظ الروابط وتفعيلها في الـ PDF */
+          a[href] { text-decoration: none !important; cursor: pointer !important; display: inline-flex !important; }
         }
       `}</style>
+
+      {/* ⏳ شاشة التحميل الذكية أثناء التجهيز للطباعة */}
+      <AnimatePresence>
+        {isPreparingPrint && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md">
+            <Loader2 className="w-16 h-16 animate-spin text-indigo-600 mb-4" />
+            <h2 className="text-2xl font-black text-slate-900">جاري هندسة وثيقة الـ PDF...</h2>
+            <p className="text-slate-500 font-bold mt-2">يرجى الانتظار، نقوم برسم الجداول والألوان وتفعيل الروابط.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* 🖥️ واجهة الموقع العادية (تختفي عند الطباعة) */}
       <div className="web-content space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
@@ -515,7 +549,7 @@ export default function SchedulePage() {
           </div>
         )}
 
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">
               <LayoutGrid className="w-3.5 h-3.5" />
@@ -526,25 +560,24 @@ export default function SchedulePage() {
             </h1>
           </div>
           
-          {/* أزرار الطباعة الفاخرة */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={handlePrintSingle} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg hover:bg-slate-800 transition-all active:scale-95">
+          {/* 🖨️ أزرار الطباعة المتطورة */}
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            <button onClick={() => executePrint('single')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex-1">
               <Printer className="h-4 w-4" /> طباعة الجدول الحالي
             </button>
             {isAdmin && (
               <>
-                <button onClick={() => handlePrintAll('all-sections')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 px-6 py-3 text-sm font-black hover:bg-indigo-100 transition-all active:scale-95">
-                  <FileDown className="h-4 w-4" /> طباعة جميع الفصول
+                <button onClick={() => executePrint('all-sections')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 px-5 py-3 text-sm font-black hover:bg-indigo-100 transition-all active:scale-95 flex-1">
+                  <FileDown className="h-4 w-4" /> جداول الفصول
                 </button>
-                <button onClick={() => handlePrintAll('all-teachers')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 px-6 py-3 text-sm font-black hover:bg-emerald-100 transition-all active:scale-95">
-                  <FileDown className="h-4 w-4" /> طباعة جميع المعلمين
+                <button onClick={() => executePrint('all-teachers')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3 text-sm font-black hover:bg-emerald-100 transition-all active:scale-95 flex-1">
+                  <FileDown className="h-4 w-4" /> جداول المعلمين
                 </button>
               </>
             )}
           </div>
         </div>
 
-        {/* ... (باقي أكواد واجهة الإدارة والتبديل والإضافة كما هي تماماً في الكود السابق) ... */}
         {isAdmin && authRole !== 'teacher' && swappingFrom && (
           <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between animate-pulse sticky top-4 z-40 gap-4">
             <div className="flex items-center gap-4">
@@ -734,16 +767,18 @@ export default function SchedulePage() {
       </div>
 
       {/* ======================================================== */}
-      {/* 🖨️ قسم الطباعة الفاخر (يظهر فقط في الـ PDF) */}
+      {/* 🖨️ قسم الطباعة (The Print Engine - PDF Masterpiece) */}
       {/* ======================================================== */}
-      <div id="print-area" className="hidden print:block font-cairo bg-white w-full">
-        {(!selectedId && !showAllSchedules) || periods.length === 0 ? null : (
-          entitiesToPrint.map((entity, pageIndex) => {
+      <div id="print-area" className="hidden font-cairo bg-white w-full">
+        {(!selectedId && printMode === 'single') || periods.length === 0 ? null : (
+          (printMode === 'all-teachers' ? teachers : printMode === 'all-sections' ? sections : [{ id: selectedId }]).map((entity, pageIndex) => {
             const entityId = entity.id;
             const printType = printMode === 'all-teachers' || viewType === 'teacher' ? 'teacher' : 'section';
             const entitySchedule = getEntitySchedule(String(entityId), printType);
             
-            // جلب الاسم بدقة (سواء كان معلماً أو فصلاً)
+            // تجاهل طباعة الجداول الفارغة كلياً عند طباعة الكل لتوفير الورق
+            if (printMode !== 'single' && entitySchedule.length === 0) return null;
+
             let entityName = '';
             if (printType === 'teacher') {
               entityName = entity.users?.full_name || 'معلم غير محدد';
@@ -753,36 +788,35 @@ export default function SchedulePage() {
             }
 
             return (
-              <div key={`print-page-${entityId}`} className="page-break w-full p-4 mb-8">
-                
-                {/* Header الفخم */}
-                <div className="flex justify-between items-end border-b-[3px] border-indigo-900 pb-4 mb-8">
+              <div key={`print-page-${entityId}`} className="page-break w-full p-6 mb-10 relative">
+                {/* Header فخم */}
+                <div className="flex justify-between items-end border-b-4 border-indigo-700 pb-4 mb-6 relative z-10">
                   <div>
-                    <h1 className="text-3xl font-black text-indigo-950 tracking-tight mb-2">الجدول الدراسي الأسبوعي</h1>
-                    <h2 className="text-lg font-black text-slate-700 bg-slate-100/80 inline-block px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">الجدول الدراسي الأسبوعي</h1>
+                    <h2 className="text-lg font-black text-slate-700 bg-slate-100/80 inline-block px-5 py-2 rounded-xl border border-slate-200">
                       {printType === 'teacher' ? `المعلم: ${entityName}` : `الفصل: ${entityName}`}
                     </h2>
                   </div>
                   <div className="text-left flex flex-col items-end">
-                    <div className="flex items-center gap-2 text-indigo-700 mb-2 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100 font-black shadow-sm">
+                    <div className="flex items-center gap-2 text-indigo-700 mb-2 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100 font-black">
                        <Calendar className="w-5 h-5" /> العام الدراسي الحالي
                     </div>
                     <p className="text-xs font-bold text-slate-500">تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                   </div>
                 </div>
 
-                {/* Table المعماري */}
-                <div className="rounded-2xl overflow-hidden border border-slate-300 shadow-sm">
+                {/* Table المحسن للقراءة دون قص */}
+                <div className="rounded-2xl overflow-hidden shadow-sm relative z-10">
                   <table className="print-table">
                     <thead>
                       <tr>
-                        <th className="w-32 bg-indigo-900 text-white border-b-2 border-l-2 border-slate-300 text-center align-middle py-4">
+                        <th className="w-32 bg-indigo-700 text-white border-b-2 border-l-2 border-indigo-800 text-center align-middle py-4">
                           اليوم / الحصة
                         </th>
                         {periods.map(p => (
-                          <th key={p.id} className="bg-slate-100 border-b-2 border-l-2 border-slate-300 text-slate-800 text-center align-middle py-3 last:border-l-0">
-                            <div className="font-black text-base mb-1">الحصة {p.period_number}</div>
-                            <div className="text-xs font-bold text-indigo-600 bg-white inline-block px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
+                          <th key={p.id} className="bg-slate-100 border-b-2 border-l-2 border-slate-200 text-slate-800 text-center align-middle py-3 last:border-l-0">
+                            <div className="font-black text-sm mb-1 text-slate-900">الحصة {p.period_number}</div>
+                            <div className="text-[11px] font-bold text-indigo-600 bg-white inline-block px-3 py-1 rounded-lg border border-indigo-100">
                               {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
                             </div>
                           </th>
@@ -792,7 +826,7 @@ export default function SchedulePage() {
                     <tbody>
                       {DAYS.map((day, index) => (
                         <tr key={day.id}>
-                          <td className={`font-black text-lg text-center align-middle border-l-2 border-slate-300 text-slate-900 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                          <td className={`font-black text-base text-center align-middle border-l-2 border-slate-200 text-slate-900 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
                             {day.name}
                           </td>
                           {periods.map((p) => {
@@ -800,27 +834,26 @@ export default function SchedulePage() {
                             const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period));
 
                             return (
-                              <td key={p.id} className={`border-l-2 border-t border-slate-300 align-middle p-2 last:border-l-0 ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
+                              <td key={p.id} className={`border-l-2 border-t border-slate-200 align-middle p-2 last:border-l-0 ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
                                 {slot ? (
-                                  <div className="flex flex-col items-center justify-center h-full gap-2 bg-white rounded-xl p-3 border border-slate-200 shadow-sm w-full">
-                                    <div className="font-black text-[15px] text-indigo-950 text-center leading-snug whitespace-normal break-words w-full">
+                                  <div className="flex flex-col items-center justify-center h-full gap-2 p-1 w-full">
+                                    <div className="font-black text-[13px] sm:text-[14px] text-slate-900 text-center leading-snug w-full">
                                       {slot.subjects?.name}
                                     </div>
-                                    <div className="text-[12px] font-bold text-slate-700 bg-slate-100 px-2 py-1.5 rounded-lg text-center w-full whitespace-normal break-words border border-slate-200">
+                                    <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-1.5 rounded-lg text-center w-full border border-slate-200">
                                       {printType === 'teacher' 
                                         ? `${Array.isArray(slot.sections?.classes) ? slot.sections?.classes[0]?.name : slot.sections?.classes?.name} - ${slot.sections?.name}`
                                         : slot.teachers?.users?.full_name}
                                     </div>
                                     {slot.teachers?.zoom_link && (
-                                      <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg mt-1 w-full hover:underline">
-                                        <Video className="w-4 h-4" /> <span>رابط البث (Zoom)</span>
+                                      <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-[10px] sm:text-[11px] font-black text-white bg-blue-600 px-3 py-1.5 rounded-full mt-1 w-[90%] mx-auto" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
+                                        <Video className="w-3.5 h-3.5" /> <span>رابط البث (Zoom)</span>
                                       </a>
                                     )}
                                   </div>
                                 ) : (
                                   <div className="flex flex-col items-center justify-center h-full opacity-30">
-                                    <BookOpen className="w-6 h-6 text-slate-400 mb-1" />
-                                    <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">فراغ</span>
+                                    <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">—</span>
                                   </div>
                                 )}
                               </td>
@@ -832,22 +865,21 @@ export default function SchedulePage() {
                   </table>
                 </div>
                 
-                {/* Footer الرسمي */}
-                <div className="mt-8 pt-4 border-t-2 border-slate-200 flex justify-between items-center">
+                {/* Footer رسمي */}
+                <div className="mt-8 pt-4 border-t-2 border-slate-200 flex justify-between items-center relative z-10">
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 bg-indigo-900 text-white rounded-xl flex items-center justify-center font-black text-xl shadow-md">R</div>
+                     <div className="w-10 h-10 bg-indigo-700 text-white rounded-xl flex items-center justify-center font-black text-xl">R</div>
                      <div>
-                       <p className="text-base font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
-                       <p className="text-xs font-bold text-slate-500">نظام الإدارة الأكاديمية الشامل</p>
+                       <p className="text-sm font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
+                       <p className="text-[10px] font-bold text-slate-500">نظام الإدارة الأكاديمية الشامل</p>
                      </div>
                   </div>
                   <div className="text-left">
-                    <p className="text-xs font-black text-indigo-700 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
-                      النسخة المعتمدة للإدارة (رقمي)
+                    <p className="text-[10px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                      وثيقة إلكترونية معتمدة
                     </p>
                   </div>
                 </div>
-
               </div>
             );
           })
