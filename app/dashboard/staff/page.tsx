@@ -90,6 +90,7 @@ export default function StaffDashboardPage() {
   // 🚀 دالة إضافة ولي الأمر باستخدام أداة الإدارة الأصلية
 // 🚀 دالة إضافة أو ربط ولي الأمر (محدثة بذكاء للتعامل مع الأبناء المتعددين)
 // 🚀 دالة إضافة أو ربط ولي الأمر (النسخة الذكية والنهائية للتعامل مع الأبناء المتعددين)
+// 🚀 دالة إضافة أو ربط ولي الأمر (النسخة الفولاذية المنيعة)
   const handleCreateParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!foundStudent || !parentForm.national_id) {
@@ -100,63 +101,75 @@ export default function StaffDashboardPage() {
     setLinkStatus({type: 'loading', msg: 'جاري التحقق من السجلات والربط...'});
 
     try {
-      // 1. نبحث أولاً في جدول users لنتأكد إذا كان ولي الأمر مسجلاً مسبقاً (لديه أبناء آخرين)
-      const { data: existingUser, error: checkError } = await supabase
+      // 1. نبحث أولاً في جدول users لنتأكد إذا كان الحساب مسجلاً مسبقاً
+      const { data: existingUser } = await supabase
         .from('users')
         .select('id, full_name')
         .eq('national_id', parentForm.national_id)
         .maybeSingle();
 
-      if (checkError) throw checkError;
+      let targetParentId = null;
 
       if (existingUser) {
-        // ==========================================
-        // 🌟 الحالة الأولى: ولي الأمر موجود مسبقاً
-        // ==========================================
-
-        // نتأكد من تسجيله في جدول parents (لتفادي أي نقص في البيانات)
-        const { data: existingParent } = await supabase
-          .from('parents')
-          .select('id')
-          .eq('id', existingUser.id)
-          .maybeSingle();
-
-        if (!existingParent) {
-          await supabase.from('parents').insert({ id: existingUser.id, national_id: parentForm.national_id });
-        }
-
-        // نربط الابن الجديد بمعرف ولي الأمر الموجود
-        const { error: linkError } = await supabase
-          .from('students')
-          .update({ parent_id: existingUser.id })
-          .eq('id', foundStudent.id);
-
-        if (linkError) throw linkError;
+        // 🌟 ولي الأمر مسجل مسبقاً (سواء كان ظاهراً للمدير أم لا)
+        targetParentId = existingUser.id;
+        
+        // نفرض إدخاله في جدول parents لمعالجة مشكلة "حساب الشبح"
+        await supabase.from('parents').upsert({ 
+          id: targetParentId, 
+          national_id: parentForm.national_id 
+        });
 
         setLinkStatus({type: 'success', msg: `نجاح! تم ربط الطالب بولي الأمر المسجل مسبقاً (${existingUser.full_name}).`});
 
       } else {
-        // ==========================================
-        // 🌟 الحالة الثانية: ولي الأمر جديد كلياً
-        // ==========================================
+        // 🌟 ولي الأمر جديد كلياً
         if (!parentForm.full_name) {
-          setLinkStatus({type: 'error', msg: 'هذا ولي أمر جديد، يرجى كتابة اسمه الكامل لإنشاء حسابه.'});
+          setLinkStatus({type: 'error', msg: 'يرجى كتابة اسم ولي الأمر الكامل لإنشاء حسابه.'});
           return;
         }
 
-        // نستخدم دالة addParent الرسمية الخاصة بالمدير لضمان اكتمال كل الجداول وظهوره في لوحة الإدارة
-        const payload = {
-          full_name: parentForm.full_name,
-          national_id: parentForm.national_id,
-          email: parentForm.email || `${parentForm.national_id}@alrefaa.edu`,
-          phone: parentForm.phone || '',
-          address: '', 
-          job_title: '',
-          student_ids: [foundStudent.id] // نرسل معرف الطالب ليتم ربطه فور الإنشاء
-        };
+        const email = parentForm.email || `${parentForm.national_id}@alrefaa.edu`;
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        // إنشاء الحساب عبر الـ API
+        const response = await fetch('/api/users/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ 
+            email: email, 
+            password: '123456', 
+            full_name: parentForm.full_name, 
+            national_id: parentForm.national_id,
+            phone: parentForm.phone || '',
+            role: 'parent' 
+          }),
+        });
+        
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
 
-        const result = await addParent(payload);
-        setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر وربطه بالطالب. (كلمة المرور: ${result.password})`});
+        targetParentId = result.user.id;
+
+        // 🚀 نفرض إدخال البيانات في جدول parents لكي يراه المدير فوراً!
+        const { error: upsertError } = await supabase.from('parents').upsert({ 
+          id: targetParentId, 
+          national_id: parentForm.national_id 
+        });
+        
+        if (upsertError) throw upsertError;
+
+        setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر بنجاح. (كلمة المرور: ${result.password})`});
+      }
+
+      // 3. الخطوة الأخيرة: ربط الطالب بمعرف ولي الأمر (سواء كان جديداً أو قديماً)
+      if (targetParentId) {
+        const { error: linkError } = await supabase
+          .from('students')
+          .update({ parent_id: targetParentId })
+          .eq('id', foundStudent.id);
+
+        if (linkError) throw linkError;
       }
 
       // تفريغ النموذج بعد النجاح
@@ -169,9 +182,9 @@ export default function StaffDashboardPage() {
 
     } catch (err: any) {
       console.error("Error linking parent:", err);
-      // رسالة مخصصة لخطأ الإيميل المكرر في حال حدث لأي سبب آخر
-      if (err.message?.includes('already been registered') || err.message?.includes('already exists')) {
-          setLinkStatus({type: 'error', msg: 'هذا الرقم المدني مسجل مسبقاً بطريقة غير مكتملة، يرجى مراجعة الإدارة.'});
+      // معالجة ذكية لأي خطأ متوقع
+      if (err.message?.includes('already been registered')) {
+          setLinkStatus({type: 'error', msg: 'الحساب موجود كـ "شبح" في النظام. يرجى من المدير حذفه أولاً من قائمة المستخدمين لتسجيله بشكل صحيح.'});
       } else {
           setLinkStatus({type: 'error', msg: err.message || 'فشلت عملية الإضافة والربط.'});
       }
