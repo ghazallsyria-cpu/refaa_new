@@ -89,27 +89,32 @@ export default function StaffDashboardPage() {
 
   // 🚀 دالة إضافة ولي الأمر باستخدام أداة الإدارة الأصلية
 // 🚀 دالة إضافة أو ربط ولي الأمر (محدثة بذكاء للتعامل مع الأبناء المتعددين)
+// 🚀 دالة إضافة أو ربط ولي الأمر (النسخة الذكية والنهائية للتعامل مع الأبناء المتعددين)
   const handleCreateParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!foundStudent || !parentForm.national_id) {
-      setLinkStatus({type: 'error', msg: 'يرجى إدخال الرقم المدني لولي الأمر على الأقل.'});
+      setLinkStatus({type: 'error', msg: 'يرجى إدخال الرقم المدني لولي الأمر.'});
       return;
     }
 
     setLinkStatus({type: 'loading', msg: 'جاري التحقق من السجلات والربط...'});
 
     try {
-      // 1. نبحث أولاً هل هذا الرقم المدني موجود مسبقاً في النظام؟
-      const { data: existingUser } = await supabase
+      // 1. نبحث أولاً في جدول users لنتأكد إذا كان ولي الأمر مسجلاً مسبقاً (لديه أبناء آخرين)
+      const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id, full_name')
         .eq('national_id', parentForm.national_id)
         .maybeSingle();
 
+      if (checkError) throw checkError;
+
       if (existingUser) {
-        // 🌟 ولي الأمر موجود مسبقاً! (لديه ابن آخر)
-        
-        // نتأكد أنه مسجل في جدول الآباء (parents) تحسباً
+        // ==========================================
+        // 🌟 الحالة الأولى: ولي الأمر موجود مسبقاً
+        // ==========================================
+
+        // نتأكد من تسجيله في جدول parents (لتفادي أي نقص في البيانات)
         const { data: existingParent } = await supabase
           .from('parents')
           .select('id')
@@ -120,7 +125,7 @@ export default function StaffDashboardPage() {
           await supabase.from('parents').insert({ id: existingUser.id, national_id: parentForm.national_id });
         }
 
-        // نقوم بربط الابن الجديد بهذا الأب فوراً!
+        // نربط الابن الجديد بمعرف ولي الأمر الموجود
         const { error: linkError } = await supabase
           .from('students')
           .update({ parent_id: existingUser.id })
@@ -128,24 +133,30 @@ export default function StaffDashboardPage() {
 
         if (linkError) throw linkError;
 
-        setLinkStatus({type: 'success', msg: `تم بنجاح! تم ربط الطالب بحساب ولي الأمر الموجود مسبقاً (${existingUser.full_name}).`});
-        
+        setLinkStatus({type: 'success', msg: `نجاح! تم ربط الطالب بولي الأمر المسجل مسبقاً (${existingUser.full_name}).`});
+
       } else {
-        // 🌟 ولي الأمر غير موجود نهائياً، نقوم بإنشاء حساب جديد له
+        // ==========================================
+        // 🌟 الحالة الثانية: ولي الأمر جديد كلياً
+        // ==========================================
         if (!parentForm.full_name) {
-            setLinkStatus({type: 'error', msg: 'ولي الأمر غير مسجل مسبقاً، يرجى كتابة اسمه لإنشاء حساب جديد.'});
-            return;
+          setLinkStatus({type: 'error', msg: 'هذا ولي أمر جديد، يرجى كتابة اسمه الكامل لإنشاء حسابه.'});
+          return;
         }
 
+        // نستخدم دالة addParent الرسمية الخاصة بالمدير لضمان اكتمال كل الجداول وظهوره في لوحة الإدارة
         const payload = {
-          ...parentForm,
+          full_name: parentForm.full_name,
+          national_id: parentForm.national_id,
+          email: parentForm.email || `${parentForm.national_id}@alrefaa.edu`,
+          phone: parentForm.phone || '',
           address: '', 
           job_title: '',
-          student_ids: [foundStudent.id] // نربطه فوراً بالطالب
+          student_ids: [foundStudent.id] // نرسل معرف الطالب ليتم ربطه فور الإنشاء
         };
 
         const result = await addParent(payload);
-        setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر وربط الطالب. كلمة المرور المؤقتة: ${result.password}`});
+        setLinkStatus({type: 'success', msg: `تم إنشاء حساب ولي الأمر وربطه بالطالب. (كلمة المرور: ${result.password})`});
       }
 
       // تفريغ النموذج بعد النجاح
@@ -157,7 +168,13 @@ export default function StaffDashboardPage() {
       }, 5000);
 
     } catch (err: any) {
-      setLinkStatus({type: 'error', msg: err.message || 'فشلت عملية الإضافة والربط.'});
+      console.error("Error linking parent:", err);
+      // رسالة مخصصة لخطأ الإيميل المكرر في حال حدث لأي سبب آخر
+      if (err.message?.includes('already been registered') || err.message?.includes('already exists')) {
+          setLinkStatus({type: 'error', msg: 'هذا الرقم المدني مسجل مسبقاً بطريقة غير مكتملة، يرجى مراجعة الإدارة.'});
+      } else {
+          setLinkStatus({type: 'error', msg: err.message || 'فشلت عملية الإضافة والربط.'});
+      }
     }
   };
 
