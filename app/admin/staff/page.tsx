@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, HeartPulse, Briefcase, Plus, Search, Edit, Trash2, X, 
@@ -8,27 +9,20 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-// 🧠 القاموس الذكي لتصنيفات الوظائف الإدارية
-const JOB_CATEGORIES = {
-  'قيادة عليا': {
-    icon: Shield,
-    color: 'indigo',
-    titles: ['مدير مدرسة (متوسط)', 'مدير مدرسة (ثانوي)', 'نائب مدير', 'مدير تنفيذي']
-  },
-  'رعاية وإرشاد': {
-    icon: HeartPulse,
-    color: 'rose',
-    titles: ['أخصائي اجتماعي', 'أخصائي نفسي', 'ممرض', 'مرشد طلابي']
-  },
-  'إدارة ومالية': {
-    icon: Briefcase,
-    color: 'amber',
-    titles: ['محاسب', 'سكرتير', 'شؤون طلبة', 'مشرف إداري', 'مسؤول تقنية معلومات']
-  }
+// 🧠 دالة ذكية لإعطاء ألوان وأيقونات للأقسام (سواء القديمة أو التي سيضيفها المدير مستقبلاً)
+const getCategoryStyles = (categoryName: string) => {
+  const knownStyles: Record<string, any> = {
+    'قيادة عليا': { icon: Shield, color: 'indigo' },
+    'رعاية وإرشاد': { icon: HeartPulse, color: 'rose' },
+    'إدارة ومالية': { icon: Briefcase, color: 'amber' }
+  };
+  // إذا أضاف المدير قسماً جديداً (مثلاً: إشراف تقني)، سنعطيه شكلاً افتراضياً أنيقاً
+  return knownStyles[categoryName] || { icon: Building2, color: 'slate' };
 };
 
 export default function StaffManagementPage() {
   const [staffList, setStaffList] = useState<any[]>([]);
+  const [dynamicCategories, setDynamicCategories] = useState<Record<string, string[]>>({}); // 🚀 القاموس الديناميكي
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -36,7 +30,6 @@ export default function StaffManagementPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
-  // حالة النموذج
   const [formData, setFormData] = useState({
     id: '', full_name: '', national_id: '', email: '', phone: '',
     job_category: '', job_title: '', scope_stage: 'الكل'
@@ -47,25 +40,44 @@ export default function StaffManagementPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const fetchStaff = async () => {
+  // 🚀 جلب البيانات المزدوج (الموظفين + إعدادات الوظائف)
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. جلب إعدادات الوظائف من الجدول الجديد
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('job_roles_settings')
+        .select('*');
+        
+      if (settingsError) throw settingsError;
+
+      // تحويل البيانات من قاعدة البيانات إلى قاموس سهل الاستخدام
+      const groupedSettings: Record<string, string[]> = {};
+      if (settingsData) {
+        settingsData.forEach(item => {
+          if (!groupedSettings[item.category_name]) groupedSettings[item.category_name] = [];
+          groupedSettings[item.category_name].push(item.job_title);
+        });
+      }
+      setDynamicCategories(groupedSettings);
+
+      // 2. جلب قائمة الموظفين
+      const { data: staffData, error: staffError } = await supabase
         .from('school_staff')
         .select('*, users!school_staff_id_fkey(full_name, email, phone, avatar_url, role)');
       
-      if (error) throw error;
-      setStaffList(data || []);
+      if (staffError) throw staffError;
+      setStaffList(staffData || []);
+
     } catch (err: any) {
       showToast('error', 'فشل جلب البيانات: ' + err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchStaff(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 دالة الحفظ (إضافة / تعديل) مع إنشاء المستخدم في Auth
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.full_name || !formData.national_id || !formData.job_category || !formData.job_title) {
@@ -75,7 +87,6 @@ export default function StaffManagementPage() {
 
     try {
       if (isEditing) {
-        // تحديث مستخدم موجود
         await supabase.from('users').update({ full_name: formData.full_name, phone: formData.phone, email: formData.email }).eq('id', formData.id);
         await supabase.from('school_staff').update({
           national_id: formData.national_id,
@@ -85,7 +96,6 @@ export default function StaffManagementPage() {
         }).eq('id', formData.id);
         showToast('success', 'تم تحديث بيانات الموظف بنجاح');
       } else {
-        // إنشاء مستخدم جديد عبر API (نفس الآلية المستخدمة للمعلمين)
         const safeEmail = formData.email || `${formData.national_id}@alrefaa.edu`;
         const { data: { session } } = await supabase.auth.getSession();
         
@@ -100,7 +110,6 @@ export default function StaffManagementPage() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
 
-        // إدراج في جدول الكادر
         await supabase.from('school_staff').insert({
           id: result.user.id,
           national_id: formData.national_id,
@@ -111,7 +120,7 @@ export default function StaffManagementPage() {
         showToast('success', `تم إضافة الموظف بنجاح (كلمة المرور: ${result.password})`);
       }
       setShowModal(false);
-      fetchStaff();
+      fetchData();
     } catch (err: any) {
       showToast('error', err.message || 'حدث خطأ غير متوقع');
     } finally {
@@ -129,7 +138,7 @@ export default function StaffManagementPage() {
       });
       if (!response.ok) throw new Error('فشل الحذف');
       showToast('success', 'تم الحذف بنجاح');
-      fetchStaff();
+      fetchData();
     } catch (err: any) { showToast('error', err.message); }
   };
 
@@ -148,18 +157,26 @@ export default function StaffManagementPage() {
     setShowModal(true);
   };
 
-  // 🧠 الفلترة والتجميع حسب فئة الوظيفة
   const filteredStaff = useMemo(() => {
     return staffList.filter(s => 
-      s.users?.full_name?.includes(searchTerm) || s.job_title.includes(searchTerm) || s.national_id.includes(searchTerm)
+      s.users?.full_name?.includes(searchTerm) || s.job_title?.includes(searchTerm) || s.national_id?.includes(searchTerm)
     );
   }, [staffList, searchTerm]);
 
+  // 🚀 التجميع الديناميكي بناءً على الفئات المجلوبة من قاعدة البيانات
   const groupedStaff = useMemo(() => {
-    const groups: Record<string, any[]> = { 'قيادة عليا': [], 'رعاية وإرشاد': [], 'إدارة ومالية': [] };
-    filteredStaff.forEach(s => { if (groups[s.job_category]) groups[s.job_category].push(s); });
+    const groups: Record<string, any[]> = {};
+    // تجهيز الهيكل الفارغ
+    Object.keys(dynamicCategories).forEach(cat => { groups[cat] = []; });
+    
+    // توزيع الموظفين
+    filteredStaff.forEach(s => { 
+      const cat = s.job_category;
+      if (!groups[cat]) groups[cat] = []; // في حال وجود موظف بفئة قديمة محذوفة
+      groups[cat].push(s); 
+    });
     return groups;
-  }, [filteredStaff]);
+  }, [filteredStaff, dynamicCategories]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pb-24 max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
@@ -191,18 +208,23 @@ export default function StaffManagementPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {Object.entries(JOB_CATEGORIES).map(([cat, info]) => (
-          <div key={cat} className={`bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-lg hover:border-${info.color}-200 transition-all group`}>
-            <div className={`h-16 w-16 bg-${info.color}-50 text-${info.color}-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner`}>
-              <info.icon className="w-8 h-8" />
+      {/* 🚀 إحصائيات الأقسام الديناميكية */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-10">
+        {Object.keys(dynamicCategories).map((cat) => {
+          const styles = getCategoryStyles(cat);
+          const Icon = styles.icon;
+          return (
+            <div key={cat} className={`bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-lg hover:border-${styles.color}-200 transition-all group`}>
+              <div className={`h-16 w-16 bg-${styles.color}-50 text-${styles.color}-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner`}>
+                <Icon className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-800 text-lg">{cat}</h3>
+                <p className="text-xs font-bold text-slate-400 mt-1">{groupedStaff[cat]?.length || 0} موظفين مسجلين</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-black text-slate-800 text-lg">{cat}</h3>
-              <p className="text-xs font-bold text-slate-400 mt-1">{groupedStaff[cat]?.length || 0} موظفين مسجلين</p>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="bg-white/80 backdrop-blur-xl p-4 rounded-[2rem] shadow-sm border border-slate-100 mb-8 sticky top-24 z-30">
@@ -216,30 +238,32 @@ export default function StaffManagementPage() {
         <div className="flex justify-center py-20"><div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div></div>
       ) : (
         <div className="space-y-12">
-          {Object.entries(JOB_CATEGORIES).map(([catName, catInfo]) => {
+          {Object.keys(groupedStaff).map((catName) => {
             const staffInCat = groupedStaff[catName];
-            if (staffInCat.length === 0) return null;
+            if (!staffInCat || staffInCat.length === 0) return null;
+            const styles = getCategoryStyles(catName);
+            const Icon = styles.icon;
             
             return (
               <div key={catName} className="space-y-6">
                 <div className="flex items-center gap-3 px-2">
-                  <div className={`p-2.5 bg-${catInfo.color}-50 text-${catInfo.color}-600 rounded-xl border border-${catInfo.color}-100`}><catInfo.icon className="w-6 h-6"/></div>
+                  <div className={`p-2.5 bg-${styles.color}-50 text-${styles.color}-600 rounded-xl border border-${styles.color}-100`}><Icon className="w-6 h-6"/></div>
                   <h2 className={`text-2xl font-black text-slate-800`}>{catName}</h2>
                   <div className="h-0.5 flex-1 bg-slate-100 rounded-full ml-4"></div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {staffInCat.map(member => (
-                    <div key={member.id} className={`bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 hover:shadow-xl hover:border-${catInfo.color}-300 transition-all duration-300 group`}>
+                    <div key={member.id} className={`bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 hover:shadow-xl hover:border-${styles.color}-300 transition-all duration-300 group`}>
                       <div className="flex items-start justify-between mb-6">
                         <div className="flex items-center gap-4">
-                          <div className={`h-14 w-14 rounded-[1.5rem] bg-${catInfo.color}-50 text-${catInfo.color}-600 flex items-center justify-center text-xl font-black shadow-inner border border-${catInfo.color}-100 group-hover:scale-110 transition-transform`}>
-                            {member.users?.avatar_url ? <img src={member.users.avatar_url} className="w-full h-full object-cover rounded-[1.2rem]"/> : member.users?.full_name?.charAt(0)}
+                          <div className={`h-14 w-14 rounded-[1.5rem] bg-${styles.color}-50 text-${styles.color}-600 flex items-center justify-center text-xl font-black shadow-inner border border-${styles.color}-100 group-hover:scale-110 transition-transform`}>
+                            {member.users?.avatar_url ? <img src={member.users.avatar_url} className="w-full h-full object-cover rounded-[1.2rem]" alt=""/> : member.users?.full_name?.charAt(0)}
                           </div>
                           <div>
                             <h3 className="font-black text-slate-900 text-lg leading-tight group-hover:text-indigo-600 transition-colors">{member.users?.full_name}</h3>
                             <div className="flex items-center gap-2 mt-1.5">
-                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg bg-${catInfo.color}-100 text-${catInfo.color}-700`}>{member.job_title}</span>
+                              <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg bg-${styles.color}-100 text-${styles.color}-700`}>{member.job_title}</span>
                               <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg">{member.scope_stage}</span>
                             </div>
                           </div>
@@ -264,7 +288,7 @@ export default function StaffManagementPage() {
         </div>
       )}
 
-      {/* 🚀 Modal - نافذة الإضافة والتعديل */}
+      {/* Modal - نافذة الإضافة والتعديل */}
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
@@ -306,14 +330,16 @@ export default function StaffManagementPage() {
                       <label className="text-xs font-black text-indigo-700 uppercase">فئة الوظيفة (القسم)</label>
                       <select required value={formData.job_category} onChange={e => setFormData({...formData, job_category: e.target.value, job_title: ''})} className="w-full bg-white border border-indigo-200 rounded-2xl px-5 py-3.5 font-black text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none">
                         <option value="">اختر الفئة...</option>
-                        {Object.keys(JOB_CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        {/* 🚀 القوائم الديناميكية المجلوبة من الداتا بيز */}
+                        {Object.keys(dynamicCategories).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       </select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-black text-indigo-700 uppercase">المسمى الوظيفي</label>
                       <select required value={formData.job_title} onChange={e => setFormData({...formData, job_title: e.target.value})} disabled={!formData.job_category} className="w-full bg-white border border-indigo-200 rounded-2xl px-5 py-3.5 font-black text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50">
                         <option value="">اختر المسمى...</option>
-                        {formData.job_category && JOB_CATEGORIES[formData.job_category as keyof typeof JOB_CATEGORIES].titles.map(t => <option key={t} value={t}>{t}</option>)}
+                        {/* 🚀 القوائم الديناميكية المجلوبة من الداتا بيز */}
+                        {formData.job_category && dynamicCategories[formData.job_category]?.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                   </div>
