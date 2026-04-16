@@ -2,13 +2,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion'; // 🚀 تمت إضافة AnimatePresence هنا
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
+// 🚀 تمت إضافة جميع الأيقونات الناقصة هنا (Settings, Building2, Calculator, HeartPulse, Activity)
 import { 
   Shield, Users, Loader2, Sparkles, 
   FileText, Bell, CheckCircle, Search, 
-  UserPlus, AlertTriangle, CalendarDays, GraduationCap, ClipboardList
+  UserPlus, AlertTriangle, CalendarDays, GraduationCap, ClipboardList,
+  Settings, Building2, Calculator, HeartPulse, Activity
 } from 'lucide-react';
 
 export default function StaffDashboardPage() {
@@ -45,14 +47,13 @@ export default function StaffDashboardPage() {
     if (!isChecking) loadWorkspace();
   }, [user, isChecking]);
 
-  // محاكاة لدالة ربط ولي الأمر بالطالب (نواة للعمل الحقيقي لاحقاً)
+  // محاكاة لدالة ربط ولي الأمر بالطالب
   const handleLinkParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!parentCivilId) return;
     setLinkStatus({type: 'loading', msg: 'جاري البحث في السجلات...'});
     
     setTimeout(() => {
-      // هنا سنضع لاحقاً كود Supabase الفعلي للبحث عن ولي الأمر وربطه
       setLinkStatus({type: 'success', msg: `تم تفعيل حساب ولي الأمر (${parentCivilId}) بنجاح وربطه بالطلاب.`});
       setParentCivilId('');
       setTimeout(() => setLinkStatus({type: 'idle', msg: ''}), 4000);
@@ -75,6 +76,59 @@ export default function StaffDashboardPage() {
 
   // التحقق مما إذا كان الموظف لا يملك أي صلاحيات على الإطلاق
   const hasNoPermissions = Object.values(staffData.permissions).every(val => val === false) || Object.keys(staffData.permissions).length === 0;
+
+  // الوحدات المصغرة (تم نقلها لداخل المكون لتجنب مشاكل النطاق)
+  const FinanceModule = () => (
+    <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 rounded-[2.5rem] text-white shadow-xl hover:shadow-2xl transition-all duration-300">
+      <Calculator className="w-12 h-12 mb-4 opacity-80" />
+      <h2 className="text-2xl font-black mb-2">البوابة المالية والإدارية</h2>
+      <p className="font-bold opacity-90 mb-6">إدارة الرسوم الدراسية، الرواتب، والميزانية التشغيلية.</p>
+      <div className="flex gap-3">
+        <button className="bg-white text-emerald-600 px-6 py-3 rounded-xl font-black shadow-lg hover:bg-emerald-50 transition-all active:scale-95">الرسوم المستحقة</button>
+        <button className="bg-emerald-700/50 text-white px-6 py-3 rounded-xl font-black hover:bg-emerald-700 transition-all border border-emerald-400/30 active:scale-95">سجلات الدفع</button>
+      </div>
+    </div>
+  );
+
+  const GuidanceModule = () => (
+    <div className="bg-gradient-to-br from-rose-500 to-pink-600 p-8 rounded-[2.5rem] text-white shadow-xl hover:shadow-2xl transition-all duration-300">
+      <HeartPulse className="w-12 h-12 mb-4 opacity-80" />
+      <h2 className="text-2xl font-black mb-2">شؤون الرعاية والإرشاد</h2>
+      <p className="font-bold opacity-90 mb-6">متابعة الحالات السلوكية، النفسية، والصحية للطلاب.</p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm border border-white/20">
+          <div className="text-3xl font-black">12</div>
+          <div className="text-sm font-bold opacity-90">حالة نشطة</div>
+        </div>
+        <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm border border-white/20">
+          <div className="text-3xl font-black">5</div>
+          <div className="text-sm font-bold opacity-90">مراجعات اليوم</div>
+        </div>
+      </div>
+      <button className="w-full mt-4 bg-white text-rose-600 py-3.5 rounded-xl font-black shadow-lg hover:bg-rose-50 transition-all active:scale-95">استعراض ملفات الطلاب</button>
+    </div>
+  );
+
+  const LeadershipModule = () => (
+    <div className="bg-gradient-to-br from-indigo-800 to-slate-900 p-8 rounded-[2.5rem] text-white shadow-xl hover:shadow-2xl transition-all duration-300 col-span-full">
+      <Shield className="w-12 h-12 mb-4 opacity-80 text-indigo-400" />
+      <h2 className="text-3xl font-black mb-2">مركز القيادة والتحكم</h2>
+      <p className="font-bold text-indigo-200 mb-6 max-w-2xl">نظرة عامة على أداء المدرسة، نسب الحضور والغياب، وتقييم الكوادر التعليمية والإدارية.</p>
+      <div className="flex flex-wrap gap-3">
+        <button className="bg-indigo-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-400 transition-all flex items-center gap-2 active:scale-95"><Activity className="w-5 h-5"/> الإحصائيات العامة</button>
+        <button className="bg-white/10 text-white border border-white/20 px-8 py-4 rounded-2xl font-black hover:bg-white/20 transition-all flex items-center gap-2 active:scale-95"><Users className="w-5 h-5"/> إدارة الطاقم</button>
+        <button className="bg-white/10 text-white border border-white/20 px-8 py-4 rounded-2xl font-black hover:bg-white/20 transition-all flex items-center gap-2 active:scale-95"><FileText className="w-5 h-5"/> التقارير الرسمية</button>
+      </div>
+    </div>
+  );
+
+  const DefaultWorkspace = ({ categoryName }: { categoryName: string }) => (
+    <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner">
+      <Building2 className="w-12 h-12 mb-4 text-slate-400" />
+      <h2 className="text-2xl font-black mb-2 text-slate-800">قسم: {categoryName}</h2>
+      <p className="font-bold text-slate-500">مرحباً بك في مساحة العمل الخاصة بك. سيتم تفعيل الأدوات المخصصة لقسمك قريباً.</p>
+    </div>
+  );
 
   return (
     <motion.div 
@@ -125,6 +179,14 @@ export default function StaffDashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
+              {/* الوحدات المخصصة حسب القسم (تظهر فقط إذا كان للموظف صلاحيات) */}
+              {staffData.job_category === 'قيادة عليا' && <div className="col-span-full"><LeadershipModule /></div>}
+              {staffData.job_category === 'رعاية وإرشاد' && <div className="col-span-full"><GuidanceModule /></div>}
+              {staffData.job_category === 'إدارة ومالية' && <div className="col-span-full"><FinanceModule /></div>}
+              {!['قيادة عليا', 'رعاية وإرشاد', 'إدارة ومالية'].includes(staffData.job_category) && (
+                <div className="col-span-full"><DefaultWorkspace categoryName={staffData.job_category} /></div>
+              )}
+
               {/* 🛠️ أداة: استعراض ملفات الطلاب */}
               {hasPerm('view_students') && (
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
@@ -155,7 +217,7 @@ export default function StaffDashboardPage() {
                 </div>
               )}
 
-              {/* 🛠️ أداة: ربط أولياء الأمور (التطبيق المصغر الذي طلبته) */}
+              {/* 🛠️ أداة: ربط أولياء الأمور */}
               {hasPerm('link_parents') && (
                 <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-[2rem] shadow-lg text-white md:col-span-2">
                   <div className="flex items-start justify-between mb-6">
@@ -194,9 +256,9 @@ export default function StaffDashboardPage() {
                         initial={{ opacity: 0, height: 0 }} 
                         animate={{ opacity: 1, height: 'auto' }} 
                         exit={{ opacity: 0, height: 0 }}
-                        className={`mt-4 text-sm font-bold px-4 py-2.5 rounded-lg border ${linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : 'bg-white/10 border-white/20 text-indigo-100'}`}
+                        className={`mt-4 overflow-hidden rounded-lg border ${linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : 'bg-white/10 border-white/20 text-indigo-100'}`}
                       >
-                        {linkStatus.msg}
+                        <div className="px-4 py-2.5 text-sm font-bold">{linkStatus.msg}</div>
                       </motion.div>
                     )}
                   </AnimatePresence>
