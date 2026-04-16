@@ -4,18 +4,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, Clock, FileText, 
-  GraduationCap, TrendingUp, AlertTriangle, Award, ChevronLeft, 
-  Play, Star, ShieldAlert, XCircle, Activity, Loader2, Heart, Coffee
+  GraduationCap, TrendingUp, AlertTriangle, Award, MessageCircle,
+  Play, Star, ShieldAlert, XCircle, Activity, Loader2, Heart, 
+  ChevronDown, Send, UserCheck, ShieldCheck, Headphones
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 
 export default function ParentDashboard() {
   const { user, authRole, isChecking } = useAuth() as any;
@@ -23,439 +21,233 @@ export default function ParentDashboard() {
   const [children, setChildren] = useState<any[]>([]);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   
-  // 🧠 بيانات الابن النشط
-  const [attendance, setAttendance] = useState<any[]>([]);
-  const [exams, setExams] = useState<any[]>([]);
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [badges, setBadges] = useState<any[]>([]);
-  const [schedule, setSchedule] = useState<any[]>([]);
-  const [periods, setPeriods] = useState<any[]>([]);
-  const [stats, setStats] = useState({ attendanceRate: 100, examsAvg: 0, assignmentsAvg: 0, absentCount: 0 });
-  
+  // بيانات المواد والدرجات المدمجة
+  const [subjectPerformance, setSubjectPerformance] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [childLoading, setChildLoading] = useState(false);
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-    setCurrentTime(new Date());
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   // 1. جلب بيانات ولي الأمر وأبنائه
   const fetchParentData = useCallback(async () => {
-    if (!user?.id || authRole !== 'parent') return;
+    if (!user?.id) return;
     try {
       setLoading(true);
-      const { data: pData } = await supabase
-        .from('parents')
-        .select('*, users(full_name, email, avatar_url)')
-        .eq('id', user.id)
-        .maybeSingle();
-      
+      const { data: pData } = await supabase.from('parents').select('*, users(full_name, avatar_url)').eq('id', user.id).maybeSingle();
       if (pData) setParentData(pData);
 
-      const { data: cData } = await supabase
-        .from('students')
-        .select('*, users(full_name, avatar_url), sections(name, classes(name))')
-        .eq('parent_id', user.id);
-
+      const { data: cData } = await supabase.from('students').select('*, users(full_name, avatar_url), sections(name, classes(name))').eq('parent_id', user.id);
       if (cData && cData.length > 0) {
         setChildren(cData);
         setActiveChildId(cData[0].id);
       }
-    } catch (e) {
-      console.error('Error fetching parent data:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, authRole]);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  }, [user]);
 
-  useEffect(() => {
-    if (!isChecking) fetchParentData();
-  }, [fetchParentData, isChecking]);
+  useEffect(() => { if (!isChecking) fetchParentData(); }, [fetchParentData, isChecking]);
 
-  // 2. جلب بيانات الابن المختار
-  const fetchActiveChildData = useCallback(async (childId: string) => {
-    if (!childId) return;
+  // 2. جلب الأداء الأكاديمي التفصيلي لكل مادة (الواجبات + الاختبارات)
+  const fetchAcademicData = useCallback(async (childId: string) => {
+    setChildLoading(true);
     try {
-      setChildLoading(true);
-      
-      const { data: attData } = await supabase
-        .from('attendance_records')
-        .select('*, subjects(name)')
-        .eq('student_id', childId)
-        .order('date', { ascending: false });
-      
-      setAttendance(attData || []);
-
-      const { data: exData } = await supabase
-        .from('exam_attempts')
-        .select('id, score, status, completed_at, exams(id, title, max_score, total_marks, subjects(name))')
-        .eq('student_id', childId)
-        .eq('status', 'graded')
-        .order('completed_at', { ascending: false });
-      
-      setExams(exData || []);
-
-      const { data: assData } = await supabase
-        .from('assignment_submissions')
-        .select('id, grade, status, submitted_at, feedback, assignments(id, title, total_marks, subjects(name), assignment_questions(points))')
-        .eq('student_id', childId)
-        .eq('status', 'graded')
-        .order('submitted_at', { ascending: false });
-      
-      setAssignments(assData || []);
-
-      const { data: bdgData } = await supabase
-        .from('student_badges')
-        .select('*, badge:badges(*)')
-        .eq('student_id', childId)
-        .order('granted_at', { ascending: false });
-      
-      setBadges(bdgData || []);
-
-      const { data: perData } = await supabase.from('periods').select('*').order('period_number', { ascending: true });
-      setPeriods(perData || []);
-
+      // جلب جميع المواد المسجلة للطالب عبر فصله
       const activeChild = children.find(c => c.id === childId);
-      if (activeChild?.section_id) {
-        const today = new Date().getDay() + 1; // الأحد = 1
-        const { data: schData } = await supabase
-          .from('schedules')
-          .select('*, subjects(name), teachers(id, users(full_name))')
-          .eq('section_id', activeChild.section_id)
-          .eq('day_of_week', today)
-          .order('period', { ascending: true });
+      if (!activeChild?.section_id) return;
+
+      const { data: subjects } = await supabase
+        .from('schedules')
+        .select('subjects(id, name), teachers(id, users(full_name, avatar_url))')
+        .eq('section_id', activeChild.section_id);
+
+      // تنظيف المواد المكررة في الجدول
+      const uniqueSubjects = Array.from(new Map(subjects?.map(item => [item.subjects.id, item])).values());
+
+      // لكل مادة، نجلب الواجبات والاختبارات
+      const performancePromises = uniqueSubjects.map(async (item: any) => {
+        const subId = item.subjects.id;
         
-        setSchedule(schData || []);
-      }
+        // جلب درجات الاختبارات لهذه المادة
+        const { data: examScores } = await supabase
+          .from('exam_attempts')
+          .select('score, status, exams(title, total_marks, subjects(id))')
+          .eq('student_id', childId)
+          .eq('status', 'graded');
+        
+        // جلب درجات الواجبات لهذه المادة
+        const { data: assignmentScores } = await supabase
+          .from('assignment_submissions')
+          .select('grade, status, assignments(title, total_marks, subjects(id))')
+          .eq('student_id', childId)
+          .eq('status', 'graded');
 
-      // حسابات الإحصائيات
-      let absentCount = 0;
-      let attRate = 100;
-      if (attData && attData.length > 0) {
-        absentCount = attData.filter(a => a.status === 'absent').length;
-        const presents = attData.filter(a => a.status === 'present' || a.status === 'late').length;
-        attRate = Math.round((presents / attData.length) * 100);
-      }
+        const filteredExams = examScores?.filter((e: any) => e.exams.subjects.id === subId) || [];
+        const filteredAssignments = assignmentScores?.filter((a: any) => a.assignments.subjects.id === subId) || [];
 
-      let exAvg = 0;
-      if (exData && exData.length > 0) {
-        let totalPct = 0;
-        exData.forEach((e: any) => {
-          const max = e.exams?.total_marks || e.exams?.max_score || 100;
-          totalPct += ((e.score || 0) / max) * 100;
-        });
-        exAvg = Math.round(totalPct / exData.length);
-      }
+        return {
+          ...item,
+          exams: filteredExams,
+          assignments: filteredAssignments,
+          average: calculateAverage([...filteredExams, ...filteredAssignments])
+        };
+      });
 
-      let assAvg = 0;
-      if (assData && assData.length > 0) {
-        let totalPct = 0;
-        assData.forEach((a: any) => {
-          const qs = a.assignments?.assignment_questions;
-          const calcMax = Array.isArray(qs) ? qs.reduce((sum: number, q: any) => sum + (Number(q.points) || 0), 0) : 0;
-          const max = calcMax > 0 ? calcMax : (a.assignments?.total_marks || 100);
-          totalPct += ((a.grade || 0) / max) * 100;
-        });
-        assAvg = Math.round(totalPct / assData.length);
-      }
+      const results = await Promise.all(performancePromises);
+      setSubjectPerformance(results);
 
-      setStats({ attendanceRate: attRate, examsAvg: exAvg, assignmentsAvg: assAvg, absentCount });
-
-    } catch (e) {
-      console.error('Error fetching active child data:', e);
-    } finally {
-      setChildLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setChildLoading(false); }
   }, [children]);
 
-  useEffect(() => {
-    if (activeChildId) fetchActiveChildData(activeChildId);
-  }, [activeChildId, fetchActiveChildData]);
+  useEffect(() => { if (activeChildId) fetchAcademicData(activeChildId); }, [activeChildId, fetchAcademicData]);
 
-  const activeChild = useMemo(() => children.find(c => c.id === activeChildId), [children, activeChildId]);
-
-  // 🚀 استخراج غياب وحضور اليوم فقط
-  const todaysAttendance = useMemo(() => {
-    if (!mounted) return [];
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    return attendance.filter(a => a.date && a.date.startsWith(todayStr));
-  }, [attendance, mounted]);
-
-  const isCurrentClass = useCallback((period: number) => {
-    if (!currentTime) return false;
-    const periodInfo = periods.find(p => p.period_number === period);
-    if (!periodInfo) return false;
-    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
-    const [endH, endM] = periodInfo.end_time.split(':').map(Number);
-    const now = currentTime;
-    const start = new Date(now); start.setHours(startH, startM, 0);
-    const end = new Date(now); end.setHours(endH, endM, 0);
-    return now >= start && now <= end;
-  }, [currentTime, periods]);
-
-  const isNextClass = useCallback((period: number) => {
-    if (!currentTime) return false;
-    const periodInfo = periods.find(p => p.period_number === period);
-    if (!periodInfo) return false;
-    const [startH, startM] = periodInfo.start_time.split(':').map(Number);
-    const now = currentTime;
-    const start = new Date(now); start.setHours(startH, startM, 0);
-    const diff = (start.getTime() - now.getTime()) / (1000 * 60);
-    return diff > 0 && diff <= 60;
-  }, [currentTime, periods]);
-
-  const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
-    if (!dateStr || !mounted) return fallback;
-    try {
-      return format(new Date(dateStr), formatStr, { locale: arSA });
-    } catch (e) { return fallback; }
-  };
-
-  // 🚀 دالة تحدد تصميم وشكل حالة الحضور
-  const getAttendanceStyle = (status: string | undefined | null) => {
-    switch(status) {
-      case 'present': return { text: 'حاضر وتسلّم حصته', bg: 'bg-emerald-50', border: 'border-emerald-200', textCol: 'text-emerald-700', icon: CheckCircle2, iconCol: 'text-emerald-500' };
-      case 'absent': return { text: 'لم يتواجد بالحصة', bg: 'bg-rose-50', border: 'border-rose-200', textCol: 'text-rose-700', icon: XCircle, iconCol: 'text-rose-500' };
-      case 'late': return { text: 'حضر متأخراً', bg: 'bg-amber-50', border: 'border-amber-200', textCol: 'text-amber-700', icon: Clock, iconCol: 'text-amber-500' };
-      case 'excused': return { text: 'مستأذن بعذر', bg: 'bg-sky-50', border: 'border-sky-200', textCol: 'text-sky-700', icon: ShieldAlert, iconCol: 'text-sky-500' };
-      default: return { text: 'لم تُسجل بعد', bg: 'bg-slate-50', border: 'border-slate-100', textCol: 'text-slate-400', icon: Clock, iconCol: 'text-slate-300' };
-    }
+  const calculateAverage = (items: any[]) => {
+    if (items.length === 0) return 0;
+    const total = items.reduce((acc, curr) => {
+      const score = curr.score || curr.grade || 0;
+      const max = curr.exams?.total_marks || curr.assignments?.total_marks || 100;
+      return acc + (score / max);
+    }, 0);
+    return Math.round((total / items.length) * 100);
   };
 
   if (isChecking || loading) return <div className="flex h-[80vh] items-center justify-center font-cairo"><Loader2 className="w-10 h-10 animate-spin text-indigo-500" /></div>;
-  if (authRole !== 'parent') return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center">هذه الصفحة مخصصة لأولياء الأمور فقط.</div>;
-
-  // التحقق من انتهاء الدوام (بعد الساعة 2 ظهراً مثلاً)
-  const isDayEnded = mounted && currentTime && currentTime.getHours() >= 14;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-12 max-w-7xl mx-auto px-4 font-cairo pt-6" dir="rtl">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24 max-w-7xl mx-auto px-4 font-cairo pt-6" dir="rtl">
       
-      {/* 👑 Hero Section */}
-      <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 p-8 sm:p-12 text-white shadow-2xl">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-8 text-center md:text-right">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold uppercase tracking-widest mb-4 backdrop-blur-sm shadow-sm">
-              <Users className="w-3.5 h-3.5 text-blue-300" /> لوحة تحكم ولي الأمر
-            </div>
-            <h1 className="text-3xl sm:text-5xl font-black mb-3 tracking-tight drop-shadow-md">أهلاً بك، {parentData?.users?.full_name?.split(' ')[0]} 👋</h1>
-            <p className="text-indigo-100 text-sm sm:text-lg font-bold bg-black/20 w-fit px-4 py-2 rounded-2xl backdrop-blur-sm border border-white/10 shadow-inner">
-              نحن هنا لنبقيك على اطلاع دائم بمسيرة أبنائك التعليمية.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {children.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-3xl border border-slate-200">
-          <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-slate-700 mb-2">لا يوجد أبناء مرتبطين</h2>
-          <p className="text-slate-500 font-bold">يرجى مراجعة إدارة المدرسة لربط حسابات أبنائك بملفك الشخصي.</p>
-        </div>
-      ) : (
-        <>
-          {/* 🔄 Smart Child Switcher */}
-          <div className="flex items-center gap-4 overflow-x-auto pb-4 custom-scrollbar">
+      {/* 🔝 الهيدر: اختيار الابن والترحيب */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
+         <div className="text-center md:text-right">
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">مرحباً، أ. {parentData?.users?.full_name?.split(' ')[0]} 👋</h1>
+            <p className="text-slate-500 font-bold mt-1">تـابـع رحـلة أبـنائـك التعليمية في مدرسة الرفعة</p>
+         </div>
+         <div className="flex gap-3 overflow-x-auto p-2 pb-4 no-scrollbar">
             {children.map(child => (
               <button 
-                key={child.id} 
-                onClick={() => setActiveChildId(child.id)}
-                className={cn(
-                  "flex items-center gap-4 p-3 pr-4 rounded-2xl transition-all duration-300 min-w-[200px] shrink-0 border-2",
-                  activeChildId === child.id ? "bg-white border-indigo-500 shadow-xl scale-105" : "bg-slate-50 border-transparent hover:border-indigo-200 hover:bg-white"
-                )}
+                key={child.id} onClick={() => setActiveChildId(child.id)}
+                className={cn("flex items-center gap-3 px-5 py-3 rounded-2xl transition-all border-2 shrink-0 shadow-sm", activeChildId === child.id ? "bg-white border-indigo-600 ring-4 ring-indigo-50" : "bg-slate-50 border-transparent hover:bg-white hover:border-slate-200")}
               >
-                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-inner", activeChildId === child.id ? "bg-indigo-100 text-indigo-600" : "bg-slate-200 text-slate-500")}>
-                  {child.users?.avatar_url ? <img src={child.users.avatar_url} className="w-full h-full rounded-xl object-cover" alt="child"/> : child.users?.full_name?.charAt(0)}
-                </div>
-                <div className="text-right">
-                  <h3 className={cn("font-black text-sm truncate max-w-[120px]", activeChildId === child.id ? "text-indigo-900" : "text-slate-600")}>{child.users?.full_name?.split(' ')[0]} {child.users?.full_name?.split(' ')[1]}</h3>
-                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">{child.sections?.classes?.name} - {child.sections?.name}</p>
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black">{child.users?.full_name?.charAt(0)}</div>
+                <span className="font-black text-sm text-slate-700">{child.users?.full_name?.split(' ')[0]}</span>
               </button>
             ))}
-          </div>
+         </div>
+      </div>
 
-          <AnimatePresence mode="wait">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* 📚 العمود الأيمن: لوحة التحكم الأكاديمية (8 أعمدة) */}
+        <div className="lg:col-span-8 space-y-8">
+          
+          <section>
+            <div className="flex items-center justify-between mb-6 px-2">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><BookOpen className="text-indigo-500"/> السجل الأكاديمي للمواد</h2>
+              <span className="text-xs font-bold text-slate-400">آخر تحديث: اليوم</span>
+            </div>
+
             {childLoading ? (
-              <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-center py-20">
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-              </motion.div>
-            ) : activeChild && (
-              <motion.div key={activeChild.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
-                
-                {/* 🌟 نبض اليوم المباشر (الميزة الجديدة المذهلة) */}
-                <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-lg shadow-indigo-100/50 border border-indigo-50 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full blur-3xl -z-10"></div>
-                  
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 relative z-10">
-                    <div>
-                      <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-                        <Heart className="w-6 h-6 text-rose-500 animate-pulse fill-rose-100" />
-                        نبض اليوم المباشر
-                      </h3>
-                      <p className="text-sm font-bold text-slate-500 mt-1">نطمئنك على {activeChild.users?.full_name?.split(' ')[0]} لحظة بلحظة طوال اليوم الدراسي.</p>
-                    </div>
-                    <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-2xl font-black text-sm border border-indigo-100 shadow-sm whitespace-nowrap">
-                      {safeFormat(new Date(), 'EEEE، d MMMM')}
-                    </div>
-                  </div>
-
-                  {schedule.length === 0 ? (
-                     <div className="text-center py-10 bg-slate-50 rounded-3xl border border-dashed border-slate-200 text-slate-400 font-bold text-sm flex flex-col items-center justify-center gap-2">
-                       <Coffee className="w-10 h-10 text-slate-300" />
-                       عطلة سعيدة! لا يوجد دوام مسجل لليوم.
-                     </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {/* الخط الزمني للحصص */}
-                      <div className="flex gap-4 overflow-x-auto pb-6 pt-2 custom-scrollbar snap-x">
-                        {schedule.map((lesson, idx) => {
-                          // محاولة إيجاد سجل الحضور لهذه الحصة (إما بالاسم أو بالتسلسل)
-                          const attendanceRecord = todaysAttendance.find(a => a.subjects?.name === lesson.subjects?.name) || todaysAttendance[idx];
-                          const style = getAttendanceStyle(attendanceRecord?.status);
-                          
-                          return (
-                            <div key={idx} className={`snap-center min-w-[180px] p-5 rounded-[2rem] border-2 ${style.bg} ${style.border} relative shrink-0 transition-transform hover:-translate-y-1`}>
-                              <div className={`w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 ${style.iconCol}`}>
-                                <style.icon className="w-5 h-5" />
-                              </div>
-                              <h4 className="font-black text-slate-800 mb-1">{lesson.subjects?.name}</h4>
-                              <p className="text-[10px] font-bold text-slate-500 mb-3">الحصة {lesson.period}</p>
-                              
-                              <div className={`text-xs font-black px-3 py-1.5 rounded-lg bg-white/60 border ${style.border} ${style.textCol} inline-block`}>
-                                {style.text}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* ملخص نهاية اليوم الحنون */}
-                      {isDayEnded && (
-                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl p-6 text-white shadow-lg shadow-emerald-500/20 flex flex-col sm:flex-row items-center gap-5">
-                          <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center shrink-0 border border-white/30 backdrop-blur-sm">
-                            <Star className="w-7 h-7 text-yellow-300 fill-yellow-300" />
-                          </div>
-                          <div className="text-center sm:text-right">
-                            <h4 className="font-black text-lg mb-1">انتهى اليوم الدراسي بسلام!</h4>
-                            <p className="text-emerald-50 font-bold text-sm">
-                              {todaysAttendance.some(a => a.status === 'absent') 
-                                ? `لاحظنا غياب ${activeChild.users?.full_name?.split(' ')[0]} عن بعض الحصص اليوم، نتمنى أن يكون المانع خيراً وبصحة وعافية.`
-                                : `أتم ابنكم البطل ${activeChild.users?.full_name?.split(' ')[0]} يومه الدراسي بنجاح وحضور كامل. نفخر بوجوده معنا!`
-                              }
-                            </p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* 🚨 نظام الإنذارات (Danger Zone) */}
-                {stats.absentCount >= 5 && (
-                  <div className="bg-gradient-to-r from-rose-600 to-rose-700 rounded-3xl p-6 text-white shadow-lg shadow-rose-500/20 border-2 border-rose-400/50 flex items-center justify-between flex-col sm:flex-row gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0 border border-white/20 animate-pulse"><AlertTriangle className="w-6 h-6 text-yellow-300" /></div>
-                      <div>
-                        <h3 className="font-black text-lg mb-1">تنبيه تراكم غياب</h3>
-                        <p className="text-sm font-bold text-rose-100">تجاوز {activeChild.users?.full_name?.split(' ')[0]} الحد المسموح للغياب ({stats.absentCount} حصص). نرجو متابعة الأمر.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 📊 إحصائيات الأداء */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                  {[
-                    { label: 'الالتزام بالحضور', value: `${stats.attendanceRate}%`, icon: CheckCircle2, color: 'emerald', bg: 'bg-emerald-500' },
-                    { label: 'متوسط الاختبارات', value: `${stats.examsAvg}%`, icon: FileText, color: 'indigo', bg: 'bg-indigo-500' },
-                    { label: 'إنجاز الواجبات', value: `${stats.assignmentsAvg}%`, icon: BookOpen, color: 'amber', bg: 'bg-amber-500' }
-                  ].map((stat, i) => (
-                    <div key={i} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all group overflow-hidden relative">
-                      <div className="flex items-center gap-5 mb-5 relative z-10">
-                        <div className={`h-14 w-14 shrink-0 rounded-2xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}><stat.icon className="w-7 h-7" /></div>
+               <div className="py-20 text-center"><Loader2 className="w-10 h-10 animate-spin mx-auto text-indigo-200" /></div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {subjectPerformance.map((item, idx) => (
+                  <motion.div 
+                    key={idx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}
+                    className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative"
+                  >
+                    {/* خلفية جمالية خفيفة */}
+                    <div className="absolute -top-10 -left-10 w-32 h-32 bg-indigo-50 rounded-full blur-3xl opacity-50 group-hover:bg-indigo-100 transition-colors"></div>
+                    
+                    <div className="flex items-start justify-between relative z-10 mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black shadow-lg shadow-indigo-200">{item.average}%</div>
                         <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                          <p className="text-3xl font-black text-slate-900">{stat.value}</p>
+                          <h3 className="font-black text-slate-800 text-lg">{item.subjects.name}</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">أ. {item.teachers?.users?.full_name}</p>
                         </div>
                       </div>
-                      <div className="h-2 w-full bg-slate-50 rounded-full overflow-hidden shadow-inner relative z-10">
-                        <motion.div initial={{ width: 0 }} animate={{ width: stat.value }} transition={{ duration: 1.5, ease: "easeOut" }} className={`h-full ${stat.bg} rounded-full`}></motion.div>
+                      <button className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"><MessageCircle className="w-5 h-5"/></button>
+                    </div>
+
+                    {/* تفاصيل الدرجات (Accordion-like) */}
+                    <div className="space-y-3 relative z-10">
+                      <div className="flex items-center justify-between text-xs font-black px-4 py-3 bg-slate-50 rounded-2xl">
+                         <span className="text-slate-500">الواجبات المنجزة</span>
+                         <span className="text-emerald-600">{item.assignments.length} سجلات</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-black px-4 py-3 bg-slate-50 rounded-2xl">
+                         <span className="text-slate-500">الاختبارات المقيمة</span>
+                         <span className="text-indigo-600">{item.exams.length} سجلات</span>
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                {/* 🏆 حائط الفخر الأكاديمي (الأوسمة) */}
-                {badges.length > 0 && (
-                  <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
-                    <div className="relative z-10">
-                      <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2"><Award className="text-yellow-400 w-6 h-6"/> حائط التميز والفخر</h3>
-                      <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar mask-fade-edges">
-                        {badges.map((b) => (
-                          <div key={b.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex items-center gap-4 min-w-[280px]">
-                            <div className="w-16 h-16 relative shrink-0"><Image src={b.badge?.image_url} alt="Badge" fill className="object-contain drop-shadow-xl" unoptimized/></div>
-                            <div>
-                              <p className="text-white font-black text-sm">{b.badge?.name}</p>
-                              <p className="text-indigo-200 text-[10px] font-bold mt-1 line-clamp-2">{b.reason}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 📅 جدول الغد / الأيام القادمة */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6 sm:p-8">
-                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2"><Clock className="text-indigo-500"/> ترتيب الحصص</h3>
-                    <div className="space-y-4">
-                      {schedule.length === 0 ? (
-                         <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 font-bold text-sm">الجدول فارغ حالياً.</div>
-                      ) : (
-                        schedule.map((item, i) => {
-                          const current = isCurrentClass(item.period);
-                          const next = isNextClass(item.period);
-                          return (
-                            <div key={i} className={cn("p-4 rounded-2xl border transition-all flex items-center gap-4", current ? "bg-indigo-50 border-indigo-200 shadow-md scale-[1.02]" : "bg-slate-50 border-slate-100")}>
-                              <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shrink-0", current ? "bg-indigo-600 text-white shadow-lg" : "bg-white text-slate-500 border border-slate-200")}>
-                                {current ? <Play className="w-5 h-5 animate-pulse" /> : item.period}
-                              </div>
-                              <div className="flex-1">
-                                <p className={cn("font-black text-lg line-clamp-1", current ? "text-indigo-900" : "text-slate-800")}>{item.subjects?.name}</p>
-                                <p className="text-xs font-bold text-slate-500 mt-1">أ. {item.teachers?.users?.full_name}</p>
-                              </div>
-                              {current && <span className="px-3 py-1 bg-indigo-500 text-white text-[10px] font-black rounded-lg animate-pulse whitespace-nowrap">الآن</span>}
-                              {next && !current && <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-lg whitespace-nowrap">القادمة</span>}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 📰 الإعلانات والمستجدات */}
-                  <div className="space-y-6">
-                    <AnnouncementsWidget authRole="parent" />
-                  </div>
-                </div>
-
-              </motion.div>
+                    <button className="w-full mt-4 py-3 bg-white border border-slate-100 text-slate-600 font-black text-xs rounded-2xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+                       عرض السجل الكامل <ChevronDown className="w-4 h-4"/>
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
             )}
-          </AnimatePresence>
-        </>
-      )}
+          </section>
+
+          {/* سجل الغياب اليومي (نبض اليوم) */}
+          <section className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
+             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                  <h2 className="text-2xl font-black mb-2 flex items-center gap-3"><Activity className="text-rose-400 animate-pulse"/> التقرير السلوكي والحضور</h2>
+                  <p className="text-indigo-200 font-bold text-sm">متابعة دقيقة لمستوى انضباط الطالب وحضوره للحصص.</p>
+                </div>
+                <button className="bg-white/10 hover:bg-white/20 border border-white/20 px-8 py-4 rounded-2xl font-black transition-all backdrop-blur-md">طلب تقرير مفصل</button>
+             </div>
+          </section>
+
+        </div>
+
+        {/* 💬 العمود الأيسر: جسر التواصل الموحد (4 أعمدة) */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-50 sticky top-24">
+             <div className="flex items-center gap-3 mb-8">
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center"><Headphones className="w-6 h-6"/></div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800">جسر التواصل الموحد</h3>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">تواصل مباشر مع المدرسة</p>
+                </div>
+             </div>
+
+             <div className="space-y-4">
+                <p className="text-sm font-bold text-slate-600 mb-4 px-1">لمن تريد توجيه رسالتك اليوم؟</p>
+                
+                {[
+                  { label: 'مدير المدرسة', role: 'admin', icon: ShieldCheck, color: 'indigo' },
+                  { label: 'الأخصائي الاجتماعي', role: 'staff', icon: Users, color: 'emerald' },
+                  { label: 'المكتب الفني', role: 'management', icon: Star, color: 'amber' },
+                  { label: 'طاقم المعلمين', role: 'teacher', icon: GraduationCap, color: 'rose' }
+                ].map((target, i) => (
+                  <button 
+                    key={i} 
+                    className="w-full group flex items-center justify-between p-4 bg-slate-50 hover:bg-white hover:shadow-lg hover:ring-2 hover:ring-indigo-500/10 rounded-2xl transition-all border border-transparent hover:border-indigo-100"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl bg-${target.color}-100 text-${target.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                        <target.icon className="w-5 h-5"/>
+                      </div>
+                      <span className="font-black text-slate-700 text-sm">{target.label}</span>
+                    </div>
+                    <ChevronDown className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors -rotate-90"/>
+                  </button>
+                ))}
+             </div>
+
+             <div className="mt-8 pt-8 border-t border-slate-100">
+                <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
+                  <h4 className="text-indigo-900 font-black text-sm mb-2 flex items-center gap-2"><Heart className="w-4 h-4 fill-indigo-200"/> ملاحظة من المعلم</h4>
+                  <p className="text-indigo-700/80 text-xs font-bold leading-relaxed italic">"أحمد أظهر تميزاً لافتاً في مادة الفيزياء هذا الأسبوع، نرجو الاستمرار في تشجيعه على حل التجارب العملية."</p>
+                </div>
+             </div>
+          </div>
+        </div>
+
+      </div>
     </motion.div>
   );
 }
