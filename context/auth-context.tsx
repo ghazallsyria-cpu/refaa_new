@@ -148,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const resetPassword = async (password: string) => {
+ const resetPassword = async (password: string) => {
     if (!user) throw new Error('غير مصرح لك بإجراء هذا التغيير');
     const { error: updateError } = await supabase.auth.updateUser({ password: password });
     if (updateError) throw updateError;
@@ -157,6 +157,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (dbError) throw dbError;
     
     setMustResetPassword(false);
+
+    // 🚀 التوجيه الذكي التلقائي بمجرد نجاح تغيير كلمة المرور
+    if (authRole === 'admin' || authRole === 'management') {
+      router.push('/admin/dashboard');
+    } else if (authRole === 'teacher') {
+      router.push('/dashboard/teacher');
+    } else if (authRole === 'student') {
+      router.push('/dashboard/student');
+    } else if (authRole === 'staff') {
+      router.push('/dashboard/staff'); // 👈 سيأخذه لغرفته فوراً
+    } else {
+      router.push('/');
+    }
   };
 
   useEffect(() => {
