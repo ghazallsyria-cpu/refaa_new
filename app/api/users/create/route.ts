@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     const { data: userData } = await supabaseAdmin.from('users').select('role').eq('id', user.id).single();
-    if (userData?.role !== 'admin' && userData?.role !== 'management') {
+    if (userData?.role !== 'admin' && userData?.role !== 'management'&& userData?.role !== 'staff') {
       return NextResponse.json({ error: 'Forbidden: Only admins can create users' }, { status: 403 });
     }
 
