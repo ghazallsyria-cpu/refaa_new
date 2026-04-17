@@ -386,7 +386,7 @@ export default function SchedulePage() {
                       <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-[2rem] border border-dashed border-slate-300">
                          <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                          <p className="font-bold text-slate-500 text-lg">يوم إجازة أو لا توجد حصص مجدولة!</p>
-                         <p className="text-sm text-slate-400 font-medium mt-1">استمتع بوقتك 🎮</p>
+<p className="text-sm text-slate-400 font-medium mt-1">{"استمتع بوقتك 🎮"}</p>
                       </div>
                     )}
                   </motion.div>
