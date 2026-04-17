@@ -247,14 +247,14 @@ export default function SchedulePage() {
       setIsGeneratingPDF(true);
       setPrintMode(mode);
 
-      // التأكد من جلب جميع البيانات صراحة إذا كان الطلب جماعيًا
+      // التأكد من جلب جميع البيانات إذا كان الطلب جماعيًا
       if (mode !== 'single') {
         setShowAllSchedules(true);
         const allData = await fetchSchedulesData({});
         setScheduleData(allData || []);
       }
 
-      // الانتظار ليتم بناء العناصر في الـ DOM المخفي
+      // الانتظار ليتم بناء العناصر (DOM)
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const containers = document.querySelectorAll('.pdf-page-container');
@@ -270,7 +270,7 @@ export default function SchedulePage() {
         
         const el = containers[i] as HTMLElement;
         
-        // التقاط العنصر كصورة
+        // التقاط العنصر כصورة لضمان التنسيق السليم
         const canvas = await html2canvas(el, { 
           scale: 2, 
           useCORS: true,
@@ -283,7 +283,7 @@ export default function SchedulePage() {
         
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
-        // 🔗 حقن الروابط القابلة للنقر
+        // 🔗 حقن الروابط القابلة للنقر داخل الـ PDF
         const links = el.querySelectorAll('a.zoom-link');
         const elementRect = el.getBoundingClientRect();
         
@@ -591,21 +591,21 @@ export default function SchedulePage() {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl border border-slate-100">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-black">{editingId ? 'تعديل الحصة' : 'إضافة حصة'}</h2>
-                <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 bg-slate-50 rounded-xl"><X className="h-5 w-5" /></button>
+                <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 bg-slate-50 hover:bg-rose-50 rounded-xl"><X className="h-5 w-5" /></button>
               </div>
               <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-bold mb-2">{viewType === 'teacher' ? 'اختيار الفصل' : 'اختيار المعلم'}</label>
                   {viewType === 'teacher' ? (
-                    <select className="w-full p-4 border rounded-xl font-bold" value={formData.section_id} onChange={(e) => setFormData({ ...formData, section_id: e.target.value })}>
+                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.section_id} onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}>
                       <option value="">-- اختر الفصل --</option>
                       {sections.map(s => <option key={s.id} value={s.id}>{formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)} - {s.name}</option>)}
                     </select>
                   ) : (
-                    <select className="w-full p-4 border rounded-xl font-bold" value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value })}>
+                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}>
                       <option value="">-- اختر المعلم --</option>
                       {teachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}
                     </select>
@@ -613,13 +613,16 @@ export default function SchedulePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold mb-2">المادة الدراسية</label>
-                  <select className="w-full p-4 border rounded-xl font-bold" value={formData.subject_id} onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}>
+                  <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none disabled:opacity-50" value={formData.subject_id} disabled={!formData.section_id || !formData.teacher_id} onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}>
                     <option value="">-- اختر المادة --</option>
                     {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="mt-8 pt-4 border-t"><button className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black" onClick={handleAddSchedule}>اعتماد الحصة</button></div>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-8 mt-4 border-t border-slate-100">
+                <button className="w-full sm:w-auto px-6 py-4 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 font-black transition-colors" onClick={() => { setIsModalOpen(false); setEditingId(null); }}>إلغاء الأمر</button>
+                <button className="w-full sm:w-auto px-6 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-black shadow-lg shadow-indigo-200 transition-colors flex-1 flex justify-center items-center gap-2" onClick={handleAddSchedule}><Save className="w-5 h-5" /> {editingId ? 'تحديث الحصة' : 'اعتماد الحصة'}</button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -702,8 +705,7 @@ export default function SchedulePage() {
       )}
 
       {/* ======================================================== */}
-      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (The Print DOM) */}
-      {/* تم استخدام الستايلات المباشرة (HEX) لتجاوز خطأ oklch */}
+      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (محصنة بالكامل ضد أخطاء الألوان) */}
       {/* ======================================================== */}
       <div className="fixed top-[-20000px] left-[-20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
         {isGeneratingPDF && (() => {
@@ -726,32 +728,33 @@ export default function SchedulePage() {
             const entityName = getEntityTitle(entity, printType);
 
             return (
-              <div key={`pdf-${entityId}`} className="pdf-page-container w-[1122px] h-[793px] p-10 font-cairo flex flex-col" dir="rtl" style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>
-                {/* ترويسة PDF */}
-                <div className="flex justify-between items-end border-b-[3px] pb-4 mb-6" style={{ borderColor: '#312e81' }}>
+              <div key={`pdf-${entityId}`} className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
+                
+                {/* ترويسة PDF محصنة بالستايل المباشر */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #312e81', paddingBottom: '16px', marginBottom: '24px' }}>
                   <div>
-                    <h1 className="text-4xl font-black mb-2" style={{ color: '#1e1b4b' }}>الجدول الدراسي الأسبوعي</h1>
-                    <h2 className="text-xl font-black inline-block px-5 py-2 rounded-xl border shadow-sm" style={{ backgroundColor: '#f1f5f9', color: '#1e293b', borderColor: '#cbd5e1' }}>
+                    <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#1e1b4b' }}>الجدول الدراسي الأسبوعي</h1>
+                    <h2 style={{ fontSize: '18px', fontWeight: 900, padding: '8px 16px', borderRadius: '12px', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e293b', margin: 0 }}>
                       {printType === 'teacher' ? `المعلم: ${entityName}` : `الفصل: ${entityName}`}
                     </h2>
                   </div>
-                  <div className="text-left flex flex-col items-end">
-                    <div className="flex items-center gap-2 mb-2 px-5 py-2 rounded-xl font-black shadow-sm" style={{ backgroundColor: '#4f46e5', color: '#ffffff' }}>
-                      <Calendar className="w-5 h-5" /> العام الدراسي الحالي
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '12px', backgroundColor: '#4f46e5', color: '#ffffff', fontWeight: 900, fontSize: '14px', marginBottom: '8px' }}>
+                      العام الدراسي الحالي
                     </div>
-                    <p className="text-sm font-bold" style={{ color: '#475569' }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#475569', margin: 0 }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
                   </div>
                 </div>
 
-                {/* جدول PDF */}
-                <table className="w-full border-collapse border-2 rounded-xl overflow-hidden flex-1 table-fixed" style={{ borderColor: '#cbd5e1' }}>
+                {/* جدول PDF محصن بالستايل المباشر HEX */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
                   <thead>
                     <tr>
-                      <th className="w-32 border text-center py-4 font-black text-lg" style={{ backgroundColor: '#3730a3', color: '#ffffff', borderColor: '#cbd5e1' }}>اليوم / الحصة</th>
+                      <th style={{ width: '120px', border: '1px solid #cbd5e1', backgroundColor: '#3730a3', color: '#ffffff', textAlign: 'center', padding: '16px 8px', fontSize: '16px', fontWeight: 900 }}>اليوم / الحصة</th>
                       {periods.map(p => (
-                        <th key={p.id} className="border text-center py-3" style={{ backgroundColor: '#f1f5f9', color: '#1e1b4b', borderColor: '#cbd5e1' }}>
-                          <div className="font-black text-base mb-1">الحصة {p.period_number}</div>
-                          <div className="text-xs font-bold inline-block px-3 py-1 rounded-md border shadow-sm" style={{ backgroundColor: '#ffffff', color: '#4338ca', borderColor: '#c7d2fe' }}>
+                        <th key={p.id} style={{ border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#1e1b4b', textAlign: 'center', padding: '12px 4px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 900, margin: '0 0 4px 0' }}>الحصة {p.period_number}</div>
+                          <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#ffffff', color: '#4338ca', border: '1px solid #c7d2fe', borderRadius: '6px', padding: '2px 8px', display: 'inline-block' }}>
                             {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
                           </div>
                         </th>
@@ -761,27 +764,27 @@ export default function SchedulePage() {
                   <tbody>
                     {DAYS.map((day, index) => (
                       <tr key={day.id}>
-                        <td className="font-black text-xl text-center border" style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', borderColor: '#cbd5e1' }}>
+                        <td style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', textAlign: 'center', fontWeight: 900, fontSize: '18px' }}>
                           {day.name}
                         </td>
                         {periods.map((p) => {
                           const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number));
                           return (
-                            <td key={p.id} className="border p-2 align-middle text-center" style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', borderColor: '#cbd5e1' }}>
+                            <td key={p.id} style={{ border: '1px solid #cbd5e1', backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', padding: '8px', textAlign: 'center', verticalAlign: 'middle' }}>
                               {slot ? (
-                                <div className="flex flex-col items-center justify-center h-full gap-2 p-2 rounded-lg shadow-sm border" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
-                                  <div className="font-black text-[16px] leading-tight w-full break-words whitespace-normal" style={{ color: '#1e1b4b' }}>{slot.subjects?.name}</div>
-                                  <div className="text-[12px] font-bold px-2 py-1.5 rounded-lg w-full border break-words whitespace-normal leading-tight" style={{ backgroundColor: '#f1f5f9', color: '#1e293b', borderColor: '#e2e8f0' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff', width: '100%', boxSizing: 'border-box' }}>
+                                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#1e1b4b', marginBottom: '6px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2' }}>{slot.subjects?.name}</div>
+                                  <div style={{ fontSize: '10px', fontWeight: 700, backgroundColor: '#f1f5f9', color: '#1e293b', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px', width: '100%', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.2', boxSizing: 'border-box' }}>
                                     {getSlotSubtitle(slot, printType)}
                                   </div>
                                   {slot.teachers?.zoom_link && (
-                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-[11px] font-black px-4 py-2 rounded-lg mt-1 w-[90%] shadow-sm" style={{ backgroundColor: '#2563eb', color: '#ffffff', textDecoration: 'none' }}>
-                                      <Video className="w-4 h-4" /> رابط زوم
+                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link" style={{ display: 'inline-block', backgroundColor: '#2563eb', color: '#ffffff', fontSize: '10px', fontWeight: 900, textDecoration: 'none', padding: '6px 0', borderRadius: '6px', marginTop: '6px', width: '90%' }}>
+                                      رابط البث
                                     </a>
                                   )}
                                 </div>
                               ) : (
-                                <span className="font-bold text-2xl" style={{ color: '#cbd5e1' }}>-</span>
+                                <span style={{ fontSize: '20px', fontWeight: 900, color: '#cbd5e1' }}>-</span>
                               )}
                             </td>
                           );
@@ -792,16 +795,16 @@ export default function SchedulePage() {
                 </table>
 
                 {/* تذييل PDF */}
-                <div className="mt-6 pt-4 border-t-[3px] flex justify-between items-center pb-2" style={{ borderColor: '#cbd5e1' }}>
-                  <div className="flex items-center gap-3">
-                     <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-2xl shadow-md" style={{ backgroundColor: '#312e81', color: '#ffffff' }}>R</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                     <div style={{ width: '40px', height: '40px', backgroundColor: '#312e81', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div>
                      <div>
-                       <p className="text-lg font-black leading-tight" style={{ color: '#0f172a', margin: '0 0 4px 0' }}>مدرسة الرفعة النموذجية</p>
-                       <p className="text-xs font-bold" style={{ color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p>
+                       <p style={{ fontSize: '16px', fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', lineHeight: '1' }}>مدرسة الرفعة النموذجية</p>
+                       <p style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p>
                      </div>
                   </div>
-                  <div className="text-left">
-                    <p className="text-sm font-black px-4 py-2 rounded-xl border shadow-sm" style={{ backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe', margin: 0 }}>وثيقة إلكترونية معتمدة</p>
+                  <div>
+                    <p style={{ fontSize: '12px', fontWeight: 900, backgroundColor: '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe', padding: '6px 12px', borderRadius: '8px', margin: 0 }}>وثيقة إلكترونية معتمدة</p>
                   </div>
                 </div>
               </div>
