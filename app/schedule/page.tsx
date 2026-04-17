@@ -38,10 +38,10 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // 🖨️ حالات الطباعة الذكية (The Bulletproof Print Engine)
+  // 🖨️ حالات الطباعة الذكية
   const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'all-sections'>('single');
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false); // الحالة التي تمنع الشاشة البيضاء كلياً
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const currentDayOfWeek = new Date().getDay() + 1;
   const defaultTab = (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) ? currentDayOfWeek : 1;
@@ -273,30 +273,24 @@ export default function SchedulePage() {
 
   const entitiesToPrint = printMode === 'all-teachers' ? teachers : printMode === 'all-sections' ? sections : [{ id: selectedId }];
 
-
-  // ==========================================
-  // 🖨️ محرك الطباعة المدرع (The Bulletproof Print Engine)
-  // ==========================================
+  // 🖨️ محرك الطباعة المدرع
   const executePrint = (mode: 'single' | 'all-teachers' | 'all-sections') => {
     setPrintMode(mode);
     if (mode !== 'single') setShowAllSchedules(true);
-    
-    setIsPreparingPrint(true); // نظهر الـ Loader ليطمئن المستخدم
+    setIsPreparingPrint(true);
     
     setTimeout(() => {
-      setIsPreparingPrint(false); // نخفي الـ Loader كلياً
-      setIsPrinting(true); // نبدل الـ DOM بالكامل إلى شاشة الطباعة فقط!
-      
-      // ننتظر المتصفح ليرسم الشاشة البيضاء والجداول الملونة براحته
+      setIsPreparingPrint(false);
+      setIsPrinting(true);
       setTimeout(() => {
-        window.print(); // نطلق أمر الطباعة
-        setIsPrinting(false); // بمجرد إغلاق نافذة الطباعة، نعود للموقع الطبيعي
+        window.print();
+        setIsPrinting(false);
       }, 800);
     }, 800);
   };
 
   // ==========================================
-  // 👨‍🎓 شاشة الطالب (لا توجد بها طباعة)
+  // 👨‍🎓 شاشة الطالب
   // ==========================================
   if (authRole === 'student') {
     const currentSectionName = sections.find(s => String(s.id) === String(selectedId))?.name || '';
@@ -568,7 +562,7 @@ export default function SchedulePage() {
                                       : slot.teachers?.users?.full_name}
                                   </div>
                                   {slot.teachers?.zoom_link && (
-                                    <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg mt-1 w-full" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
+                                    <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg mt-1 w-full hover:underline">
                                       <Video className="w-4 h-4" /> <span>رابط البث</span>
                                     </a>
                                   )}
