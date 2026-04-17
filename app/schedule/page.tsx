@@ -1,6 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -249,14 +247,14 @@ export default function SchedulePage() {
       setIsGeneratingPDF(true);
       setPrintMode(mode);
 
-      // التأكد من جلب جميع البيانات إذا كان الطلب جماعيًا
+      // التأكد من جلب جميع البيانات صراحة إذا كان الطلب جماعيًا
       if (mode !== 'single') {
         setShowAllSchedules(true);
         const allData = await fetchSchedulesData({});
         setScheduleData(allData || []);
       }
 
-      // الانتظار ليتم بناء العناصر (DOM)
+      // الانتظار ليتم بناء العناصر في الـ DOM المخفي
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const containers = document.querySelectorAll('.pdf-page-container');
@@ -272,7 +270,7 @@ export default function SchedulePage() {
         
         const el = containers[i] as HTMLElement;
         
-        // التقاط العنصر כصورة لضمان التنسيق العربي السليم
+        // التقاط العنصر كصورة
         const canvas = await html2canvas(el, { 
           scale: 2, 
           useCORS: true,
@@ -285,13 +283,12 @@ export default function SchedulePage() {
         
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
-        // 🔗 حقن الروابط القابلة للنقر داخل الـ PDF
+        // 🔗 حقن الروابط القابلة للنقر
         const links = el.querySelectorAll('a.zoom-link');
         const elementRect = el.getBoundingClientRect();
         
         links.forEach((link: any) => {
           const rect = link.getBoundingClientRect();
-          // حساب الموقع النسبي
           const relativeX = (rect.left - elementRect.left) / elementRect.width;
           const relativeY = (rect.top - elementRect.top) / elementRect.height;
           const relativeW = rect.width / elementRect.width;
@@ -302,7 +299,6 @@ export default function SchedulePage() {
           const pdfW = relativeW * pdfWidth;
           const pdfH = relativeH * pdfHeight;
           
-          // تأكد أن الرابط منظم قبل وضعه
           const finalUrl = normalizeUrl(link.href);
           if (finalUrl) {
             pdf.link(pdfX, pdfY, pdfW, pdfH, { url: finalUrl });
@@ -595,10 +591,10 @@ export default function SchedulePage() {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl border border-slate-100">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-black">{editingId ? 'تعديل الحصة' : 'إضافة حصة'}</h2>
-                <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 bg-slate-50 hover:bg-rose-50 rounded-xl"><X className="h-5 w-5" /></button>
+                <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 bg-slate-50 rounded-xl"><X className="h-5 w-5" /></button>
               </div>
               <div className="space-y-5">
                 <div>
@@ -706,7 +702,8 @@ export default function SchedulePage() {
       )}
 
       {/* ======================================================== */}
-      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (محصنة بالكامل ضد أخطاء الألوان) */}
+      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (The Print DOM) */}
+      {/* تم استخدام الستايلات المباشرة (HEX) لتجاوز خطأ oklch */}
       {/* ======================================================== */}
       <div className="fixed top-[-20000px] left-[-20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
         {isGeneratingPDF && (() => {
@@ -730,8 +727,7 @@ export default function SchedulePage() {
 
             return (
               <div key={`pdf-${entityId}`} className="pdf-page-container w-[1122px] h-[793px] p-10 font-cairo flex flex-col" dir="rtl" style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>
-                
-                {/* ترويسة PDF بالألوان المباشرة لتجاوز خطأ oklch */}
+                {/* ترويسة PDF */}
                 <div className="flex justify-between items-end border-b-[3px] pb-4 mb-6" style={{ borderColor: '#312e81' }}>
                   <div>
                     <h1 className="text-4xl font-black mb-2" style={{ color: '#1e1b4b' }}>الجدول الدراسي الأسبوعي</h1>
@@ -747,7 +743,7 @@ export default function SchedulePage() {
                   </div>
                 </div>
 
-                {/* جدول PDF بالألوان المباشرة */}
+                {/* جدول PDF */}
                 <table className="w-full border-collapse border-2 rounded-xl overflow-hidden flex-1 table-fixed" style={{ borderColor: '#cbd5e1' }}>
                   <thead>
                     <tr>
@@ -779,8 +775,8 @@ export default function SchedulePage() {
                                     {getSlotSubtitle(slot, printType)}
                                   </div>
                                   {slot.teachers?.zoom_link && (
-                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-[11px] font-black px-4 py-2 rounded-lg mt-1 w-[90%] shadow-sm" style={{ backgroundColor: '#2563eb', color: '#ffffff', textDecoration: 'none', WebkitPrintColorAdjust: 'exact' }}>
-                                      <Video className="w-4 h-4" /> دخول البث
+                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-[11px] font-black px-4 py-2 rounded-lg mt-1 w-[90%] shadow-sm" style={{ backgroundColor: '#2563eb', color: '#ffffff', textDecoration: 'none' }}>
+                                      <Video className="w-4 h-4" /> رابط زوم
                                     </a>
                                   )}
                                 </div>
@@ -795,17 +791,17 @@ export default function SchedulePage() {
                   </tbody>
                 </table>
 
-                {/* تذييل PDF بالألوان المباشرة */}
+                {/* تذييل PDF */}
                 <div className="mt-6 pt-4 border-t-[3px] flex justify-between items-center pb-2" style={{ borderColor: '#cbd5e1' }}>
                   <div className="flex items-center gap-3">
                      <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-2xl shadow-md" style={{ backgroundColor: '#312e81', color: '#ffffff' }}>R</div>
                      <div>
-                       <p className="text-lg font-black leading-tight" style={{ color: '#0f172a' }}>مدرسة الرفعة النموذجية</p>
-                       <p className="text-xs font-bold" style={{ color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</p>
+                       <p className="text-lg font-black leading-tight" style={{ color: '#0f172a', margin: '0 0 4px 0' }}>مدرسة الرفعة النموذجية</p>
+                       <p className="text-xs font-bold" style={{ color: '#64748b', margin: 0 }}>نظام الإدارة الأكاديمية الشامل</p>
                      </div>
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-black px-4 py-2 rounded-xl border shadow-sm" style={{ backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' }}>وثيقة إلكترونية معتمدة</p>
+                    <p className="text-sm font-black px-4 py-2 rounded-xl border shadow-sm" style={{ backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe', margin: 0 }}>وثيقة إلكترونية معتمدة</p>
                   </div>
                 </div>
               </div>
