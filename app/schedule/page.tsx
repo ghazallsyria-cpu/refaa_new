@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, Loader2, FileDown } from 'lucide-react';
+import { User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, Loader2, FileDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
@@ -281,7 +281,7 @@ export default function SchedulePage() {
         
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
-        // 🔗 حقن روابط الزوم الفعالة
+        // 🔗 حقن الروابط
         const links = el.querySelectorAll('a.zoom-link');
         const elementRect = el.getBoundingClientRect();
         
@@ -321,7 +321,7 @@ export default function SchedulePage() {
 
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8" dir="rtl">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-700 p-8 sm:p-12 text-white shadow-2xl shadow-indigo-200/50">
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
             <div className="space-y-3">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-xs font-bold uppercase backdrop-blur-md shadow-sm">
@@ -450,7 +450,8 @@ export default function SchedulePage() {
               <button onClick={() => { setViewType('section'); if (sections.length > 0) setSelectedId(String(sections[0].id)); }} className={`flex-1 flex gap-2 px-6 py-3 text-sm font-black rounded-lg ${viewType === 'section' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}><Users className="w-4 h-4" /> فصول</button>
             </div>
             <div className="flex-1 w-full relative">
-              <select value={selectedId} onChange={(e) => setSelectedId(String(e.target.value))} className="w-full rounded-xl py-4 px-4 bg-slate-50 border border-slate-200 font-bold outline-none">
+              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none"><BookOpen className="h-5 w-5 text-slate-400" /></div>
+              <select value={selectedId} onChange={(e) => setSelectedId(String(e.target.value))} className="w-full rounded-xl py-4 pr-12 pl-4 bg-slate-50 border border-slate-200 font-bold outline-none">
                 <option value="">-- اختر --</option>
                 {viewType === 'teacher' 
                   ? teachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>) 
@@ -529,7 +530,7 @@ export default function SchedulePage() {
                         const displaySlot = slot || (swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id)) ? swappingFrom : others[0]);
 
                         return (
-                          <div key={`${day.id}-${p.id}`} className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col justify-between transition-all group ${slot ? 'bg-white shadow-md border border-indigo-200' : displaySlot ? 'bg-slate-50 border border-slate-200' : 'bg-slate-50/50 border border-dashed border-slate-200 hover:bg-slate-50'} ${isAdmin ? 'cursor-pointer hover:border-indigo-400' : ''}`}
+                          <div key={`${day.id}-${p.id}`} className={`relative p-4 rounded-2xl min-h-[140px] flex flex-col justify-between transition-all group ${slot ? 'bg-white shadow-md border border-indigo-200' : displaySlot ? 'bg-slate-50 border border-slate-200' : 'bg-slate-50/50 border border-dashed border-slate-200 hover:bg-slate-50'} ${isAdmin ? 'cursor-pointer hover:border-indigo-400' : ''}`}
                             onClick={() => {
                               if (isAdmin) {
                                 if (swappingFrom) {
@@ -546,11 +547,13 @@ export default function SchedulePage() {
                               <div className="w-full">
                                 <h4 className="font-black text-sm mb-1">{displaySlot.subjects?.name}</h4>
                                 <div className="text-[10px] font-bold px-2 py-1.5 bg-slate-100 rounded-lg whitespace-normal break-words leading-tight">{getSlotSubtitle(displaySlot, viewType)}</div>
+                                
                                 {displaySlot.teachers?.zoom_link && (
                                   <a href={normalizeUrl(displaySlot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-black hover:bg-emerald-500 hover:text-white transition-colors">
                                     <Video className="w-3.5 h-3.5" /> دخول البث
                                   </a>
                                 )}
+                                
                                 {isAdmin && slot && (
                                   <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 rounded-xl">
                                     <div className="flex gap-1.5">
@@ -580,9 +583,9 @@ export default function SchedulePage() {
       </div>
 
       {/* ======================================================== */}
-      {/* 🖨️ منطقة الطباعة الخفية (محصنة ضد ظلال الشاشة) */}
+      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (بعيدة عن الشاشة) */}
       {/* ======================================================== */}
-      <div className="fixed top-[-9999px] left-[-9999px] w-0 h-0 overflow-hidden z-[-50] opacity-100" aria-hidden="true">
+      <div className="fixed top-[-20000px] left-[-20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
         {isGeneratingPDF && (() => {
           let entitiesToPrint: any[] = [];
           if (printMode === 'all-teachers') {
@@ -599,12 +602,12 @@ export default function SchedulePage() {
             const entitySchedule = getEntitySchedule(String(entityId), printType);
             
             if (printMode !== 'single' && entitySchedule.length === 0) return null;
+
             const entityName = getEntityTitle(entity, printType);
 
             return (
               <div key={`pdf-${entityId}`} className="pdf-page-container w-[1122px] h-[793px] bg-white p-10 font-cairo flex flex-col" dir="rtl">
-                {/* ترويسة PDF */}
-                <div className="flex justify-between items-end border-b-[3px] border-indigo-900 pb-4 mb-6">
+                <div className="flex justify-between items-end border-b-4 border-indigo-800 pb-4 mb-6">
                   <div>
                     <h1 className="text-4xl font-black text-indigo-950 mb-2">الجدول الدراسي الأسبوعي</h1>
                     <h2 className="text-xl font-black text-slate-800 bg-slate-100 inline-block px-5 py-2 rounded-xl border border-slate-300">
@@ -619,7 +622,6 @@ export default function SchedulePage() {
                   </div>
                 </div>
 
-                {/* جدول PDF */}
                 <table className="w-full border-collapse border-2 border-slate-300 rounded-xl overflow-hidden flex-1 table-fixed">
                   <thead>
                     <tr>
@@ -647,17 +649,17 @@ export default function SchedulePage() {
                               {slot ? (
                                 <div className="flex flex-col items-center justify-center h-full gap-2 p-2">
                                   <div className="font-black text-[16px] text-indigo-950 leading-tight w-full break-words whitespace-normal">{slot.subjects?.name}</div>
-                                  <div className="text-[12px] font-bold text-slate-800 bg-slate-100 px-2 py-1.5 rounded-lg w-full border border-slate-200 break-words whitespace-normal leading-tight">
+                                  <div className="text-[12px] font-bold text-slate-800 bg-slate-100 px-2 py-1.5 rounded-lg w-full border border-slate-200 break-words whitespace-normal">
                                     {getSlotSubtitle(slot, printType)}
                                   </div>
                                   {slot.teachers?.zoom_link && (
-                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-[11px] font-black text-white bg-blue-600 px-4 py-2 rounded-lg mt-1 w-full shadow-sm" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
+                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-xs font-black text-white bg-blue-600 px-4 py-2 rounded-lg mt-1 w-[90%] shadow-sm" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
                                       <Video className="w-4 h-4" /> رابط زوم
                                     </a>
                                   )}
                                 </div>
                               ) : (
-                                <span className="text-slate-300 font-bold text-2xl">-</span>
+                                <span className="text-slate-300 font-bold text-xl">-</span>
                               )}
                             </td>
                           );
@@ -667,8 +669,7 @@ export default function SchedulePage() {
                   </tbody>
                 </table>
 
-                {/* تذييل PDF */}
-                <div className="mt-6 pt-4 border-t-[3px] border-slate-300 flex justify-between items-center pb-2">
+                <div className="mt-6 pt-4 border-t-4 border-slate-300 flex justify-between items-center pb-2">
                   <div className="flex items-center gap-3">
                      <div className="w-12 h-12 bg-indigo-900 text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-md">R</div>
                      <div>
