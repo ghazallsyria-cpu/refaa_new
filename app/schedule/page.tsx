@@ -706,7 +706,7 @@ export default function SchedulePage() {
       )}
 
       {/* ======================================================== */}
-      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (بعيدة عن الشاشة) */}
+      {/* 🖨️ منطقة تجهيز الـ PDF المخفية (محصنة بالكامل ضد أخطاء الألوان) */}
       {/* ======================================================== */}
       <div className="fixed top-[-20000px] left-[-20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
         {isGeneratingPDF && (() => {
@@ -729,32 +729,33 @@ export default function SchedulePage() {
             const entityName = getEntityTitle(entity, printType);
 
             return (
-              <div key={`pdf-${entityId}`} className="pdf-page-container w-[1122px] h-[793px] bg-white p-10 font-cairo flex flex-col" dir="rtl">
-                {/* ترويسة PDF */}
-                <div className="flex justify-between items-end border-b-[3px] border-indigo-900 pb-4 mb-6">
+              <div key={`pdf-${entityId}`} className="pdf-page-container w-[1122px] h-[793px] p-10 font-cairo flex flex-col" dir="rtl" style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>
+                
+                {/* ترويسة PDF بالألوان المباشرة لتجاوز خطأ oklch */}
+                <div className="flex justify-between items-end border-b-[3px] pb-4 mb-6" style={{ borderColor: '#312e81' }}>
                   <div>
-                    <h1 className="text-4xl font-black text-indigo-950 mb-2">الجدول الدراسي الأسبوعي</h1>
-                    <h2 className="text-xl font-black text-slate-800 bg-slate-100 inline-block px-5 py-2 rounded-xl border border-slate-300 shadow-sm">
+                    <h1 className="text-4xl font-black mb-2" style={{ color: '#1e1b4b' }}>الجدول الدراسي الأسبوعي</h1>
+                    <h2 className="text-xl font-black inline-block px-5 py-2 rounded-xl border shadow-sm" style={{ backgroundColor: '#f1f5f9', color: '#1e293b', borderColor: '#cbd5e1' }}>
                       {printType === 'teacher' ? `المعلم: ${entityName}` : `الفصل: ${entityName}`}
                     </h2>
                   </div>
                   <div className="text-left flex flex-col items-end">
-                    <div className="flex items-center gap-2 text-white mb-2 bg-indigo-600 px-5 py-2 rounded-xl font-black shadow-sm">
+                    <div className="flex items-center gap-2 mb-2 px-5 py-2 rounded-xl font-black shadow-sm" style={{ backgroundColor: '#4f46e5', color: '#ffffff' }}>
                       <Calendar className="w-5 h-5" /> العام الدراسي الحالي
                     </div>
-                    <p className="text-sm font-bold text-slate-600">تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
+                    <p className="text-sm font-bold" style={{ color: '#475569' }}>تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG')}</p>
                   </div>
                 </div>
 
-                {/* جدول PDF */}
-                <table className="w-full border-collapse border-2 border-slate-300 rounded-xl overflow-hidden flex-1 table-fixed">
+                {/* جدول PDF بالألوان المباشرة */}
+                <table className="w-full border-collapse border-2 rounded-xl overflow-hidden flex-1 table-fixed" style={{ borderColor: '#cbd5e1' }}>
                   <thead>
                     <tr>
-                      <th className="w-32 bg-indigo-800 text-white border border-slate-300 text-center py-4 font-black text-lg">اليوم / الحصة</th>
+                      <th className="w-32 border text-center py-4 font-black text-lg" style={{ backgroundColor: '#3730a3', color: '#ffffff', borderColor: '#cbd5e1' }}>اليوم / الحصة</th>
                       {periods.map(p => (
-                        <th key={p.id} className="bg-slate-100 border border-slate-300 text-indigo-950 text-center py-3">
+                        <th key={p.id} className="border text-center py-3" style={{ backgroundColor: '#f1f5f9', color: '#1e1b4b', borderColor: '#cbd5e1' }}>
                           <div className="font-black text-base mb-1">الحصة {p.period_number}</div>
-                          <div className="text-xs font-bold text-indigo-700 bg-white inline-block px-3 py-1 rounded-md border border-indigo-200 shadow-sm">
+                          <div className="text-xs font-bold inline-block px-3 py-1 rounded-md border shadow-sm" style={{ backgroundColor: '#ffffff', color: '#4338ca', borderColor: '#c7d2fe' }}>
                             {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
                           </div>
                         </th>
@@ -764,27 +765,27 @@ export default function SchedulePage() {
                   <tbody>
                     {DAYS.map((day, index) => (
                       <tr key={day.id}>
-                        <td className={`font-black text-xl text-center border border-slate-300 text-slate-900 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                        <td className="font-black text-xl text-center border" style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', color: '#0f172a', borderColor: '#cbd5e1' }}>
                           {day.name}
                         </td>
                         {periods.map((p) => {
                           const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number));
                           return (
-                            <td key={p.id} className={`border border-slate-300 p-2 align-middle text-center ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
+                            <td key={p.id} className="border p-2 align-middle text-center" style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : '#ffffff', borderColor: '#cbd5e1' }}>
                               {slot ? (
-                                <div className="flex flex-col items-center justify-center h-full gap-2 p-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                                  <div className="font-black text-[16px] text-indigo-950 leading-tight w-full break-words whitespace-normal">{slot.subjects?.name}</div>
-                                  <div className="text-[12px] font-bold text-slate-800 bg-slate-100 px-2 py-1.5 rounded-lg w-full border border-slate-200 break-words whitespace-normal leading-tight">
+                                <div className="flex flex-col items-center justify-center h-full gap-2 p-2 rounded-lg shadow-sm border" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
+                                  <div className="font-black text-[16px] leading-tight w-full break-words whitespace-normal" style={{ color: '#1e1b4b' }}>{slot.subjects?.name}</div>
+                                  <div className="text-[12px] font-bold px-2 py-1.5 rounded-lg w-full border break-words whitespace-normal leading-tight" style={{ backgroundColor: '#f1f5f9', color: '#1e293b', borderColor: '#e2e8f0' }}>
                                     {getSlotSubtitle(slot, printType)}
                                   </div>
                                   {slot.teachers?.zoom_link && (
-                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-[11px] font-black text-white bg-blue-600 px-4 py-2 rounded-lg mt-1 w-full shadow-sm" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
-                                      <Video className="w-4 h-4" /> رابط زوم
+                                    <a href={normalizeUrl(slot.teachers.zoom_link)} className="zoom-link inline-flex items-center justify-center gap-1.5 text-[11px] font-black px-4 py-2 rounded-lg mt-1 w-[90%] shadow-sm" style={{ backgroundColor: '#2563eb', color: '#ffffff', textDecoration: 'none', WebkitPrintColorAdjust: 'exact' }}>
+                                      <Video className="w-4 h-4" /> دخول البث
                                     </a>
                                   )}
                                 </div>
                               ) : (
-                                <span className="text-slate-300 font-bold text-2xl">-</span>
+                                <span className="font-bold text-2xl" style={{ color: '#cbd5e1' }}>-</span>
                               )}
                             </td>
                           );
@@ -794,17 +795,17 @@ export default function SchedulePage() {
                   </tbody>
                 </table>
 
-                {/* تذييل PDF */}
-                <div className="mt-6 pt-4 border-t-[3px] border-slate-300 flex justify-between items-center pb-2">
+                {/* تذييل PDF بالألوان المباشرة */}
+                <div className="mt-6 pt-4 border-t-[3px] flex justify-between items-center pb-2" style={{ borderColor: '#cbd5e1' }}>
                   <div className="flex items-center gap-3">
-                     <div className="w-12 h-12 bg-indigo-900 text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-md">R</div>
+                     <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-2xl shadow-md" style={{ backgroundColor: '#312e81', color: '#ffffff' }}>R</div>
                      <div>
-                       <p className="text-lg font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
-                       <p className="text-xs font-bold text-slate-500">نظام الإدارة الأكاديمية الشامل</p>
+                       <p className="text-lg font-black leading-tight" style={{ color: '#0f172a' }}>مدرسة الرفعة النموذجية</p>
+                       <p className="text-xs font-bold" style={{ color: '#64748b' }}>نظام الإدارة الأكاديمية الشامل</p>
                      </div>
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-black text-indigo-800 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-200 shadow-sm">وثيقة إلكترونية معتمدة</p>
+                    <p className="text-sm font-black px-4 py-2 rounded-xl border shadow-sm" style={{ backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' }}>وثيقة إلكترونية معتمدة</p>
                   </div>
                 </div>
               </div>
@@ -816,4 +817,3 @@ export default function SchedulePage() {
     </div>
   );
 }
-
