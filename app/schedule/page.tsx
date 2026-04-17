@@ -38,7 +38,6 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // 🖨️ حالات الطباعة الذكية
   const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'all-sections'>('single');
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -264,7 +263,6 @@ export default function SchedulePage() {
     fetchSchedule();
   }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
-  // دالة تصفية الجداول حسب نوع الطباعة المختار
   const getEntitySchedule = (entityId: string, entityType: 'teacher' | 'section') => {
     return scheduleData.filter(s => 
       entityType === 'teacher' ? String(s.teacher_id) === String(entityId) : String(s.section_id) === String(entityId)
@@ -273,7 +271,6 @@ export default function SchedulePage() {
 
   const entitiesToPrint = printMode === 'all-teachers' ? teachers : printMode === 'all-sections' ? sections : [{ id: selectedId }];
 
-  // 🖨️ محرك الطباعة المدرع
   const executePrint = (mode: 'single' | 'all-teachers' | 'all-sections') => {
     setPrintMode(mode);
     if (mode !== 'single') setShowAllSchedules(true);
@@ -464,7 +461,7 @@ export default function SchedulePage() {
   }
 
   // ==========================================
-  // 🖨️ شاشة الطباعة الفاخرة (لا تظهر إلا عند طلب الطباعة)
+  // 🖨️ شاشة الطباعة الفاخرة (لا تظهر إلا عند الطباعة)
   // ==========================================
   if (isPrinting) {
     return (
@@ -505,7 +502,6 @@ export default function SchedulePage() {
           return (
             <div key={`print-page-${entityId}`} className="page-break w-full p-4 mb-8">
               
-              {/* Header */}
               <div className="flex justify-between items-end border-b-4 border-indigo-700 pb-4 mb-6">
                 <div>
                   <h1 className="text-3xl font-black text-indigo-950 tracking-tight mb-2">الجدول الدراسي الأسبوعي</h1>
@@ -521,7 +517,6 @@ export default function SchedulePage() {
                 </div>
               </div>
 
-              {/* Table */}
               <div className="rounded-xl overflow-hidden border border-slate-300 shadow-sm">
                 <table className="print-table">
                   <thead>
@@ -562,8 +557,8 @@ export default function SchedulePage() {
                                       : slot.teachers?.users?.full_name}
                                   </div>
                                   {slot.teachers?.zoom_link && (
-                                    <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg mt-1 w-full hover:underline">
-                                      <Video className="w-4 h-4" /> <span>رابط البث</span>
+                                    <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-[10px] sm:text-[11px] font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg mt-1 w-full hover:underline" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
+                                      <Video className="w-3.5 h-3.5" /> <span>رابط البث</span>
                                     </a>
                                   )}
                                 </div>
@@ -581,7 +576,6 @@ export default function SchedulePage() {
                 </table>
               </div>
               
-              {/* Footer */}
               <div className="mt-6 pt-4 border-t-2 border-slate-200 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                    <div className="w-8 h-8 bg-indigo-700 text-white rounded-xl flex items-center justify-center font-black text-lg">R</div>
@@ -609,7 +603,6 @@ export default function SchedulePage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20" dir="rtl">
       
-      {/* ⏳ شاشة التحميل الذكية أثناء التجهيز للطباعة */}
       <AnimatePresence>
         {isPreparingPrint && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md">
