@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
-import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, Loader2 } from 'lucide-react';
+import { Printer, User, Users, Info, X, Plus, Calendar, AlertCircle, Clock, Video, BookOpen, Sparkles, Bug, LayoutGrid, Save, Loader2, FileDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
@@ -16,6 +16,15 @@ const DAYS = [
   { id: 4, name: 'الأربعاء' },
   { id: 5, name: 'الخميس' },
 ];
+
+// ==========================================
+// 🔗 دالة معالجة الروابط (لتفعيل روابط زوم دائماً)
+// ==========================================
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  const clean = url.trim();
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+};
 
 // ==========================================
 // 🖨️ مكوّن جدول الطباعة لكيان واحد (معلم أو فصل)
@@ -38,8 +47,10 @@ function PrintScheduleBlock({
   return (
     <div
       style={{
-        pageBreakAfter: isLast ? 'avoid' : 'always',
-        breakAfter: isLast ? 'avoid' : 'page',
+        pageBreakAfter: isLast ? 'auto' : 'always',
+        breakAfter: isLast ? 'auto' : 'page',
+        breakInside: 'avoid',
+        pageBreakInside: 'avoid',
         width: '100%',
         fontFamily: 'Cairo, sans-serif',
       }}
@@ -123,10 +134,10 @@ function PrintScheduleBlock({
           borderRadius: '12px',
           overflow: 'hidden',
           border: '2px solid #e2e8f0',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
         }}
       >
         <table
-          className="custom-print-table"
           style={{
             width: '100%',
             borderCollapse: 'collapse',
@@ -235,6 +246,7 @@ function PrintScheduleBlock({
                             borderRadius: '8px',
                             padding: '6px',
                             border: '1px solid #e0e7ff',
+                            boxShadow: '0 1px 3px rgba(99,102,241,0.08)',
                           }}
                         >
                           {/* اسم المادة */}
@@ -261,7 +273,9 @@ function PrintScheduleBlock({
                               borderRadius: '4px',
                               border: '1px solid #c7d2fe',
                               maxWidth: '100%',
-                              textAlign: 'center',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             {viewType === 'teacher'
@@ -273,29 +287,28 @@ function PrintScheduleBlock({
                               : slot.teachers?.users?.full_name}
                           </div>
 
-                          {/* رابط زوم (تم حل مشكلة الرابط الطويل) */}
+                          {/* رابط زوم المعدل */}
                           {slot.teachers?.zoom_link && (
                             <a
-                              href={slot.teachers.zoom_link}
+                              href={normalizeUrl(slot.teachers.zoom_link)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="print-zoom-link"
                               style={{
-                                display: 'inline-flex',
+                                display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 gap: '4px',
-                                fontSize: '10px',
+                                fontSize: '9px',
                                 fontWeight: 900,
-                                color: 'white',
-                                background: '#2563eb', /* أزرق زوم */
-                                border: '1px solid #1d4ed8',
-                                padding: '3px 8px',
-                                borderRadius: '6px',
+                                color: '#065f46',
+                                background: '#d1fae5',
+                                border: '1px solid #6ee7b7',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
                                 textDecoration: 'none',
-                                marginTop: '4px',
+                                marginTop: '2px',
                                 width: '100%',
-                                WebkitPrintColorAdjust: 'exact',
                               }}
                             >
                               رابط البث (Zoom)
@@ -403,7 +416,7 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // ─── حالة الطباعة المتقدمة ───
+  // ─── حالة الطباعة الجماعية ───
   const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'all-sections'>('single');
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
   
@@ -420,7 +433,8 @@ export default function SchedulePage() {
     updateSchedule, 
     deleteSchedule,
     checkConflicts,
-    swapSchedules
+    swapSchedules,
+    notifyScheduleChange
   } = useSchedulesSystem();
 
   const fetchFilters = useCallback(async () => {
@@ -459,6 +473,10 @@ export default function SchedulePage() {
       console.error(err);
     }
   }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
+
+  const availableSections = sections;
+  const modalAvailableTeachers = teachers;
+  const availableSubjects = subjects;
 
   useEffect(() => {
     fetchFilters();
@@ -546,30 +564,32 @@ export default function SchedulePage() {
     fetchSchedule();
   }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
-  // ─── محرك الطباعة المعالج ───
-  // هذا المحرك يمنع طباعة شاشة التحميل (الصورة 4)، ويجهز كل البيانات
-  const executePrint = (type: 'single' | 'all-teachers' | 'all-sections') => {
-    // 1. تحديد نوع الطباعة
-    setPrintMode(type);
-    
-    // 2. التأكد من عرض كل الجداول إذا كانت طباعة جماعية
-    if (type !== 'single') {
-      setShowAllSchedules(true);
-    }
-
-    // 3. إظهار شاشة التحميل لمنع المستخدم من فعل شيء
-    setIsPreparingPrint(true);
-
-    // 4. السحر: ننتظر قليلاً لكي يقوم React برسم الجداول في الخلفية
-    setTimeout(() => {
-      // 5. نخفي شاشة التحميل *كلياً* لكي لا تظهر في الطباعة
+  // ─── محرك الطباعة المعالج جذرياً كما اقترحت ───
+  const executePrint = async (type: 'single' | 'all-teachers' | 'all-sections') => {
+    try {
+      setIsPreparingPrint(true);
+      setPrintMode(type);
+      
+      if (type !== 'single') {
+        setShowAllSchedules(true);
+        // اجلب كل الجداول صراحة كما اقترحت
+        const allData = await fetchSchedulesData({});
+        setScheduleData(allData || []);
+      }
+      
+      // ننتظر رندر React ليتم بناء جداول الـ DOM بشكل كامل
+      await new Promise((r) => setTimeout(r, 600)); 
+      
+      // نخفي شاشة التحميل كلياً لكي لا تظهر في الورق
       setIsPreparingPrint(false);
-
-      // 6. ننتظر جزءاً من الثانية ليتأكد المتصفح أن الـ Loader اختفى، ثم نطبع
-      setTimeout(() => {
-        window.print();
-      }, 500); 
-    }, 1500); // 1.5 ثانية كافية جداً لرسم الجداول
+      
+      // نعطي المتصفح 100 ملي ثانية لتحديث الـ DOM بعد إخفاء الشاشة، ثم نطبع
+      await new Promise((r) => setTimeout(r, 100));
+      window.print();
+    } catch (err: any) {
+      setIsPreparingPrint(false);
+      alert(err.message || 'فشل تجهيز الطباعة');
+    }
   };
 
   // ==========================================
@@ -625,7 +645,7 @@ export default function SchedulePage() {
                               <div className="text-xs font-bold text-slate-500"><User className="w-3.5 h-3.5 inline mr-1" />{slot.teachers?.users?.full_name}</div>
                             </div>
                             {slot.teachers?.zoom_link && (
-                              <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-3 w-full flex items-center justify-center bg-emerald-50 text-emerald-700 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-500 hover:text-white transition-colors">
+                              <a href={normalizeUrl(slot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="mt-3 w-full flex items-center justify-center bg-emerald-50 text-emerald-700 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-500 hover:text-white transition-colors">
                                 <Video className="w-3.5 h-3.5 mr-1" /> دخول البث
                               </a>
                             )}
@@ -651,12 +671,12 @@ export default function SchedulePage() {
   return (
     <div dir="rtl">
       
-      {/* 🖨️ CSS السحري لحل مشاكل Tailwind في الطباعة */}
+      {/* 🖨️ CSS السحري لحل مشاكل المتصفح والروابط في الطباعة */}
       <style jsx global>{`
         @media print {
           @page { size: landscape; margin: 10mm; }
           
-          /* تنظيف خصائص Next.js التي تمنع الطباعة في الموبايل */
+          /* تنظيف خصائص Next.js التي تمنع الطباعة وتخفي المحتوى */
           html, body, main, #__next {
             height: auto !important;
             min-height: auto !important;
@@ -674,23 +694,21 @@ export default function SchedulePage() {
           /* إجبار الألوان في كل المتصفحات */
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-          /* 🚀 الحل الجذري لمشكلة الروابط البشعة (الصورة 5):
-             هذا السطر يمنع المتصفح من كتابة رابط الـ URL بجانب الزر! */
+          /* منع قص الكتل وتداخل الصفحات */
+          .print-block {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          /* 🚀 الحل الجذري لمشكلة الروابط البشعة: منع المتصفح من وضع الرابط كنص بجانب الزر */
           a.print-zoom-link::after,
           a[href]::after {
             content: none !important;
           }
-
-          /* حل مشكلة تقطع الكلمات العربية (الصورة 3) */
-          .custom-print-table th, .custom-print-table td {
-            word-break: normal !important;
-            overflow-wrap: break-word !important;
-            white-space: pre-wrap !important;
-          }
         }
       `}</style>
 
-      {/* ⏳ شاشة التحميل (تظهر فقط في الموقع وليس في الورق) */}
+      {/* ⏳ شاشة التحميل (تظهر في الموقع وتختفي في الطباعة بفضل Tailwind print:hidden) */}
       <AnimatePresence>
         {isPreparingPrint && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md text-white print:hidden">
@@ -715,24 +733,28 @@ export default function SchedulePage() {
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <button 
               onClick={() => executePrint('single')}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 transition-all active:scale-95"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow-lg hover:bg-slate-800 transition-all active:scale-95"
             >
-              <Printer className="h-4 w-4" /> طباعة الحالي
+              <Printer className="h-4 w-4" /> طباعة الجدول الحالي
             </button>
 
             {isAdmin && authRole !== 'teacher' && (
               <>
                 <button
                   onClick={() => executePrint('all-teachers')}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white hover:bg-indigo-700 transition-all active:scale-95"
+                  disabled={isPreparingPrint}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <User className="h-4 w-4" /> طباعة كل المعلمين
+                  <User className="h-4 w-4" />
+                  {isPreparingPrint ? 'جاري التحضير...' : 'طباعة كل المعلمين'}
                 </button>
                 <button
                   onClick={() => executePrint('all-sections')}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-black text-white hover:bg-violet-700 transition-all active:scale-95"
+                  disabled={isPreparingPrint}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-black text-white shadow-lg hover:bg-violet-700 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Users className="h-4 w-4" /> طباعة كل الفصول
+                  <Users className="h-4 w-4" />
+                  {isPreparingPrint ? 'جاري التحضير...' : 'طباعة كل الفصول'}
                 </button>
               </>
             )}
@@ -796,7 +818,7 @@ export default function SchedulePage() {
                               <h4 className="font-black text-sm mb-1">{displaySlot.subjects?.name}</h4>
                               <div className="text-[10px] font-bold px-2 py-1 bg-slate-100 rounded">{viewType === 'teacher' ? `${Array.isArray(displaySlot.sections?.classes) ? displaySlot.sections?.classes[0]?.name : displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}` : displaySlot.teachers?.users?.full_name}</div>
                               {displaySlot.teachers?.zoom_link && (
-                                <a href={displaySlot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex justify-center bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-black">دخول البث</a>
+                                <a href={normalizeUrl(displaySlot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex justify-center bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-black">دخول البث</a>
                               )}
                               {isAdmin && slot && <button onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }} className="text-[10px] text-rose-500 font-bold mt-2">حذف الحصة</button>}
                             </div>
@@ -853,46 +875,50 @@ export default function SchedulePage() {
       </AnimatePresence>
 
       {/* ======================================================== */}
-      {/* 🖨️ منطقة الطباعة الخفية (The Print DOM)                   */}
+      {/* 🖨️ منطقة الطباعة الخفية (The Print DOM) المبنية على المصفوفة المفلترة فعلياً */}
       {/* ======================================================== */}
       {periods.length > 0 && (
         <div id="print-area" style={{ display: 'none' }} dir="rtl">
 
           {/* ── طباعة كل المعلمين ── */}
-          {printMode === 'all-teachers' && teachers.map((teacher, tIdx) => {
-            const teacherSchedule = scheduleData.filter(s => String(s.teacher_id) === String(teacher.id));
-            if (teacherSchedule.length === 0) return null;
-            return (
-              <PrintScheduleBlock
-                key={teacher.id}
-                label={teacher.users?.full_name || 'معلم'}
-                scheduleData={teacherSchedule}
-                periods={periods}
-                viewType="teacher"
-                isLast={tIdx === teachers.length - 1}
-              />
-            );
-          })}
+          {printMode === 'all-teachers' && (() => {
+            const printableTeachers = teachers.filter((teacher) => scheduleData.some((s) => String(s.teacher_id) === String(teacher.id)));
+            return printableTeachers.map((teacher, tIdx) => {
+              const teacherSchedule = scheduleData.filter(s => String(s.teacher_id) === String(teacher.id));
+              return (
+                <PrintScheduleBlock
+                  key={teacher.id}
+                  label={teacher.users?.full_name || 'معلم'}
+                  scheduleData={teacherSchedule}
+                  periods={periods}
+                  viewType="teacher"
+                  isLast={tIdx === printableTeachers.length - 1}
+                />
+              );
+            });
+          })()}
 
           {/* ── طباعة كل الفصول ── */}
-          {printMode === 'all-sections' && sections.map((section, sIdx) => {
-            const sectionSchedule = scheduleData.filter(s => String(s.section_id) === String(section.id));
-            if (sectionSchedule.length === 0) return null;
-            const classData = Array.isArray(section.classes) ? section.classes[0] : section.classes;
-            return (
-              <PrintScheduleBlock
-                key={section.id}
-                label={`${classData?.name} - ${section.name}`}
-                scheduleData={sectionSchedule}
-                periods={periods}
-                viewType="section"
-                isLast={sIdx === sections.length - 1}
-              />
-            );
-          })}
+          {printMode === 'all-sections' && (() => {
+            const printableSections = sections.filter((section) => scheduleData.some((s) => String(s.section_id) === String(section.id)));
+            return printableSections.map((section, sIdx) => {
+              const sectionSchedule = scheduleData.filter(s => String(s.section_id) === String(section.id));
+              const classData = Array.isArray(section.classes) ? section.classes[0] : section.classes;
+              return (
+                <PrintScheduleBlock
+                  key={section.id}
+                  label={`${classData?.name} - ${section.name}`}
+                  scheduleData={sectionSchedule}
+                  periods={periods}
+                  viewType="section"
+                  isLast={sIdx === printableSections.length - 1}
+                />
+              );
+            });
+          })()}
 
           {/* ── طباعة الجدول الحالي فقط ── */}
-          {printMode === 'single' && selectedId && (
+          {printMode === 'single' && (selectedId || showAllSchedules) && (
             <PrintScheduleBlock
               label={
                 viewType === 'teacher'
