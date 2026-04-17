@@ -263,7 +263,7 @@ export default function SchedulePage() {
     fetchSchedule();
   }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
-  // 🖨️ محرك الطباعة الذكي (يضمن تحميل الـ DOM قبل فتح النافذة)
+  // 🖨️ محرك الطباعة الذكي (تم حل مشكلة التجميد هنا)
   const executePrint = (mode: 'single' | 'all-teachers' | 'all-sections') => {
     setIsPreparingPrint(true);
     setPrintMode(mode);
@@ -271,10 +271,15 @@ export default function SchedulePage() {
       setShowAllSchedules(true);
     }
     
-    // إعطاء React وقتاً كافياً لرسم الجداول في الذاكرة (لتفادي الصفحة البيضاء)
+    // ننتظر ثانية ونصف حتى يقوم React برسم الجداول في الـ DOM
     setTimeout(() => {
-      window.print();
+      // 🚀 إخفاء شاشة التحميل *قبل* استدعاء الطباعة لمنع التقاطها في الـ PDF
       setIsPreparingPrint(false);
+      
+      // ننتظر 150 ملي ثانية ليتأكد المتصفح من إزالة شاشة التحميل، ثم نطبع!
+      setTimeout(() => {
+        window.print();
+      }, 150);
     }, 1500);
   };
 
@@ -526,10 +531,10 @@ export default function SchedulePage() {
         }
       `}</style>
 
-      {/* ⏳ شاشة التحميل الذكية أثناء التجهيز للطباعة */}
+      {/* ⏳ شاشة التحميل الذكية أثناء التجهيز للطباعة (مخفية تماماً في الطباعة) */}
       <AnimatePresence>
         {isPreparingPrint && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md print:hidden">
             <Loader2 className="w-16 h-16 animate-spin text-indigo-600 mb-4" />
             <h2 className="text-2xl font-black text-slate-900">جاري هندسة وثيقة الـ PDF...</h2>
             <p className="text-slate-500 font-bold mt-2">يرجى الانتظار، نقوم برسم الجداول والألوان وتفعيل الروابط.</p>
@@ -790,9 +795,9 @@ export default function SchedulePage() {
             return (
               <div key={`print-page-${entityId}`} className="page-break w-full p-6 mb-10 relative">
                 {/* Header فخم */}
-                <div className="flex justify-between items-end border-b-4 border-indigo-700 pb-4 mb-6 relative z-10">
+                <div className="flex justify-between items-end border-b-[3px] border-indigo-900 pb-4 mb-8 relative z-10">
                   <div>
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">الجدول الدراسي الأسبوعي</h1>
+                    <h1 className="text-3xl font-black text-indigo-950 tracking-tight mb-2">الجدول الدراسي الأسبوعي</h1>
                     <h2 className="text-lg font-black text-slate-700 bg-slate-100/80 inline-block px-5 py-2 rounded-xl border border-slate-200">
                       {printType === 'teacher' ? `المعلم: ${entityName}` : `الفصل: ${entityName}`}
                     </h2>
@@ -814,7 +819,7 @@ export default function SchedulePage() {
                           اليوم / الحصة
                         </th>
                         {periods.map(p => (
-                          <th key={p.id} className="bg-slate-100 border-b-2 border-l-2 border-slate-200 text-slate-800 text-center align-middle py-3 last:border-l-0">
+                          <th key={p.id} className="bg-slate-100 border-b-2 border-l-2 border-slate-300 text-slate-800 text-center align-middle py-3 last:border-l-0">
                             <div className="font-black text-sm mb-1 text-slate-900">الحصة {p.period_number}</div>
                             <div className="text-[11px] font-bold text-indigo-600 bg-white inline-block px-3 py-1 rounded-lg border border-indigo-100">
                               {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
@@ -826,7 +831,7 @@ export default function SchedulePage() {
                     <tbody>
                       {DAYS.map((day, index) => (
                         <tr key={day.id}>
-                          <td className={`font-black text-base text-center align-middle border-l-2 border-slate-200 text-slate-900 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                          <td className={`font-black text-base text-center align-middle border-l-2 border-slate-300 text-slate-900 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
                             {day.name}
                           </td>
                           {periods.map((p) => {
@@ -834,7 +839,7 @@ export default function SchedulePage() {
                             const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period));
 
                             return (
-                              <td key={p.id} className={`border-l-2 border-t border-slate-200 align-middle p-2 last:border-l-0 ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
+                              <td key={p.id} className={`border-l-2 border-t border-slate-300 align-middle p-2 last:border-l-0 ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
                                 {slot ? (
                                   <div className="flex flex-col items-center justify-center h-full gap-2 p-1 w-full">
                                     <div className="font-black text-[13px] sm:text-[14px] text-slate-900 text-center leading-snug w-full">
@@ -868,18 +873,19 @@ export default function SchedulePage() {
                 {/* Footer رسمي */}
                 <div className="mt-8 pt-4 border-t-2 border-slate-200 flex justify-between items-center relative z-10">
                   <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 bg-indigo-700 text-white rounded-xl flex items-center justify-center font-black text-xl">R</div>
+                     <div className="w-10 h-10 bg-indigo-900 text-white rounded-xl flex items-center justify-center font-black text-xl">R</div>
                      <div>
-                       <p className="text-sm font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
-                       <p className="text-[10px] font-bold text-slate-500">نظام الإدارة الأكاديمية الشامل</p>
+                       <p className="text-base font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
+                       <p className="text-xs font-bold text-slate-500">نظام الإدارة الأكاديمية الشامل</p>
                      </div>
                   </div>
                   <div className="text-left">
-                    <p className="text-[10px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                      وثيقة إلكترونية معتمدة
+                    <p className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
+                      النسخة المعتمدة للإدارة (رقمي)
                     </p>
                   </div>
                 </div>
+
               </div>
             );
           })
