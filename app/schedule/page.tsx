@@ -9,6 +9,10 @@ import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// استيراد مكتبات الـ PDF التي تمتلكها بالفعل في package.json
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 const DAYS = [
   { id: 1, name: 'الأحد' },
   { id: 2, name: 'الإثنين' },
@@ -38,9 +42,8 @@ export default function SchedulePage() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // 🖨️ حالات الطباعة الذكية
-  const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'all-sections'>('single');
-  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  // حالة توليد الـ PDF
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const currentDayOfWeek = new Date().getDay() + 1;
   const defaultTab = (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) ? currentDayOfWeek : 1;
@@ -55,8 +58,7 @@ export default function SchedulePage() {
     updateSchedule, 
     deleteSchedule,
     checkConflicts,
-    swapSchedules,
-    notifyScheduleChange
+    swapSchedules
   } = useSchedulesSystem();
 
   const fetchFilters = useCallback(async () => {
@@ -263,35 +265,148 @@ export default function SchedulePage() {
     fetchSchedule();
   }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
-  // 🖨️ محرك الطباعة المدرع والمصلح
-  const executePrint = (mode: 'single' | 'all-teachers' | 'all-sections') => {
-    setPrintMode(mode);
-    if (mode !== 'single') {
-      setShowAllSchedules(true);
-    }
-    
-    // عرض رسالة التحميل لثانية واحدة لتجهيز البيانات في الذاكرة
-    setIsPreparingPrint(true);
-    
-    setTimeout(() => {
-      // إخفاء رسالة التحميل تماماً لكي لا تظهر في الطباعة
-      setIsPreparingPrint(false);
-      
-      // ننتظر قليلاً ليتأكد المتصفح من إخفاءها ثم نستدعي الطباعة
-      setTimeout(() => {
-        window.print();
-      }, 300);
-    }, 1200);
-  };
-
-  // دالة لتصفية الجداول في ملف PDF
   const getEntitySchedule = (entityId: string, entityType: 'teacher' | 'section') => {
     return scheduleData.filter(s => 
       entityType === 'teacher' ? String(s.teacher_id) === String(entityId) : String(s.section_id) === String(entityId)
     );
   };
 
-  const entitiesToPrint = printMode === 'all-teachers' ? teachers : printMode === 'all-sections' ? sections : [{ id: selectedId }];
+  // ==========================================
+  // 🖨️ الحل الجذري: توليد ملف PDF باستخدام مكتبة jsPDF التي طلبها المستخدم
+  // ==========================================
+  const generatePDF = async (mode: 'single' | 'all-teachers' | 'all-sections') => {
+    setIsGeneratingPDF(true);
+    
+    try {
+      // إعداد المستند
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      });
+      
+      // تعيين خط يدعم العربية إن أمكن (هنا نستخدم الخط الافتراضي مع قلب النصوص لتظهر صحيحة)
+      const reverseString = (str: string) => str ? str.split(' ').reverse().join(' ') : '';
+
+      const entitiesToPrint = mode === 'all-teachers' ? teachers : mode === 'all-sections' ? sections : [{ id: selectedId }];
+      
+      for (let i = 0; i < entitiesToPrint.length; i++) {
+        const entity = entitiesToPrint[i];
+        const printType = mode === 'all-teachers' || (mode === 'single' && viewType === 'teacher') ? 'teacher' : 'section';
+        const entitySchedule = getEntitySchedule(String(entity.id), printType);
+        
+        if (mode !== 'single' && entitySchedule.length === 0) continue;
+
+        if (i > 0) doc.addPage();
+
+        let entityName = '';
+        if (printType === 'teacher') {
+          entityName = entity.users?.full_name || 'معلم غير محدد';
+        } else {
+          const className = Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name;
+          entityName = `${className || ''} - ${entity.name}`;
+        }
+
+        // رسم الترويسة
+        doc.setFillColor(79, 70, 229); // Indigo 600
+        doc.rect(0, 0, 297, 15, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(16);
+        // نعكس النص العربي ليظهر صحيحاً في مكتبة الـ PDF الأساسية
+        doc.text(reverseString('مدرسة الرفعة النموذجية - الجدول الدراسي'), 280, 10, { align: 'right' });
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(14);
+        doc.text(reverseString(`${printType === 'teacher' ? 'المعلم' : 'الفصل'}: ${entityName}`), 280, 25, { align: 'right' });
+
+        // بناء بيانات الجدول
+        const tableBody = DAYS.map(day => {
+          const rowData = [reverseString(day.name)];
+          
+          periods.forEach(p => {
+            const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number));
+            if (slot) {
+              const subject = slot.subjects?.name || '';
+              const secondaryText = printType === 'teacher' 
+                ? `${Array.isArray(slot.sections?.classes) ? slot.sections?.classes[0]?.name : slot.sections?.classes?.name} - ${slot.sections?.name}`
+                : slot.teachers?.users?.full_name || '';
+              
+              // ندمج اسم المادة واسم المعلم/الفصل في الخلية
+              rowData.push(`${reverseString(subject)}\n${reverseString(secondaryText)}`);
+            } else {
+              rowData.push('-');
+            }
+          });
+          return rowData;
+        });
+
+        const tableHead = [['اليوم', ...periods.map(p => reverseString(`الحصة ${p.period_number} (${p.start_time.slice(0,5)})`))]];
+
+        // رسم الجدول باستخدام مكتبة autoTable (التي تمتلكها في مشروعك)
+        autoTable(doc, {
+          startY: 35,
+          head: tableHead,
+          body: tableBody,
+          theme: 'grid',
+          styles: {
+            font: 'helvetica',
+            fontSize: 10,
+            halign: 'center',
+            valign: 'middle',
+            minCellHeight: 25,
+            textColor: [15, 23, 42]
+          },
+          headStyles: {
+            fillColor: [79, 70, 229], // لون أزرق للرأس
+            textColor: [255, 255, 255],
+            fontSize: 12,
+            fontStyle: 'bold'
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252] // خلفية خفيفة للأسطر المتناوبة
+          },
+          // هذه الخاصية العبقرية ستضع روابط الزوم داخل الـ PDF
+          didDrawCell: (data) => {
+            if (data.section === 'body' && data.column.index > 0) {
+              const dayIndex = data.row.index;
+              const periodIndex = data.column.index - 1;
+              const day = DAYS[dayIndex];
+              const p = periods[periodIndex];
+              
+              const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number));
+              
+              if (slot && slot.teachers?.zoom_link) {
+                // رسم زر أزرق صغير يحتوي على الرابط داخل خلية الـ PDF
+                const x = data.cell.x + (data.cell.width / 2) - 10;
+                const y = data.cell.y + data.cell.height - 6;
+                
+                doc.setFillColor(37, 99, 235); // Blue 600
+                doc.rect(x, y - 4, 20, 6, 'F');
+                
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(8);
+                doc.text('Zoom', x + 10, y, { align: 'center' });
+                
+                // إضافة الرابط القابل للنقر برمجياً إلى الـ PDF
+                doc.link(x, y - 4, 20, 6, { url: slot.teachers.zoom_link });
+              }
+            }
+          }
+        });
+      }
+
+      // حفظ الملف وتنزيله مباشرة
+      const fileName = mode === 'single' ? `جدول_${viewType}_${selectedId}.pdf` : `جميع_الجداول_${mode}.pdf`;
+      doc.save(fileName);
+      
+    } catch (error) {
+      console.error("PDF Generation Error:", error);
+      alert("حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة مرة أخرى.");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   // ==========================================
   // 👨‍🎓 شاشة الطالب
@@ -471,428 +586,240 @@ export default function SchedulePage() {
   // 🚀 ADMIN / TEACHER VIEW 
   // ==========================================
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 print:m-0 print:p-0 print:space-y-0" dir="rtl">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20" dir="rtl">
       
-      {/* 🖨️ CSS الطباعة الحاسم المطور */}
-      <style jsx global>{`
-        @media print {
-          @page { size: landscape; margin: 10mm; }
-          
-          /* تنظيف الهيكل الرئيسي لضمان عمل الطباعة دون صفحات بيضاء */
-          body, html, main, #__next {
-            height: auto !important;
-            min-height: 100% !important;
-            overflow: visible !important;
-            background-color: white !important;
-            color: black !important;
-          }
-          
-          /* إخفاء واجهة الموقع الأصلية أثناء الطباعة */
-          #main-web-content { 
-            display: none !important; 
-          }
-          
-          /* إظهار منطقة الطباعة وتنسيقها */
-          #print-area { 
-            display: block !important; 
-            width: 100% !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-          }
-          
-          /* التحكم في فواصل الصفحات لطباعة المتعدد */
-          .page-break { page-break-after: always !important; }
-          .page-break:last-child { page-break-after: auto !important; }
-          
-          /* إجبار الألوان */
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          
-          /* جداول الطباعة */
-          .print-table { 
-            width: 100% !important; 
-            border-collapse: separate !important; 
-            border-spacing: 0 !important; 
-            border-radius: 12px !important; 
-            border: 2px solid #e2e8f0 !important; 
-          }
-          .print-table th, .print-table td { 
-            border: 1px solid #e2e8f0 !important; 
-            padding: 10px 6px !important; 
-            text-align: center !important; 
-            vertical-align: middle !important; 
-            word-wrap: break-word !important; 
-            white-space: normal !important; /* هذا السطر يمنع قص الكلمات الطويلة */
-          }
-          .print-table th { 
-            background-color: #f8fafc !important; 
-            color: #1e1b4b !important; 
-            font-weight: 900 !important; 
-            font-size: 13px !important; 
-          }
-          
-          /* تفعيل الروابط */
-          a[href] { text-decoration: none !important; color: inherit !important; display: inline-flex !important; }
-        }
-      `}</style>
-
-      {/* ⏳ شاشة التحميل أثناء الطباعة (لا تظهر أبدًا في الورق) */}
       <AnimatePresence>
-        {isPreparingPrint && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/90 backdrop-blur-md print:hidden">
-            <Loader2 className="w-16 h-16 animate-spin text-indigo-600 mb-4" />
-            <h2 className="text-2xl font-black text-slate-900">جاري التجهيز للطباعة...</h2>
-            <p className="text-slate-500 font-bold mt-2">نرجو الانتظار للحظات.</p>
+        {isGeneratingPDF && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-md text-white">
+            <Loader2 className="w-20 h-20 animate-spin text-indigo-400 mb-6" />
+            <h2 className="text-3xl font-black tracking-tight drop-shadow-md">جاري بناء وتنزيل ملف الـ PDF...</h2>
+            <p className="text-slate-300 font-bold mt-2 text-lg">النظام يقوم الآن بحقن الروابط ورسم الجداول، يرجى الانتظار.</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 🖥️ واجهة الويب الرئيسية (تختفي في الطباعة) */}
-      <div id="main-web-content" className="space-y-6">
-        
-        {isAdmin && authRole !== 'teacher' && (
-          <div className="bg-amber-50 p-4 rounded-2xl text-sm text-amber-800 font-bold border border-amber-200 flex items-center gap-3">
-            <Bug className="w-5 h-5 shrink-0" />
-            <div>
-              <p>وضع الإدارة مفعل. يمكنك تعديل ونسخ وتبديل الحصص بالسحب والنقر بحرية تامة.</p>
-            </div>
-          </div>
-        )}
+      {isAdmin && authRole !== 'teacher' && (
+        <div className="bg-amber-50 p-4 rounded-2xl text-sm text-amber-800 font-bold border border-amber-200 flex items-center gap-3">
+          <Bug className="w-5 h-5 shrink-0" />
+          <div><p>وضع الإدارة مفعل. يمكنك تعديل ونسخ وتبديل الحصص بالسحب والنقر بحرية تامة.</p></div>
+        </div>
+      )}
 
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>إدارة الهيكل الزمني</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الدراسي الشامل'}
-            </h1>
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2">
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span>إدارة الهيكل الزمني</span>
           </div>
-          
-          <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-            <button onClick={() => executePrint('single')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex-1">
-              <Printer className="h-4 w-4" /> طباعة الجدول الحالي
-            </button>
-            {isAdmin && (
-              <>
-                <button onClick={() => executePrint('all-sections')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 px-5 py-3 text-sm font-black hover:bg-indigo-100 transition-all active:scale-95 flex-1">
-                  <FileDown className="h-4 w-4" /> طباعة جميع الفصول
-                </button>
-                <button onClick={() => executePrint('all-teachers')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3 text-sm font-black hover:bg-emerald-100 transition-all active:scale-95 flex-1">
-                  <FileDown className="h-4 w-4" /> طباعة جميع المعلمين
-                </button>
-              </>
-            )}
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            {authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الدراسي الشامل'}
+          </h1>
+        </div>
+        
+        {/* أزرار التحميل الفاخرة للـ PDF */}
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+          <button onClick={() => generatePDF('single')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex-1">
+            <FileDown className="h-4 w-4" /> تحميل الجدول كـ PDF
+          </button>
+          {isAdmin && (
+            <>
+              <button onClick={() => generatePDF('all-sections')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 px-5 py-3 text-sm font-black hover:bg-indigo-100 transition-all active:scale-95 flex-1">
+                <FileDown className="h-4 w-4" /> تحميل جداول كل الفصول
+              </button>
+              <button onClick={() => generatePDF('all-teachers')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3 text-sm font-black hover:bg-emerald-100 transition-all active:scale-95 flex-1">
+                <FileDown className="h-4 w-4" /> تحميل جداول كل المعلمين
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {isAdmin && authRole !== 'teacher' && swappingFrom && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between animate-pulse sticky top-4 z-40 gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm"><Users className="h-6 w-6" /></div>
+            <div>
+              <p className="font-black text-lg">وضع التبديل نشط</p>
+              <p className="text-sm text-amber-50 font-medium mt-1">أنت تقوم بنقل حصة: <span className="font-black bg-white/20 px-2 py-0.5 rounded">{swappingFrom.subjects?.name}</span> ({swappingFrom.teachers?.users?.full_name})<br />انقر على أي خانة أخرى لإتمام التبديل.</p>
+            </div>
+          </div>
+          <button onClick={() => setSwappingFrom(null)} className="bg-white text-amber-600 hover:bg-amber-50 px-6 py-3 rounded-xl text-sm font-black shadow-sm transition-colors w-full sm:w-auto">إلغاء التبديل</button>
+        </div>
+      )}
+
+      {isAdmin && authRole !== 'teacher' && copiedLesson && (
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between sticky top-4 z-40 gap-4 mt-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm"><Info className="h-6 w-6" /></div>
+            <div>
+              <p className="font-black text-lg">تم نسخ الحصة</p>
+              <p className="text-sm text-emerald-50 font-medium mt-1">الحصة المنسوخة: <span className="font-black bg-white/20 px-2 py-0.5 rounded">{copiedLesson.subjects?.name}</span> ({copiedLesson.teachers?.users?.full_name})<br />انقر على أي خانة فارغة للصق.</p>
+            </div>
+          </div>
+          <button onClick={() => setCopiedLesson(null)} className="bg-white text-emerald-600 hover:bg-emerald-50 px-6 py-3 rounded-xl text-sm font-black shadow-sm transition-colors w-full sm:w-auto">مسح الحافظة</button>
+        </div>
+      )}
+
+      {isAdmin && authRole !== 'teacher' && (
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-6 items-center">
+          <div className="flex rounded-xl shadow-sm bg-slate-100 p-1 w-full lg:w-auto shrink-0">
+            <button type="button" onClick={() => { setViewType('teacher'); if (teachers.length > 0) setSelectedId(String(teachers[0].id)); }} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm font-black rounded-lg transition-all ${viewType === 'teacher' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><User className="w-4 h-4" /> جدول المعلمين</button>
+            <button type="button" onClick={() => { setViewType('section'); if (sections.length > 0) setSelectedId(String(sections[0].id)); }} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm font-black rounded-lg transition-all ${viewType === 'section' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Users className="w-4 h-4" /> جدول الفصول</button>
+          </div>
+          <div className="flex-1 w-full relative">
+            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none"><BookOpen className="h-5 w-5 text-slate-400" /></div>
+            <select value={selectedId} onChange={(e) => setSelectedId(String(e.target.value))} className="block w-full rounded-xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold outline-none">
+              <option value="">-- اختر {viewType === 'teacher' ? 'المعلم' : 'الفصل'} --</option>
+              {viewType === 'teacher' ? teachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name || 'معلم غير معروف'}</option>) : sections.map(s => { const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes; return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option> })}
+            </select>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 bg-slate-50 px-5 py-3.5 rounded-xl border border-slate-200 w-full lg:w-auto">
+            <input type="checkbox" id="showAll" checked={showAllSchedules} onChange={(e) => setShowAllSchedules(e.target.checked)} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer" />
+            <label htmlFor="showAll" className="text-sm font-black text-slate-700 cursor-pointer select-none">عرض كامل اللوحة (الكل)</label>
           </div>
         </div>
+      )}
 
-        {isAdmin && authRole !== 'teacher' && swappingFrom && (
-          <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between animate-pulse sticky top-4 z-40 gap-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm"><Users className="h-6 w-6" /></div>
-              <div>
-                <p className="font-black text-lg">وضع التبديل نشط</p>
-                <p className="text-sm text-amber-50 font-medium mt-1">أنت تقوم بنقل حصة: <span className="font-black bg-white/20 px-2 py-0.5 rounded">{swappingFrom.subjects?.name}</span> ({swappingFrom.teachers?.users?.full_name})<br />انقر على أي خانة أخرى لإتمام التبديل.</p>
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl border border-slate-100">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2"><div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar className="w-5 h-5"/></div>{editingId ? 'تعديل الحصة' : 'إضافة حصة جديدة'}</h2>
+                <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-xl transition-colors"><X className="h-5 w-5" /></button>
               </div>
-            </div>
-            <button onClick={() => setSwappingFrom(null)} className="bg-white text-amber-600 hover:bg-amber-50 px-6 py-3 rounded-xl text-sm font-black shadow-sm transition-colors w-full sm:w-auto">إلغاء التبديل</button>
-          </div>
-        )}
-
-        {isAdmin && authRole !== 'teacher' && copiedLesson && (
-          <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between sticky top-4 z-40 gap-4 mt-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm"><Info className="h-6 w-6" /></div>
-              <div>
-                <p className="font-black text-lg">تم نسخ الحصة</p>
-                <p className="text-sm text-emerald-50 font-medium mt-1">الحصة المنسوخة: <span className="font-black bg-white/20 px-2 py-0.5 rounded">{copiedLesson.subjects?.name}</span> ({copiedLesson.teachers?.users?.full_name})<br />انقر على أي خانة فارغة للصق.</p>
-              </div>
-            </div>
-            <button onClick={() => setCopiedLesson(null)} className="bg-white text-emerald-600 hover:bg-emerald-50 px-6 py-3 rounded-xl text-sm font-black shadow-sm transition-colors w-full sm:w-auto">مسح الحافظة</button>
-          </div>
-        )}
-
-        {isAdmin && authRole !== 'teacher' && (
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-6 items-center">
-            <div className="flex rounded-xl shadow-sm bg-slate-100 p-1 w-full lg:w-auto shrink-0">
-              <button type="button" onClick={() => { setViewType('teacher'); if (teachers.length > 0) setSelectedId(String(teachers[0].id)); }} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm font-black rounded-lg transition-all ${viewType === 'teacher' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><User className="w-4 h-4" /> جدول المعلمين</button>
-              <button type="button" onClick={() => { setViewType('section'); if (sections.length > 0) setSelectedId(String(sections[0].id)); }} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm font-black rounded-lg transition-all ${viewType === 'section' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><Users className="w-4 h-4" /> جدول الفصول</button>
-            </div>
-            <div className="flex-1 w-full relative">
-              <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none"><BookOpen className="h-5 w-5 text-slate-400" /></div>
-              <select value={selectedId} onChange={(e) => setSelectedId(String(e.target.value))} className="block w-full rounded-xl border-0 py-4 pr-12 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-indigo-600 sm:text-sm font-bold outline-none">
-                <option value="">-- اختر {viewType === 'teacher' ? 'المعلم' : 'الفصل'} --</option>
-                {viewType === 'teacher' ? teachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name || 'معلم غير معروف'}</option>) : sections.map(s => { const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes; return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option> })}
-              </select>
-            </div>
-            <div className="flex items-center gap-3 shrink-0 bg-slate-50 px-5 py-3.5 rounded-xl border border-slate-200 w-full lg:w-auto">
-              <input type="checkbox" id="showAll" checked={showAllSchedules} onChange={(e) => setShowAllSchedules(e.target.checked)} className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer" />
-              <label htmlFor="showAll" className="text-sm font-black text-slate-700 cursor-pointer select-none">عرض كامل اللوحة (الكل)</label>
-            </div>
-          </div>
-        )}
-
-        <AnimatePresence>
-          {isModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[2rem] p-8 w-full max-w-lg shadow-2xl border border-slate-100">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2"><div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar className="w-5 h-5"/></div>{editingId ? 'تعديل الحصة' : 'إضافة حصة جديدة'}</h2>
-                  <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-xl transition-colors"><X className="h-5 w-5" /></button>
-                </div>
-                <div className="space-y-5">
+              <div className="space-y-5">
+                {viewType === 'teacher' ? (
+                  <div><label className="block text-sm font-bold text-slate-700 mb-2">المعلم المحدد</label><div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-bold flex items-center gap-2"><User className="w-4 h-4 text-slate-400" />{teachers.find(t => String(t.id) === String(selectedId))?.users?.full_name}</div></div>
+                ) : (
+                  <div><label className="block text-sm font-bold text-slate-700 mb-2">الفصل المحدد</label><div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-bold flex items-center gap-2"><Users className="w-4 h-4 text-slate-400" />{sections.find(s => String(s.id) === String(selectedId))?.classes?.name} - {sections.find(s => String(s.id) === String(selectedId))?.name}</div></div>
+                )}
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">{viewType === 'teacher' ? 'إسناد لفصل' : 'اختيار المعلم'}</label>
                   {viewType === 'teacher' ? (
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">المعلم المحدد</label><div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-bold flex items-center gap-2"><User className="w-4 h-4 text-slate-400" />{teachers.find(t => String(t.id) === String(selectedId))?.users?.full_name}</div></div>
+                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.section_id} onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}><option value="">-- اختر الفصل --</option>{availableSections.map(s => { const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes; return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option> })}</select>
                   ) : (
-                    <div><label className="block text-sm font-bold text-slate-700 mb-2">الفصل المحدد</label><div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 font-bold flex items-center gap-2"><Users className="w-4 h-4 text-slate-400" />{sections.find(s => String(s.id) === String(selectedId))?.classes?.name} - {sections.find(s => String(s.id) === String(selectedId))?.name}</div></div>
+                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}><option value="">-- اختر المعلم --</option>{modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}</select>
                   )}
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">{viewType === 'teacher' ? 'إسناد لفصل' : 'اختيار المعلم'}</label>
-                    {viewType === 'teacher' ? (
-                      <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.section_id} onChange={(e) => setFormData({ ...formData, section_id: e.target.value, subject_id: '' })}><option value="">-- اختر الفصل --</option>{availableSections.map(s => { const classData = Array.isArray(s.classes) ? s.classes[0] : s.classes; return <option key={s.id} value={s.id}>{classData?.name} - {s.name}</option> })}</select>
-                    ) : (
-                      <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}><option value="">-- اختر المعلم --</option>{modalAvailableTeachers.map(t => <option key={t.id} value={t.id}>{t.users?.full_name}</option>)}</select>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">المادة الدراسية</label>
-                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none disabled:opacity-50" value={formData.subject_id} disabled={!formData.section_id || !formData.teacher_id} onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}><option value="">-- اختر المادة --</option>{availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                    {(!formData.section_id || !formData.teacher_id) && <p className="text-[10px] font-bold text-slate-400 mt-2 flex items-center gap-1"><Info className="w-3 h-3"/> يرجى اختيار {viewType === 'teacher' ? 'الفصل' : 'المعلم'} أولاً لفتح المواد</p>}
-                  </div>
                 </div>
-                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-8">
-                  <button className="w-full sm:w-auto px-6 py-4 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 font-black transition-colors" onClick={() => { setIsModalOpen(false); setEditingId(null); }}>إلغاء الأمر</button>
-                  <button className="w-full sm:w-auto px-6 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-black shadow-lg shadow-indigo-200 transition-colors flex-1 flex justify-center items-center gap-2" onClick={handleAddSchedule}><Save className="w-5 h-5" /> {editingId ? 'تحديث الحصة' : 'اعتماد الحصة'}</button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {!selectedId && !showAllSchedules ? (
-          <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-16 text-center">
-            <div className="mx-auto h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100"><LayoutGrid className="h-10 w-10 text-slate-300" /></div>
-            <h3 className="text-2xl font-black text-slate-900 mb-2">لوحة الجدول فارغة</h3>
-            <p className="text-slate-500 font-bold">الرجاء اختيار معلم أو فصل من القائمة العلوية.</p>
-          </div>
-        ) : periods.length === 0 ? (
-          <div className="bg-white rounded-[2rem] shadow-sm border border-rose-100 p-16 text-center">
-            <div className="mx-auto h-24 w-24 bg-rose-50 rounded-full flex items-center justify-center mb-6 border border-rose-100 animate-pulse"><AlertCircle className="h-10 w-10 text-rose-500" /></div>
-            <h3 className="text-2xl font-black text-slate-900 mb-2">النظام الزمني غير معد</h3>
-            <p className="text-slate-500 font-bold mb-8 max-w-md mx-auto">لا يمكن عرض أي جدول دراسي لعدم وجود أوقات حصص.</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-            <div className="overflow-x-auto p-6 sm:p-8">
-              <div className="min-w-[800px]">
-                <div className="grid gap-3" style={{ gridTemplateColumns: `100px repeat(${periods.length}, minmax(0, 1fr))` }}>
-                  <div className="h-16 flex items-center justify-center bg-slate-900 rounded-2xl shadow-inner">
-                    <span className="text-xs font-black text-white uppercase tracking-widest">اليوم</span>
-                  </div>
-                  {periods.map(p => (
-                    <div key={p.id} className="h-16 flex flex-col items-center justify-center bg-slate-50/80 rounded-2xl border border-slate-200/60 shadow-sm">
-                      <span className="text-sm font-black text-slate-900">الحصة {p.period_number}</span>
-                      <span className="text-[10px] text-slate-500 font-bold flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3" /> {p.start_time.slice(0, 5)}</span>
-                    </div>
-                  ))}
-
-                  {loading ? (
-                    <div className="col-span-full py-32 text-center flex flex-col items-center justify-center">
-                      <div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                      <p className="font-bold text-slate-400">جاري تحميل الجدول...</p>
-                    </div>
-                  ) : (
-                    DAYS.map((day) => (
-                      <React.Fragment key={day.id}>
-                        <div className="font-black text-sm flex items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-sm">
-                          {day.name}
-                        </div>
-                        {periods.map((p, pIdx) => {
-                          const period = p.period_number;
-                          const slot = scheduleData.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period) && (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId)));
-                          const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period) && (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))) : [];
-
-                          const isSwappingFromThisSlot = swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id));
-                          const isCopiedFromThisSlot = copiedLesson && others.find(o => String(o.id) === String(copiedLesson.id));
-                          const displaySlot = slot || (isSwappingFromThisSlot ? swappingFrom : (isCopiedFromThisSlot ? copiedLesson : others[0]));
-
-                          return (
-                            <motion.div 
-                              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: (day.id * 0.1) + (pIdx * 0.05) }} key={`${day.id}-${p.id}`} 
-                              className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col justify-between transition-all group overflow-hidden
-                                ${slot ? 'bg-white border-2 border-indigo-500 shadow-md shadow-indigo-100 z-10' : displaySlot ? 'bg-slate-50 border border-slate-200 text-slate-400' : 'bg-slate-50/30 border border-dashed border-slate-200 text-slate-300 hover:bg-slate-50'}
-                                ${isAdmin ? 'cursor-pointer hover:border-indigo-400 hover:shadow-lg' : ''} 
-                                ${String(swappingFrom?.id) === String(displaySlot?.id) && displaySlot ? 'ring-4 ring-amber-400 bg-amber-50 z-20 scale-105 shadow-xl border-transparent' : ''} 
-                                ${String(copiedLesson?.id) === String(displaySlot?.id) && displaySlot ? 'ring-4 ring-emerald-400 bg-emerald-50 z-20 border-transparent' : ''}`}
-                              onClick={() => {
-                                if (isAdmin) {
-                                  if (swappingFrom) {
-                                    if (String(swappingFrom.id) === String(displaySlot?.id)) setSwappingFrom(null);
-                                    else handleSwap(day.id, period, displaySlot);
-                                  } else if (!displaySlot || others.length > 0) {
-                                    setFormData({ teacher_id: viewType === 'teacher' ? selectedId : (copiedLesson?.teacher_id || ''), section_id: viewType === 'section' ? selectedId : (copiedLesson?.section_id || ''), subject_id: copiedLesson?.subject_id || '' });
-                                    setSelectedSlot({day: day.id, period: period});
-                                    setIsModalOpen(true);
-                                  }
-                                } else if (slot?.teachers?.zoom_link) { window.open(slot.teachers.zoom_link, '_blank'); }
-                              }}
-                            >
-                              {displaySlot ? (
-                                <div className="w-full relative z-10">
-                                  <span className={`font-black text-sm block mb-1.5 leading-tight ${slot ? 'text-slate-900' : 'text-slate-500'}`}>{displaySlot.subjects?.name}</span>
-                                  <div className={`text-[10px] font-bold px-2 py-1 rounded bg-slate-100 inline-block truncate max-w-full ${slot ? 'text-indigo-700 bg-indigo-50 border border-indigo-100' : 'text-slate-400'}`}>
-                                    {viewType === 'teacher' ? `${Array.isArray(displaySlot.sections?.classes) ? displaySlot.sections?.classes[0]?.name : displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}` : displaySlot.teachers?.users?.full_name}
-                                  </div>
-                                  
-                                  {isAdmin && slot && (
-                                    <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
-                                      <div className="flex items-center gap-1.5">
-                                        <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border border-emerald-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); setCopiedLesson(displaySlot); }}>نسخ</button>
-                                        <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white border border-amber-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); setSwappingFrom(displaySlot); }}>نقل</button>
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-500 hover:text-white border border-blue-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); setEditingId(String(displaySlot.id)); setFormData({ teacher_id: displaySlot.teacher_id || '', section_id: displaySlot.section_id || '', subject_id: displaySlot.subject_id || '' }); setSelectedSlot({day: day.id, period: period}); setIsModalOpen(true); }}>تعديل</button>
-                                        <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white border border-rose-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }}>حذف</button>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {!slot && others.length > 1 && <span className="text-[9px] font-bold text-slate-400 block mt-2 bg-slate-100 rounded-full px-2 py-0.5 inline-block">+{others.length - 1} تعارضات</span>}
-                                </div>
-                              ) : (
-                                <div className="flex flex-col items-center gap-2"><Plus className="w-6 h-6 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full shadow-sm" /><span className="text-slate-300 text-[10px] font-bold tracking-widest uppercase group-hover:opacity-0 transition-opacity">فراغ</span></div>
-                              )}
-                            </motion.div>
-                          );
-                        })}
-                      </React.Fragment>
-                    ))
-                  )}
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">المادة الدراسية</label>
+                  <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none disabled:opacity-50" value={formData.subject_id} disabled={!formData.section_id || !formData.teacher_id} onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}><option value="">-- اختر المادة --</option>{availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                  {(!formData.section_id || !formData.teacher_id) && <p className="text-[10px] font-bold text-slate-400 mt-2 flex items-center gap-1"><Info className="w-3 h-3"/> يرجى اختيار {viewType === 'teacher' ? 'الفصل' : 'المعلم'} أولاً لفتح المواد</p>}
                 </div>
               </div>
-            </div>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-8">
+                <button className="w-full sm:w-auto px-6 py-4 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 font-black transition-colors" onClick={() => { setIsModalOpen(false); setEditingId(null); }}>إلغاء الأمر</button>
+                <button className="w-full sm:w-auto px-6 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-black shadow-lg shadow-indigo-200 transition-colors flex-1 flex justify-center items-center gap-2" onClick={handleAddSchedule}><Save className="w-5 h-5" /> {editingId ? 'تحديث الحصة' : 'اعتماد الحصة'}</button>
+              </div>
+            </motion.div>
           </div>
         )}
-      </div>
+      </AnimatePresence>
 
-      {/* ======================================================== */}
-      {/* 🖨️ قسم الطباعة الفاخر (يظهر حصرياً وقت الطباعة) */}
-      {/* ======================================================== */}
-      <div id="print-area" className="hidden font-cairo bg-white w-full">
-        {(!selectedId && printMode === 'single') || periods.length === 0 ? null : (
-          entitiesToPrint.map((entity, pageIndex) => {
-            const entityId = entity.id;
-            const printType = printMode === 'all-teachers' || viewType === 'teacher' ? 'teacher' : 'section';
-            const entitySchedule = getEntitySchedule(String(entityId), printType);
-            
-            if (printMode !== 'single' && entitySchedule.length === 0) return null;
-
-            let entityName = '';
-            if (printType === 'teacher') {
-              entityName = entity.users?.full_name || 'معلم غير محدد';
-            } else {
-              const className = Array.isArray(entity.classes) ? entity.classes[0]?.name : entity.classes?.name;
-              entityName = `${className || ''} - ${entity.name}`;
-            }
-
-            return (
-              <div key={`print-page-${entityId}`} className="page-break w-full p-4 mb-8">
-                
-                <div className="flex justify-between items-end border-b-4 border-indigo-700 pb-4 mb-6">
-                  <div>
-                    <h1 className="text-3xl font-black text-indigo-950 tracking-tight mb-2">الجدول الدراسي الأسبوعي</h1>
-                    <h2 className="text-lg font-black text-slate-700 bg-slate-100 inline-block px-5 py-2 rounded-xl border border-slate-200">
-                      {printType === 'teacher' ? `المعلم: ${entityName}` : `الفصل: ${entityName}`}
-                    </h2>
-                  </div>
-                  <div className="text-left flex flex-col items-end">
-                    <div className="flex items-center gap-2 text-indigo-700 mb-2 bg-indigo-50 px-4 py-1.5 rounded-xl border border-indigo-100 font-black">
-                       <Calendar className="w-5 h-5" /> العام الدراسي الحالي
-                    </div>
-                    <p className="text-xs font-bold text-slate-500">تاريخ الإصدار: {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  </div>
+      {!selectedId && !showAllSchedules ? (
+        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-16 text-center">
+          <div className="mx-auto h-24 w-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100"><LayoutGrid className="h-10 w-10 text-slate-300" /></div>
+          <h3 className="text-2xl font-black text-slate-900 mb-2">لوحة الجدول فارغة</h3>
+          <p className="text-slate-500 font-bold">الرجاء اختيار معلم أو فصل من القائمة العلوية.</p>
+        </div>
+      ) : periods.length === 0 ? (
+        <div className="bg-white rounded-[2rem] shadow-sm border border-rose-100 p-16 text-center">
+          <div className="mx-auto h-24 w-24 bg-rose-50 rounded-full flex items-center justify-center mb-6 border border-rose-100 animate-pulse"><AlertCircle className="h-10 w-10 text-rose-500" /></div>
+          <h3 className="text-2xl font-black text-slate-900 mb-2">النظام الزمني غير معد</h3>
+          <p className="text-slate-500 font-bold mb-8 max-w-md mx-auto">لا يمكن عرض أي جدول دراسي لعدم وجود أوقات حصص.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto p-6 sm:p-8">
+            <div className="min-w-[800px]">
+              <div className="grid gap-3" style={{ gridTemplateColumns: `100px repeat(${periods.length}, minmax(0, 1fr))` }}>
+                <div className="h-16 flex items-center justify-center bg-slate-900 rounded-2xl shadow-inner">
+                  <span className="text-xs font-black text-white uppercase tracking-widest">اليوم</span>
                 </div>
+                {periods.map(p => (
+                  <div key={p.id} className="h-16 flex flex-col items-center justify-center bg-slate-50/80 rounded-2xl border border-slate-200/60 shadow-sm">
+                    <span className="text-sm font-black text-slate-900">الحصة {p.period_number}</span>
+                    <span className="text-[10px] text-slate-500 font-bold flex items-center gap-1 mt-0.5"><Clock className="w-3 h-3" /> {p.start_time.slice(0, 5)}</span>
+                  </div>
+                ))}
 
-                <div className="rounded-xl overflow-hidden border border-slate-300 shadow-sm">
-                  <table className="print-table">
-                    <thead>
-                      <tr>
-                        <th className="w-32 bg-indigo-700 text-white border-b-2 border-l-2 border-slate-300 text-center align-middle py-4">
-                          اليوم / الحصة
-                        </th>
-                        {periods.map(p => (
-                          <th key={p.id} className="bg-slate-100 border-b-2 border-l-2 border-slate-300 text-slate-800 text-center align-middle py-3 last:border-l-0">
-                            <div className="font-black text-base mb-1">الحصة {p.period_number}</div>
-                            <div className="text-xs font-bold text-indigo-600 bg-white inline-block px-3 py-1 rounded-lg border border-indigo-100">
-                              {p.start_time.slice(0, 5)} - {p.end_time.slice(0, 5)}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {DAYS.map((day, index) => (
-                        <tr key={day.id}>
-                          <td className={`font-black text-lg text-center align-middle border-l-2 border-slate-300 text-slate-900 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
-                            {day.name}
-                          </td>
-                          {periods.map((p) => {
-                            const period = p.period_number;
-                            const slot = entitySchedule.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period));
+                {loading ? (
+                  <div className="col-span-full py-32 text-center flex flex-col items-center justify-center">
+                    <div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="font-bold text-slate-400">جاري تحميل الجدول...</p>
+                  </div>
+                ) : (
+                  DAYS.map((day) => (
+                    <React.Fragment key={day.id}>
+                      <div className="font-black text-sm flex items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-sm">
+                        {day.name}
+                      </div>
+                      {periods.map((p, pIdx) => {
+                        const period = p.period_number;
+                        const slot = scheduleData.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period) && (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId)));
+                        const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(period) && (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))) : [];
 
-                            return (
-                              <td key={p.id} className={`border-l-2 border-t border-slate-300 align-middle p-2 last:border-l-0 ${index % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
-                                {slot ? (
-                                  <div className="flex flex-col items-center justify-center h-full gap-2 bg-white rounded-xl p-3 border border-slate-200 shadow-sm w-full">
-                                    <div className="font-black text-[15px] text-indigo-950 text-center leading-snug whitespace-normal break-words w-full">
-                                      {slot.subjects?.name}
+                        const isSwappingFromThisSlot = swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id));
+                        const isCopiedFromThisSlot = copiedLesson && others.find(o => String(o.id) === String(copiedLesson.id));
+                        const displaySlot = slot || (isSwappingFromThisSlot ? swappingFrom : (isCopiedFromThisSlot ? copiedLesson : others[0]));
+
+                        return (
+                          <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: (day.id * 0.1) + (pIdx * 0.05) }} key={`${day.id}-${p.id}`} 
+                            className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col justify-between transition-all group overflow-hidden
+                              ${slot ? 'bg-white border-2 border-indigo-500 shadow-md shadow-indigo-100 z-10' : displaySlot ? 'bg-slate-50 border border-slate-200 text-slate-400' : 'bg-slate-50/30 border border-dashed border-slate-200 text-slate-300 hover:bg-slate-50'}
+                              ${isAdmin ? 'cursor-pointer hover:border-indigo-400 hover:shadow-lg' : ''} 
+                              ${String(swappingFrom?.id) === String(displaySlot?.id) && displaySlot ? 'ring-4 ring-amber-400 bg-amber-50 z-20 scale-105 shadow-xl border-transparent' : ''} 
+                              ${String(copiedLesson?.id) === String(displaySlot?.id) && displaySlot ? 'ring-4 ring-emerald-400 bg-emerald-50 z-20 border-transparent' : ''}`}
+                            onClick={() => {
+                              if (isAdmin) {
+                                if (swappingFrom) {
+                                  if (String(swappingFrom.id) === String(displaySlot?.id)) setSwappingFrom(null);
+                                  else handleSwap(day.id, period, displaySlot);
+                                } else if (!displaySlot || others.length > 0) {
+                                  setFormData({ teacher_id: viewType === 'teacher' ? selectedId : (copiedLesson?.teacher_id || ''), section_id: viewType === 'section' ? selectedId : (copiedLesson?.section_id || ''), subject_id: copiedLesson?.subject_id || '' });
+                                  setSelectedSlot({day: day.id, period: period});
+                                  setIsModalOpen(true);
+                                }
+                              } else if (slot?.teachers?.zoom_link) { window.open(slot.teachers.zoom_link, '_blank'); }
+                            }}
+                          >
+                            {displaySlot ? (
+                              <div className="w-full relative z-10">
+                                <span className={`font-black text-sm block mb-1.5 leading-tight ${slot ? 'text-slate-900' : 'text-slate-500'}`}>{displaySlot.subjects?.name}</span>
+                                <div className={`text-[10px] font-bold px-2 py-1 rounded bg-slate-100 inline-block truncate max-w-full ${slot ? 'text-indigo-700 bg-indigo-50 border border-indigo-100' : 'text-slate-400'}`}>
+                                  {viewType === 'teacher' ? `${Array.isArray(displaySlot.sections?.classes) ? displaySlot.sections?.classes[0]?.name : displaySlot.sections?.classes?.name} - ${displaySlot.sections?.name}` : displaySlot.teachers?.users?.full_name}
+                                </div>
+                                
+                                {isAdmin && slot && (
+                                  <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+                                    <div className="flex items-center gap-1.5">
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border border-emerald-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); setCopiedLesson(displaySlot); }}>نسخ</button>
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white border border-amber-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); setSwappingFrom(displaySlot); }}>نقل</button>
                                     </div>
-                                    <div className="text-[12px] font-bold text-slate-700 bg-slate-100 px-2 py-1.5 rounded-lg text-center w-full whitespace-normal break-words border border-slate-200">
-                                      {printType === 'teacher' 
-                                        ? `${Array.isArray(slot.sections?.classes) ? slot.sections?.classes[0]?.name : slot.sections?.classes?.name} - ${slot.sections?.name}`
-                                        : slot.teachers?.users?.full_name}
+                                    <div className="flex items-center gap-1.5">
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-500 hover:text-white border border-blue-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); setEditingId(String(displaySlot.id)); setFormData({ teacher_id: displaySlot.teacher_id || '', section_id: displaySlot.section_id || '', subject_id: displaySlot.subject_id || '' }); setSelectedSlot({day: day.id, period: period}); setIsModalOpen(true); }}>تعديل</button>
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white border border-rose-100 transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }}>حذف</button>
                                     </div>
-                                    {slot.teachers?.zoom_link && (
-                                      <a href={slot.teachers.zoom_link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1.5 text-xs font-black text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg mt-1 w-full hover:underline" style={{ WebkitPrintColorAdjust: 'exact', color: 'white' }}>
-                                        <Video className="w-4 h-4" /> <span>رابط البث</span>
-                                      </a>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col items-center justify-center h-full opacity-30">
-                                    <span className="text-slate-400 text-xs font-bold uppercase tracking-widest">—</span>
                                   </div>
                                 )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                <div className="mt-6 pt-4 border-t-2 border-slate-200 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                     <div className="w-8 h-8 bg-indigo-700 text-white rounded-xl flex items-center justify-center font-black text-lg">R</div>
-                     <div>
-                       <p className="text-sm font-black text-slate-900 leading-tight">مدرسة الرفعة النموذجية</p>
-                       <p className="text-[10px] font-bold text-slate-500">نظام الإدارة الأكاديمية الشامل</p>
-                     </div>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-[10px] font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                      النسخة المعتمدة للإدارة (رقمي)
-                    </p>
-                  </div>
-                </div>
-
+                                {!slot && others.length > 1 && <span className="text-[9px] font-bold text-slate-400 block mt-2 bg-slate-100 rounded-full px-2 py-0.5 inline-block">+{others.length - 1} تعارضات</span>}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-2"><Plus className="w-6 h-6 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full shadow-sm" /><span className="text-slate-300 text-[10px] font-bold tracking-widest uppercase group-hover:opacity-0 transition-opacity">فراغ</span></div>
+                            )}
+                          </motion.div>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))
+                )}
               </div>
-            );
-          })
+            </div>
+          </div>
         )}
       </div>
-
     </div>
   );
 }
