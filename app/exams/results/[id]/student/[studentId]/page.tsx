@@ -63,14 +63,14 @@ export default function StudentExamResult() {
                  let qContent = q.content || '';
                  let qType = q.type;
                  
-                 const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
-                 const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
+                 const typeRegex = new RegExp('');
+                 const globalTypeRegex = new RegExp('', 'g');
                  const typeMatch = qContent.match(typeRegex);
                  
                  if (typeMatch) {
                      qType = typeMatch[1];
                      qContent = qContent.replace(globalTypeRegex, '');
-                 } else if (qContent.includes('<!--[TYPE:file]-->') || qType === 'file_upload') {
+                 } else if (qContent.includes('') || qType === 'file_upload') {
                      qType = 'file';
                      qContent = qContent.replace(globalTypeRegex, '');
                  }
@@ -299,6 +299,9 @@ export default function StudentExamResult() {
             const isUnanswered = !studentAnswerText;
             const correctAnswerText = question.options?.filter((o:any)=>o.is_correct).map((o:any)=>o.content).join('، ') || 'يتم التقييم من قِبل المعلم';
 
+            // 💡 السطر المضاف ليتعرف على الروابط والصور حتى في الاختياري
+            const isImageOrFile = typeof studentAnswerText === 'string' && !!(studentAnswerText.match(/\.(jpeg|jpg|gif|png|webp)$/i) || studentAnswerText.includes('cloudinary'));
+
             return (
               <div key={question.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
                 <div className="p-6 sm:p-8 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
@@ -336,7 +339,8 @@ export default function StudentExamResult() {
                       <span className={isUnanswered ? 'text-slate-500' : isCorrect ? 'text-emerald-700' : 'text-rose-700'}>إجابة الطالب</span>
                     </div>
                     
-                    {isFileUploadType && !isUnanswered ? (
+                    {/* 💡 التعديل هنا ليأخذ الصور حتى لو كان السؤال ليس رفع ملف */}
+                    {(isFileUploadType || isImageOrFile) && !isUnanswered ? (
                        <div className="mt-4 bg-white p-2 rounded-xl border border-slate-200 shadow-sm inline-block">
                           {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
                              <img src={String(studentAnswerText)} alt="صورة إجابة الطالب" className="max-h-96 w-auto rounded-lg object-contain" />
