@@ -63,21 +63,28 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 🚀 تنظيف أي شفرات قديمة باستخدام القص الآمن بدلاً من Regex
-        while(qContent.includes('[[[TYPE:')) {
-            const start = qContent.indexOf('[[[TYPE:');
-            const end = qContent.indexOf(']]]', start) + 3;
-            if (end > start) qContent = qContent.substring(0, start) + qContent.substring(end);
+        // 🚀 تمزيق الكلمات الدلالية لتفادي أخطاء النسخ من الدردشة
+        const tNewPre = '[[[' + 'TYPE:';
+        const tNewSuf = ']]]';
+        const tOldPre = '<' + '!--[TYPE:';
+        const tOldSuf = ']--' + '>';
+
+        while(qContent.includes(tNewPre)) {
+            const start = qContent.indexOf(tNewPre);
+            const end = qContent.indexOf(tNewSuf, start);
+            if (end > start) qContent = qContent.substring(0, start) + qContent.substring(end + tNewSuf.length);
             else break;
         }
-        while(qContent.includes('', start) + 4;
-            if (end > start) qContent = qContent.substring(0, start) + qContent.substring(end);
+        while(qContent.includes(tOldPre)) {
+            const start = qContent.indexOf(tOldPre);
+            const end = qContent.indexOf(tOldSuf, start);
+            if (end > start) qContent = qContent.substring(0, start) + qContent.substring(end + tOldSuf.length);
             else break;
         }
         qContent = qContent.trim();
 
-        // 💡 حقن الشفرة الجديدة القوية
-        qContent = `[[[TYPE:${frontendType}]]] ${qContent}`;
+        // 💡 حقن الشفرة الجديدة
+        qContent = `${tNewPre}${frontendType}${tNewSuf} ${qContent}`;
 
         // 💡 حفظ النوع في الميتا داتا كجدار حماية إضافي
         const metadata = typeof q.metadata === 'object' && q.metadata !== null ? q.metadata : {};
