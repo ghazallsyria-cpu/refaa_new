@@ -12,10 +12,10 @@ export function useGradebook() {
     setLoading(true);
 
     try {
-      // 1. سحب الطلاب (الـ id هنا هو نفسه user.id كما اتفقنا)
+      // 1. سحب الطلاب 
       const { data: studentsData, error: studentsErr } = await supabase
         .from('students')
-        .select('id, users!inner(full_name)')
+        .select('id, users(full_name)')
         .eq('section_id', sectionId);
 
       if (studentsErr) throw studentsErr;
@@ -35,10 +35,10 @@ export function useGradebook() {
       let attemptsData: any[] = [];
       let archivedGradesData: any[] = [];
 
-      // 3. سحب الدرجات باستخدام IN (بدون أي ضغط على السيرفر)
+      // 3. سحب الدرجات 
       if (studentIds.length > 0 && examIds.length > 0) {
         
-        // سحب الدرجات الجارية (قبل الأرشفة)
+        // سحب الدرجات الجارية 
         const { data: attempts } = await supabase
           .from('exam_attempts')
           .select('student_id, exam_id, score')
@@ -48,18 +48,18 @@ export function useGradebook() {
         
         attemptsData = attempts || [];
 
-        // سحب الدرجات المؤرشفة مسبقاً من جدول grades الموجود لديك
+        // سحب الدرجات المؤرشفة
         const { data: grades } = await supabase
           .from('grades')
           .select('student_id, exam_id, score')
           .in('exam_id', examIds)
           .in('student_id', studentIds)
-          .eq('exam_type', 'exam'); 
+          .eq('assessment_type', 'exam'); 
           
         archivedGradesData = grades || [];
       }
 
-      // دمج الدرجات (نعطي الأولوية للدرجات المؤرشفة النهائية إن وجدت)
+      // دمج الدرجات
       const mergedScores = [...attemptsData];
       archivedGradesData.forEach(ag => {
          const existingIdx = mergedScores.findIndex(m => String(m.student_id) === String(ag.student_id) && String(m.exam_id) === String(ag.exam_id));
@@ -67,10 +67,20 @@ export function useGradebook() {
          else mergedScores.push(ag);
       });
 
-      const formattedStudents = studentsData?.map(s => ({
-        id: s.id,
-        name: s.users?.full_name || 'طالب غير معروف',
-      })) || [];
+      // 🚀 تم إصلاح خطأ Typescript هنا
+      const formattedStudents = studentsData?.map(s => {
+        let fullName = 'طالب غير معروف';
+        if (Array.isArray(s.users) && s.users.length > 0) {
+          fullName = s.users[0].full_name;
+        } else if (s.users && !Array.isArray(s.users)) {
+          fullName = (s.users as any).full_name;
+        }
+        
+        return {
+          id: s.id,
+          name: fullName,
+        };
+      }) || [];
 
       setGradeData({
         students: formattedStudents,
