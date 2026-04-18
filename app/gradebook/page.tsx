@@ -28,52 +28,32 @@ export default function GradebookPage() {
   const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
   const subjects = formData?.subjects || [];
 
-  // 🚀 1. نظام المسودات اللحظية (استرجاع البيانات عند فتح الفصل)
   useEffect(() => {
     if (selectedSection && selectedSubject) {
       fetchGradebook(selectedSection, selectedSubject);
-      
-      // محاولة استرجاع مسودة غير محفوظة من المتصفح لهذا الفصل تحديداً
       const draftKey = `grades_draft_${selectedSection}_${selectedSubject}`;
       const savedDraft = localStorage.getItem(draftKey);
       if (savedDraft) {
-        try {
-          setModifiedGrades(JSON.parse(savedDraft));
-        } catch (e) {
-          setModifiedGrades({});
-        }
-      } else {
-        setModifiedGrades({});
-      }
-    } else {
-       setModifiedGrades({});
-    }
+        try { setModifiedGrades(JSON.parse(savedDraft)); } catch (e) { setModifiedGrades({}); }
+      } else { setModifiedGrades({}); }
+    } else { setModifiedGrades({}); }
   }, [selectedSection, selectedSubject, fetchGradebook]);
 
-  // 🚀 2. نظام المسودات اللحظية (الحفظ اللحظي مع كل ضغطة زر في المتصفح)
   useEffect(() => {
     if (selectedSection && selectedSubject) {
        const draftKey = `grades_draft_${selectedSection}_${selectedSubject}`;
-       if (Object.keys(modifiedGrades).length > 0) {
-          localStorage.setItem(draftKey, JSON.stringify(modifiedGrades));
-       } else {
-          localStorage.removeItem(draftKey); // تنظيف الذاكرة إذا تم حفظها للسيرفر
-       }
+       if (Object.keys(modifiedGrades).length > 0) localStorage.setItem(draftKey, JSON.stringify(modifiedGrades));
+       else localStorage.removeItem(draftKey); 
     }
   }, [modifiedGrades, selectedSection, selectedSubject]);
 
-  // 🚀 3. حماية المعلم من إغلاق الصفحة بالخطأ
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (Object.keys(modifiedGrades).length > 0) {
-        e.preventDefault();
-        e.returnValue = ''; // هذه التعليمة تجبر المتصفح على إظهار رسالة التحذير
-      }
+      if (Object.keys(modifiedGrades).length > 0) { e.preventDefault(); e.returnValue = ''; }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [modifiedGrades]);
-
 
   const { students, assessments, scores, customColumns, customScores, assignments, assignmentScores } = gradeData;
 
@@ -94,7 +74,7 @@ export default function GradebookPage() {
   const handleScoreChange = (studentId: string, column: any, val: string) => {
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
-    const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(column.id));
+    const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(column.id));
     
     setModifiedGrades(prev => ({
       ...prev,
@@ -108,7 +88,7 @@ export default function GradebookPage() {
   const getCustomScoreDisplay = (studentId: string, columnId: string) => {
     const key = `${studentId}_${columnId}`;
     if (modifiedGrades[key] !== undefined) return modifiedGrades[key].score;
-    const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(columnId));
+    const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(columnId));
     return record ? Number(record.score) : '';
   };
 
@@ -118,9 +98,12 @@ export default function GradebookPage() {
   const handleSaveBulk = async () => {
     const gradesArray = Object.values(modifiedGrades);
     if (gradesArray.length > 0) { 
-      await saveCustomGradesBulk(selectedSection, selectedSubject, gradesArray); 
-      setModifiedGrades({}); 
-      // الـ useEffect بالأعلى سيقوم بمسح المسودة من المتصفح تلقائياً لأن modifiedGrades أصبحت فارغة
+      try {
+        await saveCustomGradesBulk(selectedSection, selectedSubject, gradesArray); 
+        setModifiedGrades({}); // 🚀 لا يتم مسح الدرجات إلا إذا نجح الحفظ 100%
+      } catch (err: any) {
+        alert("تعذر حفظ الدرجات! السبب: " + (err.message || "يرجى تحديث قاعدة البيانات"));
+      }
     }
   };
 
