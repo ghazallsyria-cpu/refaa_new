@@ -57,11 +57,10 @@ export default function TakeQuiz() {
       let validStudentId = actualUserId;
 
       if (!isPreviewMode) {
-          // 🚀 الإصلاح الجذري: البحث عن الطالب بـ id مباشرة وإزالة user_id
           const { data: sProfile } = await supabase
             .from('students')
             .select('id')
-            .eq('id', actualUserId) // ✅ التصحيح هنا
+            .eq('id', actualUserId)
             .maybeSingle();
             
           if (sProfile) {
@@ -110,9 +109,9 @@ export default function TakeQuiz() {
          let qContent = q.content || '';
          let qType = q.type;
          
-         // 🚀 الإصلاح الآمن: استخدام RegExp بدلاً من النص العادي
-         const typeRegex = new RegExp('');
-         const globalTypeRegex = new RegExp('', 'g');
+         // ✅ الإصلاح הגذري: استخدام التعبيرات الآمنة لعدم ضياع أنواع الأسئلة
+         const typeRegex = //;
+         const globalTypeRegex = //g;
          const typeMatch = qContent.match(typeRegex);
          
          if (typeMatch) {
