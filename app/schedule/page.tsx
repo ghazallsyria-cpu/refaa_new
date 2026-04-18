@@ -610,6 +610,7 @@ export default function SchedulePage() {
                         <option value="">-- اختر الفصل --</option>
                         {sections.map(s => <option key={s.id} value={s.id}>{formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)} - {s.name}</option>)}
                       </select>
+                                </div>
                     ) : (
                       <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}>
                         <option value="">-- اختر المعلم --</option>
