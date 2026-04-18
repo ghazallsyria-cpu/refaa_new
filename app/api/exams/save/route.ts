@@ -8,7 +8,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
-    // 🚀 تحديد المعلم الصحيح
     let finalTeacherId = examData.teacher_id;
     if (!finalTeacherId) {
         const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
@@ -64,15 +63,26 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 1. تنظيف أي علامات (Tags) قديمة
-        const globalTypeRegex = new RegExp('', 'g');
-        const alternativeRegex = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
-        qContent = qContent.replace(globalTypeRegex, '').replace(alternativeRegex, '').trim();
+        // 🚀 تنظيف أي شفرات قديمة باستخدام القص الآمن بدلاً من Regex
+        while(qContent.includes('[[[TYPE:')) {
+            const start = qContent.indexOf('[[[TYPE:');
+            const end = qContent.indexOf(']]]', start) + 3;
+            if (end > start) qContent = qContent.substring(0, start) + qContent.substring(end);
+            else break;
+        }
+        while(qContent.includes('', start) + 4;
+            if (end > start) qContent = qContent.substring(0, start) + qContent.substring(end);
+            else break;
+        }
+        qContent = qContent.trim();
 
-        // 2. 💡 هنا السر الأكبر: حقن النوع الحقيقي داخل النص لكي لا ترفضه الداتا بيز
-        qContent = `${qContent}`;
+        // 💡 حقن الشفرة الجديدة القوية
+        qContent = `[[[TYPE:${frontendType}]]] ${qContent}`;
 
-        // 3. تحديد نوع آمن لقاعدة البيانات لتمرير الحفظ
+        // 💡 حفظ النوع في الميتا داتا كجدار حماية إضافي
+        const metadata = typeof q.metadata === 'object' && q.metadata !== null ? q.metadata : {};
+        metadata.frontend_type = frontendType;
+
         let dbType = frontendType;
         if (!['multiple_choice', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'file'].includes(dbType)) {
             dbType = 'essay';
@@ -85,7 +95,8 @@ export async function POST(req: Request) {
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
-          order_index: i
+          order_index: i,
+          metadata: metadata
         };
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
@@ -103,10 +114,7 @@ export async function POST(req: Request) {
             }
         }
 
-        if (qErr) {
-            console.error('Question Save Error:', qErr);
-            continue; 
-        }
+        if (qErr) continue;
 
         if (savedQ && q.options?.length > 0 && (frontendType === 'multiple_choice' || frontendType === 'true_false' || frontendType === 'multi_select')) {
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
