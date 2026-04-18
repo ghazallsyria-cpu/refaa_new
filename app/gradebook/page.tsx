@@ -8,6 +8,8 @@ import { useGradebook } from '@/hooks/useGradebook';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import * as Dialog from '@radix-ui/react-dialog';
+// 🚀 1. استيراد دالة Image من Next.js
+import Image from 'next/image'; 
 
 export default function GradebookPage() {
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
@@ -62,7 +64,6 @@ export default function GradebookPage() {
   const getExamTotal = (studentId: string) => assessments.reduce((total, a) => { const s = getExamScore(studentId, a.id); return s !== '-' ? total + s : total; }, 0);
   const maxExamTotal = assessments.reduce((sum, a) => sum + (Number(a.max_score) || 0), 0);
 
-  // 🚀 تصحيح درجات الواجبات لتتعرف على المسمى الصحيح للدرجة
   const getAssignmentMax = (a: any) => Number(a.total_marks || a.max_score || 100);
   
   const getAssignmentScore = (studentId: string, assignmentId: string) => {
@@ -142,10 +143,8 @@ export default function GradebookPage() {
   });
 
   return (
-    // 🚀 المظهر الزجاجي الفخم: خلفية متدرجة، عناصر طافية (Blobs)، وستايل خاص بالطباعة الأفقية والملونة
     <div className="min-h-screen relative bg-slate-50/50 pb-32 overflow-hidden print:bg-white print:pb-0" dir="rtl">
       
-      {/* CSS السحري للطباعة الأفقية وبالألوان */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           @page { size: landscape; margin: 10mm; }
@@ -157,25 +156,37 @@ export default function GradebookPage() {
         }
       `}} />
 
-      {/* فقاعات الخلفية (Blobs) للمظهر الساحر */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-400/10 rounded-full blur-[100px] pointer-events-none print:hidden -translate-y-1/2 translate-x-1/3" />
       <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-400/10 rounded-full blur-[100px] pointer-events-none print:hidden translate-y-1/3 -translate-x-1/3" />
 
-      {/* ترويسة الطباعة */}
       <div className="hidden print:block text-center py-6 border-b-2 border-slate-900 mb-8">
          <h1 className="text-2xl font-black text-slate-900">سجل الأعمال الشامل</h1>
          <p className="text-slate-600 font-bold mt-2">الفصل: {sections.find((s:any) => s.id === selectedSection)?.name || '-'} | المادة: {subjects.find((s:any) => s.id === selectedSubject)?.name || '-'}</p>
       </div>
 
-      {/* هيدر زجاجي (Glassmorphism) */}
       <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-2xl border-b border-white/50 shadow-[0_4px_30px_rgba(0,0,0,0.03)] px-8 py-6 print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50/80 text-indigo-600 rounded-xl text-sm font-black mb-3 border border-indigo-100/50">
-              <Calculator className="w-4 h-4" /> دفتر أعمال المعلم
+          
+          {/* 🚀 2. الهيدر الجديد مع الصورة الزجاجية */}
+          <div className="flex items-center gap-5">
+            <div className="relative h-20 w-32 shrink-0 glass-panel bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 p-1 flex items-center justify-center shadow-lg overflow-hidden group">
+               {/* الصورة المخصصة بالمظهر الزجاجي */}
+               <Image 
+                  src="/images/gradebook_hero.png" // المسار الذي حفظت فيه الصورة
+                  alt="Gradebook Hero"
+                  fill
+                  className="object-cover group-hover:scale-105 transition-transform duration-500"
+                  priority
+               />
             </div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">سجل الدرجات الاحترافي</h1>
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50/80 text-indigo-600 rounded-xl text-sm font-black mb-3 border border-indigo-100/50">
+                <Calculator className="w-4 h-4" /> سجل الدرجات الذكي
+              </div>
+              <h1 className="text-3xl font-black text-slate-800 tracking-tight">سجل التقييم الشامل</h1>
+            </div>
           </div>
+
           <div className="flex w-full md:w-auto items-center gap-3">
             <div className="flex-1 bg-white/60 backdrop-blur-md border border-slate-200/60 rounded-2xl flex items-center px-2 hover:bg-white hover:border-indigo-300 transition-all shadow-sm">
               <Users className="w-5 h-5 text-indigo-400 mx-3 shrink-0" />
@@ -209,14 +220,12 @@ export default function GradebookPage() {
         ) : (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 print:space-y-0">
             
-            {/* أزرار التبويبات العائمة الزجاجية */}
             <div className="flex flex-wrap items-center justify-center gap-2 bg-white/50 backdrop-blur-xl p-2 rounded-[2rem] shadow-sm border border-white/60 w-fit mx-auto print:hidden">
                <button onClick={() => setActiveTab('custom')} className={`px-8 py-3.5 rounded-2xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-300/50 scale-105' : 'text-slate-500 hover:bg-white/60 hover:text-indigo-600'}`}><Edit3 className="w-4 h-4" /> التقييم المستمر</button>
                <button onClick={() => setActiveTab('exams')} className={`px-8 py-3.5 rounded-2xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-300/50 scale-105' : 'text-slate-500 hover:bg-white/60 hover:text-indigo-600'}`}><Trophy className="w-4 h-4" /> الاختبارات</button>
                <button onClick={() => setActiveTab('assignments')} className={`px-8 py-3.5 rounded-2xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-300/50 scale-105' : 'text-slate-500 hover:bg-white/60 hover:text-indigo-600'}`}><FileText className="w-4 h-4" /> الواجبات</button>
             </div>
 
-            {/* 1. التقييم اليدوي */}
             {activeTab === 'custom' && (
               <div className="glass-panel bg-white/70 backdrop-blur-xl rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-white/80 overflow-hidden print:shadow-none print:border-none print:rounded-none">
                 <div className="p-6 border-b border-slate-100/50 flex flex-col sm:flex-row items-center justify-between print:hidden gap-4">
@@ -231,15 +240,15 @@ export default function GradebookPage() {
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
                           <div className="flex justify-between items-center mb-6"><Dialog.Title className="text-2xl font-black text-slate-800">نشاط جديد</Dialog.Title><Dialog.Close className="text-slate-400 hover:text-slate-700 bg-slate-100 p-2 rounded-full"><X className="w-5 h-5" /></Dialog.Close></div>
                           <div className="space-y-5">
-                            <div><label className="block text-sm font-black text-slate-600 mb-2">اسم النشاط</label><input type="text" placeholder="مثال: سلوك، مشاركة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all focus:bg-white" /></div>
-                            <div><label className="block text-sm font-black text-slate-600 mb-2">الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all focus:bg-white" /></div>
-                            <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black py-4 rounded-2xl mt-2 hover:opacity-90 disabled:opacity-50 shadow-xl shadow-indigo-200">اعتماد النشاط</button>
+                            <div><label className="block text-sm font-black text-slate-600 mb-2">اسم النشاط</label><input type="text" placeholder="مثال: سلوك، مشاركة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
+                            <div><label className="block text-sm font-black text-slate-600 mb-2">الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
+                            <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black py-4 rounded-xl mt-2 hover:opacity-90 disabled:opacity-50 shadow-xl shadow-indigo-200">اعتماد النشاط</button>
                           </div>
                         </Dialog.Content>
                       </Dialog.Portal>
                     </Dialog.Root>
 
-                    <Dialog.Root open={isEditColModalOpen} onOpenChange={setIsEditColModalOpen}>
+                    <Dialog.Root open={isEditColModalOpen} onOpenChange={(open) => { setIsEditColModalOpen(open); if(!open){setEditingColId(''); setNewColTitle(''); setNewColMax(10); } }}>
                       <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 print:hidden" />
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
@@ -271,7 +280,7 @@ export default function GradebookPage() {
                               <th key={c.id} className="bg-slate-50/50 backdrop-blur-sm text-slate-700 font-black py-4 px-4 border-b border-slate-200/50 text-center min-w-[130px] print:border-slate-300 group">
                                 <div className="flex items-center justify-center gap-2">
                                   <div className="text-sm truncate" title={c.title}>{c.title}</div>
-                                  <button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1.5 bg-indigo-100/50 text-indigo-600 hover:bg-indigo-200 rounded-lg transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
                                 </div>
                                 <div className="text-[11px] font-bold text-slate-400 mt-1 print:text-slate-600">من {c.max_score}</div>
                               </th>
@@ -348,9 +357,9 @@ export default function GradebookPage() {
                        const percentage = maxExamTotal > 0 ? Math.round((studentTotal / maxExamTotal) * 100) : 0;
                        return (
                          <tr key={student.id} className={`hover:bg-indigo-50/30 transition-colors group ${idx % 2 === 0 ? 'bg-white/40' : 'bg-transparent'}`}>
-                           <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100/50 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.03)] bg-inherit group-hover:bg-indigo-50/90">{student.name}</td>
+                           <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100/50 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-colors bg-inherit group-hover:bg-indigo-50/90">{student.name}</td>
                            {assessments.map(a => { const score = getExamScore(student.id, a.id); return (<td key={a.id} className="border-b border-slate-100/50 py-4 px-4 text-center font-bold text-slate-600">{score === '-' ? <span className="text-slate-300">-</span> : score}</td>); })}
-                           <td className="border-b border-l border-indigo-50/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
+                           <td className="border-b border-l border-indigo-100/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
                          </tr>
                        );
                      })}
@@ -390,7 +399,7 @@ export default function GradebookPage() {
                          <tr key={student.id} className={`hover:bg-indigo-50/30 transition-colors group ${idx % 2 === 0 ? 'bg-white/40' : 'bg-transparent'}`}>
                            <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100/50 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.03)] bg-inherit group-hover:bg-indigo-50/90">{student.name}</td>
                            {assignments.map(a => { const score = getAssignmentScore(student.id, a.id); return (<td key={a.id} className="border-b border-slate-100/50 py-4 px-4 text-center font-bold text-slate-600">{score === '-' ? <span className="text-slate-300">-</span> : score}</td>); })}
-                           <td className="border-b border-l border-indigo-50/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
+                           <td className="border-b border-l border-indigo-100/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
                          </tr>
                        );
                      })}
