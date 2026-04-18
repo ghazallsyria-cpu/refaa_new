@@ -18,7 +18,7 @@ export interface StudentExamResult {
   questions: any[];
 }
 
-// 💡 الدالة التي تستعيد نوع السؤال الحقيقي من الميتا داتا
+// دالة أمان لمعالجة الـ URLs والصور
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   return (questionsData || []).map((q: any) => {
     const normalized = normalizeQuestion(q) as any; 
@@ -27,9 +27,18 @@ const mapQuestionsWithMedia = (questionsData: any[] | null) => {
     let qType = q.metadata?.frontend_type || normalized.type;
     let qContent = normalized.content || '';
 
-    // تنظيف أمان لأي كود قديم
-    const globalTypeRegex = //g;
-    qContent = qContent.replace(globalTypeRegex, '').trim();
+    // 🚀 تنظيف أمان لأي كود قديم باستخدام RegExp محصن لا يتحول إلى تعليق أبداً
+    const typeRegex = new RegExp('');
+    const globalTypeRegex = new RegExp('', 'g');
+    const typeMatch = qContent.match(typeRegex);
+    
+    if (typeMatch) {
+        qType = typeMatch[1];
+        qContent = qContent.replace(globalTypeRegex, '').trim();
+    } else if (qContent.includes('') || qType === 'file_upload') {
+        qType = 'file';
+        qContent = qContent.replace(globalTypeRegex, '').trim();
+    }
 
     return {
       ...normalized,
@@ -199,7 +208,7 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to save exam');
-      clearExamsCache();
+      clearExamsCache(); 
       await fetchExams(true);
       return result.examId;
     } catch (err) { throw err; }
