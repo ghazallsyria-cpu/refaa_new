@@ -67,7 +67,7 @@ export function useGradebook() {
          else mergedScores.push(ag);
       });
 
-      // 🚀 تم إصلاح خطأ Typescript هنا
+      // تهيئة أسماء الطلاب
       const formattedStudents = studentsData?.map(s => {
         let fullName = 'طالب غير معروف';
         if (Array.isArray(s.users) && s.users.length > 0) {
@@ -81,6 +81,9 @@ export function useGradebook() {
           name: fullName,
         };
       }) || [];
+
+      // 🚀 اللمسة السحرية: ترتيب الطلاب أبجدياً باللغة العربية
+      formattedStudents.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
       setGradeData({
         students: formattedStudents,
