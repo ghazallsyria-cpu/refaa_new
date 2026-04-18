@@ -109,9 +109,9 @@ export default function TakeQuiz() {
          let qContent = q.content || '';
          let qType = q.type;
          
-         // ✅ الإصلاح הגذري: استخدام التعبيرات الآمنة لعدم ضياع أنواع الأسئلة
-         const typeRegex = //;
-         const globalTypeRegex = //g;
+         // ✅ تم استخدام new RegExp للهروب من خطأ التعليقات //
+         const typeRegex = new RegExp('');
+         const globalTypeRegex = new RegExp('', 'g');
          const typeMatch = qContent.match(typeRegex);
          
          if (typeMatch) {
