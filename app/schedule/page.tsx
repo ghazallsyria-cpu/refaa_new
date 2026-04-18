@@ -695,7 +695,7 @@ export default function SchedulePage() {
                                     </div>
                                   </div>
                                 )}
-</div> {/* ✅ هذا هو وسم الإغلاق المفقود الذي سقط سهواً */}                            ) : (
+
                               <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-50"><Plus className="w-6 h-6" /></div>
                             )}
                           </motion.div>
