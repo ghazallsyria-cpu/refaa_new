@@ -55,7 +55,6 @@ export default function QuizBuilder() {
   
   const { fetchExamDetails, saveExam } = useExamsSystem();
   
-  // 🚀 حارس يمنع إعادة جلب البيانات عند تغيير التبويب (Tab Switch)
   const dataFetchedRef = useRef(false);
 
   const [exam, setExam] = useState<ExamData>({
@@ -127,7 +126,6 @@ export default function QuizBuilder() {
   }, [userRole]);
 
   const fetchInitialData = useCallback(async () => {
-    // 🚀 إذا تم جلب البيانات مسبقاً، لا تقم بجلبها مرة أخرى!
     if (dataFetchedRef.current || isChecking) return;
     dataFetchedRef.current = true;
 
@@ -153,14 +151,15 @@ export default function QuizBuilder() {
            let qType = q.type;
            let qContent = q.content || '';
            
-           const typeRegex = new RegExp('<!--\\[TYPE:(.*?)\\]-->');
-           const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
+           // ✅ الإصلاح الجذري لتعبيرات استخراج النوع
+           const typeRegex = //;
+           const globalTypeRegex = //g;
            
            const typeMatch = qContent.match(typeRegex);
            if (typeMatch) {
                qType = typeMatch[1];
                qContent = qContent.replace(globalTypeRegex, '');
-           } else if (qContent.includes('<!--[TYPE:file]-->') || qType === 'file_upload') {
+           } else if (qContent.includes('') || qType === 'file_upload') {
                qType = 'file';
                qContent = qContent.replace(globalTypeRegex, '');
            } else if (qType === 'open') {
@@ -186,7 +185,6 @@ export default function QuizBuilder() {
     }
   }, [fetchInitialData, isChecking]);
 
-  // 🚀 تحسين دوال التحديث لاستخدام Functional Updates لمنع فقدان البيانات عند التحديث السريع
   const updateQuestion = useCallback((id: string, updates: Partial<any>) => {
     setQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
   }, []);
@@ -195,7 +193,6 @@ export default function QuizBuilder() {
     setQuestions(prev => {
       const question = prev.find(q => q.id === id);
       if (question?.media_url) {
-        // الحذف من الكلاوديناري يعمل في الخلفية
         deleteFromCloudinary(question.media_url).catch(console.error);
       }
       return prev.filter(q => q.id !== id);
@@ -513,7 +510,8 @@ export default function QuizBuilder() {
                            
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
-                               const globalTypeRegex = new RegExp('<!--\\[TYPE:.*?\\]-->', 'g');
+                               // ✅ تم إصلاح التعبير هنا أيضاً
+                               const globalTypeRegex = //g;
                                cleanContent = cleanContent.replace(globalTypeRegex, '');
                                updates.content = cleanContent;
                            }
