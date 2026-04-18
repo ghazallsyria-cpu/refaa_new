@@ -1,11 +1,12 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
   Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
-  XCircle, AlertCircle, ArrowLeft, GraduationCap, Printer,
-  RefreshCw, SearchX, Bug, Calculator, Loader2
+  XCircle, AlertCircle, ArrowLeft, Printer,
+  RefreshCw, SearchX, Bug, Calculator, Loader2, Layers, BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -16,35 +17,77 @@ import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } fro
 import * as XLSX from 'xlsx';
 
 export default function AttendanceReportsPage() {
-  const { user, authRole, isChecking } = useAuth(); // 🚀 استيراد جدار الحماية
+  const { user, authRole, isChecking } = useAuth() as any; 
   const { fetchTeacherDashboardData } = useDashboardSystem();
   
+  const isAdmin = authRole === 'admin' || authRole === 'management';
+  
   const [loading, setLoading] = useState(true);
-  const [records, setRecords] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
   const [dbError, setDbError] = useState<string | null>(null);
   
-  // Filters
+  // 🚀 تحديد التبويب الافتراضي: المدير يرى الإحصائيات، المعلم يرى تقارير الطلاب مباشرة
+  const [activeTab, setActiveTab] = useState<'daily_snapshot' | 'analytics'>(isAdmin ? 'daily_snapshot' : 'analytics');
+  
+  // ==========================================
+  // حالة (State) الخاصة بالإحصائية الإدارية
+  // ==========================================
+  const [snapshotDate, setSnapshotDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [dailyStats, setDailyStats] = useState<any[]>([]);
+
+  // ==========================================
+  // حالة (State) الخاصة بسجل تقارير الطلاب (المعلم + المدير)
+  // ==========================================
+  const [records, setRecords] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
   const [selectedSection, setSelectedSection] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('month'); // الافتراضي شهر لتخفيف الضغط
   const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
-  const fetchData = useCallback(async () => {
-    // 🚀 تأكيد الصلاحية قبل جلب البيانات لحماية السيرفر من المتطفلين
+
+  // ==========================================
+  // 1. جلب بيانات اللقطة الإحصائية اليومية (للمدير فقط)
+  // ==========================================
+  const fetchDailySnapshot = useCallback(async () => {
+    if (!user || !isAdmin) return;
+    setLoading(true); setDbError(null);
+    try {
+      const { data, error } = await supabase
+        .from('daily_attendance_stats')
+        .select(`
+          id, date, period, lesson_title, total_students, present_count, absent_count, late_count, excused_count,
+          sections (name, classes(name)),
+          subjects (name),
+          users (full_name)
+        `)
+        .eq('date', snapshotDate)
+        .order('period', { ascending: true });
+
+      if (error) throw error;
+      setDailyStats(data || []);
+    } catch (error: any) {
+      setDbError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, isAdmin, snapshotDate]);
+
+
+  // ==========================================
+  // 2. جلب تقارير الطلاب (للمعلم والمدير) مبرمجة لتخفيف الضغط
+  // ==========================================
+  const fetchAnalyticsData = useCallback(async () => {
     if (!user || (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher')) return;
 
-    setLoading(true);
-    setDbError(null);
+    setLoading(true); setDbError(null);
     try {
       let currentTeacherId = null;
       if (authRole === 'teacher') {
-        // 🚀 الإصلاح: البحث عن المعلم باستخدام id بدلاً من user_id
         const { data: teacherData } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // جلب الفصول المتاحة للفلترة
+      // جلب الفصول المتاحة
       let availableSections = [];
       if (authRole === 'teacher') {
         const dashData = await fetchTeacherDashboardData();
@@ -56,46 +99,48 @@ export default function AttendanceReportsPage() {
 
       const validSections = availableSections.map(sec => {
         const classData = Array.isArray(sec.classes) ? sec.classes[0] : sec.classes;
-        return {
-          id: sec.id,
-          name: sec.name,
-          className: classData?.name || 'فصل غير محدد'
-        };
+        return { id: sec.id, name: sec.name, className: classData?.name || 'فصل غير محدد' };
       });
       setSections(validSections);
 
       if (validSections.length === 0 && authRole === 'teacher') {
-        setRecords([]);
-        setLoading(false);
-        return;
+        setRecords([]); setLoading(false); return;
       }
 
-      // 🚀 قراءة السجلات
+      // 🚀 التحسين الخارق: تطبيق فلاتر التاريخ داخل الـ Query مباشرة لتخفيف حجم البيانات المسحوبة
       let query = supabase
         .from('attendance_records')
         .select(`
           id, date, period, status, section_id,
-          students (
-            id,
-            users (full_name, avatar_url)
-          ),
+          students (id, users (full_name, avatar_url)),
           sections (name, classes(name))
-        `)
-        .order('date', { ascending: false });
+        `);
 
       if (authRole === 'teacher' && currentTeacherId) {
         query = query.eq('teacher_id', currentTeacherId);
       }
 
-      const { data: attendanceData, error } = await query;
-      
-      if (error) {
-        throw error;
+      if (selectedSection !== 'all') {
+        query = query.eq('section_id', selectedSection);
       }
 
-      // فلترة آمنة للفصول (إذا كان معلماً، يرى فصوله فقط)
+      const today = new Date();
+      if (dateRange === 'today') {
+        query = query.eq('date', format(today, 'yyyy-MM-dd'));
+      } else if (dateRange === 'week') {
+        query = query.gte('date', format(startOfWeek(today, { weekStartsOn: 0 }), 'yyyy-MM-dd')).lte('date', format(endOfWeek(today, { weekStartsOn: 0 }), 'yyyy-MM-dd'));
+      } else if (dateRange === 'month') {
+        query = query.gte('date', format(startOfMonth(today), 'yyyy-MM-dd')).lte('date', format(endOfMonth(today), 'yyyy-MM-dd'));
+      } else if (dateRange === 'custom') {
+        query = query.gte('date', customStartDate).lte('date', customEndDate);
+      }
+
+      const { data: attendanceData, error } = await query;
+      if (error) throw error;
+
+      // فلترة أمان للمعلم
       let finalData = attendanceData || [];
-      if (authRole === 'teacher' && validSections.length > 0) {
+      if (authRole === 'teacher' && selectedSection === 'all') {
         const sectionIds = validSections.map(s => String(s.id));
         finalData = finalData.filter((record: any) => sectionIds.includes(String(record.section_id)));
       }
@@ -108,56 +153,70 @@ export default function AttendanceReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, authRole, fetchTeacherDashboardData]);
+  }, [user, authRole, fetchTeacherDashboardData, selectedSection, dateRange, customStartDate, customEndDate]);
 
+
+  // 🚀 مراقب التبويبات لتشغيل دوال الجلب المناسبة
   useEffect(() => {
-    // 🚀 لا نجلب البيانات إلا بعد التأكد من الهوية
-    if (authRole === 'admin' || authRole === 'management' || authRole === 'teacher') {
-       fetchData();
-    }
-  }, [fetchData, authRole]);
+    if (isChecking) return;
+    if (activeTab === 'daily_snapshot' && isAdmin) fetchDailySnapshot();
+    else if (activeTab === 'analytics') fetchAnalyticsData();
+  }, [activeTab, fetchDailySnapshot, fetchAnalyticsData, isChecking, isAdmin]);
 
-  // المحرك الذكي للفلترة والتجميع وتطبيق معادلة (5 حصص = 1 يوم)
-  const reportData = useMemo(() => {
-    let filtered = records || [];
 
-    // فلترة الفصل
-    if (selectedSection !== 'all') {
-      filtered = filtered.filter((r: any) => String(r.section_id) === String(selectedSection));
-    }
+  // ==========================================
+  // محرك فرز الإحصائية الإدارية 
+  // ==========================================
+  const groupedDailyStats = useMemo(() => {
+    const groups: Record<string, Record<string, any[]>> = {
+      'المرحلة المتوسطة': {},
+      'المرحلة الثانوية': {}
+    };
 
-    // فلترة التاريخ (بناءً على عمود date الجديد)
-    if (dateRange !== 'all') {
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+    dailyStats.forEach(stat => {
+      const classData: any = Array.isArray(stat.sections?.classes) ? stat.sections?.classes[0] : stat.sections?.classes;
+      const className = classData?.name || '';
+      const fullClassName = `${className} - ${stat.sections?.name || ''}`;
       
-      filtered = filtered.filter((r: any) => {
-        const targetDateStr = r.date;
-        if (!targetDateStr) return false;
-        
-        if (dateRange === 'today') {
-          return targetDateStr === todayStr;
-        } 
-        
-        const recordDate = new Date(targetDateStr);
-        if (dateRange === 'week') {
-          // 🚀 تم تعديل بداية الأسبوع ليكون الأحد (0) بدلاً من السبت
-          return recordDate >= startOfWeek(today, { weekStartsOn: 0 }) && recordDate <= endOfWeek(today, { weekStartsOn: 0 });
-        } else if (dateRange === 'month') {
-          return recordDate >= startOfMonth(today) && recordDate <= endOfMonth(today);
-        } else if (dateRange === 'custom') {
-          const start = new Date(customStartDate); start.setHours(0,0,0,0);
-          const end = new Date(customEndDate); end.setHours(23,59,59,999);
-          return recordDate >= start && recordDate <= end;
-        }
-        return true;
-      });
-    }
+      const stage = /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className) ? 'المرحلة المتوسطة' : 'المرحلة الثانوية';
+      
+      const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
+      const subjName = subjData?.name || 'مادة غير محددة';
+      
+      let dept = 'أقسام أخرى';
+      if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) dept = 'قسم العلوم';
+      else if (/(رياضيات)/.test(subjName)) dept = 'قسم الرياضيات';
+      else if (/(عربي|عربية)/.test(subjName)) dept = 'قسم اللغة العربية';
+      else if (/(إنجليزي|انجليزي)/.test(subjName)) dept = 'قسم اللغة الإنجليزية';
+      else if (/(إسلامية|قرآن|تجويد)/.test(subjName)) dept = 'قسم التربية الإسلامية';
+      else if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) dept = 'قسم الاجتماعيات';
+      else if (/(حاسوب|معلوماتية)/.test(subjName)) dept = 'قسم الحاسوب';
 
-    // تجميع الإحصائيات لكل طالب
+      const teacherData: any = Array.isArray(stat.users) ? stat.users[0] : stat.users;
+      
+      if (!groups[stage][dept]) groups[stage][dept] = [];
+      groups[stage][dept].push({
+        teacher: teacherData?.full_name || 'غير محدد',
+        lesson: stat.lesson_title || 'لم يتم التسجيل',
+        subject: subjName,
+        total: stat.total_students,
+        absent: stat.absent_count,
+        present: stat.present_count,
+        period: stat.period,
+        className: fullClassName
+      });
+    });
+
+    return groups;
+  }, [dailyStats]);
+
+  // ==========================================
+  // محرك تجميع تقارير الطلاب والمعادلة (5 حصص = 1 يوم)
+  // ==========================================
+  const reportData = useMemo(() => {
     const studentMap = new Map<string, any>();
     
-    filtered.forEach((record: any) => {
+    records.forEach((record: any) => {
       const stuObj: any = Array.isArray(record.students) ? record.students[0] : record.students;
       const sId = stuObj?.id;
       if (!sId) return;
@@ -167,19 +226,11 @@ export default function AttendanceReportsPage() {
         const secData: any = Array.isArray(record.sections) ? record.sections[0] : record.sections;
         const classData: any = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
         
-        const className = classData?.name || '';
-        const secName = secData?.name || '';
-        
         studentMap.set(sId, {
           id: sId,
           name: userData?.full_name || 'طالب غير معروف',
-          className: className ? `${className} - ${secName}` : 'فصل غير محدد',
-          present: 0,
-          absent: 0,
-          late: 0,
-          excused: 0,
-          fullDaysAbsent: 0,
-          totalRecords: 0
+          className: classData?.name ? `${classData.name} - ${secData?.name || ''}` : 'فصل غير محدد',
+          present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0, totalRecords: 0
         });
       }
       
@@ -191,22 +242,89 @@ export default function AttendanceReportsPage() {
       if (record.status === 'excused') st.excused += 1;
     });
 
-    // حساب الأيام الفعلية (كل 5 حصص = يوم)
-    const processedData = Array.from(studentMap.values()).map(st => {
+    return Array.from(studentMap.values()).map(st => {
       st.fullDaysAbsent = Math.floor(st.absent / 5);
       return st;
-    });
+    }).sort((a, b) => b.absent - a.absent);
+  }, [records]);
 
-    return processedData.sort((a, b) => b.absent - a.absent);
-  }, [records, selectedSection, dateRange, customStartDate, customEndDate]);
-
-  // الطلاب الذين لديهم غياب يعادل يوم فأكثر (أي 5 حصص غياب فأكثر)
   const atRiskStudents = reportData.filter(s => s.absent >= 5);
 
   const getReportTitle = () => {
     const secName = selectedSection === 'all' ? 'جميع الفصول' : sections.find(s => String(s.id) === String(selectedSection))?.className + ' - ' + sections.find(s => String(s.id) === String(selectedSection))?.name || '';
     const dateText = dateRange === 'all' ? 'كل الأوقات' : dateRange === 'today' ? 'اليوم' : dateRange === 'week' ? 'هذا الأسبوع' : dateRange === 'month' ? 'هذا الشهر' : 'فترة مخصصة';
     return `تقرير الغياب التحليلي (${secName}) - ${dateText}`;
+  };
+
+  // ==========================================
+  // دوال الطباعة والتصدير
+  // ==========================================
+  const printDepartmentReport = (stage: string, department: string, deptRecords: any[]) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
+
+    const formattedDate = new Date(snapshotDate).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' });
+    const rows = deptRecords.map((r) => `
+      <tr>
+        <td><strong>${r.teacher}</strong></td>
+        <td style="text-align: right; padding-right: 10px;">${r.lesson}</td>
+        <td>${r.subject}</td>
+        <td style="font-weight: bold;">${r.total}</td>
+        <td style="color: #e11d48; font-weight: bold;">${r.absent}</td>
+        <td style="color: #059669; font-weight: bold;">${r.present}</td>
+        <td>${r.period}</td>
+        <td dir="ltr">${r.className}</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>إحصائية ${department} - ${formattedDate}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+            body { font-family: 'Cairo', sans-serif; padding: 30px; color: #000; background: #fff; }
+            .header { text-align: center; margin-bottom: 20px; }
+            .header h3 { margin: 5px 0; font-size: 18px; font-weight: 900; }
+            .header h4 { margin: 10px 0; font-size: 16px; font-weight: 700; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; text-align: center; }
+            th { background-color: #f1f5f9; color: #000; padding: 12px 5px; font-weight: 900; border: 1px solid #000; font-size: 13px; }
+            td { padding: 8px 5px; border: 1px solid #000; }
+            .signatures { margin-top: 50px; display: flex; justify-content: space-between; font-weight: 900; font-size: 16px; padding: 0 50px; }
+            .signatures div { text-align: center; }
+            .signatures p { margin-top: 5px; font-weight: 700; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h3>مدرسة الرفعة النموذجية ( ${department} )</h3>
+            <h4>إحصائية غياب الطلبة خلال حصص ${department} التعليم عن بعد ${formattedDate.replace('،', '')}</h4>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th width="15%">اسم المدرس</th>
+                <th width="25%">عنوان الدرس</th>
+                <th width="12%">المادة</th>
+                <th width="8%">الإجمالي</th>
+                <th width="8%">الغياب</th>
+                <th width="8%">الحضور</th>
+                <th width="8%">الحصة</th>
+                <th width="16%">الصف</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="signatures">
+            <div>رئيس القسم<br/><p>أ / رائد عبد الستار</p></div>
+            <div>مدير المدرسة<br/><p>أ / صالح المطيري</p></div>
+          </div>
+          <script>window.onload = () => { setTimeout(() => window.print(), 500); }</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const exportToExcel = () => {
@@ -225,7 +343,7 @@ export default function AttendanceReportsPage() {
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير الغياب الشامل");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير الغياب");
     XLSX.writeFile(workbook, `${getReportTitle()}.xlsx`);
   };
 
@@ -236,7 +354,7 @@ export default function AttendanceReportsPage() {
     const dataToPrint = isWarningReport ? atRiskStudents : reportData;
     if (dataToPrint.length === 0) {
       printWindow.close();
-      return alert('لا توجد بيانات للطباعة في هذا القسم');
+      return alert('لا توجد بيانات للطباعة');
     }
     
     const title = isWarningReport ? 'إشعار إنذار إداري (تجاوز 5 حصص غياب = يوم كامل)' : getReportTitle();
@@ -269,7 +387,6 @@ export default function AttendanceReportsPage() {
             td { padding: 10px; border: 1px solid #cbd5e1; }
             tr:nth-child(even) { background-color: #f8fafc; }
             .footer { margin-top: 50px; font-size: 12px; color: #94a3b8; text-align: center; }
-            .stamp { float: left; border: 2px dashed ${isWarningReport ? '#e11d48' : '#4f46e5'}; padding: 10px; color: ${isWarningReport ? '#e11d48' : '#4f46e5'}; font-weight: bold; transform: rotate(-10deg); margin-top: 30px; }
           </style>
         </head>
         <body>
@@ -277,25 +394,13 @@ export default function AttendanceReportsPage() {
             <h1>${isWarningReport ? '⚠️ إشعار إنذار غياب للطلاب' : '📊 التقرير التحليلي الشامل للغياب'}</h1>
             <p>${title} | تاريخ الإصدار: ${format(new Date(), 'yyyy/MM/dd')}</p>
           </div>
-          <div class="info-box">
-            ملاحظة إدارية: يتم احتساب الأيام الفعلية بناءً على المعادلة (كل 5 حصص غياب متفرقة = 1 يوم غياب كامل).
-          </div>
+          <div class="info-box">يتم احتساب الأيام الفعلية بناءً على المعادلة (كل 5 حصص غياب متفرقة = 1 يوم غياب كامل).</div>
           <table>
             <thead>
-              <tr>
-                <th width="5%">#</th>
-                <th width="30%">اسم الطالب</th>
-                <th width="20%">الفصل</th>
-                <th width="10%">حضـور (حصة)</th>
-                <th width="10%">غيـاب (حصة)</th>
-                <th width="15%">الغياب الفعلي (يوم)</th>
-                <th width="10%">تأخيـر (حصة)</th>
-              </tr>
+              <tr><th width="5%">#</th><th width="30%">اسم الطالب</th><th width="20%">الفصل</th><th width="10%">حضـور</th><th width="10%">غيـاب</th><th width="15%">الغياب الفعلي</th><th width="10%">تأخيـر</th></tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
-          <div class="stamp">اعتماد النظام الموحد<br/>تم الإصدار تلقائياً</div>
-          <div class="clearfix" style="clear: both;"></div>
           <div class="footer">تطبيق الرفعة النموذجي - جميع الحقوق محفوظة</div>
           <script>window.onload = () => { setTimeout(() => window.print(), 500); }</script>
         </body>
@@ -305,300 +410,342 @@ export default function AttendanceReportsPage() {
     printWindow.document.close();
   };
 
-  // 🚀 شاشة التحميل وحماية الوصول
+  // شاشة حماية الوصول
   if (isChecking) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-[#090b14]">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
-          <p className="text-slate-500 font-bold animate-pulse">جاري التحقق من الصلاحيات...</p>
+          <Loader2 className="w-12 h-12 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
+          <p className="text-slate-400 font-bold animate-pulse">جاري التحقق من الصلاحيات...</p>
         </div>
       </div>
     );
   }
 
-  // 🚀 منع الدخول إذا لم يكن المستخدم مديراً أو معلماً
   if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
-    return <div className="p-10 text-center font-bold text-rose-600 min-h-screen flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة للمعلمين وفريق الإدارة فقط.</div>;
-  }
-
-  if (loading) {
-    return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب وتجميع التقارير المتطورة...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (dbError) {
-    return (
-      <div className="flex h-screen items-center justify-center p-6" dir="rtl">
-        <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-rose-100 text-center max-w-lg w-full">
-          <div className="h-24 w-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
-             <Bug className="h-12 w-12 text-rose-500 animate-bounce" />
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-3">عذراً، حدث خطأ في قاعدة البيانات</h2>
-          <div className="bg-rose-50 p-4 rounded-xl text-right mb-8 overflow-auto max-h-32 border border-rose-100">
-             <p className="text-rose-600 font-mono text-xs" dir="ltr">{dbError}</p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={fetchData} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
-               <RefreshCw className="w-5 h-5" /> إعادة المحاولة
-            </button>
-            <Link href="/attendance" className="flex-1 bg-white text-slate-700 border border-slate-200 py-4 rounded-2xl font-black hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-2">
-               العودة
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="p-10 text-center font-black text-rose-500 min-h-screen flex items-center justify-center bg-[#090b14]">هذه الصفحة مخصصة لفريق الإدارة والمعلمين فقط.</div>;
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pb-24 px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo" dir="rtl">
       
-      {/* 🚀 Top Navigation */}
-      <div className="pt-6 flex justify-between items-center">
-        <Link href="/attendance" className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all w-fit group text-sm sm:text-base">
-          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة لرصد الغياب
-        </Link>
-        <button onClick={fetchData} className="flex items-center gap-2 text-indigo-600 font-bold bg-indigo-50 px-4 py-2.5 rounded-2xl shadow-sm border border-indigo-100 transition-all hover:bg-indigo-600 hover:text-white active:scale-95 text-sm sm:text-base">
-          <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" /> تحديث البيانات
-        </button>
-      </div>
+      {/* الخلفية المضيئة والمظهر الزجاجي */}
+      <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
+      <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 Hero Section */}
-      <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 p-6 sm:p-12 text-white shadow-2xl shadow-slate-900/20">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
-          <div className="space-y-3 sm:space-y-4">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm">
-              <BarChart2 className="w-3.5 h-3.5 text-indigo-300" />
-              <span>التحليل والإحصاء المتقدم</span>
+      <div className="max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
+        
+        {/* Top Navigation */}
+        <div className="flex justify-between items-center">
+          <Link href="/attendance" className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 font-bold bg-[#131836]/60 backdrop-blur-xl px-5 py-2.5 rounded-2xl border border-white/10 transition-all w-fit group text-sm sm:text-base shadow-lg">
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة للرصد
+          </Link>
+          <button onClick={activeTab === 'daily_snapshot' ? fetchDailySnapshot : fetchAnalyticsData} className="flex items-center gap-2 text-slate-900 font-black bg-gradient-to-r from-emerald-500 to-teal-400 px-5 py-2.5 rounded-2xl transition-all hover:opacity-90 active:scale-95 text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} /> تحديث البيانات
+          </button>
+        </div>
+
+        {/* Hero Section */}
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-[#131836]/60 backdrop-blur-2xl border border-white/10 p-8 sm:p-12 text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs font-black text-emerald-400 uppercase tracking-widest backdrop-blur-sm shadow-sm">
+                <BarChart2 className="w-4 h-4" /> مركز العمليات والتحليل
+              </div>
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
+                تقارير الحضور والغياب
+              </h1>
+              <p className="text-slate-400 text-sm sm:text-base font-bold max-w-2xl leading-relaxed">
+                تحليل ذكي لسجلات الحضور. تطبيق تلقائي لمعادلة (5 حصص = يوم غياب) لاستخراج إحصائيات دقيقة وفورية.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight drop-shadow-md">
-              تقارير الحضور والغياب
-            </h1>
-            <p className="text-indigo-100 text-xs sm:text-base font-bold opacity-90 max-w-2xl leading-relaxed">
-              تحليل ذكي لسجلات الطلاب. النظام يقوم بحساب الغياب بناءً على الحصص، ويطبق تلقائياً معادلة (5 حصص = يوم غياب) لاستخراج الإنذارات الدقيقة.
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full lg:w-auto">
-            <button onClick={exportToExcel} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-emerald-500 hover:bg-emerald-600 text-white text-sm sm:text-base font-black shadow-lg shadow-emerald-500/30 transition-all active:scale-95">
-              <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5" /> تصدير Excel
-            </button>
-            <button onClick={() => exportToPDF(false)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 sm:px-6 py-3.5 sm:py-4 rounded-[1.5rem] bg-indigo-500 hover:bg-indigo-600 text-white text-sm sm:text-base font-black shadow-lg shadow-indigo-500/30 transition-all active:scale-95">
-              <Download className="w-4 h-4 sm:w-5 sm:h-5" /> التقرير الشامل PDF
-            </button>
-          </div>
-        </div>
-        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
-        <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"></div>
-      </div>
-
-      {/* 🚀 Smart Filter Bar */}
-      <div className="bg-white/90 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30">
-        <div className="flex items-center gap-2 sm:gap-3 mb-4">
-          <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
-          <h3 className="text-sm sm:text-base font-black text-slate-900">محددات التقرير</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-          <div className="space-y-1.5 sm:space-y-2">
-            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفصل الدراسي</label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none cursor-pointer"
-            >
-              <option value="all">جميع الفصول والشعب</option>
-              {sections.map(s => (
-                <option key={s.id} value={s.id}>{s.className} - {s.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1.5 sm:space-y-2">
-            <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">الفترة الزمنية</label>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value as any)}
-              className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none appearance-none cursor-pointer"
-            >
-              <option value="all">كل الأوقات (الافتراضي)</option>
-              <option value="today">اليوم الحالي</option>
-              <option value="week">هذا الأسبوع</option>
-              <option value="month">هذا الشهر</option>
-              <option value="custom">فترة مخصصة</option>
-            </select>
-          </div>
-
-          <AnimatePresence>
-            {dateRange === 'custom' && (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-2 space-y-0">
-                <div className="flex-1 space-y-1.5 sm:space-y-2">
-                  <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">من</label>
-                  <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-3 sm:px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none" />
-                </div>
-                <div className="flex-1 space-y-1.5 sm:space-y-2">
-                  <label className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest pl-2">إلى</label>
-                  <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3 sm:py-3.5 px-3 sm:px-4 text-slate-900 bg-slate-50 focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm font-bold transition-all outline-none" />
-                </div>
-              </motion.div>
+            
+            {/* التبويبات تظهر للمدير فقط */}
+            {isAdmin && (
+              <div className="flex flex-col gap-3 shrink-0 w-full lg:w-auto bg-[#090b14]/50 p-2 rounded-[2rem] border border-white/5">
+                <button onClick={() => setActiveTab('daily_snapshot')} className={`flex items-center justify-center gap-2 px-6 py-4 rounded-[1.5rem] text-sm sm:text-base font-black transition-all ${activeTab === 'daily_snapshot' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                  <Layers className="w-5 h-5" /> الإحصائية الإدارية السريعة
+                </button>
+                <button onClick={() => setActiveTab('analytics')} className={`flex items-center justify-center gap-2 px-6 py-4 rounded-[1.5rem] text-sm sm:text-base font-black transition-all ${activeTab === 'analytics' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                  <Users className="w-5 h-5" /> سجل تقارير الطلاب العام
+                </button>
+              </div>
             )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* 🚀 At-Risk Radar (تحديث: إنذار يعتمد على الأيام الفعلية) */}
-      <AnimatePresence>
-        {atRiskStudents.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-rose-50 to-red-50 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-rose-200 shadow-lg shadow-rose-100/50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5 sm:mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 sm:p-3 bg-rose-500 text-white rounded-xl sm:rounded-2xl shadow-md shadow-rose-500/30 animate-pulse shrink-0">
-                  <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
-                </div>
-                <div>
-                  <h2 className="text-lg sm:text-2xl font-black text-rose-900 leading-tight">إنذار: غياب يوم فأكثر (5 حصص فاكثر)</h2>
-                  <p className="text-[10px] sm:text-sm font-bold text-rose-600 mt-1">هؤلاء الطلاب يتطلبون استدعاء وطباعة إنذار لإدارة المدرسة.</p>
-                </div>
-              </div>
-              <button onClick={() => exportToPDF(true)} className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white text-rose-600 text-xs sm:text-sm font-black shadow-sm border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 shrink-0 w-full sm:w-auto">
-                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> طباعة تقرير إنذار
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-              {atRiskStudents.map(student => (
-                <div key={student.id} className="bg-white p-4 sm:p-5 rounded-[1.5rem] shadow-sm border border-rose-100 flex items-center justify-between group hover:shadow-md transition-all">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 bg-rose-100 text-rose-700 rounded-xl flex items-center justify-center font-black shrink-0 text-base sm:text-lg">
-                      {student.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-black text-slate-900 text-xs sm:text-sm truncate">{student.name}</p>
-                      <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 truncate">{student.className}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <div className="bg-rose-50 text-rose-600 border border-rose-200 px-2 py-1 rounded-md text-[9px] font-black shrink-0 whitespace-nowrap">
-                      {student.absent} حصة
-                    </div>
-                    <div className="bg-rose-500 text-white px-2 py-1 rounded-md text-[9px] font-black shrink-0 whitespace-nowrap shadow-sm">
-                      {student.fullDaysAbsent} يوم فعلي
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 🚀 Main Data Table */}
-      <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-5 sm:p-8 border-b border-slate-100/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50/30">
-          <div className="flex items-center gap-3">
-            <div className="p-2 sm:p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner border border-indigo-100 shrink-0">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">السجل التحليلي الشامل</h2>
-              <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500 font-bold">
-                 <Calculator className="w-3 h-3 text-indigo-500" /> يتم حساب الأيام الفعلية بناءً على المعادلة: كل 5 حصص = 1 يوم غياب.
-              </div>
-            </div>
           </div>
-          <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 shadow-sm w-full sm:w-auto text-center">
-            إجمالي السجلات: {reportData.length} طالب
-          </span>
+          <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none"></div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
-            <thead>
-              <tr className="bg-slate-50/30">
-                <th scope="col" className="py-4 sm:py-5 pr-6 sm:pr-8 pl-4 text-right text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">اسم الطالب والفصل</th>
-                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-600">حضور<br/><span className="text-[8px]">(حصص)</span></th>
-                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-500">غياب<br/><span className="text-[8px]">(حصص)</span></th>
-                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-700 bg-rose-50 border-x border-rose-100">الأيام الفعلية<br/><span className="text-[8px]">(تجاوز)</span></th>
-                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-600">متأخر<br/><span className="text-[8px]">(حصص)</span></th>
-                <th scope="col" className="px-2 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-600">مستأذن<br/><span className="text-[8px]">(حصص)</span></th>
-                <th scope="col" className="px-4 py-4 text-center text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 hidden sm:table-cell">مؤشر الخطر</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {reportData.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-16 sm:py-20 text-center">
-                    <div className="flex flex-col items-center gap-3 sm:gap-4">
-                      <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-[1.5rem] sm:rounded-3xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                        <SearchX className="h-6 w-6 sm:h-8 sm:w-8 text-slate-300" />
-                      </div>
-                      <p className="text-slate-500 font-bold text-xs sm:text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                reportData.map((student) => {
-                  const isWarning = student.fullDaysAbsent > 0;
-                  const isDanger = student.fullDaysAbsent >= 3;
-                  
-                  return (
-                    <tr key={student.id} className="group hover:bg-slate-50/50 transition-colors">
-                      <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4">
-                        <div className="flex items-center gap-3 sm:gap-4">
-                          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center font-black text-sm sm:text-lg shadow-sm shrink-0">
-                            {student.name.charAt(0)}
+        {dbError && (
+          <div className="bg-rose-500/10 p-6 rounded-[2rem] border border-rose-500/30 text-rose-400 font-bold flex items-center gap-3 backdrop-blur-md">
+            <Bug className="w-6 h-6 shrink-0" /> خطأ في جلب البيانات: {dbError}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* التبويب الأول: الإحصائية اليومية للإدارة (للمدير فقط) */}
+        {/* ========================================================= */}
+        {isAdmin && activeTab === 'daily_snapshot' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+            
+            <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center gap-3 text-emerald-400 font-black text-lg">
+                <Calendar className="w-6 h-6" /> عرض إحصائيات يوم:
+              </div>
+              <input 
+                type="date" 
+                value={snapshotDate} 
+                onChange={(e) => setSnapshotDate(e.target.value)} 
+                className="w-full sm:w-auto rounded-2xl border border-white/10 py-3.5 px-6 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" 
+                style={{ colorScheme: 'dark' }} 
+              />
+            </div>
+
+            {loading ? (
+              <div className="py-20 flex justify-center"><Loader2 className="w-12 h-12 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /></div>
+            ) : dailyStats.length === 0 ? (
+              <div className="bg-[#131836]/40 backdrop-blur-xl py-20 text-center rounded-[2.5rem] border border-white/5"><BookOpen className="w-16 h-16 text-slate-600 mx-auto mb-4" /><p className="text-slate-400 font-bold text-xl">لا توجد إحصائيات معتمدة في هذا اليوم.</p></div>
+            ) : (
+              Object.keys(groupedDailyStats).map(stage => {
+                const stageData = groupedDailyStats[stage];
+                if (Object.keys(stageData).length === 0) return null;
+                
+                return (
+                  <div key={stage} className="space-y-6">
+                    <h2 className="text-2xl sm:text-3xl font-black text-white border-r-4 border-emerald-500 pr-4 drop-shadow-md">{stage}</h2>
+                    
+                    {Object.keys(stageData).map(dept => {
+                      const recordsList = stageData[dept];
+                      return (
+                        <div key={dept} className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
+                          <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#090b14]/30">
+                            <h3 className="text-xl font-black text-emerald-400 flex items-center gap-3">
+                              <Layers className="w-6 h-6" /> {dept}
+                            </h3>
+                            <button onClick={() => printDepartmentReport(stage, dept, recordsList)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black transition-all border border-white/10 active:scale-95">
+                              <Printer className="w-4 h-4" /> طباعة الإحصائية
+                            </button>
                           </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{student.name}</span>
-                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate">{student.className}</span>
+                          <div className="overflow-x-auto pb-4">
+                            <table className="w-full text-right whitespace-nowrap">
+                              <thead>
+                                <tr className="bg-white/5 border-b border-white/5">
+                                  <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">اسم المدرس</th>
+                                  <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">عنوان الدرس</th>
+                                  <th className="py-4 px-6 text-xs font-black uppercase text-slate-400 text-center">المادة</th>
+                                  <th className="py-4 px-4 text-xs font-black uppercase text-slate-400 text-center">الإجمالي</th>
+                                  <th className="py-4 px-4 text-xs font-black uppercase text-rose-400 text-center">الغياب</th>
+                                  <th className="py-4 px-4 text-xs font-black uppercase text-emerald-400 text-center">الحضور</th>
+                                  <th className="py-4 px-4 text-xs font-black uppercase text-slate-400 text-center">الحصة</th>
+                                  <th className="py-4 px-6 text-xs font-black uppercase text-slate-400 text-center">الصف</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {recordsList.map((r, i) => (
+                                  <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                                    <td className="py-4 px-6 font-black text-white text-sm">{r.teacher}</td>
+                                    <td className="py-4 px-6 font-bold text-slate-300 text-sm truncate max-w-[200px]" title={r.lesson}>{r.lesson}</td>
+                                    <td className="py-4 px-6 font-bold text-slate-400 text-sm text-center">{r.subject}</td>
+                                    <td className="py-4 px-4 font-black text-white text-base text-center">{r.total}</td>
+                                    <td className="py-4 px-4 font-black text-rose-400 text-base text-center">{r.absent}</td>
+                                    <td className="py-4 px-4 font-black text-emerald-400 text-base text-center">{r.present}</td>
+                                    <td className="py-4 px-4 font-black text-slate-300 text-sm text-center bg-white/5 border-x border-white/5">{r.period}</td>
+                                    <td className="py-4 px-6 font-black text-slate-300 text-sm text-center" dir="ltr">{r.className}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 font-black text-xs sm:text-sm border border-emerald-100">{student.present}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.absent > 0 ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.absent}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center bg-rose-50/30 border-x border-rose-50">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl font-black text-sm sm:text-base border shadow-sm ${isDanger ? 'bg-rose-600 text-white border-rose-700 animate-pulse' : isWarning ? 'bg-rose-500 text-white border-rose-600' : 'bg-white text-slate-300 border-slate-200'}`}>
-                          {student.fullDaysAbsent}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl font-black text-xs sm:text-sm border ${student.late > 0 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{student.late}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-3 sm:py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-blue-50 text-blue-600 font-black text-xs sm:text-sm border border-blue-100">{student.excused}</span>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 sm:py-4 text-center hidden sm:table-cell">
-                         {isDanger ? (
-                           <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded-md text-[10px] font-black">
-                             <AlertCircle className="w-3 h-3" /> خطير (تجاوز 3 أيام)
-                           </span>
-                         ) : isWarning ? (
-                           <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-200 px-2 py-1 rounded-md text-[10px] font-black">
-                             <ShieldAlert className="w-3 h-3" /> منذر (يوم فأكثر)
-                           </span>
-                         ) : (
-                           <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-1 rounded-md text-[10px] font-black">
-                             <CheckCircle2 className="w-3 h-3" /> سليم
-                           </span>
-                         )}
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            )}
+          </motion.div>
+        )}
+
+        {/* ========================================================= */}
+        {/* التبويب الثاني: سجل تقارير الطلاب (للمعلم والمدير) */}
+        {/* ========================================================= */}
+        {activeTab === 'analytics' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+            
+            {/* شريط الفلترة الذكي */}
+            <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-6 rounded-[2.5rem] shadow-xl border border-white/10 sticky top-4 z-30">
+              <div className="flex items-center gap-2 sm:gap-3 mb-4">
+                <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+                <h3 className="text-sm sm:text-base font-black text-white">محددات التقرير</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+                <div className="space-y-1.5 sm:space-y-2">
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest pl-2">الفصل الدراسي</label>
+                  <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full rounded-2xl border border-white/10 py-3.5 px-4 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none appearance-none [&>option]:bg-[#131836]">
+                    <option value="all">جميع الفصول والشعب</option>
+                    {sections.map(s => <option key={s.id} value={s.id}>{s.className} - {s.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 sm:space-y-2">
+                  <label className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest pl-2">الفترة الزمنية</label>
+                  <select value={dateRange} onChange={(e) => setDateRange(e.target.value as any)} className="w-full rounded-2xl border border-white/10 py-3.5 px-4 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none appearance-none [&>option]:bg-[#131836]">
+                    <option value="all">كل الأوقات (قد يكون بطيئاً)</option>
+                    <option value="today">اليوم الحالي</option>
+                    <option value="week">هذا الأسبوع</option>
+                    <option value="month">هذا الشهر</option>
+                    <option value="custom">فترة مخصصة</option>
+                  </select>
+                </div>
+
+                <AnimatePresence>
+                  {dateRange === 'custom' && (
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex items-center gap-2 space-y-0">
+                      <div className="flex-1 space-y-1.5 sm:space-y-2">
+                        <label className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest pl-2">من</label>
+                        <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-full rounded-2xl border border-white/10 py-3.5 px-4 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" style={{ colorScheme: 'dark' }} />
+                      </div>
+                      <div className="flex-1 space-y-1.5 sm:space-y-2">
+                        <label className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest pl-2">إلى</label>
+                        <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-full rounded-2xl border border-white/10 py-3.5 px-4 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" style={{ colorScheme: 'dark' }} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="py-20 flex justify-center"><Loader2 className="w-12 h-12 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /></div>
+            ) : (
+              <>
+                {/* 🚀 رادار الإنذارات */}
+                <AnimatePresence>
+                  {atRiskStudents.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-rose-500/10 p-5 sm:p-8 rounded-[2.5rem] border border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.15)] backdrop-blur-xl">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-3 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-2xl shadow-inner animate-pulse shrink-0">
+                            <ShieldAlert className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h2 className="text-xl sm:text-2xl font-black text-white leading-tight">إنذار: غياب يوم فأكثر</h2>
+                            <p className="text-[10px] sm:text-sm font-bold text-rose-300 mt-1">هؤلاء الطلاب يتطلبون استدعاء وطباعة إنذار.</p>
+                          </div>
+                        </div>
+                        <button onClick={() => exportToPDF(true)} className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-rose-500 text-white text-sm font-black shadow-[0_0_15px_rgba(244,63,94,0.4)] hover:bg-rose-400 transition-all active:scale-95 shrink-0 w-full sm:w-auto">
+                          <Printer className="w-4 h-4" /> طباعة تقرير الإنذار
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {atRiskStudents.map(student => (
+                          <div key={student.id} className="bg-[#090b14]/50 p-5 rounded-[1.5rem] border border-white/5 flex items-center justify-between group hover:border-rose-500/50 transition-all">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-12 w-12 bg-white/5 text-white border border-white/10 rounded-xl flex items-center justify-center font-black shrink-0 text-lg">{student.name.charAt(0)}</div>
+                              <div className="min-w-0">
+                                <p className="font-black text-white text-sm truncate">{student.name}</p>
+                                <p className="text-[10px] font-bold text-slate-400 truncate mt-1">{student.className}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-1 rounded-md text-[10px] font-black whitespace-nowrap">{student.absent} حصة</div>
+                              <div className="bg-rose-500 text-white px-2 py-1 rounded-md text-[10px] font-black whitespace-nowrap shadow-sm">{student.fullDaysAbsent} يوم فعلي</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* 🚀 الجدول الرئيسي */}
+                <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden">
+                  <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-[#090b14]/30">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl shadow-inner shrink-0">
+                        <TrendingUp className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">السجل التحليلي الشامل للطلاب</h2>
+                        <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-400 font-bold">
+                           <Calculator className="w-3.5 h-3.5 text-indigo-400" /> يتم حساب الأيام الفعلية بناءً على المعادلة: كل 5 حصص = 1 يوم غياب.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 w-full lg:w-auto">
+                      <button onClick={exportToExcel} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-black hover:bg-white/10 transition-all active:scale-95"><FileSpreadsheet className="w-4 h-4" /> Excel</button>
+                      <button onClick={() => exportToPDF(false)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-black hover:bg-white/10 transition-all active:scale-95"><Download className="w-4 h-4" /> PDF</button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto pb-4">
+                    <table className="w-full text-right whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-white/5 border-b border-white/5">
+                          <th className="py-5 pr-8 pl-4 text-xs font-black uppercase tracking-widest text-slate-400">اسم الطالب والفصل</th>
+                          <th className="px-4 py-5 text-center text-xs font-black uppercase tracking-widest text-emerald-400">حضور<br/><span className="text-[9px]">(حصص)</span></th>
+                          <th className="px-4 py-5 text-center text-xs font-black uppercase tracking-widest text-rose-400">غياب<br/><span className="text-[9px]">(حصص)</span></th>
+                          <th className="px-4 py-5 text-center text-xs font-black uppercase tracking-widest text-rose-300 bg-rose-500/10 border-x border-rose-500/20">الأيام الفعلية<br/><span className="text-[9px]">(تجاوز)</span></th>
+                          <th className="px-4 py-5 text-center text-xs font-black uppercase tracking-widest text-amber-400">متأخر<br/><span className="text-[9px]">(حصص)</span></th>
+                          <th className="px-4 py-5 text-center text-xs font-black uppercase tracking-widest text-blue-400">مستأذن<br/><span className="text-[9px]">(حصص)</span></th>
+                          <th className="px-6 py-5 text-center text-xs font-black uppercase tracking-widest text-slate-400">مؤشر الخطر</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {reportData.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="py-24 text-center">
+                              <div className="flex flex-col items-center gap-4">
+                                <div className="h-20 w-20 rounded-[2rem] bg-white/5 flex items-center justify-center border border-white/10"><SearchX className="h-10 w-10 text-slate-500" /></div>
+                                <p className="text-slate-400 font-bold text-lg">لا توجد سجلات مطابقة لمحددات البحث الحالية.</p>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          reportData.map((student) => {
+                            const isWarning = student.fullDaysAbsent > 0;
+                            const isDanger = student.fullDaysAbsent >= 3;
+                            
+                            return (
+                              <tr key={student.id} className="group hover:bg-white/[0.02] transition-colors">
+                                <td className="py-4 pr-8 pl-4">
+                                  <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 rounded-2xl bg-[#090b14] border border-white/10 text-white flex items-center justify-center font-black text-lg shrink-0">{student.name.charAt(0)}</div>
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="font-black text-white text-sm group-hover:text-emerald-400 transition-colors truncate">{student.name}</span>
+                                      <span className="text-[10px] text-slate-400 font-bold truncate mt-1">{student.className}</span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 text-center"><span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 font-black text-sm border border-emerald-500/20">{student.present}</span></td>
+                                <td className="px-4 py-4 text-center"><span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-black text-sm border ${student.absent > 0 ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : 'bg-white/5 text-slate-500 border-white/10'}`}>{student.absent}</span></td>
+                                <td className="px-4 py-4 text-center bg-rose-500/5 border-x border-rose-500/10">
+                                  <span className={`inline-flex items-center justify-center w-10 h-10 rounded-xl font-black text-base border shadow-sm ${isDanger ? 'bg-rose-600 text-white border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)] animate-pulse' : isWarning ? 'bg-rose-500 text-white border-rose-400' : 'bg-[#090b14] text-slate-500 border-white/10'}`}>{student.fullDaysAbsent}</span>
+                                </td>
+                                <td className="px-4 py-4 text-center"><span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-black text-sm border ${student.late > 0 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-white/5 text-slate-500 border-white/10'}`}>{student.late}</span></td>
+                                <td className="px-4 py-4 text-center"><span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 font-black text-sm border border-blue-500/20">{student.excused}</span></td>
+                                <td className="px-6 py-4 text-center">
+                                   {isDanger ? (
+                                     <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-lg text-xs font-black"><AlertCircle className="w-3.5 h-3.5" /> استدعاء فوري</span>
+                                   ) : isWarning ? (
+                                     <span className="inline-flex items-center gap-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-black"><ShieldAlert className="w-3.5 h-3.5" /> إنذار أولي</span>
+                                   ) : (
+                                     <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-lg text-xs font-black"><CheckCircle2 className="w-3.5 h-3.5" /> سليم</span>
+                                   )}
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+
       </div>
     </motion.div>
   );
