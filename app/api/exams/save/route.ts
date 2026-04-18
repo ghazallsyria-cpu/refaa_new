@@ -14,7 +14,7 @@ export async function POST(req: Request) {
         const { data: tProfile, error: tError } = await adminSupabase
             .from('teachers')
             .select('id')
-            .eq('id', userId) // ✅ التصحيح هنا
+            .eq('id', userId)
             .maybeSingle();
             
         if (tError) throw new Error("خطأ في التحقق من حساب المعلم: " + tError.message);
@@ -72,28 +72,29 @@ export async function POST(req: Request) {
         const q = questions[i];
         
         let frontendType = q.type || 'multiple_choice';
+        // توحيد مسمى رفع الملفات
         if (frontendType === 'file_upload') frontendType = 'file';
         
         let qContent = q.content || '';
         
-        // 🚀 الإصلاح: إزالة الريجكس المعطوب الذي يسبب مشكلة التعليقات
-        const regex1 = new RegExp('<\!--\\[TYPE:.*?\\]-->', 'g');
-        const regex2 = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
-        qContent = qContent.replace(regex1, '').replace(regex2, '');
+        // تنظيف المحتوى من أي Tags قديمة تسبب مشاكل في العرض
+        const globalTypeRegex = //g;
+        const alternativeRegex = /\[\[\[TYPE:.*?\]\]\]/g;
+        qContent = qContent.replace(globalTypeRegex, '').replace(alternativeRegex, '').trim();
 
+        // 🚀 الإصلاح: لم نعد نحول file إلى essay، بل نحتفظ بنوعه لكي يفهمه الموبايل لاحقاً!
         let dbType = frontendType;
         
-        // إذا كان النوع مرفوضاً من قاعدة البيانات، نخفيه في النص ونجعله 'essay'
-        if (['essay', 'fill_in_blank', 'file'].includes(frontendType)) {
-            dbType = 'essay'; 
-            qContent += ``;
+        // التحويل فقط للأنواع الغريبة جداً (إن وجدت) لكي يقبلها قاعدة البيانات
+        if (!['multiple_choice', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'file'].includes(dbType)) {
+            dbType = 'essay';
         }
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
           type: dbType,
-          content: qContent.trim(),
+          content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
           order_index: i
@@ -102,16 +103,13 @@ export async function POST(req: Request) {
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
         if (qErr) {
-            const fallbacks = ['open', 'text', 'multiple_choice'];
-            for (const fb of fallbacks) {
-                if (fb === dbType) continue;
-                qPayload.type = fb;
-                const retry = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-                if (!retry.error) {
-                    savedQ = retry.data;
-                    qErr = null as any;
-                    break;
-                }
+            console.warn('Attempting fallback type for question:', qErr.message);
+            // الخطة (ب): إذا رفض السيرفر حفظ النوع file (لأن قاعدة البيانات قديمة مثلاً)، سنضع Tag آمن ونجعله essay
+            if (dbType === 'file') {
+               qPayload.type = 'essay';
+               qPayload.content = `${qContent}`;
+               const retry = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
+               if (!retry.error) { savedQ = retry.data; qErr = null as any; }
             }
         }
 
@@ -120,6 +118,7 @@ export async function POST(req: Request) {
             continue; 
         }
 
+        // حفظ الخيارات إذا كان السؤال اختياري
         if (savedQ && q.options?.length > 0 && (frontendType === 'multiple_choice' || frontendType === 'true_false' || frontendType === 'multi_select')) {
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
           if (incomingOptionIds.length > 0) {
