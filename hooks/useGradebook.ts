@@ -30,8 +30,8 @@ export function useGradebook() {
 
       let attemptsData: any[] = [];
       let archivedGradesData: any[] = [];
-      let assignmentSubmissionsData: any[] = [];
       let customScoresData: any[] = [];
+      let assignmentSubmissionsData: any[] = [];
 
       if (studentIds.length > 0) {
         if (examIds.length > 0) {
@@ -47,7 +47,6 @@ export function useGradebook() {
            assignmentSubmissionsData = submissions || [];
         }
 
-        // 🚀 سحب الدرجات اليدوية من الجدول الجديد الخاص بالدفتر
         if (columnIds.length > 0) {
             const { data: cScores } = await supabase.from('gradebook_scores').select('student_id, column_id, score').in('column_id', columnIds).in('student_id', studentIds);
             customScoresData = cScores || [];
@@ -71,8 +70,7 @@ export function useGradebook() {
 
       setGradeData({
         students: formattedStudents, assessments: examsData || [], scores: mergedScores, 
-        customColumns: customColsData || [], customScores: customScoresData, 
-        assignments: assignmentsData || [], assignmentScores: assignmentSubmissionsData
+        customColumns: customColsData || [], customScores: customScoresData, assignments: assignmentsData || [], assignmentScores: assignmentSubmissionsData
       });
 
     } catch (error) { console.error('Error fetching gradebook:', error); } finally { setLoading(false); }
@@ -97,7 +95,6 @@ export function useGradebook() {
   const deleteCustomColumn = async (sectionId: string, subjectId: string, columnId: string) => {
     if (!user) return;
     try {
-      // 🚀 مسح الدرجات المرتبطة والعمود بشكل نظيف
       await supabase.from('gradebook_scores').delete().eq('column_id', columnId);
       await supabase.from('gradebook_columns').delete().eq('id', columnId);
       await fetchGradebook(sectionId, subjectId);
@@ -105,22 +102,22 @@ export function useGradebook() {
   };
 
   const saveCustomGradesBulk = async (sectionId: string, subjectId: string, gradesArray: any[]) => {
-    if (!user || gradesArray.length === 0) return;
+    if (!user || gradesArray.length === 0) return false;
     setSaving(true);
     try {
-      // 🚀 تجهيز البيانات للجدول الجديد المخصص (نظيف وخالي من التعقيدات)
       const payload = gradesArray.map(g => ({
-        student_id: g.student_id, 
-        column_id: g.column_id, 
-        score: g.score, 
-        recorded_by: user.id
+        student_id: g.student_id, column_id: g.column_id, score: g.score, recorded_by: user.id
       }));
       
       const { error } = await supabase.from('gradebook_scores').upsert(payload, { onConflict: 'student_id, column_id' });
-      if (error) throw error;
+      if (error) throw error; // 🚀 رمي الخطأ لتمسكه الواجهة بدلاً من إخفائه
       
       await fetchGradebook(sectionId, subjectId);
-    } catch (err) { console.error('Error saving grades:', err); } finally { setSaving(false); }
+      return true; // 🚀 نجاح الحفظ
+    } catch (err: any) { 
+      console.error('Error saving grades:', err); 
+      throw err; // 🚀 تمرير الخطأ للصفحة
+    } finally { setSaving(false); }
   };
 
   return { fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk };
