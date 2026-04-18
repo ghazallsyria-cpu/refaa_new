@@ -21,7 +21,9 @@ export function useGradebook() {
       const { data: studentsData } = await supabase.from('students').select('id, users(full_name)').eq('section_id', sectionId);
       const { data: examsData } = await supabase.from('exams').select('id, title, max_score, status').eq('subject_id', subjectId).in('status', ['published', 'archived']);
       const { data: customColsData } = await supabase.from('gradebook_columns').select('*').eq('section_id', sectionId).eq('subject_id', subjectId).order('created_at', { ascending: true });
-      const { data: assignmentsData } = await supabase.from('assignments').select('id, title, total_marks, status').eq('subject_id', subjectId).in('status', ['published', 'archived', 'closed']);
+      
+      // 🚀 سحب الواجبات مع ضمان قراءة الدرجة العظمى سواء كانت total_marks أو max_score
+      const { data: assignmentsData } = await supabase.from('assignments').select('id, title, total_marks, max_score, status').eq('subject_id', subjectId).in('status', ['published', 'archived', 'closed']);
 
       const studentIds = studentsData?.map(s => s.id) || [];
       const examIds = examsData?.map(e => e.id) || [];
@@ -43,7 +45,7 @@ export function useGradebook() {
         archivedGradesData = grades || [];
 
         if (assignmentIds.length > 0) {
-           const { data: submissions } = await supabase.from('assignment_submissions').select('student_id, assignment_id, grade').in('assignment_id', assignmentIds).in('student_id', studentIds).not('grade', 'is', null);
+           const { data: submissions } = await supabase.from('assignment_submissions').select('student_id, assignment_id, grade, score').in('assignment_id', assignmentIds).in('student_id', studentIds);
            assignmentSubmissionsData = submissions || [];
         }
 
@@ -108,15 +110,13 @@ export function useGradebook() {
       const payload = gradesArray.map(g => ({
         student_id: g.student_id, column_id: g.column_id, score: g.score, recorded_by: user.id
       }));
-      
       const { error } = await supabase.from('gradebook_scores').upsert(payload, { onConflict: 'student_id, column_id' });
-      if (error) throw error; // 🚀 رمي الخطأ لتمسكه الواجهة بدلاً من إخفائه
-      
+      if (error) throw error; 
       await fetchGradebook(sectionId, subjectId);
-      return true; // 🚀 نجاح الحفظ
+      return true; 
     } catch (err: any) { 
       console.error('Error saving grades:', err); 
-      throw err; // 🚀 تمرير الخطأ للصفحة
+      throw err; 
     } finally { setSaving(false); }
   };
 
