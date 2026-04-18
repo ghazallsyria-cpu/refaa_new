@@ -8,6 +8,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
+    // 🚀 الإصلاح الجذري: تحديد المعلم الصحيح باستخدام id مباشرة
     let finalTeacherId = examData.teacher_id;
     if (!finalTeacherId) {
         const { data: tProfile, error: tError } = await adminSupabase
@@ -67,29 +68,36 @@ export async function POST(req: Request) {
         let frontendType = q.type || 'multiple_choice';
         if (frontendType === 'file_upload') frontendType = 'file';
         
-        // 🚀 تنظيف أي أكواد قديمة من النص
         let qContent = q.content || '';
-        const globalTypeRegex = //g;
-        qContent = qContent.replace(globalTypeRegex, '').trim();
+        
+        // 🚀 الإصلاح الجذري: استخدام RegExp آمن لحماية الكود من الانهيار (تحول دون أن تصبح تعليقاً //)
+        const globalTypeRegex = new RegExp('', 'g');
+        const alternativeRegex = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
+        qContent = qContent.replace(globalTypeRegex, '').replace(alternativeRegex, '').trim();
 
-        // 💡 حفظ النوع الحقيقي في الـ metadata لتتجاوز قيود الداتا بيز
+        // حفظ النوع الحقيقي في الـ metadata لتتجاوز قيود الداتا بيز
         const metadata = { ...(q.metadata || {}), frontend_type: frontendType };
+
+        let dbType = frontendType;
+        if (!['multiple_choice', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'file'].includes(dbType)) {
+            dbType = 'essay';
+        }
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
-          type: frontendType, // سنرسل النوع كما هو
+          type: frontendType,
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
           order_index: i,
-          metadata: metadata // ✅ هنا السر
+          metadata: metadata
         };
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
-        // في حال رفضت قاعدة البيانات نوع السؤال الغريب، نحفظه كـ essay ولكن نحتفظ بالنوع الحقيقي في metadata
         if (qErr) {
+            console.warn('Attempting fallback type for question:', qErr.message);
             const fallbacks = ['essay', 'open', 'text', 'multiple_choice'];
             for (const fb of fallbacks) {
                 qPayload.type = fb;
