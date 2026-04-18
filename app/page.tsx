@@ -8,14 +8,13 @@ export default function Home() {
 
   useEffect(() => {
     // The actual routing is handled by app-layout.tsx
-    // This page is just a fallback while routing happens
   }, [router]);
 
   return (
-    <div className="flex h-[80vh] items-center justify-center">
+    <div className="flex h-screen items-center justify-center bg-[#090b14]">
       <div className="flex flex-col items-center gap-4">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
-        <p className="text-slate-500 font-medium animate-pulse">جاري توجيهك...</p>
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]"></div>
+        <p className="text-slate-400 font-bold animate-pulse">جاري تجهيز المنصة...</p>
       </div>
     </div>
   );
