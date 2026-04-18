@@ -109,7 +109,7 @@ export default function TakeQuiz() {
          let qContent = q.content || '';
          let qType = q.type;
          
-         // ✅ تم استخدام new RegExp للهروب من خطأ التعليقات //
+         // 🚀 الإصلاح الآمن: استخدام RegExp بدلاً من التعبيرات الحرفية لتجنب خطأ / //
          const typeRegex = new RegExp('');
          const globalTypeRegex = new RegExp('', 'g');
          const typeMatch = qContent.match(typeRegex);
@@ -161,13 +161,12 @@ export default function TakeQuiz() {
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !questions || questions.length === 0 || !user) return;
     
-     if (isPreviewMode) {
-       // إنهاء الاختبار الوهمي للمعلم ليرى شاشة النهاية بنجاح دون الحفظ في القاعدة
+    if (isPreviewMode) {
+       // 🚀 الإصلاح: السماح للمعلم برؤية شاشة النهاية الوهمية في وضع المعاينة
        setIsFinished(true);
        setIsSubmitting(false);
        return;
     }
-
 
     setIsSubmitting(true);
 
@@ -247,7 +246,7 @@ export default function TakeQuiz() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, router, studentProfileId]);
+  }, [isSubmitting, questions, answers, params.id, exam, user, startTime, isPreviewMode, studentProfileId]);
 
   useEffect(() => {
     if (timeLeft !== null && timeLeft > 0 && !isFinished && !alreadySubmitted) {
@@ -342,18 +341,19 @@ export default function TakeQuiz() {
           <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
           <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
           <p className="text-slate-600 font-medium">
-             لقد استلمنا إجاباتك وتم تسجيلها في قاعدة البيانات. 
-             {hasManualQuestions ? (
+             {isPreviewMode ? "لقد أنهيت المعاينة بنجاح (لم يتم حفظ أي إجابات)." : "لقد استلمنا إجاباتك وتم تسجيلها في قاعدة البيانات."}
+             {!isPreviewMode && hasManualQuestions && (
                <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">
                  ستظهر نتيجتك النهائية بعد تصحيح المعلم وانتهاء الوقت.
                </span>
-             ) : (
+             )}
+             {!isPreviewMode && !hasManualQuestions && (
                <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">
                  تم تصحيح الاختبار، ستظهر نتيجتك بعد انتهاء وقت الاختبار.
                </span>
              )}
           </p>
-          {timeTakenInfo > 0 && (
+          {timeTakenInfo > 0 && !isPreviewMode && (
             <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-3 rounded-2xl font-bold mt-2 border border-slate-200">
                <Clock className="w-5 h-5 text-slate-400" />
                <span>أنهيت الاختبار في: <span dir="ltr">{formatTime(timeTakenInfo)}</span></span>
