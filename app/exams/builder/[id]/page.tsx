@@ -148,7 +148,7 @@ export default function QuizBuilder() {
           }
         });
 
-        // 🚀 الهوك يقوم الآن بجلب الأنواع الحقيقية، لا نحتاج للبحث بـ Regex هنا
+        // 🚀 الهوك قام بكل التنظيف والاستخراج مسبقاً
         setQuestions((questionsData || []).map((q: any) => {
            return {...q, type: q.type, content: q.content, is_required: q.is_required ?? true};
         }));
@@ -492,7 +492,7 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           // 🚀 الإصلاح: إرسال القيمة المباشرة وعدم التلاعب بالمحتوى هنا
+                           // 🚀 مجرد تحديث القيمة، الهوك يقوم بكل عمليات التنظيف بذكاء
                            if (['multiple_choice', 'multi_select', 'checkbox', 'radio'].includes(type)) {
                               updates.options = (q.options && q.options.length > 0) ? q.options : [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
                            } else if (type === 'true_false') {
