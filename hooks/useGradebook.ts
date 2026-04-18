@@ -8,9 +8,15 @@ export function useGradebook() {
   const [saving, setSaving] = useState(false);
   
   const [gradeData, setGradeData] = useState<{ 
-    students: any[], assessments: any[], scores: any[], customColumns: any[], customScores: any[]
+    students: any[], 
+    assessments: any[], 
+    scores: any[],
+    customColumns: any[],
+    customScores: any[],
+    assignments: any[],          // 🚀 جديد: الواجبات
+    assignmentScores: any[]      // 🚀 جديد: درجات الواجبات
   }>({
-    students: [], assessments: [], scores: [], customColumns: [], customScores: []
+    students: [], assessments: [], scores: [], customColumns: [], customScores: [], assignments: [], assignmentScores: []
   });
 
   const fetchGradebook = useCallback(async (sectionId: string, subjectId: string) => {
@@ -18,31 +24,44 @@ export function useGradebook() {
     setLoading(true);
 
     try {
+      // 1. سحب الطلاب
       const { data: studentsData, error: studentsErr } = await supabase.from('students').select('id, users(full_name)').eq('section_id', sectionId);
       if (studentsErr) throw studentsErr;
 
+      // 2. سحب الاختبارات
       const { data: examsData } = await supabase.from('exams').select('id, title, max_score, status').eq('subject_id', subjectId).in('status', ['published', 'archived']);
 
+      // 3. سحب أعمدة التقييم اليدوي
       const { data: customColsData } = await supabase.from('gradebook_columns').select('*').eq('section_id', sectionId).eq('subject_id', subjectId).order('created_at', { ascending: true });
+
+      // 4. 🚀 سحب الواجبات
+      const { data: assignmentsData } = await supabase.from('assignments').select('id, title, total_marks, status').eq('subject_id', subjectId).in('status', ['published', 'archived', 'closed']);
 
       const studentIds = studentsData?.map(s => s.id) || [];
       const examIds = examsData?.map(e => e.id) || [];
+      const assignmentIds = assignmentsData?.map(a => a.id) || [];
 
       let attemptsData: any[] = [];
       let archivedGradesData: any[] = [];
       let customScoresData: any[] = [];
+      let assignmentSubmissionsData: any[] = [];
 
       if (studentIds.length > 0) {
+        // سحب درجات الاختبارات الجارية والمؤرشفة والتقييم اليدوي
         if (examIds.length > 0) {
           const { data: attempts } = await supabase.from('exam_attempts').select('student_id, exam_id, score').in('exam_id', examIds).in('student_id', studentIds).in('status', ['completed', 'graded']);
           attemptsData = attempts || [];
         }
 
-        // 🚀 سحب الدرجات مع العمود الجديد column_id
         const { data: grades } = await supabase.from('grades').select('id, student_id, exam_id, column_id, score, exam_type, title').in('student_id', studentIds).eq('subject_id', subjectId).eq('section_id', sectionId);
-          
         archivedGradesData = grades?.filter(g => g.exam_type === 'exam') || [];
         customScoresData = grades?.filter(g => g.exam_type === 'custom') || [];
+
+        // 🚀 سحب درجات الواجبات 
+        if (assignmentIds.length > 0) {
+           const { data: submissions } = await supabase.from('assignment_submissions').select('student_id, assignment_id, grade').in('assignment_id', assignmentIds).in('student_id', studentIds).not('grade', 'is', null);
+           assignmentSubmissionsData = submissions || [];
+        }
       }
 
       const mergedScores = [...attemptsData];
@@ -61,7 +80,13 @@ export function useGradebook() {
       formattedStudents.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
       setGradeData({
-        students: formattedStudents, assessments: examsData || [], scores: mergedScores, customColumns: customColsData || [], customScores: customScoresData
+        students: formattedStudents,
+        assessments: examsData || [],
+        scores: mergedScores,
+        customColumns: customColsData || [],
+        customScores: customScoresData,
+        assignments: assignmentsData || [],           // 🚀
+        assignmentScores: assignmentSubmissionsData   // 🚀
       });
 
     } catch (error) { console.error('Error fetching gradebook:', error); } finally { setLoading(false); }
@@ -90,17 +115,8 @@ export function useGradebook() {
     setSaving(true);
     try {
       const payload = gradesArray.map(g => ({
-        id: g.id || undefined, 
-        student_id: g.student_id, 
-        subject_id: subjectId, 
-        section_id: sectionId,
-        exam_type: 'custom', 
-        title: g.title, 
-        column_id: g.column_id, // 🚀 استخدمنا العمود المخصص للتقييمات اليدوية لتفادي أخطاء الداتا بيز
-        exam_id: null, // لا نضع شيء في اختبار النظام
-        score: g.score, 
-        max_score: g.max_score, 
-        recorded_by: user.id
+        id: g.id || undefined, student_id: g.student_id, subject_id: subjectId, section_id: sectionId,
+        exam_type: 'custom', title: g.title, column_id: g.column_id, exam_id: null, score: g.score, max_score: g.max_score, recorded_by: user.id
       }));
       const { error } = await supabase.from('grades').upsert(payload, { onConflict: 'id' });
       if (error) throw error;
