@@ -8,37 +8,41 @@ import { Question, normalizeQuestion } from '../types/question';
 export interface ExamForStudent { exam: ExamWithMeta; questions: Question[]; }
 export interface StudentExamResult { exam: Exam; student: { id: string, users: { full_name: string } }; attempt: ExamAttempt | null; answers: any[]; questions: any[]; }
 
-// 💡 الدالة المحصنة لاستخراج نوع السؤال
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   return (questionsData || []).map((q: any) => {
     const normalized = normalizeQuestion(q) as any; 
     let qType = normalized.type;
     let qContent = normalized.content || '';
 
-    // 1. القراءة من الميتا داتا (أقوى حماية)
     if (q.metadata) {
        let meta = q.metadata;
        if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch(e) {} }
        if (meta && meta.frontend_type) qType = meta.frontend_type;
     }
 
-    // 2. القراءة من الشفرة الجديدة والقص برمجياً
-    if (qContent.includes('[[[TYPE:')) {
-        const start = qContent.indexOf('[[[TYPE:');
-        const end = qContent.indexOf(']]]', start);
+    // 🚀 الكلمات الدلالية مقسمة لكي لا تختفي في الدردشة
+    const tNewPre = '[[[' + 'TYPE:';
+    const tNewSuf = ']]]';
+    const tOldPre = '<' + '!--[TYPE:';
+    const tOldSuf = ']--' + '>';
+
+    if (qContent.includes(tNewPre)) {
+        const start = qContent.indexOf(tNewPre);
+        const end = qContent.indexOf(tNewSuf, start);
         if (end > start) {
-            const extracted = qContent.substring(start + 8, end);
+            const extracted = qContent.substring(start + tNewPre.length, end);
             if (extracted && (!q.metadata || !q.metadata.frontend_type)) qType = extracted;
-            qContent = qContent.substring(0, start) + qContent.substring(end + 3);
+            qContent = qContent.substring(0, start) + qContent.substring(end + tNewSuf.length);
         }
     }
     
-    // 3. دعم الشفرات القديمة
-    if (qContent.includes('', start);
+    if (qContent.includes(tOldPre)) {
+        const start = qContent.indexOf(tOldPre);
+        const end = qContent.indexOf(tOldSuf, start);
         if (end > start) {
-            const extracted = qContent.substring(start + 10, end);
+            const extracted = qContent.substring(start + tOldPre.length, end);
             if (extracted && (!q.metadata || !q.metadata.frontend_type)) qType = extracted;
-            qContent = qContent.substring(0, start) + qContent.substring(end + 4);
+            qContent = qContent.substring(0, start) + qContent.substring(end + tOldSuf.length);
         }
     }
 
