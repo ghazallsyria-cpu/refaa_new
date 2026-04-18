@@ -77,9 +77,9 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // تنظيف المحتوى من أي Tags قديمة تسبب مشاكل في العرض
-        const globalTypeRegex = //g;
-        const alternativeRegex = /\[\[\[TYPE:.*?\]\]\]/g;
+        // 🚀 تنظيف المحتوى بالصيغة الآمنة لتجنب أخطاء التعليقات في الـ Build
+        const globalTypeRegex = new RegExp('', 'g');
+        const alternativeRegex = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
         qContent = qContent.replace(globalTypeRegex, '').replace(alternativeRegex, '').trim();
 
         // 🚀 الإصلاح: لم نعد نحول file إلى essay، بل نحتفظ بنوعه لكي يفهمه الموبايل لاحقاً!
