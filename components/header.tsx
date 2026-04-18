@@ -47,11 +47,8 @@ export function Header({
         {!showMenuButton && (
           <Link href="/" className="flex items-center gap-4 group transition-transform hover:scale-105">
             <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-[#090b14] shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/30 relative overflow-hidden">
-              {schoolData.logo_url ? (
-                <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-1.5 drop-shadow-lg" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center"><School className="h-7 w-7 text-[#090b14]" /></div>
-              )}
+       <Image src="/images/logo.png" alt="Logo" fill className="object-contain p-1.5 drop-shadow-lg" />
+
             </div>
             <div className="hidden sm:flex flex-col">
               <span className="text-lg font-black text-white tracking-tight leading-none group-hover:text-emerald-400 transition-colors drop-shadow-md">{schoolData.name}</span>
