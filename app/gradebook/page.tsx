@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookOpen, Users, Calculator, Download, Loader2, Trophy, Medal, Plus, Save, BarChart3, Edit3, Pencil, Printer, FileText, X } from 'lucide-react';
+import { BookOpen, Users, Calculator, Download, Loader2, Trophy, Medal, Plus, Save, BarChart3, Edit3, Pencil, Printer, FileText, X, Trash2 } from 'lucide-react';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useGradebook } from '@/hooks/useGradebook';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,13 +11,12 @@ import * as Dialog from '@radix-ui/react-dialog';
 
 export default function GradebookPage() {
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
-  const { fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, saveCustomGradesBulk } = useGradebook();
+  const { fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
 
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [activeTab, setActiveTab] = useState<'custom' | 'exams' | 'assignments'>('custom');
 
-  // حالات الإضافة والتعديل للتقييم اليدوي
   const [newColTitle, setNewColTitle] = useState('');
   const [newColMax, setNewColMax] = useState(10);
   const [isAddColModalOpen, setIsAddColModalOpen] = useState(false);
@@ -26,9 +25,7 @@ export default function GradebookPage() {
 
   const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); 
 
-  const sections = formData?.sections?.map((s: any) => ({
-    id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name
-  })) || [];
+  const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
   const subjects = formData?.subjects || [];
 
   useEffect(() => {
@@ -38,31 +35,25 @@ export default function GradebookPage() {
 
   const { students, assessments, scores, customColumns, customScores, assignments, assignmentScores } = gradeData;
 
-  // حسابات الاختبارات
   const getExamScore = (studentId: string, examId: string) => {
     const record = scores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(examId));
     return record ? Number(record.score) : '-';
   };
-  const getExamTotal = (studentId: string) => assessments.reduce((total, a) => {
-    const s = getExamScore(studentId, a.id); return s !== '-' ? total + s : total;
-  }, 0);
+  const getExamTotal = (studentId: string) => assessments.reduce((total, a) => { const s = getExamScore(studentId, a.id); return s !== '-' ? total + s : total; }, 0);
   const maxExamTotal = assessments.reduce((sum, a) => sum + (Number(a.max_score) || 0), 0);
 
-  // حسابات الواجبات 🚀
   const getAssignmentScore = (studentId: string, assignmentId: string) => {
     const record = assignmentScores.find(s => String(s.student_id) === String(studentId) && String(s.assignment_id) === String(assignmentId));
     return record ? Number(record.grade) : '-';
   };
-  const getAssignmentTotal = (studentId: string) => assignments.reduce((total, a) => {
-    const s = getAssignmentScore(studentId, a.id); return s !== '-' ? total + s : total;
-  }, 0);
+  const getAssignmentTotal = (studentId: string) => assignments.reduce((total, a) => { const s = getAssignmentScore(studentId, a.id); return s !== '-' ? total + s : total; }, 0);
   const maxAssignmentTotal = assignments.reduce((sum, a) => sum + (Number(a.total_marks) || 0), 0);
 
-  // حسابات التقييم المخصص
   const handleScoreChange = (studentId: string, column: any, val: string) => {
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
-    const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(column.id));
+    // 🚀 تحديث البحث ليستخدم exam_id كما برمجناه في الهوك
+    const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(column.id));
     
     setModifiedGrades(prev => ({
       ...prev,
@@ -76,13 +67,12 @@ export default function GradebookPage() {
   const getCustomScoreDisplay = (studentId: string, columnId: string) => {
     const key = `${studentId}_${columnId}`;
     if (modifiedGrades[key] !== undefined) return modifiedGrades[key].score;
-    const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(columnId));
+    // 🚀 تحديث البحث ليستخدم exam_id
+    const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(columnId));
     return record ? Number(record.score) : '';
   };
 
-  const getCustomTotal = (studentId: string) => customColumns.reduce((total, c) => {
-    const s = getCustomScoreDisplay(studentId, c.id); return s !== '' ? total + Number(s) : total;
-  }, 0);
+  const getCustomTotal = (studentId: string) => customColumns.reduce((total, c) => { const s = getCustomScoreDisplay(studentId, c.id); return s !== '' ? total + Number(s) : total; }, 0);
   const maxCustomTotal = customColumns.reduce((sum, c) => sum + (Number(c.max_score) || 0), 0);
 
   const handleSaveBulk = async () => {
@@ -108,6 +98,17 @@ export default function GradebookPage() {
           if (updatedModified[key].score > newColMax) updatedModified[key].score = newColMax;
         } else { updatedModified[key] = modifiedGrades[key]; }
       });
+      setModifiedGrades(updatedModified);
+    }
+  };
+
+  const handleDeleteColumn = async () => {
+    if (confirm('هل أنت متأكد من حذف هذا التقييم وكل الدرجات المرتبطة به؟')) {
+      await deleteCustomColumn(selectedSection, selectedSubject, editingColId);
+      setIsEditColModalOpen(false); setEditingColId('');
+      
+      const updatedModified: Record<string, any> = {};
+      Object.keys(modifiedGrades).forEach(key => { if (modifiedGrades[key].column_id !== editingColId) updatedModified[key] = modifiedGrades[key]; });
       setModifiedGrades(updatedModified);
     }
   };
@@ -168,26 +169,20 @@ export default function GradebookPage() {
         ) : (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 print:space-y-0">
             
-            {/* أزرار التبويبات */}
             <div className="flex flex-wrap items-center justify-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-200 w-fit mx-auto print:hidden">
-               <button onClick={() => setActiveTab('custom')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
-                 <Edit3 className="w-4 h-4" /> التقييم المستمر
-               </button>
-               <button onClick={() => setActiveTab('exams')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
-                 <Trophy className="w-4 h-4" /> الاختبارات
-               </button>
-               <button onClick={() => setActiveTab('assignments')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
-                 <FileText className="w-4 h-4" /> الواجبات
-               </button>
+               <button onClick={() => setActiveTab('custom')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}><Edit3 className="w-4 h-4" /> التقييم المستمر</button>
+               <button onClick={() => setActiveTab('exams')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}><Trophy className="w-4 h-4" /> الاختبارات</button>
+               <button onClick={() => setActiveTab('assignments')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}><FileText className="w-4 h-4" /> الواجبات</button>
             </div>
 
-            {/* 1. التقييم اليدوي */}
             {activeTab === 'custom' && (
               <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden print:shadow-none print:border-none print:rounded-none">
                 <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between bg-slate-50/50 print:hidden gap-4">
                   <div className="flex items-center gap-3"><div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><BarChart3 className="w-5 h-5" /></div><span className="font-black text-slate-800 text-lg">دفتر المتابعة والتقييم</span></div>
                   <div className="flex gap-3">
                     <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 px-5 py-2.5 rounded-xl transition-colors shadow-sm active:scale-95"><Printer className="w-4 h-4" /> تصدير PDF</button>
+                    
+                    {/* إضافة عمود */}
                     <Dialog.Root open={isAddColModalOpen} onOpenChange={(open) => { setIsAddColModalOpen(open); if(!open){setNewColTitle(''); setNewColMax(10);} }}>
                       <Dialog.Trigger asChild><button className="flex items-center gap-2 font-black text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl transition-colors shadow-md shadow-indigo-200 active:scale-95"><Plus className="w-4 h-4" /> إضافة عمود</button></Dialog.Trigger>
                       <Dialog.Portal>
@@ -202,6 +197,8 @@ export default function GradebookPage() {
                         </Dialog.Content>
                       </Dialog.Portal>
                     </Dialog.Root>
+
+                    {/* تعديل العمود 🚀 */}
                     <Dialog.Root open={isEditColModalOpen} onOpenChange={setIsEditColModalOpen}>
                       <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 print:hidden" />
@@ -210,7 +207,11 @@ export default function GradebookPage() {
                           <div className="space-y-4">
                             <div><label className="block text-sm font-bold text-slate-500 mb-2">تعديل اسم النشاط</label><input type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
                             <div><label className="block text-sm font-bold text-slate-500 mb-2">تعديل الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
-                            <button onClick={handleEditColumn} disabled={!newColTitle} className="w-full bg-amber-500 text-white font-black py-4 rounded-xl mt-4 hover:bg-amber-600 disabled:opacity-50">حفظ التعديلات</button>
+                            
+                            <div className="flex gap-3 pt-4">
+                               <button onClick={handleDeleteColumn} className="flex-1 bg-red-50 text-red-600 font-black py-4 rounded-xl hover:bg-red-100 flex items-center justify-center gap-2"><Trash2 className="w-5 h-5" /> حذف</button>
+                               <button onClick={handleEditColumn} disabled={!newColTitle} className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 disabled:opacity-50">حفظ التعديلات</button>
+                            </div>
                           </div>
                         </Dialog.Content>
                       </Dialog.Portal>
@@ -219,17 +220,20 @@ export default function GradebookPage() {
                 </div>
 
                 {customColumns.length === 0 ? (
-                  <div className="p-20 text-center flex flex-col items-center print:hidden"><Edit3 className="w-16 h-16 text-slate-200 mb-4" /><p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.</p></div>
+                  <div className="p-20 text-center flex flex-col items-center print:hidden"><Edit3 className="w-16 h-16 text-slate-200 mb-4" /><p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.<br/>انقر على زر "إضافة عمود" للبدء.</p></div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto print:overflow-visible">
+                    <div className="overflow-x-auto print:overflow-visible pb-10">
                       <table className="w-full text-right border-collapse print:text-sm">
                         <thead>
                           <tr>
                             <th className="sticky right-0 z-20 bg-slate-900 text-white font-black py-5 px-6 border-b border-l border-slate-800 w-64 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)] print:bg-slate-100 print:text-black print:border-slate-300 print:shadow-none">اسم الطالب</th>
                             {customColumns.map(c => (
-                              <th key={c.id} className="bg-slate-50 text-slate-700 font-black py-4 px-4 border-b border-slate-200 text-center min-w-[120px] print:border-slate-300 group">
-                                <div className="flex items-center justify-center gap-2"><div className="text-sm truncate" title={c.title}>{c.title}</div><button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button></div>
+                              <th key={c.id} className="bg-slate-50 text-slate-700 font-black py-4 px-4 border-b border-slate-200 text-center min-w-[120px] print:border-slate-300">
+                                <div className="flex items-center justify-center gap-2">
+                                  <div className="text-sm truncate" title={c.title}>{c.title}</div>
+                                  <button onClick={() => openEditModal(c)} className="p-1.5 bg-indigo-100 text-indigo-600 hover:bg-indigo-200 rounded-lg transition-colors print:hidden"><Pencil className="w-3 h-3" /></button>
+                                </div>
                                 <div className="text-[10px] text-slate-400 mt-1 print:text-slate-600">من {c.max_score}</div>
                               </th>
                             ))}
@@ -277,14 +281,14 @@ export default function GradebookPage() {
               </div>
             )}
 
-            {/* 2. الاختبارات */}
+            {/* الاختبارات والواجبات كما هي... */}
             {activeTab === 'exams' && (
                <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden print:hidden">
                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                  <div className="flex items-center gap-2"><Trophy className="w-5 h-5 text-amber-500" /><span className="font-black text-slate-700">كشف نتائج الاختبارات (للقراءة فقط)</span></div>
                  <button onClick={() => window.print()} className="flex items-center gap-2 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors"><Printer className="w-4 h-4" /> تصدير PDF</button>
                </div>
-               <div className="overflow-x-auto">
+               <div className="overflow-x-auto pb-10">
                  <table className="w-full text-right border-collapse">
                    <thead>
                      <tr>
@@ -314,18 +318,16 @@ export default function GradebookPage() {
                    </tbody>
                  </table>
                </div>
-               {assessments.length === 0 && (<div className="p-8 text-center text-slate-500 font-bold border-t border-slate-100 bg-slate-50/50">لم يتم العثور على أي اختبارات لهذه المادة.</div>)}
              </div>
             )}
 
-            {/* 3. الواجبات 🚀 */}
             {activeTab === 'assignments' && (
                <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden print:hidden">
                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                  <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-500" /><span className="font-black text-slate-700">كشف نتائج الواجبات (للقراءة فقط)</span></div>
                  <button onClick={() => window.print()} className="flex items-center gap-2 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors"><Printer className="w-4 h-4" /> تصدير PDF</button>
                </div>
-               <div className="overflow-x-auto">
+               <div className="overflow-x-auto pb-10">
                  <table className="w-full text-right border-collapse">
                    <thead>
                      <tr>
@@ -355,7 +357,6 @@ export default function GradebookPage() {
                    </tbody>
                  </table>
                </div>
-               {assignments.length === 0 && (<div className="p-8 text-center text-slate-500 font-bold border-t border-slate-100 bg-slate-50/50">لم يتم العثور على أي واجبات لهذه المادة.</div>)}
              </div>
             )}
 
@@ -378,7 +379,6 @@ export default function GradebookPage() {
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
