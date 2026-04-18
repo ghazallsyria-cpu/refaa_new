@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -253,7 +254,7 @@ export default function GradebookPage() {
                 {customColumns.length === 0 ? (
                   <div className="p-20 text-center flex flex-col items-center print:hidden">
                     <Edit3 className="w-16 h-16 text-slate-200 mb-4" />
-                    <p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.<br/>انقر على زر "إضافة عمود" للبدء.</p>
+                    <p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.<br/>انقر على زر إضافة عمود للبدء.</p>
                   </div>
                 ) : (
                   <>
@@ -286,7 +287,6 @@ export default function GradebookPage() {
                                 </td>
                                 {customColumns.map(c => (
                                   <td key={c.id} className="border-b border-slate-100 py-2 px-2 text-center print:border-slate-300">
-                                    {/* 🚀 تصميم أنيق لحقل الإدخال يشبه الإكسيل */}
                                     <input 
                                       type="number" 
                                       max={c.max_score} min="0"
@@ -370,7 +370,6 @@ export default function GradebookPage() {
         )}
       </main>
 
-      {/* زر الحفظ العائم الذكي لا يظهر في الطباعة */}
       <AnimatePresence>
         {Object.keys(modifiedGrades).length > 0 && (
           <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 print:hidden">
