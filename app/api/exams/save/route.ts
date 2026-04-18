@@ -8,7 +8,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
-    // 🚀 الإصلاح الجذري: تحديد المعلم الصحيح باستخدام id مباشرة
     let finalTeacherId = examData.teacher_id;
     if (!finalTeacherId) {
         const { data: tProfile, error: tError } = await adminSupabase
@@ -18,13 +17,7 @@ export async function POST(req: Request) {
             .maybeSingle();
             
         if (tError) throw new Error("خطأ في التحقق من حساب المعلم: " + tError.message);
-        
-        if (tProfile) {
-            finalTeacherId = tProfile.id;
-        } else {
-            // كخيار أخير إذا فشل كل شيء، نستخدم الـ userId القادم من الواجهة
-            finalTeacherId = userId; 
-        }
+        finalTeacherId = tProfile ? tProfile.id : userId;
     }
 
     const payload = {
@@ -72,44 +65,40 @@ export async function POST(req: Request) {
         const q = questions[i];
         
         let frontendType = q.type || 'multiple_choice';
-        // توحيد مسمى رفع الملفات
         if (frontendType === 'file_upload') frontendType = 'file';
         
+        // 🚀 تنظيف أي أكواد قديمة من النص
         let qContent = q.content || '';
-        
-        // 🚀 تنظيف المحتوى بالصيغة الآمنة لتجنب أخطاء التعليقات في الـ Build
-        const globalTypeRegex = new RegExp('', 'g');
-        const alternativeRegex = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
-        qContent = qContent.replace(globalTypeRegex, '').replace(alternativeRegex, '').trim();
+        const globalTypeRegex = //g;
+        qContent = qContent.replace(globalTypeRegex, '').trim();
 
-        // 🚀 الإصلاح: لم نعد نحول file إلى essay، بل نحتفظ بنوعه لكي يفهمه الموبايل لاحقاً!
-        let dbType = frontendType;
-        
-        // التحويل فقط للأنواع الغريبة جداً (إن وجدت) لكي يقبلها قاعدة البيانات
-        if (!['multiple_choice', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'file'].includes(dbType)) {
-            dbType = 'essay';
-        }
+        // 💡 حفظ النوع الحقيقي في الـ metadata لتتجاوز قيود الداتا بيز
+        const metadata = { ...(q.metadata || {}), frontend_type: frontendType };
 
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
-          type: dbType,
+          type: frontendType, // سنرسل النوع كما هو
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
-          order_index: i
+          order_index: i,
+          metadata: metadata // ✅ هنا السر
         };
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
+        // في حال رفضت قاعدة البيانات نوع السؤال الغريب، نحفظه كـ essay ولكن نحتفظ بالنوع الحقيقي في metadata
         if (qErr) {
-            console.warn('Attempting fallback type for question:', qErr.message);
-            // الخطة (ب): إذا رفض السيرفر حفظ النوع file (لأن قاعدة البيانات قديمة مثلاً)، سنضع Tag آمن ونجعله essay
-            if (dbType === 'file') {
-               qPayload.type = 'essay';
-               qPayload.content = `${qContent}`;
-               const retry = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
-               if (!retry.error) { savedQ = retry.data; qErr = null as any; }
+            const fallbacks = ['essay', 'open', 'text', 'multiple_choice'];
+            for (const fb of fallbacks) {
+                qPayload.type = fb;
+                const retry = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
+                if (!retry.error) {
+                    savedQ = retry.data;
+                    qErr = null as any;
+                    break;
+                }
             }
         }
 
@@ -118,7 +107,6 @@ export async function POST(req: Request) {
             continue; 
         }
 
-        // حفظ الخيارات إذا كان السؤال اختياري
         if (savedQ && q.options?.length > 0 && (frontendType === 'multiple_choice' || frontendType === 'true_false' || frontendType === 'multi_select')) {
           const incomingOptionIds = q.options.map((o: any) => o.id).filter(Boolean);
           if (incomingOptionIds.length > 0) {
