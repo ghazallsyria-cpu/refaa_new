@@ -161,11 +161,13 @@ export default function TakeQuiz() {
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !questions || questions.length === 0 || !user) return;
     
-    if (isPreviewMode) {
-       alert("هذا الاختبار في وضع المعاينة. لن يتم حفظ الإجابات في قاعدة البيانات لأنك لست طالباً مسجلاً في المادة.");
-       router.push('/exams');
+     if (isPreviewMode) {
+       // إنهاء الاختبار الوهمي للمعلم ليرى شاشة النهاية بنجاح دون الحفظ في القاعدة
+       setIsFinished(true);
+       setIsSubmitting(false);
        return;
     }
+
 
     setIsSubmitting(true);
 
