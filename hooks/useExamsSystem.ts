@@ -18,30 +18,22 @@ export interface StudentExamResult {
   questions: any[];
 }
 
-// دالة أمان لمعالجة الـ URLs والصور
+// 💡 الدالة التي تستعيد نوع السؤال الحقيقي من الميتا داتا
 const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   return (questionsData || []).map((q: any) => {
     const normalized = normalizeQuestion(q) as any; 
-    let qType = normalized.type;
+    
+    // 🚀 القراءة من الميتا داتا أولاً لحل مشكلة الداتا بيز
+    let qType = q.metadata?.frontend_type || normalized.type;
     let qContent = normalized.content || '';
 
-    // 🚀 الإصلاح الجذري: استخدام التعبيرات الآمنة لتجنب التعليقات المزدوجة
-    const typeRegex = new RegExp('');
-    const globalTypeRegex = new RegExp('', 'g');
-    
-    const typeMatch = qContent.match(typeRegex);
-    
-    if (typeMatch) {
-        qType = typeMatch[1];
-        qContent = qContent.replace(globalTypeRegex, '').trim();
-    } else if (qContent.includes('') || qType === 'file_upload') {
-        qType = 'file';
-        qContent = qContent.replace(globalTypeRegex, '').trim();
-    }
+    // تنظيف أمان لأي كود قديم
+    const globalTypeRegex = //g;
+    qContent = qContent.replace(globalTypeRegex, '').trim();
 
     return {
       ...normalized,
-      type: qType,
+      type: qType, // ✅ هذا سيضمن عودة السؤال كـ file أو غيره
       content: qContent,
       mediaUrl: q.media_url || q.mediaUrl || normalized.mediaUrl || normalized.media_url || null,
       media_url: q.media_url || q.mediaUrl || normalized.mediaUrl || normalized.media_url || null
@@ -49,17 +41,14 @@ const mapQuestionsWithMedia = (questionsData: any[] | null) => {
   });
 };
 
-// ==========================================
-// 🚀 محرك الكاش الذكي للاختبارات (Exams Cache Engine)
-// ==========================================
 const globalCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // مدة حفظ الكاش: 5 دقائق
+const CACHE_TTL = 5 * 60 * 1000;
 
 const withCache = async <T>(key: string, fetcher: () => Promise<T>, forceRefresh = false): Promise<T> => {
   if (!forceRefresh && globalCache.has(key)) {
     const cached = globalCache.get(key)!;
     if (Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data; // استرجاع فوري من الذاكرة
+      return cached.data;
     }
   }
   
@@ -86,10 +75,7 @@ export function useExamsSystem() {
     const cacheKey = `exams_${currentRole}_${user.id}`;
     const isCached = !forceRefresh && globalCache.has(cacheKey) && (Date.now() - globalCache.get(cacheKey)!.timestamp < CACHE_TTL);
     
-    // إظهار التحميل فقط إذا لم يكن هناك كاش
-    if (!isCached) {
-      setLoading(true);
-    }
+    if (!isCached) setLoading(true);
     setError(null);
     
     try {
@@ -104,7 +90,6 @@ export function useExamsSystem() {
 
         if (currentRole === 'student') {
           let studentProfile = null;
-          // 🚀 الإصلاح: البحث الآمن عن الطالب باستخدام الـ id فقط
           const { data: sp } = await supabase.from('students').select('id, section_id').eq('id', user.id).maybeSingle();
           if (sp) studentProfile = sp;
 
@@ -116,17 +101,16 @@ export function useExamsSystem() {
           }
         } else if (currentRole === 'teacher') {
           let teacherProfile = null;
-          // 🚀 الإصلاح الجذري: البحث الآمن عن المعلم باستخدام الـ id فقط وإزالة البحث بـ user_id المعطوب
           const { data: tp } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
           if (tp) teacherProfile = tp;
             
           if (!teacherProfile && user.user_metadata?.role === 'teacher') {
-            const { data: newTeacher, error: createError } = await supabase.from('teachers').insert({
-                id: user.id, // ✅ استخدام نفس معرّف المستخدم بدلاً من user_id
+            const { data: newTeacher } = await supabase.from('teachers').insert({
+                id: user.id, 
                 national_id: 'TEMP_' + user.id.substring(0, 8),
                 specialization: 'غير محدد'
               }).select('id').single();
-            if (!createError && newTeacher) teacherProfile = newTeacher;
+            if (newTeacher) teacherProfile = newTeacher;
           }
 
           if (teacherProfile) {
@@ -215,7 +199,7 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to save exam');
-      clearExamsCache(); // 🚀 تفريغ الكاش
+      clearExamsCache();
       await fetchExams(true);
       return result.examId;
     } catch (err) { throw err; }
@@ -226,10 +210,8 @@ export function useExamsSystem() {
     try {
       if (currentRole === 'student') {
         let studentProfile = null;
-        // 🚀 الإصلاح: البحث عن الطالب بـ id فقط
         const { data: sp } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
         if (sp) studentProfile = sp;
-        
         if (!studentProfile) throw new Error('حساب الطالب غير مكتمل');
       }
 
@@ -260,7 +242,7 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to submit exam');
-      clearExamsCache(); // 🚀
+      clearExamsCache();
       await fetchExams(true);
       return result.attemptId;
     } catch (err: any) { throw err; }
@@ -271,7 +253,7 @@ export function useExamsSystem() {
     try {
       const response = await fetch('/api/exams/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId, userId: user.id }) });
       if (!response.ok) throw new Error('Failed to delete exam');
-      clearExamsCache(); // 🚀
+      clearExamsCache();
       await fetchExams(true);
     } catch (err) { throw err; }
   }, [user, fetchExams]);
@@ -287,7 +269,7 @@ export function useExamsSystem() {
       }
       const response = await fetch('/api/exams/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examId, userId: user.id }) });
       if (!response.ok) throw new Error('Failed to delete exam');
-      clearExamsCache(); // 🚀
+      clearExamsCache();
       await fetchExams(true);
       return { success: true };
     } catch (err: unknown) { throw err; }
@@ -339,7 +321,7 @@ export function useExamsSystem() {
     try {
       const response = await fetch('/api/exams/delete-attempt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attemptId, userId: user.id }) });
       if (!response.ok) throw new Error('Failed to delete attempt');
-      clearExamsCache(); // 🚀
+      clearExamsCache();
       return { success: true };
     } catch (err) { throw err; }
   }, [user]);
@@ -354,9 +336,7 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       
-      if (!response.ok) {
-         throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
-      }
+      if (!response.ok) throw new Error(result.error || 'فشل جلب النتيجة من السيرفر');
 
       const formattedAnswers = (result.answers || []).map((ans: any) => {
         if (ans.question) {
@@ -388,7 +368,7 @@ export function useExamsSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'فشل تقييم الإجابة');
-      clearExamsCache(); // 🚀
+      clearExamsCache();
     } catch (err) { throw err; }
   }, []);
 
