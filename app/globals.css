@@ -14,42 +14,53 @@
 
 @layer base {
   * {
-    @apply border-slate-200;
+    @apply border-white/10;
   }
   body {
-    @apply bg-slate-50 text-slate-900;
+    /* 🚀 تحويل الخلفية الافتراضية للوضع الليلي الفخم */
+    @apply bg-[#090b14] text-slate-200;
   }
 }
 
 @layer components {
-  .glass-card {
-    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
+  /* 🚀 الفئات الزجاجية العالمية للاستخدام في أي صفحة */
+  .glass-panel {
+    @apply bg-[#131836]/60 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)];
   }
   
-  .bento-grid {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6;
+  .glass-header {
+    @apply bg-[#090b14]/70 backdrop-blur-2xl border-b border-white/5 shadow-[0_4px_30px_rgba(0,0,0,0.5)];
   }
   
-  .bento-item {
-    @apply bg-white rounded-3xl p-6 shadow-sm ring-1 ring-slate-200 hover:shadow-md transition-all duration-300;
+  .glass-input {
+    @apply bg-[#090b14]/50 backdrop-blur-md border border-white/10 focus:bg-[#131836] focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none transition-all text-white placeholder:text-slate-500;
   }
-  
+
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-600 hover:bg-slate-100 hover:text-indigo-600 transition-all duration-200;
+    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-200;
   }
   
   .sidebar-link-active {
-    @apply bg-indigo-50 text-indigo-700 font-medium;
+    @apply bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-900 font-black shadow-[0_0_20px_rgba(16,185,129,0.3)];
   }
 }
 
-/* Custom Scrollbar */
+/* 🚀 Custom Scrollbar for Dark Mode */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  @apply bg-[#090b14];
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full hover:bg-slate-400;
+  @apply bg-slate-700 rounded-full hover:bg-emerald-500 transition-colors;
+}
+
+/* إعدادات الطباعة العالمية */
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: white !important; color: black !important; }
+  .glass-panel, .glass-header { background: white !important; backdrop-filter: none !important; box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+  .print-hidden { display: none !important; }
 }
