@@ -8,7 +8,6 @@ import { useGradebook } from '@/hooks/useGradebook';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import * as Dialog from '@radix-ui/react-dialog';
-// 🚀 1. استيراد دالة Image من Next.js
 import Image from 'next/image'; 
 
 export default function GradebookPage() {
@@ -167,12 +166,10 @@ export default function GradebookPage() {
       <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-2xl border-b border-white/50 shadow-[0_4px_30px_rgba(0,0,0,0.03)] px-8 py-6 print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           
-          {/* 🚀 2. الهيدر الجديد مع الصورة الزجاجية */}
           <div className="flex items-center gap-5">
             <div className="relative h-20 w-32 shrink-0 glass-panel bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 p-1 flex items-center justify-center shadow-lg overflow-hidden group">
-               {/* الصورة المخصصة بالمظهر الزجاجي */}
                <Image 
-                  src="/images/gradebook_hero.png" // المسار الذي حفظت فيه الصورة
+                  src="/images/gradebook_hero.png" 
                   alt="Gradebook Hero"
                   fill
                   className="object-cover group-hover:scale-105 transition-transform duration-500"
@@ -240,15 +237,15 @@ export default function GradebookPage() {
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
                           <div className="flex justify-between items-center mb-6"><Dialog.Title className="text-2xl font-black text-slate-800">نشاط جديد</Dialog.Title><Dialog.Close className="text-slate-400 hover:text-slate-700 bg-slate-100 p-2 rounded-full"><X className="w-5 h-5" /></Dialog.Close></div>
                           <div className="space-y-5">
-                            <div><label className="block text-sm font-black text-slate-600 mb-2">اسم النشاط</label><input type="text" placeholder="مثال: سلوك، مشاركة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
-                            <div><label className="block text-sm font-black text-slate-600 mb-2">الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
-                            <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black py-4 rounded-xl mt-2 hover:opacity-90 disabled:opacity-50 shadow-xl shadow-indigo-200">اعتماد النشاط</button>
+                            <div><label className="block text-sm font-black text-slate-600 mb-2">اسم النشاط</label><input type="text" placeholder="مثال: سلوك، مشاركة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all focus:bg-white" /></div>
+                            <div><label className="block text-sm font-black text-slate-600 mb-2">الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none transition-all focus:bg-white" /></div>
+                            <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black py-4 rounded-2xl mt-2 hover:opacity-90 disabled:opacity-50 shadow-xl shadow-indigo-200">اعتماد النشاط</button>
                           </div>
                         </Dialog.Content>
                       </Dialog.Portal>
                     </Dialog.Root>
 
-                    <Dialog.Root open={isEditColModalOpen} onOpenChange={(open) => { setIsEditColModalOpen(open); if(!open){setEditingColId(''); setNewColTitle(''); setNewColMax(10); } }}>
+                    <Dialog.Root open={isEditColModalOpen} onOpenChange={setIsEditColModalOpen}>
                       <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 print:hidden" />
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
@@ -280,7 +277,7 @@ export default function GradebookPage() {
                               <th key={c.id} className="bg-slate-50/50 backdrop-blur-sm text-slate-700 font-black py-4 px-4 border-b border-slate-200/50 text-center min-w-[130px] print:border-slate-300 group">
                                 <div className="flex items-center justify-center gap-2">
                                   <div className="text-sm truncate" title={c.title}>{c.title}</div>
-                                  <button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1.5 bg-indigo-100/50 text-indigo-600 hover:bg-indigo-200 rounded-lg transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
                                 </div>
                                 <div className="text-[11px] font-bold text-slate-400 mt-1 print:text-slate-600">من {c.max_score}</div>
                               </th>
@@ -329,7 +326,6 @@ export default function GradebookPage() {
               </div>
             )}
 
-            {/* 2. الاختبارات */}
             {activeTab === 'exams' && (
                <div className="glass-panel bg-white/70 backdrop-blur-xl rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-white/80 overflow-hidden print:hidden">
                <div className="p-6 border-b border-slate-100/50 flex items-center justify-between">
@@ -357,9 +353,9 @@ export default function GradebookPage() {
                        const percentage = maxExamTotal > 0 ? Math.round((studentTotal / maxExamTotal) * 100) : 0;
                        return (
                          <tr key={student.id} className={`hover:bg-indigo-50/30 transition-colors group ${idx % 2 === 0 ? 'bg-white/40' : 'bg-transparent'}`}>
-                           <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100/50 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-colors bg-inherit group-hover:bg-indigo-50/90">{student.name}</td>
+                           <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100/50 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.03)] bg-inherit group-hover:bg-indigo-50/90">{student.name}</td>
                            {assessments.map(a => { const score = getExamScore(student.id, a.id); return (<td key={a.id} className="border-b border-slate-100/50 py-4 px-4 text-center font-bold text-slate-600">{score === '-' ? <span className="text-slate-300">-</span> : score}</td>); })}
-                           <td className="border-b border-l border-indigo-100/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
+                           <td className="border-b border-l border-indigo-50/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
                          </tr>
                        );
                      })}
@@ -369,7 +365,6 @@ export default function GradebookPage() {
              </div>
             )}
 
-            {/* 3. الواجبات */}
             {activeTab === 'assignments' && (
                <div className="glass-panel bg-white/70 backdrop-blur-xl rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-white/80 overflow-hidden print:hidden">
                <div className="p-6 border-b border-slate-100/50 flex items-center justify-between">
@@ -399,7 +394,7 @@ export default function GradebookPage() {
                          <tr key={student.id} className={`hover:bg-indigo-50/30 transition-colors group ${idx % 2 === 0 ? 'bg-white/40' : 'bg-transparent'}`}>
                            <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100/50 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.03)] bg-inherit group-hover:bg-indigo-50/90">{student.name}</td>
                            {assignments.map(a => { const score = getAssignmentScore(student.id, a.id); return (<td key={a.id} className="border-b border-slate-100/50 py-4 px-4 text-center font-bold text-slate-600">{score === '-' ? <span className="text-slate-300">-</span> : score}</td>); })}
-                           <td className="border-b border-l border-indigo-100/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
+                           <td className="border-b border-l border-indigo-50/50 py-4 px-6 text-center font-black bg-indigo-50/20"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
                          </tr>
                        );
                      })}
