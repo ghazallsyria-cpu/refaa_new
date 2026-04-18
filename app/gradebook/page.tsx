@@ -142,7 +142,6 @@ export default function GradebookPage() {
   });
 
   return (
-    // 🚀 تطبيق لون الخلفية الداكن المطابق للصورة (Deep Navy)
     <div className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden print:bg-white print:text-black print:pb-0" dir="rtl">
       
       <style dangerouslySetInnerHTML={{__html: `
@@ -158,24 +157,22 @@ export default function GradebookPage() {
         }
       `}} />
 
-      {/* 🚀 1. الصورة العلوية المدمجة كخلفية (Hero Image Background) */}
-      <div className="absolute top-0 left-0 w-full h-[400px] md:h-[600px] z-0 print:hidden pointer-events-none">
+      {/* 🚀 1. الصورة العلوية المدمجة كخلفية (تم تعديل الشفافية والتدرج لتظهر بوضوح) */}
+      <div className="absolute top-0 left-0 w-full h-[500px] md:h-[600px] z-0 print:hidden pointer-events-none">
          <Image 
-            src="/images/gradebook_hero.png" // تأكد أن الصورة بنفس هذا الاسم والمسار
+            src="/images/gradebook_hero.png" 
             alt="Hero Background"
             fill
-            className="object-cover object-top opacity-70 mix-blend-screen"
+            className="object-cover object-top opacity-60 mix-blend-screen"
             priority
          />
-         {/* تدرج لوني يدمج أسفل الصورة مع لون الصفحة الداكن */}
-         <div className="absolute inset-0 bg-gradient-to-b from-[#090b14]/10 via-[#090b14]/60 to-[#090b14]"></div>
+         {/* تدرج لوني لطيف لدمج الصورة مع الصفحة دون إخفائها */}
+         <div className="absolute inset-0 bg-gradient-to-b from-[#090b14]/5 via-[#090b14]/40 to-[#090b14]"></div>
       </div>
 
-      {/* تأثيرات الإضاءة المطابقة للصورة (أخضر زمردي وبنفسجي) */}
       <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-purple-600/15 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
 
-      {/* المحتوى الرئيسي فوق الخلفيات */}
       <div className="relative z-10">
         
         <div className="hidden print:block text-center py-6 border-b-2 border-slate-900 mb-8">
@@ -183,69 +180,74 @@ export default function GradebookPage() {
           <p className="text-slate-600 font-bold mt-2">الفصل: {sections.find((s:any) => s.id === selectedSection)?.name || '-'} | المادة: {subjects.find((s:any) => s.id === selectedSubject)?.name || '-'}</p>
         </div>
 
-        <header className="pt-10 pb-6 px-4 sm:px-8 print:hidden">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6 glass-panel bg-[#131836]/60 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-6 rounded-3xl">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 rounded-xl text-sm font-black mb-3 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+        {/* 🚀 2. الهيدر (تم تعديله ليتجاوب مع شاشات الجوال بشكل مثالي) */}
+        <header className="pt-6 sm:pt-10 pb-6 px-4 sm:px-8 print:hidden">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 bg-[#131836]/40 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-6 sm:p-8 rounded-[2rem]">
+            
+            <div className="text-center md:text-right w-full md:w-auto flex flex-col items-center md:items-start">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-xl text-xs sm:text-sm font-black mb-3 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
                 <Calculator className="w-4 h-4" /> سجل الدرجات الذكي
               </div>
-              <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-md">سجل التقييم الشامل</h1>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg">سجل التقييم الشامل</h1>
             </div>
 
-            <div className="flex w-full md:w-auto items-center gap-4">
-              <div className="flex-1 bg-[#090b14]/80 border border-white/10 rounded-2xl flex items-center px-2 hover:border-emerald-400/50 transition-all shadow-inner">
-                <Users className="w-5 h-5 text-emerald-400 mx-3 shrink-0" />
-                <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-4 font-bold text-white outline-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white">
+            {/* 🚀 حقول الاختيار تترتب عمودياً على الموبايل لعدم الانضغاط */}
+            <div className="flex flex-col sm:flex-row w-full md:w-auto items-center gap-3 sm:gap-4">
+              <div className="w-full sm:w-56 lg:w-64 bg-[#090b14]/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center px-3 hover:border-emerald-400/50 transition-all shadow-inner">
+                <Users className="w-5 h-5 text-emerald-400 shrink-0" />
+                <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-3.5 px-2 font-bold text-white outline-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white truncate">
                   <option value="">-- اختر الفصل --</option>
-                  {sections.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
                 </select>
               </div>
-              <div className="flex-1 bg-[#090b14]/80 border border-white/10 rounded-2xl flex items-center px-2 hover:border-emerald-400/50 transition-all shadow-inner">
-                <BookOpen className="w-5 h-5 text-emerald-400 mx-3 shrink-0" />
-                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full bg-transparent border-none py-4 font-bold text-white outline-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white">
+              
+              <div className="w-full sm:w-56 lg:w-64 bg-[#090b14]/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center px-3 hover:border-emerald-400/50 transition-all shadow-inner">
+                <BookOpen className="w-5 h-5 text-emerald-400 shrink-0" />
+                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full bg-transparent border-none py-3.5 px-2 font-bold text-white outline-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white truncate">
                   <option value="">-- اختر المادة --</option>
                   {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
             </div>
+
           </div>
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 space-y-8 print:p-0 print:m-0 print:max-w-none">
           {!selectedSection || !selectedSubject ? (
-            <div className="glass-panel bg-[#131836]/40 backdrop-blur-xl rounded-[2rem] border border-white/5 p-20 flex flex-col items-center justify-center text-center shadow-2xl print:hidden">
-              <div className="h-24 w-24 bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]"><Calculator className="h-10 w-10 text-emerald-400" /></div>
-              <h2 className="text-2xl font-black text-white mb-3">الدفتر بانتظارك</h2>
-              <p className="text-slate-400 font-bold text-lg">يرجى تحديد الفصل والمادة من الأعلى لعرض السجل.</p>
+            <div className="bg-[#131836]/40 backdrop-blur-xl rounded-[2rem] border border-white/10 p-10 sm:p-20 flex flex-col items-center justify-center text-center shadow-2xl print:hidden mt-4">
+              <div className="h-20 w-20 sm:h-24 sm:w-24 bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)]"><Calculator className="h-10 w-10 text-emerald-400" /></div>
+              <h2 className="text-xl sm:text-2xl font-black text-white mb-3">الدفتر بانتظارك</h2>
+              <p className="text-slate-400 font-bold text-sm sm:text-lg">يرجى تحديد الفصل والمادة من الأعلى لعرض السجل.</p>
             </div>
           ) : formLoading || loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-4 print:hidden"><Loader2 className="w-12 h-12 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /><p className="font-bold text-slate-300 animate-pulse">جاري تجميع الدرجات...</p></div>
           ) : students.length === 0 ? (
-            <div className="glass-panel bg-[#131836]/40 backdrop-blur-xl rounded-[2rem] border border-white/5 p-20 flex flex-col items-center justify-center text-center shadow-2xl print:hidden"><Users className="h-20 w-20 text-slate-600 mb-6" /><h2 className="text-xl font-black text-slate-300">لا يوجد طلاب</h2></div>
+            <div className="bg-[#131836]/40 backdrop-blur-xl rounded-[2rem] border border-white/10 p-10 sm:p-20 flex flex-col items-center justify-center text-center shadow-2xl print:hidden mt-4"><Users className="h-16 w-16 sm:h-20 sm:w-20 text-slate-600 mb-6" /><h2 className="text-xl font-black text-slate-300">لا يوجد طلاب</h2></div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 print:space-y-0">
               
               <div className="flex flex-wrap items-center justify-center gap-3 bg-[#131836]/60 backdrop-blur-xl p-2 rounded-[2rem] shadow-lg border border-white/10 w-fit mx-auto print:hidden">
-                 <button onClick={() => setActiveTab('custom')} className={`px-8 py-3.5 rounded-[1.5rem] font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Edit3 className="w-4 h-4" /> التقييم المستمر</button>
-                 <button onClick={() => setActiveTab('exams')} className={`px-8 py-3.5 rounded-[1.5rem] font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Trophy className="w-4 h-4" /> الاختبارات</button>
-                 <button onClick={() => setActiveTab('assignments')} className={`px-8 py-3.5 rounded-[1.5rem] font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><FileText className="w-4 h-4" /> الواجبات</button>
+                 <button onClick={() => setActiveTab('custom')} className={`px-6 sm:px-8 py-3.5 rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Edit3 className="w-4 h-4" /> التقييم المستمر</button>
+                 <button onClick={() => setActiveTab('exams')} className={`px-6 sm:px-8 py-3.5 rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Trophy className="w-4 h-4" /> الاختبارات</button>
+                 <button onClick={() => setActiveTab('assignments')} className={`px-6 sm:px-8 py-3.5 rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-105' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><FileText className="w-4 h-4" /> الواجبات</button>
               </div>
 
               {activeTab === 'custom' && (
-                <div className="glass-panel bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden print:shadow-none print:border-none print:rounded-none">
+                <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden print:shadow-none print:border-none print:rounded-none">
                   <div className="p-6 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between print:hidden gap-4">
-                    <div className="flex items-center gap-3"><div className="p-3 bg-gradient-to-br from-emerald-400 to-teal-600 text-white rounded-2xl shadow-inner"><BarChart3 className="w-5 h-5" /></div><span className="font-black text-white text-xl">سجل المتابعة والنشاط</span></div>
-                    <div className="flex gap-3">
-                      <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-white bg-white/5 border border-white/10 hover:bg-white/10 px-5 py-3 rounded-2xl transition-all active:scale-95"><Printer className="w-4 h-4" /> طباعة / PDF</button>
+                    <div className="flex items-center gap-3"><div className="p-3 bg-gradient-to-br from-emerald-400 to-teal-600 text-white rounded-2xl shadow-inner"><BarChart3 className="w-5 h-5" /></div><span className="font-black text-white text-lg sm:text-xl">سجل المتابعة والنشاط</span></div>
+                    <div className="flex flex-wrap items-center justify-center gap-3 w-full sm:w-auto">
+                      <button onClick={() => window.print()} className="flex-1 sm:flex-none flex items-center justify-center gap-2 font-black text-white bg-white/5 border border-white/10 hover:bg-white/10 px-5 py-3 rounded-2xl transition-all active:scale-95"><Printer className="w-4 h-4" /> PDF</button>
                       
                       <Dialog.Root open={isAddColModalOpen} onOpenChange={(open) => { setIsAddColModalOpen(open); if(!open){setNewColTitle(''); setNewColMax(10);} }}>
-                        <Dialog.Trigger asChild><button className="flex items-center gap-2 font-black text-slate-900 bg-emerald-400 hover:bg-emerald-300 px-6 py-3 rounded-2xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95"><Plus className="w-5 h-5" /> إضافة نشاط</button></Dialog.Trigger>
+                        <Dialog.Trigger asChild><button className="flex-1 sm:flex-none flex items-center justify-center gap-2 font-black text-slate-900 bg-emerald-400 hover:bg-emerald-300 px-6 py-3 rounded-2xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95"><Plus className="w-5 h-5" /> نشاط</button></Dialog.Trigger>
                         <Dialog.Portal>
                           <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/80 backdrop-blur-md z-50 print:hidden" />
-                          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
+                          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl z-50 w-[90%] max-w-sm print:hidden" dir="rtl">
                             <div className="flex justify-between items-center mb-6"><Dialog.Title className="text-2xl font-black text-white">نشاط جديد</Dialog.Title><Dialog.Close className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X className="w-5 h-5" /></Dialog.Close></div>
                             <div className="space-y-5">
-                              <div><label className="block text-sm font-black text-slate-300 mb-2">اسم النشاط</label><input type="text" placeholder="مثال: سلوك، مشاركة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-5 py-4 bg-[#090b14] border border-white/10 text-white rounded-2xl font-bold focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition-all" /></div>
+                              <div><label className="block text-sm font-black text-slate-300 mb-2">اسم النشاط</label><input type="text" placeholder="مثال: سلوك..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-5 py-4 bg-[#090b14] border border-white/10 text-white rounded-2xl font-bold focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition-all" /></div>
                               <div><label className="block text-sm font-black text-slate-300 mb-2">الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-5 py-4 bg-[#090b14] border border-white/10 text-white rounded-2xl font-bold focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none transition-all" /></div>
                               <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black py-4 rounded-2xl mt-2 hover:opacity-90 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)]">اعتماد النشاط</button>
                             </div>
@@ -256,7 +258,7 @@ export default function GradebookPage() {
                       <Dialog.Root open={isEditColModalOpen} onOpenChange={(open) => { setIsEditColModalOpen(open); if(!open){setEditingColId(''); setNewColTitle(''); setNewColMax(10); } }}>
                         <Dialog.Portal>
                           <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/80 backdrop-blur-md z-50 print:hidden" />
-                          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
+                          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl z-50 w-[90%] max-w-sm print:hidden" dir="rtl">
                             <div className="flex justify-between items-center mb-6"><Dialog.Title className="text-2xl font-black text-white">تعديل النشاط</Dialog.Title><Dialog.Close className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X className="w-5 h-5" /></Dialog.Close></div>
                             <div className="space-y-5">
                               <div><label className="block text-sm font-black text-slate-300 mb-2">تعديل الاسم</label><input type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-5 py-4 bg-[#090b14] border border-white/10 text-white rounded-2xl font-bold focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none" /></div>
@@ -273,25 +275,25 @@ export default function GradebookPage() {
                   </div>
 
                   {customColumns.length === 0 ? (
-                    <div className="p-24 text-center flex flex-col items-center print:hidden"><div className="p-6 bg-white/5 rounded-full mb-4"><Edit3 className="w-12 h-12 text-slate-500" /></div><p className="text-xl font-black text-slate-400">الدفتر فارغ حالياً.<br/>ابدأ بإضافة أعمدة تقييم لطلابك.</p></div>
+                    <div className="p-16 sm:p-24 text-center flex flex-col items-center print:hidden"><div className="p-6 bg-white/5 rounded-full mb-4"><Edit3 className="w-10 h-10 sm:w-12 sm:h-12 text-slate-500" /></div><p className="text-lg sm:text-xl font-black text-slate-400">الدفتر فارغ حالياً.</p></div>
                   ) : (
                     <>
                       <div className="overflow-x-auto print-overflow-visible pb-10">
                         <table className="w-full text-right border-collapse print:text-sm">
                           <thead>
                             <tr>
-                              <th className="sticky right-0 z-20 bg-[#131836] text-white font-black py-5 px-6 border-b border-l border-white/10 w-64 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.5)] print:bg-slate-100 print:text-black print:border-slate-300 print:shadow-none">اسم الطالب</th>
+                              <th className="sticky right-0 z-20 bg-[#131836] text-white font-black py-5 px-4 sm:px-6 border-b border-l border-white/10 w-48 sm:w-64 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.5)] print:bg-slate-100 print:text-black print:border-slate-300 print:shadow-none">اسم الطالب</th>
                               {customColumns.map(c => (
-                                <th key={c.id} className="bg-white/5 text-slate-200 font-black py-4 px-4 border-b border-white/10 text-center min-w-[130px] print:border-slate-300 group">
+                                <th key={c.id} className="bg-white/5 text-slate-200 font-black py-4 px-2 sm:px-4 border-b border-white/10 text-center min-w-[100px] sm:min-w-[130px] print:border-slate-300 group">
                                   <div className="flex items-center justify-center gap-2">
-                                    <div className="text-sm truncate" title={c.title}>{c.title}</div>
-                                    <button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1.5 bg-white/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
+                                    <div className="text-xs sm:text-sm truncate" title={c.title}>{c.title}</div>
+                                    <button onClick={() => openEditModal(c)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1.5 bg-white/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
                                   </div>
-                                  <div className="text-[11px] font-bold text-slate-500 mt-1 print:text-slate-600">من {c.max_score}</div>
+                                  <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 mt-1 print:text-slate-600">من {c.max_score}</div>
                                 </th>
                               ))}
-                              <th className="bg-emerald-500/10 text-emerald-400 font-black py-4 px-6 border-b border-emerald-500/20 text-center min-w-[120px] print:border-slate-300">
-                                <div>إجمالي النقاط</div><div className="text-[11px] font-bold text-emerald-500/70 mt-1 print:text-slate-600">من {maxCustomTotal}</div>
+                              <th className="bg-emerald-500/10 text-emerald-400 font-black py-4 px-4 sm:px-6 border-b border-emerald-500/20 text-center min-w-[100px] sm:min-w-[120px] print:border-slate-300">
+                                <div className="text-xs sm:text-sm">إجمالي النقاط</div><div className="text-[10px] sm:text-[11px] font-bold text-emerald-500/70 mt-1 print:text-slate-600">من {maxCustomTotal}</div>
                               </th>
                             </tr>
                           </thead>
@@ -300,29 +302,29 @@ export default function GradebookPage() {
                               const total = getCustomTotal(student.id);
                               return (
                                 <tr key={student.id} className={`hover:bg-white/5 transition-colors group print:border-b print:border-slate-300 ${idx % 2 === 0 ? 'bg-white/[0.02]' : 'bg-transparent'}`}>
-                                  <td className="sticky right-0 z-10 font-black text-sm py-3 px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.2)] bg-inherit group-hover:bg-[#1a2044] print:bg-transparent print:shadow-none print:border-slate-300">{student.name}</td>
+                                  <td className="sticky right-0 z-10 font-black text-xs sm:text-sm py-3 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.2)] bg-inherit group-hover:bg-[#1a2044] print:bg-transparent print:shadow-none print:border-slate-300">{student.name}</td>
                                   {customColumns.map(c => (
-                                    <td key={c.id} className="border-b border-white/5 py-3 px-2 text-center print:border-slate-300">
-                                      <input type="number" max={c.max_score} min="0" value={getCustomScoreDisplay(student.id, c.id)} onChange={(e) => handleScoreChange(student.id, c, e.target.value)} className="w-16 mx-auto text-center font-bold text-white bg-[#090b14]/50 hover:bg-[#090b14] border border-white/10 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 rounded-xl py-2 outline-none transition-all print:border-none print:bg-transparent print:text-black print:p-0 print:w-auto" />
+                                    <td key={c.id} className="border-b border-white/5 py-3 px-1 sm:px-2 text-center print:border-slate-300">
+                                      <input type="number" max={c.max_score} min="0" value={getCustomScoreDisplay(student.id, c.id)} onChange={(e) => handleScoreChange(student.id, c, e.target.value)} className="w-14 sm:w-16 mx-auto text-center font-bold text-white bg-[#090b14]/50 hover:bg-[#090b14] border border-white/10 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 rounded-xl py-2 outline-none transition-all print:border-none print:bg-transparent print:text-black print:p-0 print:w-auto" />
                                     </td>
                                   ))}
-                                  <td className="border-b border-l border-emerald-500/10 py-3 px-6 text-center font-black bg-emerald-500/5 text-emerald-400 print:bg-transparent print:border-slate-300 print:text-black">{total}</td>
+                                  <td className="border-b border-l border-emerald-500/10 py-3 px-4 sm:px-6 text-center font-black bg-emerald-500/5 text-emerald-400 print:bg-transparent print:border-slate-300 print:text-black">{total}</td>
                                 </tr>
                               );
                             })}
                           </tbody>
                         </table>
                       </div>
-                      <div className="p-8 bg-[#090b14]/30 border-t border-white/5 print:hidden">
-                        <h3 className="font-black text-slate-200 mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-emerald-400"/> تحليل أداء الفصل في الأنشطة</h3>
-                        <div className="h-64 w-full">
+                      <div className="p-4 sm:p-8 bg-[#090b14]/30 border-t border-white/5 print:hidden">
+                        <h3 className="font-black text-slate-200 mb-6 flex items-center gap-2 text-sm sm:text-base"><BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400"/> تحليل الأداء</h3>
+                        <div className="h-48 sm:h-64 w-full">
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chartData}>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff15" />
-                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: 'bold'}} />
-                              <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: 'bold'}} />
-                              <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{borderRadius: '20px', fontWeight: 'bold', border: '1px solid #ffffff20', backgroundColor: '#131836', color: '#fff', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.5)'}} />
-                              <Bar dataKey="متوسط_الدرجات" radius={[8, 8, 0, 0]}>
+                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
+                              <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
+                              <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{borderRadius: '20px', fontWeight: 'bold', border: '1px solid #ffffff20', backgroundColor: '#131836', color: '#fff', fontSize: 12, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.5)'}} />
+                              <Bar dataKey="متوسط_الدرجات" radius={[8, 8, 0, 0]} maxBarSize={50}>
                                 {chartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.متوسط_الدرجات > entry.fullMark * 0.8 ? '#10b981' : entry.متوسط_الدرجات > entry.fullMark * 0.5 ? '#06b6d4' : '#8b5cf6'} />))}
                               </Bar>
                             </BarChart>
@@ -336,23 +338,23 @@ export default function GradebookPage() {
 
               {/* 2. الاختبارات */}
               {activeTab === 'exams' && (
-                 <div className="glass-panel bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden print:hidden">
+                 <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden print:hidden">
                  <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                   <div className="flex items-center gap-3"><div className="p-3 bg-gradient-to-br from-indigo-400 to-purple-500 text-white rounded-2xl shadow-inner"><Trophy className="w-5 h-5" /></div><span className="font-black text-white text-xl">كشف درجات الاختبارات</span></div>
-                   <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-white bg-white/5 border border-white/10 hover:bg-white/10 px-5 py-3 rounded-2xl transition-all active:scale-95"><Printer className="w-4 h-4" /> تصدير PDF</button>
+                   <div className="flex items-center gap-3"><div className="p-3 bg-gradient-to-br from-amber-400 to-orange-500 text-white rounded-2xl shadow-inner"><Trophy className="w-5 h-5" /></div><span className="font-black text-white text-lg sm:text-xl">درجات الاختبارات</span></div>
+                   <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-white bg-white/5 border border-white/10 hover:bg-white/10 px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl transition-all active:scale-95 text-sm sm:text-base"><Printer className="w-4 h-4" /> PDF</button>
                  </div>
                  <div className="overflow-x-auto pb-10">
                    <table className="w-full text-right border-collapse">
                      <thead>
                        <tr>
-                         <th className="sticky right-0 z-20 bg-[#131836] text-white font-black py-5 px-6 border-b border-l border-white/10 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.5)] w-64">اسم الطالب</th>
+                         <th className="sticky right-0 z-20 bg-[#131836] text-white font-black py-5 px-4 sm:px-6 border-b border-l border-white/10 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.5)] w-48 sm:w-64 text-xs sm:text-sm">اسم الطالب</th>
                          {assessments.map(a => (
-                           <th key={a.id} className="bg-white/5 text-slate-200 font-black py-4 px-4 border-b border-white/10 text-center min-w-[140px]">
-                             <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title || a.name || 'اختبار'}>{a.title || a.name || 'اختبار'}</div><div className="text-[11px] font-bold text-slate-500 mt-1">من {a.max_score}</div>
+                           <th key={a.id} className="bg-white/5 text-slate-200 font-black py-4 px-2 sm:px-4 border-b border-white/10 text-center min-w-[100px] sm:min-w-[140px]">
+                             <div className="text-xs sm:text-sm truncate max-w-[100px] sm:max-w-[120px] mx-auto" title={a.title || a.name || 'اختبار'}>{a.title || a.name || 'اختبار'}</div><div className="text-[10px] sm:text-[11px] font-bold text-slate-500 mt-1">من {a.max_score}</div>
                            </th>
                          ))}
-                         <th className="bg-indigo-500/10 text-indigo-400 font-black py-4 px-6 border-b border-l border-indigo-500/20 text-center min-w-[120px]">
-                           <div className="flex items-center justify-center gap-1.5"><Medal className="w-4 h-4" /> إجمالي الدرجات</div><div className="text-[11px] font-bold text-indigo-500/70 mt-1">من {maxExamTotal}</div>
+                         <th className="bg-indigo-500/10 text-indigo-400 font-black py-4 px-4 sm:px-6 border-b border-l border-indigo-500/20 text-center min-w-[100px] sm:min-w-[120px]">
+                           <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm"><Medal className="w-4 h-4" /> الإجمالي</div><div className="text-[10px] sm:text-[11px] font-bold text-indigo-500/70 mt-1">من {maxExamTotal}</div>
                          </th>
                        </tr>
                      </thead>
@@ -362,9 +364,9 @@ export default function GradebookPage() {
                          const percentage = maxExamTotal > 0 ? Math.round((studentTotal / maxExamTotal) * 100) : 0;
                          return (
                            <tr key={student.id} className={`hover:bg-white/5 transition-colors group ${idx % 2 === 0 ? 'bg-white/[0.02]' : 'bg-transparent'}`}>
-                             <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.2)] bg-inherit group-hover:bg-[#1a2044]">{student.name}</td>
-                             {assessments.map(a => { const score = getExamScore(student.id, a.id); return (<td key={a.id} className="border-b border-white/5 py-4 px-4 text-center font-bold text-slate-300">{score === '-' ? <span className="text-slate-600">-</span> : score}</td>); })}
-                             <td className="border-b border-l border-indigo-500/10 py-4 px-6 text-center font-black bg-indigo-500/5"><span className={percentage >= 90 ? 'text-emerald-400' : percentage >= 50 ? 'text-indigo-400' : 'text-rose-400'}>{studentTotal}</span></td>
+                             <td className="sticky right-0 z-10 font-black text-xs sm:text-sm py-4 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.2)] bg-inherit group-hover:bg-[#1a2044]">{student.name}</td>
+                             {assessments.map(a => { const score = getExamScore(student.id, a.id); return (<td key={a.id} className="border-b border-white/5 py-4 px-2 sm:px-4 text-center font-bold text-slate-300 text-xs sm:text-sm">{score === '-' ? <span className="text-slate-600">-</span> : score}</td>); })}
+                             <td className="border-b border-l border-indigo-500/10 py-4 px-4 sm:px-6 text-center font-black bg-indigo-500/5 text-xs sm:text-sm"><span className={percentage >= 90 ? 'text-emerald-400' : percentage >= 50 ? 'text-indigo-400' : 'text-rose-400'}>{studentTotal}</span></td>
                            </tr>
                          );
                        })}
@@ -376,23 +378,23 @@ export default function GradebookPage() {
 
               {/* 3. الواجبات */}
               {activeTab === 'assignments' && (
-                 <div className="glass-panel bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden print:hidden">
+                 <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden print:hidden">
                  <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                   <div className="flex items-center gap-3"><div className="p-3 bg-gradient-to-br from-cyan-400 to-blue-500 text-white rounded-2xl shadow-inner"><FileText className="w-5 h-5" /></div><span className="font-black text-white text-xl">كشف تسليمات الواجبات</span></div>
-                   <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-white bg-white/5 border border-white/10 hover:bg-white/10 px-5 py-3 rounded-2xl transition-all active:scale-95"><Printer className="w-4 h-4" /> تصدير PDF</button>
+                   <div className="flex items-center gap-3"><div className="p-3 bg-gradient-to-br from-cyan-400 to-blue-500 text-white rounded-2xl shadow-inner"><FileText className="w-5 h-5" /></div><span className="font-black text-white text-lg sm:text-xl">تسليمات الواجبات</span></div>
+                   <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-white bg-white/5 border border-white/10 hover:bg-white/10 px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl transition-all active:scale-95 text-sm sm:text-base"><Printer className="w-4 h-4" /> PDF</button>
                  </div>
                  <div className="overflow-x-auto pb-10">
                    <table className="w-full text-right border-collapse">
                      <thead>
                        <tr>
-                         <th className="sticky right-0 z-20 bg-[#131836] text-white font-black py-5 px-6 border-b border-l border-white/10 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.5)] w-64">اسم الطالب</th>
+                         <th className="sticky right-0 z-20 bg-[#131836] text-white font-black py-5 px-4 sm:px-6 border-b border-l border-white/10 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.5)] w-48 sm:w-64 text-xs sm:text-sm">اسم الطالب</th>
                          {assignments.map(a => (
-                           <th key={a.id} className="bg-white/5 text-slate-200 font-black py-4 px-4 border-b border-white/10 text-center min-w-[140px]">
-                             <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title || a.name || 'واجب'}>{a.title || a.name || 'واجب'}</div><div className="text-[11px] font-bold text-slate-500 mt-1">من {getAssignmentMax(a)}</div>
+                           <th key={a.id} className="bg-white/5 text-slate-200 font-black py-4 px-2 sm:px-4 border-b border-white/10 text-center min-w-[100px] sm:min-w-[140px]">
+                             <div className="text-xs sm:text-sm truncate max-w-[100px] sm:max-w-[120px] mx-auto" title={a.title || a.name || 'واجب'}>{a.title || a.name || 'واجب'}</div><div className="text-[10px] sm:text-[11px] font-bold text-slate-500 mt-1">من {getAssignmentMax(a)}</div>
                            </th>
                          ))}
-                         <th className="bg-cyan-500/10 text-cyan-400 font-black py-4 px-6 border-b border-l border-cyan-500/20 text-center min-w-[120px]">
-                           <div className="flex items-center justify-center gap-1.5"><Medal className="w-4 h-4" /> إجمالي الواجبات</div><div className="text-[11px] font-bold text-cyan-500/70 mt-1">من {maxAssignmentTotal}</div>
+                         <th className="bg-cyan-500/10 text-cyan-400 font-black py-4 px-4 sm:px-6 border-b border-l border-cyan-500/20 text-center min-w-[100px] sm:min-w-[120px]">
+                           <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm"><Medal className="w-4 h-4" /> الإجمالي</div><div className="text-[10px] sm:text-[11px] font-bold text-cyan-500/70 mt-1">من {maxAssignmentTotal}</div>
                          </th>
                        </tr>
                      </thead>
@@ -402,9 +404,9 @@ export default function GradebookPage() {
                          const percentage = maxAssignmentTotal > 0 ? Math.round((studentTotal / maxAssignmentTotal) * 100) : 0;
                          return (
                            <tr key={student.id} className={`hover:bg-white/5 transition-colors group ${idx % 2 === 0 ? 'bg-white/[0.02]' : 'bg-transparent'}`}>
-                             <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.2)] bg-inherit group-hover:bg-[#1a2044]">{student.name}</td>
-                             {assignments.map(a => { const score = getAssignmentScore(student.id, a.id); return (<td key={a.id} className="border-b border-white/5 py-4 px-4 text-center font-bold text-slate-300">{score === '-' ? <span className="text-slate-600">-</span> : score}</td>); })}
-                             <td className="border-b border-l border-cyan-500/10 py-4 px-6 text-center font-black bg-cyan-500/5"><span className={percentage >= 90 ? 'text-emerald-400' : percentage >= 50 ? 'text-cyan-400' : 'text-rose-400'}>{studentTotal}</span></td>
+                             <td className="sticky right-0 z-10 font-black text-xs sm:text-sm py-4 px-4 sm:px-6 border-b border-l border-white/5 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.2)] bg-inherit group-hover:bg-[#1a2044]">{student.name}</td>
+                             {assignments.map(a => { const score = getAssignmentScore(student.id, a.id); return (<td key={a.id} className="border-b border-white/5 py-4 px-2 sm:px-4 text-center font-bold text-slate-300 text-xs sm:text-sm">{score === '-' ? <span className="text-slate-600">-</span> : score}</td>); })}
+                             <td className="border-b border-l border-cyan-500/10 py-4 px-4 sm:px-6 text-center font-black bg-cyan-500/5 text-xs sm:text-sm"><span className={percentage >= 90 ? 'text-emerald-400' : percentage >= 50 ? 'text-cyan-400' : 'text-rose-400'}>{studentTotal}</span></td>
                            </tr>
                          );
                        })}
@@ -421,13 +423,13 @@ export default function GradebookPage() {
 
       <AnimatePresence>
         {Object.keys(modifiedGrades).length > 0 && (
-          <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 print:hidden">
-            <div className="bg-[#131836]/90 backdrop-blur-2xl text-white px-8 py-5 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center gap-6 border border-white/20">
-              <div>
-                <p className="font-black text-lg">تغييرات قيد الانتظار!</p>
-                <p className="text-sm text-emerald-400 font-bold">يرجى حفظ الدرجات لكي لا تفقدها.</p>
+          <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50 print:hidden w-[90%] sm:w-auto">
+            <div className="bg-[#131836]/95 backdrop-blur-2xl text-white px-5 sm:px-8 py-4 sm:py-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col sm:flex-row items-center gap-4 sm:gap-6 border border-white/20">
+              <div className="text-center sm:text-right">
+                <p className="font-black text-base sm:text-lg">تغييرات قيد الانتظار!</p>
+                <p className="text-xs sm:text-sm text-emerald-400 font-bold">يرجى حفظ الدرجات لكي لا تفقدها.</p>
               </div>
-              <button onClick={handleSaveBulk} disabled={saving} className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-900 font-black px-8 py-4 rounded-2xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)]">
+              <button onClick={handleSaveBulk} disabled={saving} className="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-900 font-black px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)] text-sm sm:text-base">
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} حفظ التغييرات الآن
               </button>
             </div>
