@@ -152,7 +152,7 @@ export default function QuizBuilder() {
            let qType = q.type;
            let qContent = q.content || '';
            
-           // ✅ تم استخدام new RegExp للهروب من خطأ التعليقات //
+           // 🚀 الإصلاح: استخدام RegExp آمن لحماية الكود من الانهيار
            const typeRegex = new RegExp('');
            const globalTypeRegex = new RegExp('', 'g');
            
@@ -511,7 +511,7 @@ export default function QuizBuilder() {
                            
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
-                               // ✅ استخدام Regex صريح وآمن
+                               // 🚀 الإصلاح: استخدام RegExp آمن لحماية الكود
                                const globalTypeRegex = new RegExp('', 'g');
                                cleanContent = cleanContent.replace(globalTypeRegex, '');
                                updates.content = cleanContent;
