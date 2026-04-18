@@ -674,43 +674,30 @@ export default function SchedulePage() {
                                 }
                               } else if (slot?.teachers?.zoom_link) { window.open(normalizeUrl(slot.teachers.zoom_link), '_blank'); }
                             }}>
-                     {displaySlot ? (
-  <div className="w-full">
-    <h4 className="font-black text-sm mb-1">{displaySlot.subjects?.name}</h4>
-    <div className="text-[10px] font-bold px-2 py-1.5 bg-slate-100 rounded-lg whitespace-normal break-words leading-tight">
-      {getSlotSubtitle(displaySlot, viewType)}
-    </div>
-
-    {displaySlot.teachers?.zoom_link && (
-      <a
-        href={normalizeUrl(displaySlot.teachers.zoom_link)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-2 w-full flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-black hover:bg-emerald-500 hover:text-white transition-colors"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Video className="w-3.5 h-3.5" /> دخول البث
-      </a>
-    )}
-
-    {isAdmin && slot && (
-      <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 rounded-xl">
-        <div className="flex gap-1.5">
-          <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600" onClick={(e) => { e.stopPropagation(); setCopiedLesson(displaySlot); }}>نسخ</button>
-          <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600" onClick={(e) => { e.stopPropagation(); setSwappingFrom(displaySlot); }}>نقل</button>
-        </div>
-        <div className="flex gap-1.5">
-          <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600" onClick={(e) => { e.stopPropagation(); setEditingId(String(displaySlot.id)); setFormData({ teacher_id: displaySlot.teacher_id || '', section_id: displaySlot.section_id || '', subject_id: displaySlot.subject_id || '' }); setSelectedSlot({day: day.id, period: p.period_number}); setIsModalOpen(true); }}>تعديل</button>
-          <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600" onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }}>حذف</button>
-        </div>
-      </div>
-    )}
-  </div>
-) : (
-  <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-50">
-    <Plus className="w-6 h-6" />
-  </div>
-)}
+                            {displaySlot ? (
+                              <div className="w-full">
+                                <h4 className="font-black text-sm mb-1">{displaySlot.subjects?.name}</h4>
+                                <div className="text-[10px] font-bold px-2 py-1.5 bg-slate-100 rounded-lg whitespace-normal break-words leading-tight">{getSlotSubtitle(displaySlot, viewType)}</div>
+                                {displaySlot.teachers?.zoom_link && (
+                                  <a href={normalizeUrl(displaySlot.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className="mt-2 w-full flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 py-1.5 rounded-lg text-[10px] font-black hover:bg-emerald-500 hover:text-white transition-colors" onClick={(e) => e.stopPropagation()}>
+                                    <Video className="w-3.5 h-3.5" /> دخول البث
+                                  </a>
+                                )}
+                                {isAdmin && slot && (
+                                  <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 rounded-xl">
+                                    <div className="flex gap-1.5">
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600" onClick={(e) => { e.stopPropagation(); setCopiedLesson(displaySlot); }}>نسخ</button>
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600" onClick={(e) => { e.stopPropagation(); setSwappingFrom(displaySlot); }}>نقل</button>
+                                    </div>
+                                    <div className="flex gap-1.5">
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600" onClick={(e) => { e.stopPropagation(); setEditingId(String(displaySlot.id)); setFormData({ teacher_id: displaySlot.teacher_id || '', section_id: displaySlot.section_id || '', subject_id: displaySlot.subject_id || '' }); setSelectedSlot({day: day.id, period: p.period_number}); setIsModalOpen(true); }}>تعديل</button>
+                                      <button className="text-[10px] font-black px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600" onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(String(displaySlot.id)); }}>حذف</button>
+                                    </div>
+                                  </div>
+                                )}
+</div> {/* ✅ هذا هو وسم الإغلاق المفقود الذي سقط سهواً */}                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-50"><Plus className="w-6 h-6" /></div>
+                            )}
                           </motion.div>
                         );
                       })}
