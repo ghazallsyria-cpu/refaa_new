@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -16,11 +17,10 @@ export default function GradebookPage() {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [activeTab, setActiveTab] = useState<'exams' | 'custom'>('custom');
 
-  // حالات خاصة بالتقييم المخصص
   const [newColTitle, setNewColTitle] = useState('');
   const [newColMax, setNewColMax] = useState(10);
   const [isAddColModalOpen, setIsAddColModalOpen] = useState(false);
-  const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); // لحفظ التعديلات المؤقتة قبل الإرسال للسيرفر
+  const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); 
 
   const sections = formData?.sections?.map((s: any) => ({
     id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name
@@ -29,12 +29,11 @@ export default function GradebookPage() {
 
   useEffect(() => {
     if (selectedSection && selectedSubject) fetchGradebook(selectedSection, selectedSubject);
-    setModifiedGrades({}); // تصفير التعديلات عند تغيير الفصل
+    setModifiedGrades({});
   }, [selectedSection, selectedSubject, fetchGradebook]);
 
   const { students, assessments, scores, customColumns, customScores } = gradeData;
 
-  // دوال حساب الاختبارات
   const getExamScore = (studentId: string, examId: string) => {
     const record = scores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(examId));
     return record ? Number(record.score) : '-';
@@ -44,11 +43,9 @@ export default function GradebookPage() {
   }, 0);
   const maxExamTotal = assessments.reduce((sum, a) => sum + (Number(a.max_score) || 0), 0);
 
-  // دوال حساب التقييم اليدوي
   const handleScoreChange = (studentId: string, column: any, val: string) => {
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
-    // البحث عن المعرف القديم إذا كان الطالب مقيم مسبقاً للتحديث وليس الإضافة
     const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(column.id));
     
     setModifiedGrades(prev => ({
@@ -58,7 +55,7 @@ export default function GradebookPage() {
         student_id: studentId,
         column_id: column.id,
         title: column.title,
-        score: scoreVal > column.max_score ? column.max_score : scoreVal, // منع تجاوز النهاية العظمى
+        score: scoreVal > column.max_score ? column.max_score : scoreVal,
         max_score: column.max_score
       }
     }));
@@ -92,7 +89,6 @@ export default function GradebookPage() {
     }
   };
 
-  // تجهيز بيانات الرسم البياني للتقييم المخصص
   const chartData = customColumns.map(col => {
     let totalScore = 0; let count = 0;
     students.forEach(st => {
@@ -108,7 +104,6 @@ export default function GradebookPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-32" dir="rtl">
-      {/* هيدر الصفحة */}
       <header className="bg-white border-b border-slate-200 px-8 py-8 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
@@ -150,7 +145,6 @@ export default function GradebookPage() {
         ) : (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
             
-            {/* التبويبات الفخمة */}
             <div className="flex items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-200 w-fit mx-auto">
                <button onClick={() => setActiveTab('custom')} className={`px-8 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
                  <Edit3 className="w-4 h-4" /> التقييم اليدوي المستمر
@@ -160,7 +154,6 @@ export default function GradebookPage() {
                </button>
             </div>
 
-            {/* 1. قسم التقييم اليدوي المخصص */}
             {activeTab === 'custom' && (
               <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -169,7 +162,6 @@ export default function GradebookPage() {
                     <span className="font-black text-slate-800 text-lg">دفتر المتابعة والتقييم</span>
                   </div>
                   
-                  {/* زر إضافة عمود - Modal */}
                   <Dialog.Root open={isAddColModalOpen} onOpenChange={setIsAddColModalOpen}>
                     <Dialog.Trigger asChild>
                       <button className="flex items-center gap-2 font-black text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl transition-colors shadow-md shadow-indigo-200 active:scale-95">
@@ -200,7 +192,7 @@ export default function GradebookPage() {
                 {customColumns.length === 0 ? (
                   <div className="p-20 text-center flex flex-col items-center">
                     <Edit3 className="w-16 h-16 text-slate-200 mb-4" />
-                    <p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.<br/>انقر على زر "إضافة عمود تقييم" للبدء.</p>
+                    <p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.<br/>انقر على زر إضافة عمود تقييم للبدء.</p>
                   </div>
                 ) : (
                   <>
@@ -246,7 +238,6 @@ export default function GradebookPage() {
                       </table>
                     </div>
                     
-                    {/* الرسوم البيانية الذكية */}
                     <div className="p-8 bg-slate-50/50 border-t border-slate-100">
                       <h3 className="font-black text-slate-700 mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-500"/> متوسط الأداء في الأنشطة</h3>
                       <div className="h-64 w-full">
@@ -270,7 +261,6 @@ export default function GradebookPage() {
               </div>
             )}
 
-            {/* 2. قسم نتائج الاختبارات (للقراءة فقط والطباعة) */}
             {activeTab === 'exams' && (
                <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden">
                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -316,7 +306,6 @@ export default function GradebookPage() {
         )}
       </main>
 
-      {/* زر الحفظ العائم الذكي (يظهر فقط عند وجود تعديلات غير محفوظة) */}
       <AnimatePresence>
         {Object.keys(modifiedGrades).length > 0 && (
           <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
