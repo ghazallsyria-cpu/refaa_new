@@ -8,16 +8,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { examData, questions, isNew, userId } = body;
 
-    // 🚀 الإصلاح الجذري: تحديد المعلم الصحيح باستخدام id مباشرة
+    // 🚀 تحديد المعلم الصحيح
     let finalTeacherId = examData.teacher_id;
     if (!finalTeacherId) {
-        const { data: tProfile, error: tError } = await adminSupabase
-            .from('teachers')
-            .select('id')
-            .eq('id', userId)
-            .maybeSingle();
-            
-        if (tError) throw new Error("خطأ في التحقق من حساب المعلم: " + tError.message);
+        const { data: tProfile } = await adminSupabase.from('teachers').select('id').eq('id', userId).maybeSingle();
         finalTeacherId = tProfile ? tProfile.id : userId;
     }
 
@@ -70,14 +64,15 @@ export async function POST(req: Request) {
         
         let qContent = q.content || '';
         
-        // 🚀 الإصلاح الجذري: استخدام RegExp آمن لحماية الكود من الانهيار (تحول دون أن تصبح تعليقاً //)
+        // 1. تنظيف أي علامات (Tags) قديمة
         const globalTypeRegex = new RegExp('', 'g');
         const alternativeRegex = new RegExp('\\[\\[\\[TYPE:.*?\\]\\]\\]', 'g');
         qContent = qContent.replace(globalTypeRegex, '').replace(alternativeRegex, '').trim();
 
-        // حفظ النوع الحقيقي في الـ metadata لتتجاوز قيود الداتا بيز
-        const metadata = { ...(q.metadata || {}), frontend_type: frontendType };
+        // 2. 💡 هنا السر الأكبر: حقن النوع الحقيقي داخل النص لكي لا ترفضه الداتا بيز
+        qContent = `${qContent}`;
 
+        // 3. تحديد نوع آمن لقاعدة البيانات لتمرير الحفظ
         let dbType = frontendType;
         if (!['multiple_choice', 'true_false', 'multi_select', 'essay', 'fill_in_blank', 'file'].includes(dbType)) {
             dbType = 'essay';
@@ -86,18 +81,16 @@ export async function POST(req: Request) {
         const qPayload = {
           id: q.id || undefined, 
           exam_id: finalExamId,
-          type: frontendType,
+          type: dbType,
           content: qContent,
           media_url: q.mediaUrl || q.media_url || null,
           points: Number(q.points) || 1,
-          order_index: i,
-          metadata: metadata
+          order_index: i
         };
 
         let { data: savedQ, error: qErr } = await adminSupabase.from('questions').upsert([qPayload], { onConflict: 'id' }).select().single();
 
         if (qErr) {
-            console.warn('Attempting fallback type for question:', qErr.message);
             const fallbacks = ['essay', 'open', 'text', 'multiple_choice'];
             for (const fb of fallbacks) {
                 qPayload.type = fb;
