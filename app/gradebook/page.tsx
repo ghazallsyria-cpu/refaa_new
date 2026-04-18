@@ -63,11 +63,12 @@ export default function GradebookPage() {
   const getExamTotal = (studentId: string) => assessments.reduce((total, a) => { const s = getExamScore(studentId, a.id); return s !== '-' ? total + s : total; }, 0);
   const maxExamTotal = assessments.reduce((sum, a) => sum + (Number(a.max_score) || 0), 0);
 
-  const getAssignmentMax = (a: any) => Number(a.total_marks || a.max_score || 100);
+  // 🚀 الدوال الذكية لقراءة بيانات الواجبات بأي مسمى
+  const getAssignmentMax = (a: any) => Number(a.total_marks ?? a.max_score ?? a.points ?? 100);
   
   const getAssignmentScore = (studentId: string, assignmentId: string) => {
     const record = assignmentScores.find(s => String(s.student_id) === String(studentId) && String(s.assignment_id) === String(assignmentId));
-    return record ? Number(record.grade || record.score || 0) : '-';
+    return record ? Number(record.grade ?? record.score ?? record.marks ?? 0) : '-';
   };
   const getAssignmentTotal = (studentId: string) => assignments.reduce((total, a) => { const s = getAssignmentScore(studentId, a.id); return s !== '-' ? total + s : total; }, 0);
   const maxAssignmentTotal = assignments.reduce((sum, a) => sum + getAssignmentMax(a), 0);
@@ -245,7 +246,7 @@ export default function GradebookPage() {
                       </Dialog.Portal>
                     </Dialog.Root>
 
-                    <Dialog.Root open={isEditColModalOpen} onOpenChange={setIsEditColModalOpen}>
+                    <Dialog.Root open={isEditColModalOpen} onOpenChange={(open) => { setIsEditColModalOpen(open); if(!open){setEditingColId(''); setNewColTitle(''); setNewColMax(10); } }}>
                       <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 print:hidden" />
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
@@ -339,7 +340,7 @@ export default function GradebookPage() {
                        <th className="sticky right-0 z-20 bg-slate-900 text-white font-black py-5 px-6 border-b border-l border-slate-800 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)] w-64">اسم الطالب</th>
                        {assessments.map(a => (
                          <th key={a.id} className="bg-slate-50/50 backdrop-blur-sm text-slate-700 font-black py-4 px-4 border-b border-slate-200/50 text-center min-w-[140px]">
-                           <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title}>{a.title}</div><div className="text-[11px] font-bold text-slate-400 mt-1">من {a.max_score}</div>
+                           <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title || a.name || 'اختبار بدون اسم'}>{a.title || a.name || 'اختبار بدون اسم'}</div><div className="text-[11px] font-bold text-slate-400 mt-1">من {a.max_score}</div>
                          </th>
                        ))}
                        <th className="bg-indigo-50/80 text-indigo-900 font-black py-4 px-6 border-b border-l border-indigo-100/50 text-center min-w-[120px]">
@@ -378,7 +379,7 @@ export default function GradebookPage() {
                        <th className="sticky right-0 z-20 bg-slate-900 text-white font-black py-5 px-6 border-b border-l border-slate-800 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)] w-64">اسم الطالب</th>
                        {assignments.map(a => (
                          <th key={a.id} className="bg-slate-50/50 backdrop-blur-sm text-slate-700 font-black py-4 px-4 border-b border-slate-200/50 text-center min-w-[140px]">
-                           <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title}>{a.title}</div><div className="text-[11px] font-bold text-slate-400 mt-1">من {getAssignmentMax(a)}</div>
+                           <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title || a.name || 'واجب بدون اسم'}>{a.title || a.name || 'واجب بدون اسم'}</div><div className="text-[11px] font-bold text-slate-400 mt-1">من {getAssignmentMax(a)}</div>
                          </th>
                        ))}
                        <th className="bg-indigo-50/80 text-indigo-900 font-black py-4 px-6 border-b border-l border-indigo-100/50 text-center min-w-[120px]">
