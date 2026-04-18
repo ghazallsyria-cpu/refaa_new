@@ -28,10 +28,52 @@ export default function GradebookPage() {
   const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
   const subjects = formData?.subjects || [];
 
+  // 🚀 1. نظام المسودات اللحظية (استرجاع البيانات عند فتح الفصل)
   useEffect(() => {
-    if (selectedSection && selectedSubject) fetchGradebook(selectedSection, selectedSubject);
-    setModifiedGrades({});
+    if (selectedSection && selectedSubject) {
+      fetchGradebook(selectedSection, selectedSubject);
+      
+      // محاولة استرجاع مسودة غير محفوظة من المتصفح لهذا الفصل تحديداً
+      const draftKey = `grades_draft_${selectedSection}_${selectedSubject}`;
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft) {
+        try {
+          setModifiedGrades(JSON.parse(savedDraft));
+        } catch (e) {
+          setModifiedGrades({});
+        }
+      } else {
+        setModifiedGrades({});
+      }
+    } else {
+       setModifiedGrades({});
+    }
   }, [selectedSection, selectedSubject, fetchGradebook]);
+
+  // 🚀 2. نظام المسودات اللحظية (الحفظ اللحظي مع كل ضغطة زر في المتصفح)
+  useEffect(() => {
+    if (selectedSection && selectedSubject) {
+       const draftKey = `grades_draft_${selectedSection}_${selectedSubject}`;
+       if (Object.keys(modifiedGrades).length > 0) {
+          localStorage.setItem(draftKey, JSON.stringify(modifiedGrades));
+       } else {
+          localStorage.removeItem(draftKey); // تنظيف الذاكرة إذا تم حفظها للسيرفر
+       }
+    }
+  }, [modifiedGrades, selectedSection, selectedSubject]);
+
+  // 🚀 3. حماية المعلم من إغلاق الصفحة بالخطأ
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (Object.keys(modifiedGrades).length > 0) {
+        e.preventDefault();
+        e.returnValue = ''; // هذه التعليمة تجبر المتصفح على إظهار رسالة التحذير
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [modifiedGrades]);
+
 
   const { students, assessments, scores, customColumns, customScores, assignments, assignmentScores } = gradeData;
 
@@ -49,18 +91,16 @@ export default function GradebookPage() {
   const getAssignmentTotal = (studentId: string) => assignments.reduce((total, a) => { const s = getAssignmentScore(studentId, a.id); return s !== '-' ? total + s : total; }, 0);
   const maxAssignmentTotal = assignments.reduce((sum, a) => sum + (Number(a.total_marks) || 0), 0);
 
-  // 🚀 تسجيل الدرجات 
   const handleScoreChange = (studentId: string, column: any, val: string) => {
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
+    const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(column.id));
     
     setModifiedGrades(prev => ({
       ...prev,
       [key]: {
-        student_id: studentId, 
-        column_id: column.id, 
-        score: scoreVal > column.max_score ? column.max_score : scoreVal, 
-        max_score: column.max_score
+        id: existingRecord?.id, student_id: studentId, column_id: column.id, title: column.title,
+        score: scoreVal > column.max_score ? column.max_score : scoreVal, max_score: column.max_score
       }
     }));
   };
@@ -68,8 +108,7 @@ export default function GradebookPage() {
   const getCustomScoreDisplay = (studentId: string, columnId: string) => {
     const key = `${studentId}_${columnId}`;
     if (modifiedGrades[key] !== undefined) return modifiedGrades[key].score;
-    // 🚀 القراءة من الجدول الجديد
-    const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(columnId));
+    const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(columnId));
     return record ? Number(record.score) : '';
   };
 
@@ -78,7 +117,11 @@ export default function GradebookPage() {
 
   const handleSaveBulk = async () => {
     const gradesArray = Object.values(modifiedGrades);
-    if (gradesArray.length > 0) { await saveCustomGradesBulk(selectedSection, selectedSubject, gradesArray); setModifiedGrades({}); }
+    if (gradesArray.length > 0) { 
+      await saveCustomGradesBulk(selectedSection, selectedSubject, gradesArray); 
+      setModifiedGrades({}); 
+      // الـ useEffect بالأعلى سيقوم بمسح المسودة من المتصفح تلقائياً لأن modifiedGrades أصبحت فارغة
+    }
   };
 
   const handleAddColumn = async () => {
@@ -92,11 +135,10 @@ export default function GradebookPage() {
     if (newColTitle && newColMax > 0 && selectedSection && selectedSubject && editingColId) {
       await editCustomColumn(selectedSection, selectedSubject, editingColId, newColTitle, newColMax);
       setIsEditColModalOpen(false); setEditingColId(''); setNewColTitle(''); setNewColMax(10);
-      
       const updatedModified: Record<string, any> = {};
       Object.keys(modifiedGrades).forEach(key => {
         if (modifiedGrades[key].column_id === editingColId) {
-          updatedModified[key] = { ...modifiedGrades[key], max_score: newColMax };
+          updatedModified[key] = { ...modifiedGrades[key], title: newColTitle, max_score: newColMax };
           if (updatedModified[key].score > newColMax) updatedModified[key].score = newColMax;
         } else { updatedModified[key] = modifiedGrades[key]; }
       });
@@ -108,7 +150,6 @@ export default function GradebookPage() {
     if (confirm('هل أنت متأكد من حذف هذا التقييم وكل الدرجات المرتبطة به؟')) {
       await deleteCustomColumn(selectedSection, selectedSubject, editingColId);
       setIsEditColModalOpen(false); setEditingColId('');
-      
       const updatedModified: Record<string, any> = {};
       Object.keys(modifiedGrades).forEach(key => { if (modifiedGrades[key].column_id !== editingColId) updatedModified[key] = modifiedGrades[key]; });
       setModifiedGrades(updatedModified);
