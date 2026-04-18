@@ -157,21 +157,9 @@ export default function GradebookPage() {
         }
       `}} />
 
-      {/* 🚀 1. الصورة العلوية المدمجة كخلفية (تم تعديل الشفافية والتدرج لتظهر بوضوح) */}
-      <div className="absolute top-0 left-0 w-full h-[500px] md:h-[600px] z-0 print:hidden pointer-events-none">
-         <Image 
-            src="/images/gradebook_hero.png" 
-            alt="Hero Background"
-            fill
-            className="object-cover object-top opacity-60 mix-blend-screen"
-            priority
-         />
-         {/* تدرج لوني لطيف لدمج الصورة مع الصفحة دون إخفائها */}
-         <div className="absolute inset-0 bg-gradient-to-b from-[#090b14]/5 via-[#090b14]/40 to-[#090b14]"></div>
-      </div>
-
-      <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
-      <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-purple-600/15 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
+      {/* خلفية الصفحة المضيئة */}
+      <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
+      <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
 
       <div className="relative z-10">
         
@@ -180,36 +168,53 @@ export default function GradebookPage() {
           <p className="text-slate-600 font-bold mt-2">الفصل: {sections.find((s:any) => s.id === selectedSection)?.name || '-'} | المادة: {subjects.find((s:any) => s.id === selectedSubject)?.name || '-'}</p>
         </div>
 
-        {/* 🚀 2. الهيدر (تم تعديله ليتجاوب مع شاشات الجوال بشكل مثالي) */}
-        <header className="pt-6 sm:pt-10 pb-6 px-4 sm:px-8 print:hidden">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 bg-[#131836]/40 backdrop-blur-xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-6 sm:p-8 rounded-[2rem]">
+        {/* 🚀 الحل الجذري: الهيدر بتصميم (Banner Card) المطابق لتويتر/لينكدإن لضمان ظهور الصورة */}
+        <header className="pt-6 sm:pt-10 pb-6 px-4 sm:px-8 print:hidden relative z-10">
+          <div className="max-w-7xl mx-auto flex flex-col overflow-hidden bg-[#131836]/60 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] rounded-[2rem] sm:rounded-[2.5rem]">
             
-            <div className="text-center md:text-right w-full md:w-auto flex flex-col items-center md:items-start">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-xl text-xs sm:text-sm font-black mb-3 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                <Calculator className="w-4 h-4" /> سجل الدرجات الذكي
-              </div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg">سجل التقييم الشامل</h1>
+            {/* جزء الصورة العلوية (Banner) يظهر بوضوح تام */}
+            <div className="relative w-full h-32 sm:h-48 md:h-56 bg-[#090b14]">
+               <Image 
+                  src="/images/gradebook_hero.png" 
+                  alt="Gradebook Banner"
+                  fill
+                  className="object-cover opacity-80 mix-blend-lighten"
+                  priority
+               />
+               {/* تدرج خفيف جداً يدمج أسفل الصورة مع المحتوى دون طمسها */}
+               <div className="absolute inset-0 bg-gradient-to-t from-[#131836]/90 via-[#131836]/20 to-transparent"></div>
             </div>
 
-            {/* 🚀 حقول الاختيار تترتب عمودياً على الموبايل لعدم الانضغاط */}
-            <div className="flex flex-col sm:flex-row w-full md:w-auto items-center gap-3 sm:gap-4">
-              <div className="w-full sm:w-56 lg:w-64 bg-[#090b14]/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center px-3 hover:border-emerald-400/50 transition-all shadow-inner">
-                <Users className="w-5 h-5 text-emerald-400 shrink-0" />
-                <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-3.5 px-2 font-bold text-white outline-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white truncate">
-                  <option value="">-- اختر الفصل --</option>
-                  {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
-                </select>
-              </div>
+            {/* محتوى الهيدر (العناوين وحقول الاختيار) يتوضع بشكل مريح تحت الصورة */}
+            <div className="p-5 sm:p-8 -mt-8 sm:-mt-10 relative z-10 flex flex-col md:flex-row items-center md:items-end justify-between gap-6">
               
-              <div className="w-full sm:w-56 lg:w-64 bg-[#090b14]/60 backdrop-blur-md border border-white/10 rounded-2xl flex items-center px-3 hover:border-emerald-400/50 transition-all shadow-inner">
-                <BookOpen className="w-5 h-5 text-emerald-400 shrink-0" />
-                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full bg-transparent border-none py-3.5 px-2 font-bold text-white outline-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white truncate">
-                  <option value="">-- اختر المادة --</option>
-                  {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+              <div className="text-center md:text-right w-full md:w-auto flex flex-col items-center md:items-start">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#090b14]/80 text-emerald-400 rounded-xl text-xs sm:text-sm font-black mb-3 border border-emerald-500/30 backdrop-blur-md shadow-lg">
+                  <Calculator className="w-4 h-4" /> سجل الدرجات الذكي
+                </div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-lg">سجل التقييم الشامل</h1>
               </div>
-            </div>
 
+              {/* حقول الاختيار: تترتب بشكل أنيق في الجوال ولا تنضغط */}
+              <div className="flex flex-col sm:flex-row w-full md:w-auto items-center gap-3 sm:gap-4 mt-2 md:mt-0">
+                <div className="relative w-full sm:w-56 lg:w-64 bg-[#090b14]/80 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center px-4 hover:border-emerald-400/50 transition-all shadow-xl group">
+                  <Users className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-3.5 px-3 font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white">
+                    <option value="">-- اختر الفصل --</option>
+                    {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
+                  </select>
+                </div>
+                
+                <div className="relative w-full sm:w-56 lg:w-64 bg-[#090b14]/80 backdrop-blur-xl border border-white/10 rounded-2xl flex items-center px-4 hover:border-emerald-400/50 transition-all shadow-xl group">
+                  <BookOpen className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full bg-transparent border-none py-3.5 px-3 font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#131836] [&>option]:text-white">
+                    <option value="">-- اختر المادة --</option>
+                    {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+            </div>
           </div>
         </header>
 
