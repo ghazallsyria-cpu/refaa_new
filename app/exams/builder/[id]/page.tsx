@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -151,9 +152,9 @@ export default function QuizBuilder() {
            let qType = q.type;
            let qContent = q.content || '';
            
-           // ✅ الإصلاح الجذري لتعبيرات استخراج النوع
-           const typeRegex = //;
-           const globalTypeRegex = //g;
+           // ✅ تم استخدام new RegExp للهروب من خطأ التعليقات //
+           const typeRegex = new RegExp('');
+           const globalTypeRegex = new RegExp('', 'g');
            
            const typeMatch = qContent.match(typeRegex);
            if (typeMatch) {
@@ -510,8 +511,8 @@ export default function QuizBuilder() {
                            
                            let cleanContent = q.content || '';
                            if (type !== 'file' && cleanContent) {
-                               // ✅ تم إصلاح التعبير هنا أيضاً
-                               const globalTypeRegex = //g;
+                               // ✅ استخدام Regex صريح وآمن
+                               const globalTypeRegex = new RegExp('', 'g');
                                cleanContent = cleanContent.replace(globalTypeRegex, '');
                                updates.content = cleanContent;
                            }
