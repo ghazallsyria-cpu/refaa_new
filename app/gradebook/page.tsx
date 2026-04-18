@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookOpen, Users, Calculator, Download, Loader2, Trophy, Medal, Plus, Save, BarChart3, Edit3, Pencil, Printer, X } from 'lucide-react';
+import { BookOpen, Users, Calculator, Download, Loader2, Trophy, Medal, Plus, Save, BarChart3, Edit3, Pencil, Printer, FileText, X } from 'lucide-react';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useGradebook } from '@/hooks/useGradebook';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,9 +15,9 @@ export default function GradebookPage() {
 
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [activeTab, setActiveTab] = useState<'exams' | 'custom'>('custom');
+  const [activeTab, setActiveTab] = useState<'custom' | 'exams' | 'assignments'>('custom');
 
-  // حالات الإضافة والتعديل
+  // حالات الإضافة والتعديل للتقييم اليدوي
   const [newColTitle, setNewColTitle] = useState('');
   const [newColMax, setNewColMax] = useState(10);
   const [isAddColModalOpen, setIsAddColModalOpen] = useState(false);
@@ -36,8 +36,9 @@ export default function GradebookPage() {
     setModifiedGrades({});
   }, [selectedSection, selectedSubject, fetchGradebook]);
 
-  const { students, assessments, scores, customColumns, customScores } = gradeData;
+  const { students, assessments, scores, customColumns, customScores, assignments, assignmentScores } = gradeData;
 
+  // حسابات الاختبارات
   const getExamScore = (studentId: string, examId: string) => {
     const record = scores.find(s => String(s.student_id) === String(studentId) && String(s.exam_id) === String(examId));
     return record ? Number(record.score) : '-';
@@ -47,21 +48,27 @@ export default function GradebookPage() {
   }, 0);
   const maxExamTotal = assessments.reduce((sum, a) => sum + (Number(a.max_score) || 0), 0);
 
+  // حسابات الواجبات 🚀
+  const getAssignmentScore = (studentId: string, assignmentId: string) => {
+    const record = assignmentScores.find(s => String(s.student_id) === String(studentId) && String(s.assignment_id) === String(assignmentId));
+    return record ? Number(record.grade) : '-';
+  };
+  const getAssignmentTotal = (studentId: string) => assignments.reduce((total, a) => {
+    const s = getAssignmentScore(studentId, a.id); return s !== '-' ? total + s : total;
+  }, 0);
+  const maxAssignmentTotal = assignments.reduce((sum, a) => sum + (Number(a.total_marks) || 0), 0);
+
+  // حسابات التقييم المخصص
   const handleScoreChange = (studentId: string, column: any, val: string) => {
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
-    // 🚀 البحث برقم العمود المخصص column_id
     const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(column.id));
     
     setModifiedGrades(prev => ({
       ...prev,
       [key]: {
-        id: existingRecord?.id,
-        student_id: studentId,
-        column_id: column.id,
-        title: column.title,
-        score: scoreVal > column.max_score ? column.max_score : scoreVal,
-        max_score: column.max_score
+        id: existingRecord?.id, student_id: studentId, column_id: column.id, title: column.title,
+        score: scoreVal > column.max_score ? column.max_score : scoreVal, max_score: column.max_score
       }
     }));
   };
@@ -69,7 +76,6 @@ export default function GradebookPage() {
   const getCustomScoreDisplay = (studentId: string, columnId: string) => {
     const key = `${studentId}_${columnId}`;
     if (modifiedGrades[key] !== undefined) return modifiedGrades[key].score;
-    // 🚀 البحث برقم العمود المخصص column_id
     const record = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(columnId));
     return record ? Number(record.score) : '';
   };
@@ -81,10 +87,7 @@ export default function GradebookPage() {
 
   const handleSaveBulk = async () => {
     const gradesArray = Object.values(modifiedGrades);
-    if (gradesArray.length > 0) {
-      await saveCustomGradesBulk(selectedSection, selectedSubject, gradesArray);
-      setModifiedGrades({});
-    }
+    if (gradesArray.length > 0) { await saveCustomGradesBulk(selectedSection, selectedSubject, gradesArray); setModifiedGrades({}); }
   };
 
   const handleAddColumn = async () => {
@@ -98,23 +101,18 @@ export default function GradebookPage() {
     if (newColTitle && newColMax > 0 && selectedSection && selectedSubject && editingColId) {
       await editCustomColumn(selectedSection, selectedSubject, editingColId, newColTitle, newColMax);
       setIsEditColModalOpen(false); setEditingColId(''); setNewColTitle(''); setNewColMax(10);
-      
       const updatedModified: Record<string, any> = {};
       Object.keys(modifiedGrades).forEach(key => {
         if (modifiedGrades[key].column_id === editingColId) {
           updatedModified[key] = { ...modifiedGrades[key], title: newColTitle, max_score: newColMax };
           if (updatedModified[key].score > newColMax) updatedModified[key].score = newColMax;
-        } else {
-          updatedModified[key] = modifiedGrades[key];
-        }
+        } else { updatedModified[key] = modifiedGrades[key]; }
       });
       setModifiedGrades(updatedModified);
     }
   };
 
-  const openEditModal = (col: any) => {
-    setEditingColId(col.id); setNewColTitle(col.title); setNewColMax(col.max_score); setIsEditColModalOpen(true);
-  };
+  const openEditModal = (col: any) => { setEditingColId(col.id); setNewColTitle(col.title); setNewColMax(col.max_score); setIsEditColModalOpen(true); };
 
   const chartData = customColumns.map(col => {
     let totalScore = 0; let count = 0;
@@ -124,13 +122,9 @@ export default function GradebookPage() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-32 print:bg-white print:pb-0" dir="rtl">
-      
       <div className="hidden print:block text-center py-6 border-b-2 border-slate-900 mb-8">
          <h1 className="text-2xl font-black text-slate-900">سجل التقييم المستمر</h1>
-         <p className="text-slate-600 font-bold mt-2">
-            الفصل: {sections.find((s:any) => s.id === selectedSection)?.name || '-'} | 
-            المادة: {subjects.find((s:any) => s.id === selectedSubject)?.name || '-'}
-         </p>
+         <p className="text-slate-600 font-bold mt-2">الفصل: {sections.find((s:any) => s.id === selectedSection)?.name || '-'} | المادة: {subjects.find((s:any) => s.id === selectedSubject)?.name || '-'}</p>
       </div>
 
       <header className="bg-white border-b border-slate-200 px-8 py-8 sticky top-0 z-30 shadow-sm print:hidden">
@@ -174,88 +168,58 @@ export default function GradebookPage() {
         ) : (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 print:space-y-0">
             
-            <div className="flex items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-200 w-fit mx-auto print:hidden">
-               <button onClick={() => setActiveTab('custom')} className={`px-8 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
-                 <Edit3 className="w-4 h-4" /> التقييم اليدوي المستمر
+            {/* أزرار التبويبات */}
+            <div className="flex flex-wrap items-center justify-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-200 w-fit mx-auto print:hidden">
+               <button onClick={() => setActiveTab('custom')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'custom' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
+                 <Edit3 className="w-4 h-4" /> التقييم المستمر
                </button>
-               <button onClick={() => setActiveTab('exams')} className={`px-8 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
-                 <Trophy className="w-4 h-4" /> درجات الاختبارات
+               <button onClick={() => setActiveTab('exams')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'exams' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
+                 <Trophy className="w-4 h-4" /> الاختبارات
+               </button>
+               <button onClick={() => setActiveTab('assignments')} className={`px-6 py-3 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${activeTab === 'assignments' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-500 hover:bg-slate-50'}`}>
+                 <FileText className="w-4 h-4" /> الواجبات
                </button>
             </div>
 
+            {/* 1. التقييم اليدوي */}
             {activeTab === 'custom' && (
               <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden print:shadow-none print:border-none print:rounded-none">
                 <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between bg-slate-50/50 print:hidden gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><BarChart3 className="w-5 h-5" /></div>
-                    <span className="font-black text-slate-800 text-lg">دفتر المتابعة والتقييم</span>
-                  </div>
-                  
+                  <div className="flex items-center gap-3"><div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><BarChart3 className="w-5 h-5" /></div><span className="font-black text-slate-800 text-lg">دفتر المتابعة والتقييم</span></div>
                   <div className="flex gap-3">
-                    <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 px-5 py-2.5 rounded-xl transition-colors shadow-sm active:scale-95">
-                      <Printer className="w-4 h-4" /> تصدير PDF
-                    </button>
-
+                    <button onClick={() => window.print()} className="flex items-center gap-2 font-black text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 px-5 py-2.5 rounded-xl transition-colors shadow-sm active:scale-95"><Printer className="w-4 h-4" /> تصدير PDF</button>
                     <Dialog.Root open={isAddColModalOpen} onOpenChange={(open) => { setIsAddColModalOpen(open); if(!open){setNewColTitle(''); setNewColMax(10);} }}>
-                      <Dialog.Trigger asChild>
-                        <button className="flex items-center gap-2 font-black text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl transition-colors shadow-md shadow-indigo-200 active:scale-95">
-                          <Plus className="w-4 h-4" /> إضافة عمود
-                        </button>
-                      </Dialog.Trigger>
+                      <Dialog.Trigger asChild><button className="flex items-center gap-2 font-black text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl transition-colors shadow-md shadow-indigo-200 active:scale-95"><Plus className="w-4 h-4" /> إضافة عمود</button></Dialog.Trigger>
                       <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 print:hidden" />
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-3xl p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
-                          <div className="flex justify-between items-center mb-6">
-                            <Dialog.Title className="text-2xl font-black text-slate-800">إضافة نشاط تقييمي</Dialog.Title>
-                            <Dialog.Close className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></Dialog.Close>
-                          </div>
+                          <div className="flex justify-between items-center mb-6"><Dialog.Title className="text-2xl font-black text-slate-800">إضافة نشاط تقييمي</Dialog.Title><Dialog.Close className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></Dialog.Close></div>
                           <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-bold text-slate-500 mb-2">اسم النشاط (مثال: سلوك، عرض)</label>
-                              <input type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-bold text-slate-500 mb-2">الدرجة العظمى</label>
-                              <input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" />
-                            </div>
+                            <div><label className="block text-sm font-bold text-slate-500 mb-2">اسم النشاط</label><input type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
+                            <div><label className="block text-sm font-bold text-slate-500 mb-2">الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
                             <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl mt-4 hover:bg-indigo-700 disabled:opacity-50">إضافة للدفتر</button>
                           </div>
                         </Dialog.Content>
                       </Dialog.Portal>
                     </Dialog.Root>
-
-                    {/* نافذة التعديل المنفصلة السليمة */}
                     <Dialog.Root open={isEditColModalOpen} onOpenChange={setIsEditColModalOpen}>
                       <Dialog.Portal>
                         <Dialog.Overlay className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 print:hidden" />
                         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-3xl p-8 shadow-2xl z-50 w-full max-w-sm print:hidden" dir="rtl">
-                          <div className="flex justify-between items-center mb-6">
-                            <Dialog.Title className="text-2xl font-black text-slate-800">تعديل التقييم</Dialog.Title>
-                            <Dialog.Close className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></Dialog.Close>
-                          </div>
+                          <div className="flex justify-between items-center mb-6"><Dialog.Title className="text-2xl font-black text-slate-800">تعديل التقييم</Dialog.Title><Dialog.Close className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></Dialog.Close></div>
                           <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-bold text-slate-500 mb-2">تعديل اسم النشاط</label>
-                              <input type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-bold text-slate-500 mb-2">تعديل الدرجة العظمى</label>
-                              <input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" />
-                            </div>
+                            <div><label className="block text-sm font-bold text-slate-500 mb-2">تعديل اسم النشاط</label><input type="text" value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
+                            <div><label className="block text-sm font-bold text-slate-500 mb-2">تعديل الدرجة العظمى</label><input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-indigo-600 outline-none" /></div>
                             <button onClick={handleEditColumn} disabled={!newColTitle} className="w-full bg-amber-500 text-white font-black py-4 rounded-xl mt-4 hover:bg-amber-600 disabled:opacity-50">حفظ التعديلات</button>
                           </div>
                         </Dialog.Content>
                       </Dialog.Portal>
                     </Dialog.Root>
-
                   </div>
                 </div>
 
                 {customColumns.length === 0 ? (
-                  <div className="p-20 text-center flex flex-col items-center print:hidden">
-                    <Edit3 className="w-16 h-16 text-slate-200 mb-4" />
-                    <p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.<br/>انقر على زر "إضافة عمود" للبدء.</p>
-                  </div>
+                  <div className="p-20 text-center flex flex-col items-center print:hidden"><Edit3 className="w-16 h-16 text-slate-200 mb-4" /><p className="text-lg font-black text-slate-400">لم تقم بإضافة أي أعمدة تقييم لهذا الفصل بعد.</p></div>
                 ) : (
                   <>
                     <div className="overflow-x-auto print:overflow-visible">
@@ -265,10 +229,7 @@ export default function GradebookPage() {
                             <th className="sticky right-0 z-20 bg-slate-900 text-white font-black py-5 px-6 border-b border-l border-slate-800 w-64 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)] print:bg-slate-100 print:text-black print:border-slate-300 print:shadow-none">اسم الطالب</th>
                             {customColumns.map(c => (
                               <th key={c.id} className="bg-slate-50 text-slate-700 font-black py-4 px-4 border-b border-slate-200 text-center min-w-[120px] print:border-slate-300 group">
-                                <div className="flex items-center justify-center gap-2">
-                                  <div className="text-sm truncate" title={c.title}>{c.title}</div>
-                                  <button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button>
-                                </div>
+                                <div className="flex items-center justify-center gap-2"><div className="text-sm truncate" title={c.title}>{c.title}</div><button onClick={() => openEditModal(c)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all print:hidden"><Pencil className="w-3.5 h-3.5" /></button></div>
                                 <div className="text-[10px] text-slate-400 mt-1 print:text-slate-600">من {c.max_score}</div>
                               </th>
                             ))}
@@ -282,18 +243,10 @@ export default function GradebookPage() {
                             const total = getCustomTotal(student.id);
                             return (
                               <tr key={student.id} className={`hover:bg-slate-50 transition-colors group print:border-b print:border-slate-300 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                                <td className="sticky right-0 z-10 font-black text-sm py-2 px-6 border-b border-l border-slate-100 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-colors bg-inherit group-hover:bg-indigo-50 print:bg-transparent print:shadow-none print:border-slate-300">
-                                  {student.name}
-                                </td>
+                                <td className="sticky right-0 z-10 font-black text-sm py-2 px-6 border-b border-l border-slate-100 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-colors bg-inherit group-hover:bg-indigo-50 print:bg-transparent print:shadow-none print:border-slate-300">{student.name}</td>
                                 {customColumns.map(c => (
                                   <td key={c.id} className="border-b border-slate-100 py-2 px-2 text-center print:border-slate-300">
-                                    <input 
-                                      type="number" 
-                                      max={c.max_score} min="0"
-                                      value={getCustomScoreDisplay(student.id, c.id)}
-                                      onChange={(e) => handleScoreChange(student.id, c, e.target.value)}
-                                      className="w-16 mx-auto text-center font-bold text-slate-700 bg-transparent hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-lg py-1.5 outline-none transition-all print:border-none print:bg-transparent print:p-0 print:w-auto"
-                                    />
+                                    <input type="number" max={c.max_score} min="0" value={getCustomScoreDisplay(student.id, c.id)} onChange={(e) => handleScoreChange(student.id, c, e.target.value)} className="w-16 mx-auto text-center font-bold text-slate-700 bg-transparent hover:bg-slate-200 focus:bg-white focus:ring-2 focus:ring-indigo-500 rounded-lg py-1.5 outline-none transition-all print:border-none print:bg-transparent print:p-0 print:w-auto" />
                                   </td>
                                 ))}
                                 <td className="border-b border-l border-emerald-50 py-2 px-6 text-center font-black bg-emerald-50/30 text-emerald-700 print:bg-transparent print:border-slate-300">{total}</td>
@@ -303,7 +256,6 @@ export default function GradebookPage() {
                         </tbody>
                       </table>
                     </div>
-                    
                     <div className="p-8 bg-slate-50/50 border-t border-slate-100 print:hidden">
                       <h3 className="font-black text-slate-700 mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-500"/> متوسط الأداء في الأنشطة</h3>
                       <div className="h-64 w-full">
@@ -314,9 +266,7 @@ export default function GradebookPage() {
                             <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontWeight: 'bold'}} />
                             <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '16px', fontWeight: 'bold', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)'}} />
                             <Bar dataKey="متوسط_الدرجات" radius={[6, 6, 0, 0]}>
-                              {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.متوسط_الدرجات > entry.fullMark * 0.8 ? '#10b981' : entry.متوسط_الدرجات > entry.fullMark * 0.5 ? '#6366f1' : '#f43f5e'} />
-                              ))}
+                              {chartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.متوسط_الدرجات > entry.fullMark * 0.8 ? '#10b981' : entry.متوسط_الدرجات > entry.fullMark * 0.5 ? '#6366f1' : '#f43f5e'} />))}
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -327,10 +277,12 @@ export default function GradebookPage() {
               </div>
             )}
 
+            {/* 2. الاختبارات */}
             {activeTab === 'exams' && (
                <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden print:hidden">
                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                  <div className="flex items-center gap-2"><Trophy className="w-5 h-5 text-amber-500" /><span className="font-black text-slate-700">كشف نتائج الاختبارات (للقراءة فقط)</span></div>
+                 <button onClick={() => window.print()} className="flex items-center gap-2 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors"><Printer className="w-4 h-4" /> تصدير PDF</button>
                </div>
                <div className="overflow-x-auto">
                  <table className="w-full text-right border-collapse">
@@ -363,6 +315,47 @@ export default function GradebookPage() {
                  </table>
                </div>
                {assessments.length === 0 && (<div className="p-8 text-center text-slate-500 font-bold border-t border-slate-100 bg-slate-50/50">لم يتم العثور على أي اختبارات لهذه المادة.</div>)}
+             </div>
+            )}
+
+            {/* 3. الواجبات 🚀 */}
+            {activeTab === 'assignments' && (
+               <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden print:hidden">
+               <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                 <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-500" /><span className="font-black text-slate-700">كشف نتائج الواجبات (للقراءة فقط)</span></div>
+                 <button onClick={() => window.print()} className="flex items-center gap-2 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors"><Printer className="w-4 h-4" /> تصدير PDF</button>
+               </div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-right border-collapse">
+                   <thead>
+                     <tr>
+                       <th className="sticky right-0 z-20 bg-slate-900 text-white font-black py-5 px-6 border-b border-l border-slate-800 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.1)] w-64">اسم الطالب</th>
+                       {assignments.map(a => (
+                         <th key={a.id} className="bg-slate-50 text-slate-700 font-black py-4 px-4 border-b border-slate-200 text-center min-w-[140px]">
+                           <div className="text-sm truncate max-w-[120px] mx-auto" title={a.title}>{a.title}</div><div className="text-[10px] text-slate-400 mt-1">من {a.total_marks}</div>
+                         </th>
+                       ))}
+                       <th className="bg-indigo-50 text-indigo-900 font-black py-4 px-6 border-b border-l border-indigo-100 text-center min-w-[120px]">
+                         <div className="flex items-center justify-center gap-1.5"><Medal className="w-4 h-4 text-indigo-600" /> المجموع</div><div className="text-[10px] text-indigo-500 mt-1">من {maxAssignmentTotal}</div>
+                       </th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {students.map((student, idx) => {
+                       const studentTotal = getAssignmentTotal(student.id);
+                       const percentage = maxAssignmentTotal > 0 ? Math.round((studentTotal / maxAssignmentTotal) * 100) : 0;
+                       return (
+                         <tr key={student.id} className={`hover:bg-slate-50 transition-colors group ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                           <td className="sticky right-0 z-10 font-black text-sm py-4 px-6 border-b border-l border-slate-100 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.05)] transition-colors bg-inherit group-hover:bg-indigo-50">{student.name}</td>
+                           {assignments.map(a => { const score = getAssignmentScore(student.id, a.id); return (<td key={a.id} className="border-b border-slate-100 py-4 px-4 text-center font-bold text-slate-600">{score === '-' ? <span className="text-slate-300">-</span> : score}</td>); })}
+                           <td className="border-b border-l border-indigo-100 py-4 px-6 text-center font-black bg-indigo-50/30"><span className={percentage >= 90 ? 'text-emerald-600' : percentage >= 50 ? 'text-indigo-600' : 'text-rose-500'}>{studentTotal}</span></td>
+                         </tr>
+                       );
+                     })}
+                   </tbody>
+                 </table>
+               </div>
+               {assignments.length === 0 && (<div className="p-8 text-center text-slate-500 font-bold border-t border-slate-100 bg-slate-50/50">لم يتم العثور على أي واجبات لهذه المادة.</div>)}
              </div>
             )}
 
