@@ -8,11 +8,7 @@ export function useGradebook() {
   const [saving, setSaving] = useState(false);
   
   const [gradeData, setGradeData] = useState<{ 
-    students: any[], 
-    assessments: any[], 
-    scores: any[],
-    customColumns: any[],
-    customScores: any[]
+    students: any[], assessments: any[], scores: any[], customColumns: any[], customScores: any[]
   }>({
     students: [], assessments: [], scores: [], customColumns: [], customScores: []
   });
@@ -42,7 +38,8 @@ export function useGradebook() {
           attemptsData = attempts || [];
         }
 
-        const { data: grades } = await supabase.from('grades').select('id, student_id, exam_id, score, exam_type, title').in('student_id', studentIds).eq('subject_id', subjectId).eq('section_id', sectionId);
+        // 🚀 سحب الدرجات مع العمود الجديد column_id
+        const { data: grades } = await supabase.from('grades').select('id, student_id, exam_id, column_id, score, exam_type, title').in('student_id', studentIds).eq('subject_id', subjectId).eq('section_id', sectionId);
           
         archivedGradesData = grades?.filter(g => g.exam_type === 'exam') || [];
         customScoresData = grades?.filter(g => g.exam_type === 'custom') || [];
@@ -64,11 +61,7 @@ export function useGradebook() {
       formattedStudents.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
       setGradeData({
-        students: formattedStudents,
-        assessments: examsData || [],
-        scores: mergedScores,
-        customColumns: customColsData || [],
-        customScores: customScoresData
+        students: formattedStudents, assessments: examsData || [], scores: mergedScores, customColumns: customColsData || [], customScores: customScoresData
       });
 
     } catch (error) { console.error('Error fetching gradebook:', error); } finally { setLoading(false); }
@@ -83,7 +76,6 @@ export function useGradebook() {
     } catch (err) { console.error('Error adding column:', err); }
   };
 
-  // 🚀 الدالة الجديدة: تعديل عمود التقييم
   const editCustomColumn = async (sectionId: string, subjectId: string, columnId: string, title: string, maxScore: number) => {
     if (!user) return;
     try {
@@ -98,8 +90,17 @@ export function useGradebook() {
     setSaving(true);
     try {
       const payload = gradesArray.map(g => ({
-        id: g.id || undefined, student_id: g.student_id, subject_id: subjectId, section_id: sectionId,
-        exam_type: 'custom', title: g.title, exam_id: g.column_id, score: g.score, max_score: g.max_score, recorded_by: user.id
+        id: g.id || undefined, 
+        student_id: g.student_id, 
+        subject_id: subjectId, 
+        section_id: sectionId,
+        exam_type: 'custom', 
+        title: g.title, 
+        column_id: g.column_id, // 🚀 استخدمنا العمود المخصص للتقييمات اليدوية لتفادي أخطاء الداتا بيز
+        exam_id: null, // لا نضع شيء في اختبار النظام
+        score: g.score, 
+        max_score: g.max_score, 
+        recorded_by: user.id
       }));
       const { error } = await supabase.from('grades').upsert(payload, { onConflict: 'id' });
       if (error) throw error;
