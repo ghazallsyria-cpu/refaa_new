@@ -22,8 +22,14 @@ export function useGradebook() {
       const { data: examsData } = await supabase.from('exams').select('id, title, max_score, status').eq('subject_id', subjectId).in('status', ['published', 'archived']);
       const { data: customColsData } = await supabase.from('gradebook_columns').select('*').eq('section_id', sectionId).eq('subject_id', subjectId).order('created_at', { ascending: true });
       
-      // 🚀 سحب الواجبات مع ضمان قراءة الدرجة العظمى سواء كانت total_marks أو max_score
-      const { data: assignmentsData } = await supabase.from('assignments').select('id, title, total_marks, max_score, status').eq('subject_id', subjectId).in('status', ['published', 'archived', 'closed']);
+      // 🚀 1. سحب الواجبات بأمان تام (استخدام * لتفادي خطأ الأعمدة المفقودة)
+      const { data: rawAssignments, error: assignErr } = await supabase.from('assignments').select('*').eq('subject_id', subjectId);
+      if (assignErr) console.error("Assignments Fetch Error:", assignErr);
+      
+      const assignmentsData = (rawAssignments || []).filter(a => {
+         const stat = a.status || 'published';
+         return ['published', 'archived', 'closed'].includes(stat);
+      });
 
       const studentIds = studentsData?.map(s => s.id) || [];
       const examIds = examsData?.map(e => e.id) || [];
@@ -44,8 +50,10 @@ export function useGradebook() {
         const { data: grades } = await supabase.from('grades').select('student_id, exam_id, score').in('student_id', studentIds).eq('subject_id', subjectId).eq('section_id', sectionId).eq('exam_type', 'exam');
         archivedGradesData = grades || [];
 
+        // 🚀 2. سحب التسليمات بأمان تام
         if (assignmentIds.length > 0) {
-           const { data: submissions } = await supabase.from('assignment_submissions').select('student_id, assignment_id, grade, score').in('assignment_id', assignmentIds).in('student_id', studentIds);
+           const { data: submissions, error: subErr } = await supabase.from('assignment_submissions').select('*').in('assignment_id', assignmentIds).in('student_id', studentIds);
+           if (subErr) console.error("Submissions Fetch Error:", subErr);
            assignmentSubmissionsData = submissions || [];
         }
 
