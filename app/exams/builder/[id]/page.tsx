@@ -148,26 +148,9 @@ export default function QuizBuilder() {
           }
         });
 
+        // 🚀 الهوك يقوم الآن بجلب الأنواع الحقيقية، لا نحتاج للبحث بـ Regex هنا
         setQuestions((questionsData || []).map((q: any) => {
-           let qType = q.type;
-           let qContent = q.content || '';
-           
-           // 🚀 الإصلاح: استخدام RegExp آمن لحماية الكود من الانهيار
-           const typeRegex = new RegExp('');
-           const globalTypeRegex = new RegExp('', 'g');
-           
-           const typeMatch = qContent.match(typeRegex);
-           if (typeMatch) {
-               qType = typeMatch[1];
-               qContent = qContent.replace(globalTypeRegex, '');
-           } else if (qContent.includes('') || qType === 'file_upload') {
-               qType = 'file';
-               qContent = qContent.replace(globalTypeRegex, '');
-           } else if (qType === 'open') {
-               qType = 'essay';
-           }
-
-           return {...q, type: qType, content: qContent.trim(), is_required: q.is_required ?? true};
+           return {...q, type: q.type, content: q.content, is_required: q.is_required ?? true};
         }));
       } else {
         addQuestion('multiple_choice');
@@ -509,14 +492,7 @@ export default function QuizBuilder() {
                            const type = e.target.value as QuestionType;
                            const updates: Partial<any> = { type };
                            
-                           let cleanContent = q.content || '';
-                           if (type !== 'file' && cleanContent) {
-                               // 🚀 الإصلاح: استخدام RegExp آمن لحماية الكود
-                               const globalTypeRegex = new RegExp('', 'g');
-                               cleanContent = cleanContent.replace(globalTypeRegex, '');
-                               updates.content = cleanContent;
-                           }
-
+                           // 🚀 الإصلاح: إرسال القيمة المباشرة وعدم التلاعب بالمحتوى هنا
                            if (['multiple_choice', 'multi_select', 'checkbox', 'radio'].includes(type)) {
                               updates.options = (q.options && q.options.length > 0) ? q.options : [{ id: crypto.randomUUID(), content: 'خيار 1', is_correct: false }];
                            } else if (type === 'true_false') {
