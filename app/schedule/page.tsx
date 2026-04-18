@@ -21,9 +21,6 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
-// ==========================================
-// 🛠️ دوال مساعدة لتنسيق النصوص والروابط
-// ==========================================
 const normalizeUrl = (url?: string) => {
   if (!url) return '';
   const clean = url.trim();
@@ -71,7 +68,6 @@ export default function SchedulePage() {
   const [swappingFrom, setSwappingFrom] = useState<any | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // 🖨️ حالات محرك الـ PDF
   const [printMode, setPrintMode] = useState<'single' | 'all-teachers' | 'all-sections'>('single');
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
@@ -166,7 +162,6 @@ export default function SchedulePage() {
       alert('يرجى تعبئة جميع الحقول المطلوبة.');
       return;
     }
-    const safeObj = (obj: any) => Array.isArray(obj) ? obj[0] : obj;
 
     try {
       try {
@@ -239,22 +234,17 @@ export default function SchedulePage() {
     );
   };
 
-  // ==========================================
-  // 🚀 محرك PDF الهجين (The Hybrid PDF Engine)
-  // ==========================================
   const executePDF = async (mode: 'single' | 'all-teachers' | 'all-sections') => {
     try {
       setIsGeneratingPDF(true);
       setPrintMode(mode);
 
-      // التأكد من جلب جميع البيانات إذا كان الطلب جماعيًا
       if (mode !== 'single') {
         setShowAllSchedules(true);
         const allData = await fetchSchedulesData({});
         setScheduleData(allData || []);
       }
 
-      // الانتظار ليتم بناء العناصر (DOM)
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const containers = document.querySelectorAll('.pdf-page-container');
@@ -262,7 +252,6 @@ export default function SchedulePage() {
         throw new Error('لم يتم العثور على جداول صالحة للطباعة (ربما تكون فارغة).');
       }
 
-      // إعداد jsPDF بمقاس A4 Landscape
       const pdf = new jsPDF('landscape', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
@@ -272,7 +261,6 @@ export default function SchedulePage() {
         
         const el = containers[i] as HTMLElement;
         
-        // التقاط العنصر كصورة بدون استخدام scale معتمد على jsPDF
         const canvas = await html2canvas(el, { 
           scale: 2, 
           useCORS: true,
@@ -280,14 +268,9 @@ export default function SchedulePage() {
           logging: false
         });
         
-        // تحويل الصورة واستخدامها مباشرة في jsPDF
         const imgData = canvas.toDataURL('image/png');
-        
-        // حساب أبعاد الصورة لتلائم صفحة الـ PDF دون تجاوز الهوامش إذا لزم الأمر
-        // هنا نملأ الصفحة تماماً بالصورة
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
         
-        // 🔗 حقن الروابط القابلة للنقر داخل الـ PDF
         const links = el.querySelectorAll('a.zoom-link');
         const elementRect = el.getBoundingClientRect();
         
@@ -505,7 +488,6 @@ export default function SchedulePage() {
   return (
     <div dir="rtl">
       
-      {/* ⏳ شاشة التحميل للـ PDF */}
       <AnimatePresence>
         {isGeneratingPDF && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md text-white">
@@ -533,7 +515,6 @@ export default function SchedulePage() {
             <h1 className="text-3xl font-black text-slate-900">{authRole === 'teacher' ? 'جدولي الدراسي' : 'الجدول الشامل'}</h1>
           </div>
           
-          {/* أزرار تحميل الـ PDF */}
           <div className="flex flex-col sm:flex-row flex-wrap gap-3">
             <button onClick={() => executePDF('single')} className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-black text-white hover:bg-slate-800 transition-all active:scale-95">
               <FileDown className="h-4 w-4" /> تحميل الجدول الحالي (PDF)
@@ -603,6 +584,7 @@ export default function SchedulePage() {
                   <button onClick={() => { setIsModalOpen(false); setEditingId(null); }} className="p-2 bg-slate-50 hover:bg-rose-50 rounded-xl"><X className="h-5 w-5" /></button>
                 </div>
                 <div className="space-y-5">
+                  {/* ✅ الإصلاح الأول: إزالة </div> المشتت من داخل الـ ternary */}
                   <div>
                     <label className="block text-sm font-bold mb-2">{viewType === 'teacher' ? 'اختيار الفصل' : 'اختيار المعلم'}</label>
                     {viewType === 'teacher' ? (
@@ -610,7 +592,6 @@ export default function SchedulePage() {
                         <option value="">-- اختر الفصل --</option>
                         {sections.map(s => <option key={s.id} value={s.id}>{formatClassName(Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name)} - {s.name}</option>)}
                       </select>
-                                </div>
                     ) : (
                       <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none" value={formData.teacher_id} onChange={(e) => setFormData({ ...formData, teacher_id: e.target.value, subject_id: '' })}>
                         <option value="">-- اختر المعلم --</option>
@@ -620,7 +601,7 @@ export default function SchedulePage() {
                   </div>
                   <div>
                     <label className="block text-sm font-bold mb-2">المادة الدراسية</label>
-                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none disabled:opacity-50" value={formData.subject_id} disabled={!formData.section_id || !formData.teacher_id} onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}>
+                    <select className="w-full p-4 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold outline-none appearance-none disabled:opacity-50" value={formData.subject_id} disabled={!formData.section_id && !formData.teacher_id} onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}>
                       <option value="">-- اختر المادة --</option>
                       {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
@@ -662,6 +643,7 @@ export default function SchedulePage() {
                         const displaySlot = slot || (swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id)) ? swappingFrom : others[0]);
 
                         return (
+                          // ✅ الإصلاح الثاني: </div> بدلاً من </motion.div> لأن العنصر الخارجي div وليس motion.div
                           <div key={`${day.id}-${p.id}`} className={`relative p-4 rounded-2xl min-h-[120px] flex flex-col justify-between transition-all group ${slot ? 'bg-white shadow-md border border-indigo-200' : displaySlot ? 'bg-slate-50 border border-slate-200' : 'bg-slate-50/50 border border-dashed border-slate-200 hover:bg-slate-50'} ${isAdmin ? 'cursor-pointer hover:border-indigo-400' : ''}`}
                             onClick={() => {
                               if (isAdmin) {
@@ -696,10 +678,11 @@ export default function SchedulePage() {
                                     </div>
                                   </div>
                                 )}
-</div> {/* ✅ هذا هو وسم الإغلاق المفقود الذي سقط سهواً */}                            ) : (
+                              </div>
+                            ) : (
                               <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-50"><Plus className="w-6 h-6" /></div>
                             )}
-                          </motion.div>
+                          </div>
                         );
                       })}
                     </React.Fragment>
@@ -711,9 +694,7 @@ export default function SchedulePage() {
         )}
       </div>
 
-      {/* ======================================================== */}
-      {/* 🖨️ منطقة الطباعة الخفية (معالجة الأخطاء) */}
-      {/* ======================================================== */}
+      {/* منطقة الطباعة الخفية */}
       <div className="fixed top-[20000px] left-[20000px] opacity-0 pointer-events-none select-none overflow-hidden" aria-hidden="true">
         {isGeneratingPDF && (() => {
           let entitiesToPrint: any[] = [];
@@ -722,7 +703,6 @@ export default function SchedulePage() {
           } else if (printMode === 'all-sections') {
             entitiesToPrint = sections.filter(sec => scheduleData.some(s => String(s.section_id) === String(sec.id)));
           } else {
-            // التعامل مع المعلم الذي قد لا يحتوي على حصص في الطباعة الفردية
             const singleEntity = viewType === 'teacher' ? teachers.find(t => String(t.id) === String(selectedId)) : sections.find(s => String(s.id) === String(selectedId));
             if(singleEntity) {
                entitiesToPrint = [singleEntity];
@@ -733,13 +713,11 @@ export default function SchedulePage() {
             const entityId = entity.id;
             const printType = printMode === 'all-teachers' || (printMode === 'single' && viewType === 'teacher') ? 'teacher' : 'section';
             const entitySchedule = getEntitySchedule(String(entityId), printType);
-            
             const entityName = getEntityTitle(entity, printType);
 
             return (
               <div key={`pdf-${entityId}`} className="pdf-page-container" dir="rtl" style={{ width: '1122px', height: '793px', padding: '40px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: '"Cairo", sans-serif', display: 'flex', flexDirection: 'column' }}>
                 
-                {/* ترويسة PDF */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '4px solid #312e81', paddingBottom: '16px', marginBottom: '24px' }}>
                   <div>
                     <h1 style={{ fontSize: '32px', fontWeight: 900, margin: '0 0 8px 0', color: '#1e1b4b' }}>الجدول الدراسي الأسبوعي</h1>
@@ -755,7 +733,6 @@ export default function SchedulePage() {
                   </div>
                 </div>
 
-                {/* جدول PDF */}
                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #cbd5e1', borderRadius: '12px', flex: 1, tableLayout: 'fixed' }}>
                   <thead>
                     <tr>
@@ -803,7 +780,6 @@ export default function SchedulePage() {
                   </tbody>
                 </table>
 
-                {/* تذييل PDF */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '3px solid #cbd5e1', paddingTop: '16px', marginTop: '24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                      <div style={{ width: '40px', height: '40px', backgroundColor: '#312e81', color: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900 }}>R</div>
