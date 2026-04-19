@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, 
   LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, 
-  RefreshCw, Calculator, Layers, PieChart, Loader2, BookType, Printer, X
+  RefreshCw, Calculator, Layers, PieChart, Loader2, BookType, Printer, X, Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -43,23 +43,23 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 🚀 المفتاح الحي (لمنع تداخل الكاش عند تغيير الحصص)
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
-  // مفتاح الكاش اللحظي الخاص بالمعلم بناءً على اختياراته
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
     return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
   }, [user?.id, selectedSection, selectedSubject, date, period, currentRole]);
 
   // =====================================
-  // 2. حالات الإدارة (الميزة الجديدة للمدير)
+  // 2. حالات الإدارة 
   // =====================================
   const [snapshotDate, setSnapshotDate] = useState<string>('');
   const [dailyStats, setDailyStats] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   
   const [deptHeads, setDeptHeads] = useState<Record<string, string>>({});
+  // 🚀 حالة جديدة لتخزين أسماء الأقسام المعدلة
+  const [customDeptNames, setCustomDeptNames] = useState<Record<string, string>>({});
   const [excludedRecords, setExcludedRecords] = useState<Set<string>>(new Set());
 
   // =====================================
@@ -72,7 +72,6 @@ export default function AttendancePage() {
   const [studentDbError, setStudentDbError] = useState<string | null>(null);
   const [activeSubjectTab, setActiveSubjectTab] = useState<string | null>(null);
 
-  // تهيئة التاريخ
   useEffect(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     setDate(today);
@@ -100,6 +99,30 @@ export default function AttendancePage() {
       if (error) throw error;
       setDailyStats(data || []);
       setExcludedRecords(new Set()); 
+      // تهيئة أسماء الأقسام الافتراضية
+      const newCustomDeptNames: Record<string, string> = {};
+      data?.forEach(stat => {
+        const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
+        const subjName = subjData?.name || 'مادة غير محددة';
+        let dept = 'أقسام أخرى';
+        if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) dept = 'قسم العلوم';
+        else if (/(رياضيات)/.test(subjName)) dept = 'قسم الرياضيات';
+        else if (/(عربي|عربية)/.test(subjName)) dept = 'قسم اللغة العربية';
+        else if (/(إنجليزي|انجليزي)/.test(subjName)) dept = 'قسم اللغة الإنجليزية';
+        else if (/(إسلامية|قرآن|تجويد)/.test(subjName)) dept = 'قسم التربية الإسلامية';
+        else if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) dept = 'قسم الاجتماعيات';
+        else if (/(حاسوب|معلوماتية)/.test(subjName)) dept = 'قسم الحاسوب';
+        
+        const classData: any = Array.isArray(stat.sections?.classes) ? stat.sections?.classes[0] : stat.sections?.classes;
+        const className = classData?.name || '';
+        const stage = /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className) ? 'المرحلة المتوسطة' : 'المرحلة الثانوية';
+        
+        const deptKey = `${stage}-${dept}`;
+        if (!newCustomDeptNames[deptKey]) {
+          newCustomDeptNames[deptKey] = dept;
+        }
+      });
+      setCustomDeptNames(newCustomDeptNames);
     } catch (error: any) {
       console.error("Admin Fetch Error:", error);
     } finally {
@@ -202,7 +225,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم (المحصنة بقفل التزامن)
+  // 🚀 دوال المعلم مع الكاش اللحظي
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -231,7 +254,6 @@ export default function AttendancePage() {
 
   const loadStudentsAndAttendance = useCallback(async () => {
     if (selectedSection && date && currentRole === 'teacher') {
-      // إيقاف الكاش مؤقتاً أثناء سحب البيانات لمنع التداخل
       setActiveKey(null);
       
       const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
@@ -246,7 +268,6 @@ export default function AttendancePage() {
         const localDraftKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
         const cachedStr = localStorage.getItem(localDraftKey);
         
-        // 🚀 الأولوية للبيانات المحفوظة رسمياً في القاعدة
         const hasDbData = res.attendance && Object.keys(res.attendance).length > 0;
 
         if (hasDbData) {
@@ -266,7 +287,6 @@ export default function AttendancePage() {
           setLessonTitle(res.savedLessonTitle || '');
         }
         
-        // تفعيل الكاش اللحظي بعد أن أصبحت البيانات المعروضة مطابقة للحصة 100%
         setActiveKey(localDraftKey);
       }
     }
@@ -274,7 +294,6 @@ export default function AttendancePage() {
 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
 
-  // 🚀 حفظ الكاش التلقائي الآمن (لا يحفظ إلا إذا كان المفتاح نشطاً)
   useEffect(() => {
     if (currentRole === 'teacher' && draftKey && activeKey === draftKey && students.length > 0) {
       if (Object.keys(attendance).length > 0 || lessonTitle) {
@@ -293,7 +312,6 @@ export default function AttendancePage() {
       await saveAttendance(selectedSection, selectedSubject, date, period, attendance, students, lessonTitle);
       setMessage({ text: 'تم حفظ سجل الحضور والغياب بنجاح!', type: 'success' });
       
-      // تنظيف الكاش وإعادة السحب
       if (draftKey) localStorage.removeItem(draftKey);
       setActiveKey(null);
       loadStudentsAndAttendance(); 
@@ -366,7 +384,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة الإدارة (الميزة التي طلبها المدير)
+  // 🚀 واجهة الإدارة 
   // ==========================================================
   if (isAdmin) {
     return (
@@ -424,13 +442,22 @@ export default function AttendancePage() {
                     const recordsList = stageData[dept];
                     const deptKey = `${stage}-${dept}`;
                     const currentHead = deptHeads[deptKey] || '';
+                    const customDeptName = customDeptNames[deptKey] || dept;
 
                     return (
                       <div key={dept} className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
                         <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 bg-[#090b14]/30">
-                          <h3 className="text-xl font-black text-emerald-400 flex items-center gap-3 shrink-0">
-                            <Layers className="w-6 h-6" /> {dept}
-                          </h3>
+                          <div className="flex items-center gap-3 w-full xl:w-auto">
+                            <Layers className="w-6 h-6 text-emerald-400 shrink-0" />
+                            {/* 🚀 جعل اسم القسم قابلاً للتحرير للمدير */}
+                            <input 
+                              type="text" 
+                              value={customDeptName}
+                              onChange={(e) => setCustomDeptNames(prev => ({...prev, [deptKey]: e.target.value}))}
+                              className="bg-transparent border-none text-xl font-black text-emerald-400 outline-none w-full placeholder:text-slate-600 focus:ring-0"
+                              placeholder="اسم القسم..."
+                            />
+                          </div>
                           
                           <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
                             <div className="flex items-center gap-3 bg-[#090b14]/80 px-4 py-2.5 rounded-2xl border border-white/10 w-full sm:w-auto">
@@ -446,7 +473,7 @@ export default function AttendancePage() {
                             <button 
                               onClick={() => {
                                 const finalRecords = recordsList.filter(r => !excludedRecords.has(r.id));
-                                printDepartmentReport(stage, dept, finalRecords, currentHead);
+                                printDepartmentReport(stage, customDeptName, finalRecords, currentHead);
                               }} 
                               className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black transition-all border border-white/10 active:scale-95 w-full sm:w-auto shrink-0"
                             >
@@ -557,10 +584,8 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم (لوحة الرصد + إصلاح الإحصائيات)
+  // 🚀 واجهة المعلم (رصد الغياب والتحكم)
   // ==========================================================
-  
-  // 🚀 إصلاح الإحصائيات (تعتمد حصرياً على الطلاب الحاليين لتجنب الأرقام السالبة)
   let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
   students.forEach(s => {
     const status = attendance[s.id];
@@ -607,7 +632,6 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* 🚀 أدوات البحث والفلترة (متجاوبة 100% مع الجوال مع إصلاح الفصل) */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="space-y-2 flex flex-col w-full">
@@ -653,7 +677,6 @@ export default function AttendancePage() {
           )}
         </div>
 
-        {/* 🚀 إحصائيات المعلم العلوية الزجاجية (الآن دقيقة 100%) */}
         {students.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
