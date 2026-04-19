@@ -60,7 +60,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#090b14]/80 backdrop-blur-md">
+      // 🚀 تم تغيير لون الخلفية لـ Slate 900 المريح
+      <div className="flex h-screen w-full items-center justify-center bg-[#0f172a]/80 backdrop-blur-md">
         <div className="relative">
           <div className="h-16 w-16 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.5)]"></div>
           <div className="absolute inset-0 flex items-center justify-center"><School className="h-6 w-6 text-emerald-400 animate-pulse"/></div>
@@ -71,15 +72,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (platformClosed && !isPublicPage) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#090b14] p-4 text-center relative overflow-hidden" dir="rtl">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-500 to-red-600 shadow-[0_0_30px_rgba(244,63,94,0.4)] mb-8 border border-white/20">
+      // 🚀 تم تغيير لون الخلفية لـ Slate 900
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f172a] p-4 text-center relative overflow-hidden" dir="rtl">
+        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-500 to-red-600 shadow-[0_0_30px_rgba(244,63,94,0.4)] mb-8 border border-white/10">
           <School className="h-12 w-12 text-white" />
         </motion.div>
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-[#131836]/80 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-2xl border border-white/10 max-w-md w-full">
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-[#1e293b]/60 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-2xl border border-white/10 max-w-md w-full">
           <div className="flex justify-center mb-6"><div className="bg-amber-500/20 p-4 rounded-full border border-amber-500/30 animate-bounce"><AlertTriangle className="h-10 w-10 text-amber-400" /></div></div>
           <h1 className="text-3xl font-black text-white mb-4 tracking-tight">المنصة مغلقة مؤقتاً</h1>
-          <p className="text-slate-300 mb-8 font-bold text-sm bg-[#090b14]/50 p-4 rounded-2xl border border-white/5">{closeMessage}</p>
-          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-lg text-sm font-black text-slate-900 bg-emerald-500 hover:bg-emerald-400 transition-all active:scale-95">العودة لتسجيل الدخول</button>
+          <p className="text-slate-300 mb-8 font-bold text-sm bg-[#0f172a]/50 p-4 rounded-2xl border border-white/5">{closeMessage}</p>
+          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-lg text-sm font-black text-white bg-emerald-600 hover:bg-emerald-500 transition-all active:scale-95">العودة لتسجيل الدخول</button>
         </motion.div>
       </div>
     );
@@ -90,12 +92,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !isPublicPage;
 
   return (
-    // 🚀 جعلنا الخلفية هنا شفافة لكي تظهر الخلفية المضيئة الموجودة في layout.tsx
     <div className="flex h-full overflow-hidden bg-transparent selection:bg-emerald-500/30 selection:text-emerald-200" dir="rtl">
       
       <AnimatePresence>
         {isSidebarOpen && showSidebar && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-[#090b14]/60 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-[#0f172a]/60 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
         )}
       </AnimatePresence>
       
