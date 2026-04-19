@@ -60,10 +60,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-white/30 backdrop-blur-xl z-50 fixed inset-0">
+      // 🚀 تحميل فخم: أسود ملكي مع ذهب مشع
+      <div className="flex h-screen w-full items-center justify-center bg-[#02040a]/90 backdrop-blur-xl z-50 fixed inset-0">
         <div className="relative flex flex-col items-center gap-4">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-amber-500/20 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)]"></div>
-          <School className="absolute top-4 h-8 w-8 text-amber-600 animate-pulse"/>
+          <div className="h-20 w-20 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.4)]"></div>
+          <School className="absolute top-6 h-8 w-8 text-amber-400 animate-pulse"/>
         </div>
       </div>
     );
@@ -71,15 +72,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (platformClosed && !isPublicPage) {
     return (
+      // 🚀 شاشة إغلاق فخمة جداً
       <div className="flex min-h-screen flex-col items-center justify-center bg-transparent p-4 text-center relative overflow-hidden" dir="rtl">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-500 to-red-600 shadow-[0_0_30px_rgba(244,63,94,0.3)] mb-8 border border-white/80 relative z-10">
+        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-600 to-red-900 shadow-[0_0_40px_rgba(225,29,72,0.5)] mb-8 border border-rose-500/30 relative z-10">
           <School className="h-12 w-12 text-white" />
         </motion.div>
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel p-10 rounded-[2.5rem] max-w-md w-full relative z-10">
-          <div className="flex justify-center mb-6"><div className="bg-amber-100 p-4 rounded-full border border-amber-200 animate-bounce"><AlertTriangle className="h-10 w-10 text-amber-600" /></div></div>
-          <h1 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">المنصة مغلقة مؤقتاً</h1>
-          <p className="text-slate-600 mb-8 font-bold text-sm bg-slate-50 p-4 rounded-2xl border border-slate-200">{closeMessage}</p>
-          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-lg text-sm font-black text-slate-900 bg-amber-400 hover:bg-amber-500 transition-all active:scale-95">العودة لتسجيل الدخول</button>
+          <div className="flex justify-center mb-6"><div className="bg-amber-500/10 p-4 rounded-full border border-amber-500/20 animate-bounce"><AlertTriangle className="h-10 w-10 text-amber-500" /></div></div>
+          <h1 className="text-3xl font-black text-white mb-4 tracking-tight drop-shadow-md">المنصة مغلقة مؤقتاً</h1>
+          <p className="text-slate-300 mb-8 font-bold text-sm bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">{closeMessage}</p>
+          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-[0_0_20px_rgba(245,158,11,0.3)] text-sm font-black text-slate-950 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 transition-all active:scale-95 border border-amber-300/50">العودة لتسجيل الدخول</button>
         </motion.div>
       </div>
     );
@@ -90,16 +92,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !isPublicPage;
 
   return (
-    <div className="flex h-full overflow-hidden bg-transparent selection:bg-amber-400/30 selection:text-amber-900" dir="rtl">
+    <div className="flex h-full overflow-hidden bg-transparent selection:bg-amber-500/30 selection:text-amber-200" dir="rtl">
       
       <AnimatePresence>
         {isSidebarOpen && showSidebar && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-[#02040a]/80 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
         )}
       </AnimatePresence>
       
       {showSidebar && (
-        <div className={cn("fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-2xl lg:shadow-none", isSidebarCollapsed ? "w-20" : "w-72", isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0", !isSidebarOpen && "lg:translate-x-full lg:w-0", isSidebarOpen && "lg:translate-x-0 lg:static")}>
+        <div className={cn("fixed inset-y-0 right-0 z-50 transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] print:hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] lg:shadow-none", isSidebarCollapsed ? "w-20" : "w-72", isSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0", !isSidebarOpen && "lg:translate-x-full lg:w-0", isSidebarOpen && "lg:translate-x-0 lg:static")}>
           <Sidebar onClose={() => setIsSidebarOpen(false)} authRole={authRole || 'student'} isCollapsed={isSidebarCollapsed} onToggleCollapse={() => { setIsSidebarCollapsed(!isSidebarCollapsed); if (window.innerWidth >= 1024) setIsSidebarOpen(false); }} />
         </div>
       )}
