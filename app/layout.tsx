@@ -22,14 +22,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a", // 🚀 مطابقة لون متصفح الجوال مع الثيم الجديد (Slate 900)
+  themeColor: "#f8fafc", // لون اللؤلؤ للمتصفح
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl" className={ibmPlexArabic.variable} suppressHydrationWarning>
       <head>
@@ -40,30 +36,31 @@ export default function RootLayout({
                 try {
                   if ('serviceWorker' in navigator) {
                     navigator.serviceWorker.getRegistrations().then(function (regs) {
-                      regs.forEach(function (reg) { reg.unregister(); console.log('SW cleaned silently'); });
+                      regs.forEach(function (reg) { reg.unregister(); });
                     });
                   }
                   if (window.caches) {
                     caches.keys().then(function (keys) {
-                      keys.forEach(function (key) { caches.delete(key); console.log('Cache cleaned silently'); });
+                      keys.forEach(function (key) { caches.delete(key); });
                     });
                   }
-                } catch (e) { console.log('Cleanup background task skipped:', e); }
+                } catch (e) {}
               })();
             `,
           }}
         />
       </head>
 
-      {/* 🚀 تحديث لون الخلفية والنص ليكون مريحاً وفخماً */}
-      <body className="antialiased bg-[#0f172a] text-slate-300 font-sans relative min-h-screen overflow-x-hidden">
+      <body className="antialiased bg-[#f8fafc] text-[#0f172a] font-sans relative min-h-screen overflow-x-hidden">
         
-        {/* 🚀 הסحر يبدأ هنا: الكرات المضيئة المتحركة (Animated Cinematic Blobs) */}
+        {/* 🚀 السحر السينمائي: التموجات اللونية (ذهب، نيلي عميق، فحمي) */}
         <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none print:hidden">
-          {/* إضاءة نيلية هادئة متحركة في الزاوية العلوية */}
-          <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-[140px] animate-blob mix-blend-screen" />
-          {/* إضاءة زمردية هادئة متحركة في الزاوية السفلية */}
-          <div className="absolute bottom-[-10%] left-[-5%] w-[700px] h-[700px] bg-emerald-500/15 rounded-full blur-[140px] animate-blob animation-delay-2000 mix-blend-screen" />
+          {/* نور ذهبي لامع في الأعلى */}
+          <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-amber-400/15 rounded-full blur-[120px] animate-blob mix-blend-multiply" />
+          {/* نور نيلي عميق في الأسفل */}
+          <div className="absolute bottom-[-10%] left-[-5%] w-[700px] h-[700px] bg-indigo-900/10 rounded-full blur-[140px] animate-blob animation-delay-2000 mix-blend-multiply" />
+          {/* لمسة أسود فحمي في المنتصف للعمق */}
+          <div className="absolute top-[40%] left-[20%] w-[500px] h-[500px] bg-slate-800/5 rounded-full blur-[100px] animate-blob animation-delay-4000 mix-blend-multiply" />
         </div>
 
         <AuthProvider>
