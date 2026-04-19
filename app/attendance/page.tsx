@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, 
   LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, 
-  Bug, RefreshCw, Calculator, Layers, PieChart, Loader2, BookType, Printer, X
+  RefreshCw, Calculator, Layers, PieChart, Loader2, BookType, Printer, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -43,7 +43,10 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 🚀 مفتاح الكاش اللحظي الخاص بالمعلم بناءً على اختياراته
+  // 🚀 المفتاح الحي (لمنع تداخل الكاش عند تغيير الحصص)
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+
+  // مفتاح الكاش اللحظي الخاص بالمعلم بناءً على اختياراته
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
     return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
@@ -77,7 +80,7 @@ export default function AttendancePage() {
   }, []);
 
   // ==========================================================
-  // 🚀 دوال الإدارة (تعمل فقط إذا كان المستخدم مديراً)
+  // 🚀 دوال الإدارة
   // ==========================================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin || !snapshotDate) return;
@@ -96,7 +99,7 @@ export default function AttendancePage() {
 
       if (error) throw error;
       setDailyStats(data || []);
-      setExcludedRecords(new Set()); // إعادة ضبط المستبعدين عند جلب بيانات جديدة
+      setExcludedRecords(new Set()); 
     } catch (error: any) {
       console.error("Admin Fetch Error:", error);
     } finally {
@@ -199,7 +202,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم مع الكاش اللحظي 
+  // 🚀 دوال المعلم (المحصنة بقفل التزامن)
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -228,6 +231,9 @@ export default function AttendancePage() {
 
   const loadStudentsAndAttendance = useCallback(async () => {
     if (selectedSection && date && currentRole === 'teacher') {
+      // إيقاف الكاش مؤقتاً أثناء سحب البيانات لمنع التداخل
+      setActiveKey(null);
+      
       const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
       if (res) {
         const sortedStudents = [...res.students].sort((a: any, b: any) => {
@@ -237,11 +243,16 @@ export default function AttendancePage() {
         });
         setStudents(sortedStudents); 
         
-        // 🚀 استرجاع الكاش اللحظي بأمان 
-        const cacheKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
-        const cachedStr = localStorage.getItem(cacheKey);
+        const localDraftKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
+        const cachedStr = localStorage.getItem(localDraftKey);
         
-        if (cachedStr) {
+        // 🚀 الأولوية للبيانات المحفوظة رسمياً في القاعدة
+        const hasDbData = res.attendance && Object.keys(res.attendance).length > 0;
+
+        if (hasDbData) {
+           setAttendance(res.attendance);
+           setLessonTitle(res.savedLessonTitle || '');
+        } else if (cachedStr) {
           try {
             const parsed = JSON.parse(cachedStr);
             setAttendance(parsed.attendance && Object.keys(parsed.attendance).length > 0 ? parsed.attendance : res.attendance);
@@ -254,21 +265,24 @@ export default function AttendancePage() {
           setAttendance(res.attendance); 
           setLessonTitle(res.savedLessonTitle || '');
         }
+        
+        // تفعيل الكاش اللحظي بعد أن أصبحت البيانات المعروضة مطابقة للحصة 100%
+        setActiveKey(localDraftKey);
       }
     }
   }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole, user?.id]);
 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
 
-  // 🚀 حفظ الكاش التلقائي عند أي تغيير
+  // 🚀 حفظ الكاش التلقائي الآمن (لا يحفظ إلا إذا كان المفتاح نشطاً)
   useEffect(() => {
-    if (currentRole === 'teacher' && draftKey && students.length > 0) {
+    if (currentRole === 'teacher' && draftKey && activeKey === draftKey && students.length > 0) {
       if (Object.keys(attendance).length > 0 || lessonTitle) {
         const draft = { attendance, lessonTitle };
         localStorage.setItem(draftKey, JSON.stringify(draft));
       }
     }
-  }, [attendance, lessonTitle, draftKey, currentRole, students.length]);
+  }, [attendance, lessonTitle, draftKey, activeKey, currentRole, students.length]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => { setAttendance(prev => ({ ...prev, [studentId]: status })); };
   const markAllAs = (status: AttendanceStatus) => { const newAttendance = { ...attendance }; students.forEach(s => { newAttendance[s.id] = status; }); setAttendance(newAttendance); };
@@ -279,10 +293,11 @@ export default function AttendancePage() {
       await saveAttendance(selectedSection, selectedSubject, date, period, attendance, students, lessonTitle);
       setMessage({ text: 'تم حفظ سجل الحضور والغياب بنجاح!', type: 'success' });
       
-      // 🚀 تنظيف الكاش بعد الاعتماد بنجاح
+      // تنظيف الكاش وإعادة السحب
       if (draftKey) localStorage.removeItem(draftKey);
-      
+      setActiveKey(null);
       loadStudentsAndAttendance(); 
+      
       setTimeout(() => setMessage({ text: '', type: '' }), 4000);
     } catch (error: any) {
       setMessage({ text: error.message || 'حدث خطأ مجهول', type: 'error' });
@@ -542,10 +557,10 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم (رصد الغياب والتحكم)
+  // 🚀 واجهة المعلم (لوحة الرصد + إصلاح الإحصائيات)
   // ==========================================================
   
-  // 🚀 حل مشكلة الإحصائيات: يتم حسابها فقط من للطلاب المتواجدين حالياً في المصفوفة
+  // 🚀 إصلاح الإحصائيات (تعتمد حصرياً على الطلاب الحاليين لتجنب الأرقام السالبة)
   let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
   students.forEach(s => {
     const status = attendance[s.id];
@@ -592,7 +607,7 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* 🚀 أدوات البحث والفلترة (تم إصلاح التشوه بإضافة | للـ split) */}
+        {/* 🚀 أدوات البحث والفلترة (متجاوبة 100% مع الجوال مع إصلاح الفصل) */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="space-y-2 flex flex-col w-full">
@@ -638,7 +653,7 @@ export default function AttendancePage() {
           )}
         </div>
 
-        {/* 🚀 إحصائيات المعلم العلوية الزجاجية */}
+        {/* 🚀 إحصائيات المعلم العلوية الزجاجية (الآن دقيقة 100%) */}
         {students.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
@@ -664,7 +679,7 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* 🚀 جدول أسماء الطلاب (Responsive Table) */}
+        {/* 🚀 جدول أسماء الطلاب (Responsive Table Fix) */}
         {students.length > 0 && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
             <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#090b14]/30">
