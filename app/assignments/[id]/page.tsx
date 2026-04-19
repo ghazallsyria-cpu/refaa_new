@@ -7,7 +7,6 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { RawAssignmentAnswer, AssignmentWithMeta, SubmissionWithStudent } from '@/types';
-
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -104,17 +103,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const getStudentSectionName = (studentObj: any) => {
     if (!studentObj || (!studentObj.sections && !studentObj.section)) return 'بدون فصل';
-    
     const sectionData = studentObj.sections || studentObj.section;
     const sec = Array.isArray(sectionData) ? sectionData[0] : sectionData;
     if (!sec) return 'بدون فصل';
-
     const sectionName = sec.name || '';
-    
     const classData = sec.classes || sec.class;
     const cls = Array.isArray(classData) ? classData[0] : classData;
     const className = cls?.name || '';
-
     if (className && sectionName) return `${className} - ${sectionName}`;
     if (sectionName) return sectionName;
     return 'بدون فصل';
@@ -128,7 +123,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const exportToExcel = () => {
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
-    
     const csvData = filteredSubmissions.map(sub => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
@@ -136,17 +130,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const status = isGraded ? 'مقيّم' : 'يحتاج تصحيح';
        const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
-       
-       return {
-         'اسم الطالب': name,
-         'الفصل': section,
-         'الدرجة': score,
-         'العلامة الكاملة': maxScore,
-         'الحالة': status,
-         'تاريخ التسليم': date
-       };
+       return { 'اسم الطالب': name, 'الفصل': section, 'الدرجة': score, 'العلامة الكاملة': maxScore, 'الحالة': status, 'تاريخ التسليم': date };
     });
-
     const worksheet = XLSX.utils.json_to_sheet(csvData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "التسليمات");
@@ -155,104 +140,26 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const exportToPDF = () => {
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      showNotification('error', 'يرجى السماح بالنوافذ المنبثقة (Pop-ups) لطباعة الكشف.');
-      return;
-    }
-
+    if (!printWindow) { showNotification('error', 'يرجى السماح بالنوافذ المنبثقة للطباعة.'); return; }
     const maxScore = questions.reduce((acc, q) => acc + (Number(q.points) || 0), 0) || 100;
     const gradedSubs = filteredSubmissions.filter(s => s.status === 'graded' || String(s.status) === 'completed');
     const avgScore = gradedSubs.length > 0 ? Math.round(gradedSubs.reduce((sum, s) => sum + (Number(s.grade) || 0), 0) / gradedSubs.length) : 0;
-
     const tableRows = filteredSubmissions.map((sub, index) => {
        const name = sub.student?.user?.full_name || (sub.student as any)?.users?.full_name || 'طالب مجهول';
        const section = getStudentSectionName(sub.student); 
        const isGraded = sub.status === 'graded' || String(sub.status) === 'completed';
        const score = isGraded ? (sub.grade || 0) : 'قيد المراجعة';
        const date = new Date(sub.submitted_at || (sub as any).created_at).toLocaleString('ar-EG');
-       
-       return `
-        <tr>
-          <td>${index + 1}</td>
-          <td><strong>${name}</strong></td>
-          <td>${section}</td>
-          <td style="text-align: center; font-weight: bold; color: ${isGraded ? '#4f46e5' : '#94a3b8'}">${score} ${isGraded ? `/ ${maxScore}` : ''}</td>
-          <td style="text-align: center;">${date}</td>
-        </tr>`;
+       return `<tr><td>${index + 1}</td><td><strong>${name}</strong></td><td>${section}</td><td style="text-align: center; font-weight: bold; color: ${isGraded ? '#4f46e5' : '#94a3b8'}">${score} ${isGraded ? `/ ${maxScore}` : ''}</td><td style="text-align: center;">${date}</td></tr>`;
     }).join('');
 
-    const html = `
-      <html dir="rtl" lang="ar">
-        <head>
-          <title>سجل تسليمات الواجب - ${assignment?.title}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-            body { font-family: 'Cairo', sans-serif; padding: 40px; color: #1e293b; background: #fff; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-            .header h1 { color: #4f46e5; margin: 0 0 10px 0; font-size: 28px; font-weight: 900; }
-            .header h2 { color: #64748b; font-size: 18px; margin: 0; font-weight: 700; }
-            .info-grid { display: flex; justify-content: space-between; background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; font-size: 14px; border: 1px solid #e2e8f0; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-            th { background-color: #4f46e5; color: white; padding: 15px; text-align: right; font-weight: bold; border: 1px solid #e2e8f0; }
-            th:nth-child(4), th:nth-child(5) { text-align: center; }
-            td { padding: 15px; border: 1px solid #e2e8f0; }
-            tr:nth-child(even) { background-color: #f8fafc; }
-            .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #94a3b8; }
-            
-            @media print {
-              body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              .info-grid { border: 1px solid #000; background: #f8fafc !important; }
-              table, th, td { border: 1px solid #000; }
-              th { background-color: #f1f5f9 !important; color: #000 !important; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>📄 كشف تسليمات الواجب</h1>
-            <h2>${assignment?.title || 'واجب'} - ${(assignment as any)?.subject_name || 'مادة عامة'}</h2>
-            ${selectedSection !== 'الكل' ? `<h3 style="color:#ef4444; font-size: 16px; margin-top:10px;">خاص بطلاب: ${selectedSection}</h3>` : ''}
-          </div>
-          
-          <div class="info-grid">
-            <div><strong>إجمالي الطلاب المٌسلمين:</strong> ${filteredSubmissions.length}</div>
-            <div><strong>تم التقييم:</strong> ${gradedSubs.length}</div>
-            <div><strong>العلامة الكاملة للواجب:</strong> ${maxScore}</div>
-            <div><strong>متوسط درجات الطلاب:</strong> ${avgScore}</div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th width="5%">#</th>
-                <th width="30%">اسم الطالب</th>
-                <th width="25%">الفصل</th>
-                <th width="20%">الدرجة</th>
-                <th width="20%">تاريخ التسليم</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
-
-          <div class="footer">
-            تم إصدار هذا الكشف تلقائياً من منصة الرفعة الرقمية بتاريخ ${new Date().toLocaleString('ar-EG')}
-          </div>
-          
-          <script>
-              window.onload = () => { setTimeout(() => window.print(), 800); }
-          </script>
-        </body>
-      </html>
-    `;
+    const html = `<html dir="rtl" lang="ar"><head><title>سجل تسليمات الواجب - ${assignment?.title}</title><style>@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');body { font-family: 'Cairo', sans-serif; padding: 40px; color: #1e293b; background: #fff; }.header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }.header h1 { color: #4f46e5; margin: 0 0 10px 0; font-size: 28px; font-weight: 900; }.header h2 { color: #64748b; font-size: 18px; margin: 0; font-weight: 700; }.info-grid { display: flex; justify-content: space-between; background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; font-size: 14px; border: 1px solid #e2e8f0; }table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }th { background-color: #4f46e5; color: white; padding: 15px; text-align: right; font-weight: bold; border: 1px solid #e2e8f0; }th:nth-child(4), th:nth-child(5) { text-align: center; }td { padding: 15px; border: 1px solid #e2e8f0; }tr:nth-child(even) { background-color: #f8fafc; }.footer { text-align: center; margin-top: 50px; font-size: 12px; color: #94a3b8; }@media print {body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }.info-grid { border: 1px solid #000; background: #f8fafc !important; }table, th, td { border: 1px solid #000; }th { background-color: #f1f5f9 !important; color: #000 !important; }}</style></head><body><div class="header"><h1>📄 كشف تسليمات الواجب</h1><h2>${assignment?.title || 'واجب'} - ${(assignment as any)?.subject_name || 'مادة عامة'}</h2>${selectedSection !== 'الكل' ? `<h3 style="color:#ef4444; font-size: 16px; margin-top:10px;">خاص بطلاب: ${selectedSection}</h3>` : ''}</div><div class="info-grid"><div><strong>إجمالي الطلاب المٌسلمين:</strong> ${filteredSubmissions.length}</div><div><strong>تم التقييم:</strong> ${gradedSubs.length}</div><div><strong>العلامة الكاملة للواجب:</strong> ${maxScore}</div><div><strong>متوسط درجات الطلاب:</strong> ${avgScore}</div></div><table><thead><tr><th width="5%">#</th><th width="30%">اسم الطالب</th><th width="25%">الفصل</th><th width="20%">الدرجة</th><th width="20%">تاريخ التسليم</th></tr></thead><tbody>${tableRows}</tbody></table><div class="footer">تم إصدار هذا الكشف تلقائياً من منصة الرفعة الرقمية بتاريخ ${new Date().toLocaleString('ar-EG')}</div><script>window.onload = () => { setTimeout(() => window.print(), 800); }</script></body></html>`;
     printWindow.document.write(html);
     printWindow.document.close();
   };
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    
     const cacheKey = `assign_cache_${assignmentId}_${user.id}_${currentRole}`;
     const cachedData = sessionStorage.getItem(cacheKey);
     
@@ -290,9 +197,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     try {
       if (currentRole === 'student') setStudentId(user.id);
       const details = await fetchAssignmentDetails(assignmentId);
-      
       sessionStorage.setItem(cacheKey, JSON.stringify(details));
-
       setAssignment(details.assignment);
       setEditData(details.assignment);
       if (details.questions) setQuestions(details.questions);
@@ -302,11 +207,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           setMySubmission(details.submission as any);
           setContent((details.submission as any).content || '');
           setFileUrl((details.submission as any).file_url || '');
-
           if (details.answers) {
             const answersMap: Record<string, string | string[] | null> = {};
             const fullMap: Record<string, any> = {};
-            
             details.answers.forEach((a: any) => {
               answersMap[a.question_id] = a.selected_options || a.answer_text;
               fullMap[a.question_id] = a;
@@ -345,10 +248,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       const draftData = { answers: myAnswers, content, fileUrl };
       const hasData = Object.keys(myAnswers).length > 0 || content || fileUrl;
       const draftKey = `draft_assign_${assignmentId}_${user.id}`;
-      
-      if (hasData) {
-        localStorage.setItem(draftKey, JSON.stringify(draftData));
-      }
+      if (hasData) localStorage.setItem(draftKey, JSON.stringify(draftData));
     }
   }, [myAnswers, content, fileUrl, currentRole, mySubmission, assignmentId, user?.id]);
 
@@ -358,28 +258,19 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       const answersPayload: RawAssignmentAnswer[] = Object.entries(answers).map(([qId, value]) => {
         const question = questions.find((q: any) => q.id === qId);
         const isMultiple = question?.type === 'multiple_choice' || question?.type === 'checkbox' || question?.type === 'true_false';
-        
         let safeSelectedOptions = null;
         let safeAnswerText = null;
-
         if (isMultiple) {
            safeSelectedOptions = Array.isArray(value) ? value : (value ? [value] : []);
         } else {
            safeAnswerText = typeof value === 'object' && value !== null ? JSON.stringify(value) : (value as string || '');
         }
-
-        return {
-          question_id: qId,
-          answer_text: safeAnswerText,
-          selected_options: safeSelectedOptions
-        };
+        return { question_id: qId, answer_text: safeAnswerText, selected_options: safeSelectedOptions };
       });
 
       await submitAssignment(assignmentId, answersPayload, mySubmission?.id, content, fileUrl);
-      
       localStorage.removeItem(`draft_assign_${assignmentId}_${user?.id}`);
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
-
       showNotification('success', 'تم تسليم الواجب بنجاح!');
       await fetchData();
     } catch (error: any) {
@@ -394,16 +285,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setIsSubmittingEdit(true);
     try {
       const payload = { title: editData.title!, due_date: new Date(editData.due_date!).toISOString() };
-      
-      const { error } = await supabase
-        .from('assignments')
-        .update(payload)
-        .eq('id', assignmentId);
-
+      const { error } = await supabase.from('assignments').update(payload).eq('id', assignmentId);
       if (error) throw error;
-      
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
-
       showNotification('success', 'تم تمديد/تحديث الواجب بنجاح');
       setIsEditModalOpen(false);
       await fetchData();
@@ -430,9 +314,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setIsDeletingSubmission(true);
     try {
       await deleteSubmission(submissionToDelete);
-      
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
-
       showNotification('success', 'تم حذف تسليم الطالب بنجاح');
       setSubmissionToDelete(null);
       await fetchData();
@@ -450,7 +332,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   if (!mounted || loading || authLoading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-[#090b14] font-cairo text-slate-200">
+      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo text-slate-200">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-14 h-14 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
           <p className="text-slate-400 font-bold animate-pulse tracking-widest">جاري تحميل الواجب...</p>
@@ -484,7 +366,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const fullSectionName = className ? `${className} - ${sectionName}` : sectionName;
 
   const isGraded = mySubmission?.status === 'graded';
-  
   const canEdit = currentRole === 'admin' || currentRole === 'management' || (assignment as any)?.teacher_id === user?.id;
 
   return (
@@ -1125,35 +1006,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Custom Scrollbar Styles for the Modals */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
-        
-        /* Override specifically for the dynamic AssignmentForm inside Dark Mode */
-        .dark-theme-override input, .dark-theme-override textarea, .dark-theme-override select {
-            background-color: rgba(9, 11, 20, 0.5) !important;
-            border-color: rgba(255, 255, 255, 0.05) !important;
-            color: white !important;
-        }
-        .dark-theme-override .bg-white {
-            background-color: transparent !important;
-        }
-        .dark-theme-override .bg-slate-50 {
-            background-color: rgba(9, 11, 20, 0.3) !important;
-            border-color: rgba(255, 255, 255, 0.05) !important;
-        }
-        .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 {
-            color: #f8fafc !important;
-        }
-        .dark-theme-override .text-slate-500, .dark-theme-override .text-slate-400 {
-            color: #94a3b8 !important;
-        }
-        .dark-theme-override .border-slate-200, .dark-theme-override .border-slate-300 {
-            border-color: rgba(255, 255, 255, 0.1) !important;
-        }
+        .dark-theme-override input, .dark-theme-override textarea, .dark-theme-override select { background-color: rgba(9, 11, 20, 0.5) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
+        .dark-theme-override .bg-white { background-color: transparent !important; }
+        .dark-theme-override .bg-slate-50 { background-color: rgba(9, 11, 20, 0.3) !important; border-color: rgba(255, 255, 255, 0.05) !important; }
+        .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 { color: #f8fafc !important; }
+        .dark-theme-override .text-slate-500, .dark-theme-override .text-slate-400 { color: #94a3b8 !important; }
+        .dark-theme-override .border-slate-200, .dark-theme-override .border-slate-300 { border-color: rgba(255, 255, 255, 0.1) !important; }
       `}} />
     </div>
   );
