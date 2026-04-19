@@ -1,8 +1,9 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, UploadCloud, Eye } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, Send, AlertCircle, CheckCircle2, Timer, BookOpen, AlertTriangle, Lock, UploadCloud, Eye, ShieldAlert, FileText, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
@@ -24,7 +25,7 @@ const isAutoGradedType = (type: string) => {
 export default function TakeQuiz() {
   const params = useParams();
   const router = useRouter();
-  const { user, userRole, authRole } = useAuth() as any; 
+  const { user, userRole, authRole, isChecking } = useAuth() as any; 
   const currentRole = authRole || userRole;
   const isPreviewMode = ['teacher', 'admin', 'management'].includes(currentRole);
 
@@ -92,7 +93,6 @@ export default function TakeQuiz() {
 
       setExam({ ...examData, description: examData.description ?? "", settings: examData.settings || {} });
       
-      // 🚀 الهوك mapQuestionsWithMedia قام بكل العمل! ننسخ الأسئلة مباشرة
       let finalQuestions = [...(questionsData || [])].map((q: any) => ({...q}));
       
       if (examData.settings?.shuffle_questions && !isPreviewMode) finalQuestions.sort(() => Math.random() - 0.5);
@@ -123,7 +123,9 @@ export default function TakeQuiz() {
     }
   }, [params.id, fetchExamForStudent, user, isPreviewMode]);
 
-  useEffect(() => { fetchQuiz(); }, [fetchQuiz]);
+  useEffect(() => { 
+    if (!isChecking) fetchQuiz(); 
+  }, [fetchQuiz, isChecking]);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting || !questions || questions.length === 0 || !user) return;
@@ -232,51 +234,79 @@ export default function TakeQuiz() {
   const handleAnswerChange = (questionId: string, value: any) => setAnswers(prev => ({ ...prev, [questionId]: value }));
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div></div>;
+  // 🚀 شاشات الحماية والتحميل بالثيم الملكي
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative flex items-center justify-center">
+             <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
+             <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
+          </div>
+          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo text-slate-100">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative flex items-center justify-center">
+             <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
+             <FileText className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
+          </div>
+          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تحميل بيئة الاختبار...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (alreadySubmitted) return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-indigo-600">
-          <div className="inline-flex p-4 rounded-full bg-indigo-50 text-indigo-600"><Lock className="h-12 w-12" /></div>
-          <h2 className="text-2xl font-black text-slate-900">لقد قمت بتقديم هذا الاختبار مسبقاً</h2>
-          <p className="text-slate-600 font-medium">لقد استنفدت الحد الأقصى للمحاولات المسموحة.</p>
-          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-md">العودة لقائمة الاختبارات</button>
-        </motion.div>
-      </div>
-    );
+    <div className="min-h-screen bg-[#090b14] flex items-center justify-center p-4 font-cairo" dir="rtl">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#0f1423] p-8 sm:p-12 rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-md w-full text-center space-y-6 border border-indigo-500/30">
+        <div className="inline-flex p-5 rounded-3xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-inner"><Lock className="h-12 w-12 drop-shadow-md" /></div>
+        <h2 className="text-2xl sm:text-3xl font-black text-white drop-shadow-sm">لقد قمت بتقديم هذا الاختبار مسبقاً</h2>
+        <p className="text-slate-400 font-bold text-sm sm:text-base leading-relaxed">لقد استنفدت الحد الأقصى للمحاولات المسموحة.</p>
+        <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-black shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all active:scale-95 border border-indigo-400/50">العودة لقائمة الاختبارات</button>
+      </motion.div>
+    </div>
+  );
 
   if (!questions || questions.length === 0) return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-amber-500">
-          <div className="inline-flex p-4 rounded-full bg-amber-50 text-amber-500"><AlertCircle className="h-12 w-12" /></div>
-          <h2 className="text-2xl font-bold text-slate-900">الاختبار غير مكتمل</h2>
-          <p className="text-slate-600 font-medium">عذراً، هذا الاختبار لا يحتوي على أي أسئلة مضافة حتى الآن.</p>
-          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-4 bg-slate-800 text-white py-3 rounded-xl font-bold">العودة للرئيسية</button>
-        </motion.div>
-      </div>
-    );
+    <div className="min-h-screen bg-[#090b14] flex items-center justify-center p-4 font-cairo" dir="rtl">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#0f1423] p-8 sm:p-12 rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_20px_60px_rgba(0,0,0,0.8)] max-w-md w-full text-center space-y-6 border border-amber-500/30">
+        <div className="inline-flex p-5 rounded-3xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-inner"><AlertCircle className="h-12 w-12 drop-shadow-md" /></div>
+        <h2 className="text-2xl sm:text-3xl font-black text-white drop-shadow-sm">الاختبار غير مكتمل</h2>
+        <p className="text-slate-400 font-bold text-sm sm:text-base leading-relaxed">عذراً، هذا الاختبار لا يحتوي على أي أسئلة مضافة حتى الآن.</p>
+        <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-[#02040a]/80 text-white py-4 rounded-2xl font-black border border-white/10 hover:bg-white/5 transition-all active:scale-95 shadow-inner">العودة للرئيسية</button>
+      </motion.div>
+    </div>
+  );
 
   const hasManualQuestions = questions.some(q => !isAutoGradedType(q.type as string));
 
   if (isFinished) return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border-t-4 border-emerald-500">
-          <div className="inline-flex p-4 rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-12 w-12" /></div>
-          <h2 className="text-2xl font-bold text-slate-900">تم إرسال الاختبار بنجاح!</h2>
-          <p className="text-slate-600 font-medium">
-             {isPreviewMode ? "لقد أنهيت المعاينة بنجاح (لم يتم حفظ أي إجابات)." : "لقد استلمنا إجاباتك وتم تسجيلها في قاعدة البيانات."}
-             {!isPreviewMode && hasManualQuestions && <span className="block mt-4 text-amber-700 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100">ستظهر نتيجتك النهائية بعد تصحيح المعلم وانتهاء الوقت.</span>}
-             {!isPreviewMode && !hasManualQuestions && <span className="block mt-4 text-emerald-700 font-bold bg-emerald-50 p-3 rounded-xl border border-emerald-100">تم تصحيح الاختبار، ستظهر نتيجتك بعد انتهاء وقت الاختبار.</span>}
-          </p>
-          {timeTakenInfo > 0 && !isPreviewMode && (
-            <div className="inline-flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-3 rounded-2xl font-bold mt-2 border border-slate-200">
-               <Clock className="w-5 h-5 text-slate-400" /><span>أنهيت الاختبار في: <span dir="ltr">{formatTime(timeTakenInfo)}</span></span>
-            </div>
-          )}
-          <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-md">العودة للرئيسية</button>
-        </motion.div>
-      </div>
-    );
+    <div className="min-h-screen bg-[#090b14] flex items-center justify-center p-4 font-cairo relative overflow-hidden" dir="rtl">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="bg-[#0f1423]/90 backdrop-blur-2xl p-8 sm:p-12 rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] max-w-lg w-full text-center space-y-6 border border-emerald-500/30 relative z-10">
+        <div className="inline-flex p-5 rounded-3xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner"><CheckCircle2 className="h-12 w-12 drop-shadow-md" /></div>
+        <h2 className="text-2xl sm:text-3xl font-black text-white drop-shadow-sm">تم إرسال الاختبار بنجاح!</h2>
+        <div className="text-slate-400 font-bold text-sm sm:text-base leading-relaxed space-y-4">
+            <p>{isPreviewMode ? "لقد أنهيت المعاينة بنجاح (لم يتم حفظ أي إجابات)." : "لقد استلمنا إجاباتك وتم تسجيلها بشكل آمن في قاعدة البيانات."}</p>
+            {!isPreviewMode && hasManualQuestions && <span className="block mt-4 text-amber-400 font-black bg-amber-500/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-amber-500/20 shadow-inner">ستظهر نتيجتك النهائية بعد تصحيح المعلم للأسئلة المقالية.</span>}
+            {!isPreviewMode && !hasManualQuestions && <span className="block mt-4 text-emerald-400 font-black bg-emerald-500/10 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-emerald-500/20 shadow-inner">تم تصحيح الاختبار آلياً، ستظهر النتيجة بعد انتهاء وقت الاختبار للجميع.</span>}
+        </div>
+        {timeTakenInfo > 0 && !isPreviewMode && (
+          <div className="inline-flex items-center justify-center w-full gap-2 bg-[#02040a]/60 text-slate-300 px-5 py-3.5 rounded-2xl font-black mt-2 border border-white/5 shadow-inner text-sm sm:text-base">
+            <Clock className="w-5 h-5 text-indigo-400" /><span>الوقت المستغرق: <span dir="ltr">{formatTime(timeTakenInfo)}</span></span>
+          </div>
+        )}
+        <button onClick={() => { window.location.href = '/exams'; }} className="w-full mt-6 bg-gradient-to-r from-emerald-600 to-teal-500 text-[#090b14] py-4 sm:py-5 rounded-2xl font-black shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 hover:opacity-90 transition-all active:scale-95 text-base sm:text-lg">العودة للرئيسية</button>
+      </motion.div>
+    </div>
+  );
 
   const currentQuestion = questions[currentQuestionIdx];
   const progress = ((currentQuestionIdx + 1) / questions.length) * 100;
@@ -287,61 +317,83 @@ export default function TakeQuiz() {
   const isFileUploadType = ['file_upload', 'file', 'upload', 'image'].includes(currentQType);
 
   return (
-    <div className={cn("min-h-screen bg-slate-50 flex flex-col relative", (exam?.settings?.prevent_copy && !isPreviewMode) && "select-none print:hidden")} dir="rtl">
+    <div className={cn("min-h-screen bg-[#090b14] flex flex-col relative font-cairo text-slate-200 overflow-x-hidden", (exam?.settings?.prevent_copy && !isPreviewMode) && "select-none print:hidden")} dir="rtl">
+      
+      {/* 🚀 الخلفية الزجاجية */}
+      <div className="fixed top-1/4 left-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-purple-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
+
       {isPreviewMode && (
-        <div className="bg-amber-100 border-b border-amber-200 text-amber-800 px-4 py-2 text-center text-sm font-bold flex justify-center items-center gap-2">
-           <Eye className="w-4 h-4" /> أنت تتصفح الاختبار كمعلم (وضع المعاينة). لن يتم حفظ الإجابات أو تفعيل قيود الغش/الوقت.
+        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-400 px-4 py-2 sm:py-3 text-center text-[10px] sm:text-sm font-black flex justify-center items-center gap-2 backdrop-blur-md shadow-inner relative z-50 uppercase tracking-widest">
+           <Eye className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" /> أنت تتصفح الاختبار كمعلم (وضع المعاينة). لن يتم حفظ الإجابات أو تفعيل قيود المراقبة.
         </div>
       )}
+      
       <AnimatePresence>
         {showCheatModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 p-4 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border-t-8 border-rose-600">
-              <div className="inline-flex p-4 rounded-full bg-rose-100 text-rose-600 mb-4 animate-bounce"><AlertTriangle className="h-12 w-12" /></div>
-              <h2 className="text-2xl font-black text-slate-900 mb-3">إنذار بمحاولة غش!</h2>
-              <p className="text-slate-600 font-bold text-lg leading-relaxed mb-6">لقد اكتشف النظام قيامك بالخروج من شاشة الاختبار.<br/><br/><span className="text-rose-600">هذا هو الإنذار الأول والأخير.</span></p>
-              <button onClick={() => setShowCheatModal(false)} className="w-full bg-rose-600 text-white py-4 rounded-xl font-black text-lg">أتعهد بعدم الخروج من الشاشة</button>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-[#02040a]/90 p-4 backdrop-blur-xl">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#0f1423] rounded-[2.5rem] p-8 sm:p-12 max-w-lg w-full text-center shadow-[0_30px_60px_rgba(225,29,72,0.4)] border border-rose-500/50 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-rose-500/20 blur-[80px] rounded-full pointer-events-none"></div>
+              <div className="inline-flex p-5 rounded-3xl bg-rose-500/10 text-rose-400 mb-6 shadow-inner border border-rose-500/20 relative z-10 animate-pulse"><AlertTriangle className="h-10 w-10 sm:h-12 sm:w-12 drop-shadow-md" /></div>
+              <h2 className="text-2xl sm:text-3xl font-black text-white mb-3 sm:mb-4 drop-shadow-sm relative z-10">إنذار بمحاولة غش!</h2>
+              <p className="text-slate-300 font-bold text-sm sm:text-lg leading-relaxed mb-8 relative z-10">لقد اكتشف النظام قيامك بالخروج من شاشة الاختبار أو تبديل النوافذ.<br/><br/><span className="text-rose-400 font-black bg-rose-500/10 px-3 py-1 rounded-lg border border-rose-500/20">هذا هو الإنذار الأول والأخير، التكرار سيسحب الورقة.</span></p>
+              <button onClick={() => setShowCheatModal(false)} className="w-full bg-gradient-to-r from-rose-600 to-red-600 text-white py-4 sm:py-5 rounded-2xl font-black text-sm sm:text-base shadow-[0_0_20px_rgba(225,29,72,0.4)] hover:opacity-90 transition-all active:scale-95 border border-rose-400/50 relative z-10">أتعهد بعدم الخروج من الشاشة</button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-50 rounded-xl"><BookOpen className="h-5 w-5 text-indigo-600" /></div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 truncate max-w-[200px] sm:max-w-md">{exam?.title}</h1>
-              <p className="text-xs text-slate-500">سؤال {currentQuestionIdx + 1} من {questions.length}</p>
+      {/* 🚀 الهيدر العلوي المظلم والمثبت */}
+      <header className="bg-[#02040a]/80 backdrop-blur-2xl border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-40 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="p-2.5 sm:p-3 bg-indigo-500/10 rounded-xl sm:rounded-2xl border border-indigo-500/20 shadow-inner shrink-0"><BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400 drop-shadow-sm" /></div>
+            <div className="min-w-0 pr-1">
+              <h1 className="text-base sm:text-lg lg:text-xl font-black text-white truncate max-w-[150px] sm:max-w-xs md:max-w-md drop-shadow-sm leading-tight">{exam?.title}</h1>
+              <p className="text-[10px] sm:text-xs font-bold text-slate-400 mt-0.5 sm:mt-1">سؤال {currentQuestionIdx + 1} <span className="opacity-50">من</span> {questions.length}</p>
             </div>
           </div>
           {timeLeft !== null && (
-            <div className={cn("flex items-center gap-2 px-4 py-2 rounded-xl border font-mono font-bold", timeLeft < 60 ? "bg-red-50 text-red-600 animate-pulse" : "bg-slate-50 text-slate-700")}>
-              <Timer className="h-4 w-4" /><span dir="ltr">{formatTime(timeLeft)}</span>
+            <div className={cn("flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border shadow-inner transition-colors shrink-0", timeLeft < 60 ? "bg-rose-500/10 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(225,29,72,0.3)] animate-pulse" : "bg-[#0f1423] text-slate-300 border-white/10")}>
+              <Timer className="h-4 w-4 sm:h-5 sm:w-5" /><span dir="ltr" className="font-black text-sm sm:text-lg tracking-tight font-mono drop-shadow-sm">{formatTime(timeLeft)}</span>
             </div>
           )}
         </div>
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100"><motion.div className="h-full bg-indigo-600" initial={{ width: 0 }} animate={{ width: `${progress}%` }} /></div>
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-[#0f1423]"><motion.div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-[0_0_10px_rgba(99,102,241,0.8)]" initial={{ width: 0 }} animate={{ width: `${progress}%` }} /></div>
       </header>
 
-      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
+      {/* 🚀 محتوى الاختبار الملكي */}
+      <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10 relative z-10">
         <AnimatePresence mode="wait">
-          <motion.div key={currentQuestion?.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-8">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm tracking-wider"><span>سؤال {currentQuestionIdx + 1}</span><span className="w-1 h-1 rounded-full bg-slate-300" /><span>{currentQuestion?.points} نقاط</span></div>
-              <div className="prose max-w-none text-xl sm:text-2xl font-bold text-slate-900 leading-relaxed"><Latex>{currentQuestion?.content || currentQuestion?.text || ''}</Latex></div>
+          <motion.div key={currentQuestion?.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="glass-panel rounded-[2rem] sm:rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 p-6 sm:p-8 lg:p-12 space-y-8 sm:space-y-10 relative overflow-hidden bg-[#0f1423]/60">
+            <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
+            
+            <div className="space-y-4 sm:space-y-6 relative z-10">
+              <div className="flex items-center gap-2 sm:gap-3 text-indigo-400 font-black text-xs sm:text-sm tracking-widest uppercase bg-[#02040a]/40 w-fit px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-white/5 shadow-inner">
+                <span>سؤال {currentQuestionIdx + 1}</span><span className="w-1.5 h-1.5 rounded-full bg-slate-500" /><span>{currentQuestion?.points} نقاط</span>
+              </div>
+              <div className="prose prose-invert max-w-none text-xl sm:text-2xl lg:text-3xl font-black text-white leading-relaxed drop-shadow-sm overflow-hidden">
+                <Latex>{currentQuestion?.content || currentQuestion?.text || ''}</Latex>
+              </div>
               {(currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl) && (
-                <div className="relative w-full flex justify-center bg-slate-50 rounded-2xl border border-slate-100 p-2 mt-4"><img src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} alt="صورة السؤال" className="max-h-[350px] w-auto object-contain rounded-xl shadow-sm" /></div>
+                <div className="relative w-full flex justify-center bg-[#02040a]/60 rounded-[1.5rem] sm:rounded-[2rem] border border-white/5 p-2 sm:p-3 mt-6 shadow-inner">
+                  <img src={currentQuestion?.media_url || (currentQuestion as any)?.mediaUrl} alt="صورة السؤال" className="max-h-[300px] sm:max-h-[400px] w-auto object-contain rounded-xl sm:rounded-2xl" />
+                </div>
               )}
             </div>
 
-            <div className="space-y-3">
-              {isAutoCurrent && isSingleChoice && currentQuestion.options?.map((option: any) => (
-                <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all group", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-50 border-indigo-600 text-indigo-900" : "bg-white border-slate-100 hover:border-slate-300")}>
-                  <div className={cn("h-6 w-6 rounded-full border-2 flex items-center justify-center shrink-0", String(answers[currentQuestion.id]) === String(option.id) ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" /></div>
-                  <span className="text-lg font-medium"><Latex>{option.content}</Latex></span>
-                </button>
-              ))}
+            <div className="space-y-3 sm:space-y-4 relative z-10">
+              {isAutoCurrent && isSingleChoice && currentQuestion.options?.map((option: any) => {
+                const isSelected = String(answers[currentQuestion.id]) === String(option.id);
+                return (
+                  <button key={option.id} onClick={() => handleAnswerChange(currentQuestion.id, option.id)} className={cn("w-full flex items-center gap-4 sm:gap-5 p-4 sm:p-5 lg:p-6 rounded-2xl sm:rounded-[1.5rem] border-2 text-right transition-all group active:scale-[0.98]", isSelected ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300 shadow-[0_0_20px_rgba(99,102,241,0.2)]" : "bg-[#02040a]/60 border-white/5 hover:border-indigo-500/30 hover:bg-[#0f1423]/80 text-slate-300 shadow-inner")}>
+                    <div className={cn("h-6 w-6 sm:h-7 sm:w-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors shadow-inner", isSelected ? "bg-indigo-600 border-indigo-400 text-white" : "border-slate-500 bg-[#0f1423]")}>
+                      <CheckCircle2 className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-opacity", isSelected ? "opacity-100" : "opacity-0")} />
+                    </div>
+                    <span className="text-base sm:text-lg lg:text-xl font-bold drop-shadow-sm leading-relaxed overflow-hidden"><Latex>{option.content}</Latex></span>
+                  </button>
+                );
+              })}
 
               {isAutoCurrent && isMultiChoice && currentQuestion.options?.map((option: any) => {
                 const isSelected = (answers[currentQuestion.id] || []).map(String).includes(String(option.id));
@@ -349,42 +401,63 @@ export default function TakeQuiz() {
                   <button key={option.id} onClick={() => {
                     const current = (answers[currentQuestion.id] || []).map(String);
                     handleAnswerChange(currentQuestion.id, isSelected ? current.filter((id: string) => id !== String(option.id)) : [...current, String(option.id)]);
-                  }} className={cn("w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-right transition-all", isSelected ? "bg-indigo-50 border-indigo-600" : "bg-white border-slate-100")}>
-                    <div className={cn("h-6 w-6 rounded-lg border-2 flex items-center justify-center shrink-0", isSelected ? "bg-indigo-600 border-indigo-600 text-white" : "border-slate-200")}><CheckCircle2 className="h-4 w-4 opacity-0" /></div>
-                    <span className="text-lg font-medium"><Latex>{option.content}</Latex></span>
+                  }} className={cn("w-full flex items-center gap-4 sm:gap-5 p-4 sm:p-5 lg:p-6 rounded-2xl sm:rounded-[1.5rem] border-2 text-right transition-all active:scale-[0.98]", isSelected ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300 shadow-[0_0_20px_rgba(99,102,241,0.2)]" : "bg-[#02040a]/60 border-white/5 hover:border-indigo-500/30 hover:bg-[#0f1423]/80 text-slate-300 shadow-inner")}>
+                    <div className={cn("h-6 w-6 sm:h-7 sm:w-7 rounded-lg sm:rounded-xl border-2 flex items-center justify-center shrink-0 transition-colors shadow-inner", isSelected ? "bg-indigo-600 border-indigo-400 text-white" : "border-slate-500 bg-[#0f1423]")}>
+                      <CheckCircle2 className={cn("h-4 w-4 sm:h-5 sm:w-5 transition-opacity", isSelected ? "opacity-100" : "opacity-0")} />
+                    </div>
+                    <span className="text-base sm:text-lg lg:text-xl font-bold drop-shadow-sm leading-relaxed overflow-hidden"><Latex>{option.content}</Latex></span>
                   </button>
                 );
               })}
 
               {isFileUploadType && (
-                <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
-                  <label className="block text-sm font-black text-indigo-800 mb-4 flex items-center gap-2"><UploadCloud className="h-5 w-5 text-indigo-600" /> قم برفع صورة حلك لهذه المسألة هنا:</label>
-                  <div className="bg-white rounded-xl overflow-hidden p-2 shadow-sm border border-slate-200">
+                <div className="bg-indigo-500/10 p-6 sm:p-8 rounded-[1.5rem] sm:rounded-[2rem] border border-indigo-500/20 shadow-inner text-center sm:text-right">
+                  <label className="flex items-center justify-center sm:justify-start gap-2 text-sm sm:text-base font-black text-indigo-300 mb-4 sm:mb-5 drop-shadow-sm"><UploadCloud className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" /> قم برفع صورة حلك لهذه المسألة هنا:</label>
+                  <div className="bg-[#02040a]/60 rounded-xl sm:rounded-2xl overflow-hidden p-2 sm:p-3 shadow-inner border border-white/5">
                     <ImageUpload initialImageUrl={answers[currentQuestion.id] || ''} onUploadSuccess={(url) => handleAnswerChange(currentQuestion.id, url)} label="انقر هنا لإرفاق الحل (صورة)" />
                   </div>
                 </div>
               )}
 
               {!isAutoCurrent && !isFileUploadType && (
-                <textarea value={answers[currentQuestion.id] || ''} onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} placeholder="اكتب إجابتك هنا بالتفصيل..." className="w-full min-h-[200px] p-4 rounded-2xl border-2 border-slate-100 focus:border-indigo-600 outline-none text-lg leading-relaxed font-bold" />
+                <div className="bg-[#02040a]/60 rounded-[1.5rem] sm:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all p-1">
+                  <textarea 
+                    value={answers[currentQuestion.id] || ''} 
+                    onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)} 
+                    placeholder="اكتب إجابتك هنا بالتفصيل..." 
+                    className="w-full min-h-[200px] sm:min-h-[250px] p-5 sm:p-6 bg-transparent border-none outline-none text-base sm:text-lg leading-relaxed font-bold text-white placeholder:text-slate-600 custom-scrollbar resize-none" 
+                  />
+                </div>
               )}
             </div>
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <footer className="bg-white border-t border-slate-200 p-4 sticky bottom-0 z-40">
+      {/* 🚀 الفوتر والأزرار السفلية الثابتة */}
+      <footer className="bg-[#02040a]/80 backdrop-blur-2xl border-t border-white/10 p-4 sm:p-6 sticky bottom-0 z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-          <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-all"><ChevronRight className="h-5 w-5" />السابق</button>
+          <button disabled={currentQuestionIdx === 0} onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))} className="flex items-center justify-center gap-1.5 sm:gap-2 px-5 sm:px-8 h-12 sm:h-14 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm text-slate-300 bg-[#0f1423] border border-white/5 hover:bg-white/10 hover:text-white disabled:opacity-30 transition-all active:scale-95 shadow-inner w-full sm:w-auto">
+             <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" /> <span className="hidden sm:inline">السابق</span>
+          </button>
+          
           {currentQuestionIdx === questions.length - 1 ? (
-            <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 disabled:opacity-50">
-              {isSubmitting ? <span className="animate-pulse">جاري المعالجة...</span> : <><Send className="h-5 w-5" /> {isPreviewMode ? 'إنهاء المعاينة' : 'إرسال الاختبار'}</>}
+            <button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center justify-center gap-2 px-6 sm:px-10 h-12 sm:h-14 bg-gradient-to-r from-emerald-600 to-teal-500 text-slate-950 rounded-xl sm:rounded-2xl font-black text-xs sm:text-base hover:opacity-90 shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:opacity-50 border border-emerald-400/50 active:scale-95 transition-all w-full sm:w-auto">
+              {isSubmitting ? <span className="animate-pulse">جاري المعالجة...</span> : <><Send className="h-4 w-4 sm:h-5 sm:w-5" /> {isPreviewMode ? 'إنهاء المعاينة' : 'إرسال الاختبار النهائي'}</>}
             </button>
           ) : (
-            <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">التالي<ChevronLeft className="h-5 w-5" /></button>
+            <button onClick={() => setCurrentQuestionIdx(prev => Math.min(questions.length - 1, prev + 1))} className="flex items-center justify-center gap-1.5 sm:gap-2 px-6 sm:px-10 h-12 sm:h-14 bg-indigo-600 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-base hover:bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-indigo-400/50 active:scale-95 transition-all w-full sm:w-auto">
+              <span className="hidden sm:inline">التالي</span> <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
           )}
         </div>
       </footer>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 1px solid #02040a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+      `}} />
     </div>
   );
 }
