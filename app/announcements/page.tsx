@@ -376,8 +376,7 @@ export default function AnnouncementsPage() {
                   </div>
 
                   {selectedAnnouncement.image_url && (
-                    <div className="relative w-full aspect-video rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden mb-8 sm:mb-10 bg-[#02040a]/80 border border-white/5 shadow-inner flex items-center justify-center p-2 relative z-10">
-                      <Image 
+<div className="relative w-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden mb-8 sm:mb-10 bg-[#02040a]/80 border border-white/5 shadow-inner flex items-center justify-center p-2 relative z-10">                      <Image 
                         src={selectedAnnouncement.image_url} 
                         alt={selectedAnnouncement.title} 
                         fill
