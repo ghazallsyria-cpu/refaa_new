@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
-import { School, Lock, User, ShieldCheck, X, Sparkles, MailQuestion, Loader2, Fingerprint } from 'lucide-react';
+import { School, Lock, User, ShieldCheck, X, Sparkles, MailQuestion, Loader2, Fingerprint ,AlertCircle, ArrowRight} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
