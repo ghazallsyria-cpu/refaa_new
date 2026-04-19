@@ -5,62 +5,86 @@
   --radius-3xl: 1.5rem;
   --radius-4xl: 2rem;
   
-  --color-brand-50: #f0f7ff;
-  --color-brand-100: #e0effe;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
+  /* 🚀 ألوان الزمرد الهادئة الجديدة */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
 }
 
 @layer base {
   * {
-    @apply border-white/10;
+    @apply border-white/5; /* تخفيف حدة الحدود البيضاء */
   }
+  
   body {
-    /* 🚀 تحويل الخلفية الافتراضية للوضع الليلي الفخم */
-    @apply bg-[#090b14] text-slate-200;
+    /* 🚀 الخلفية الجديدة: كحلي-رمادي عميق ومريح للعين (بدلاً من الأسود القاسي) */
+    @apply bg-[#0f172a] text-slate-300 relative overflow-x-hidden;
+  }
+
+  /* 🚀 طبقة النسيج السينمائي (Noise Texture) لمنع الإجهاد البصري وإعطاء فخامة */
+  body::before {
+    content: "";
+    @apply absolute inset-0 pointer-events-none z-[-1] opacity-[0.03];
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
 }
 
 @layer components {
-  /* 🚀 الفئات الزجاجية العالمية للاستخدام في أي صفحة */
+  /* 🚀 الفئات الزجاجية العالمية للاستخدام في أي صفحة (Soft Glass) */
   .glass-panel {
-    @apply bg-[#131836]/60 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)];
+    /* تم تخفيف الخلفية وتقليل حدة الظلال */
+    @apply bg-[#1e293b]/40 backdrop-blur-2xl border border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.2)];
   }
   
   .glass-header {
-    @apply bg-[#090b14]/70 backdrop-blur-2xl border-b border-white/5 shadow-[0_4px_30px_rgba(0,0,0,0.5)];
+    @apply bg-[#0f172a]/70 backdrop-blur-3xl border-b border-white/5 shadow-[0_4px_30px_rgba(0,0,0,0.3)];
   }
   
   .glass-input {
-    @apply bg-[#090b14]/50 backdrop-blur-md border border-white/10 focus:bg-[#131836] focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 outline-none transition-all text-white placeholder:text-slate-500;
+    @apply bg-[#1e293b]/50 backdrop-blur-md border border-white/10 focus:bg-[#1e293b]/80 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all text-slate-200 placeholder:text-slate-500 shadow-inner;
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-200;
+    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-300;
   }
   
   .sidebar-link-active {
-    @apply bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-900 font-black shadow-[0_0_20px_rgba(16,185,129,0.3)];
+    /* تدرج لوني أهدأ لراحة العين */
+    @apply bg-gradient-to-r from-emerald-500/90 to-teal-500/90 text-white font-black shadow-[0_0_20px_rgba(16,185,129,0.2)];
   }
 }
 
-/* 🚀 Custom Scrollbar for Dark Mode */
+/* 🚀 Custom Scrollbar for Dark Mode (أنعم وأرق) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-[#090b14];
+  @apply bg-transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-700 rounded-full hover:bg-emerald-500 transition-colors;
+  @apply bg-slate-700/50 rounded-full hover:bg-emerald-500/80 transition-colors;
 }
 
 /* إعدادات الطباعة العالمية */
 @media print {
   @page { size: landscape; margin: 10mm; }
   body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: white !important; color: black !important; }
+  body::before { display: none !important; }
   .glass-panel, .glass-header { background: white !important; backdrop-filter: none !important; box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
   .print-hidden { display: none !important; }
+}
+
+/* 🚀 حركات الأنيميشن للخلفية المضيئة (Slow Breathe) */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.05); }
+}
+.animate-blob {
+  animation: pulse-slow 10s infinite alternate;
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
 }
