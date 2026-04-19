@@ -548,7 +548,7 @@ export default function AttendancePage() {
               );
             })
           )}
-        </motion.div>
+       </div>
       </div>
     );
   }
