@@ -10,7 +10,7 @@ import {
   Shield, Users, Loader2, Sparkles, 
   FileText, Bell, CheckCircle, Search, 
   UserPlus, AlertTriangle, CalendarDays, GraduationCap, ClipboardList,
-  Settings, Building2, Calculator, HeartPulse, Activity, UserCheck, PlusCircle, X
+  Settings, Building2, Calculator, HeartPulse, Activity, UserCheck, PlusCircle, X, ShieldAlert
 } from 'lucide-react';
 
 export default function StaffDashboardPage() {
@@ -64,7 +64,7 @@ export default function StaffDashboardPage() {
       setLinkStatus({type: 'success', msg: `تمت إضافة ${student.users?.full_name} للقائمة.`});
       setTimeout(() => setLinkStatus({type: 'idle', msg: ''}), 2000);
     } else {
-      setLinkStatus({type: 'error', msg: 'لم يتم العثور على طالب.'});
+      setLinkStatus({type: 'error', msg: 'لم يتم العثور على طالب بالرقم المدني المدخل.'});
     }
   };
 
@@ -75,7 +75,7 @@ export default function StaffDashboardPage() {
   const handleCreateParent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedStudents.length === 0 || !parentForm.national_id) {
-      setLinkStatus({type: 'error', msg: 'يرجى إضافة طالب وإدخال الرقم المدني.'}); return;
+      setLinkStatus({type: 'error', msg: 'يرجى إضافة طالب وإدخال الرقم المدني لولي الأمر.'}); return;
     }
 
     setLinkStatus({type: 'loading', msg: 'جاري التحقق والتسجيل والربط الشامل...'});
@@ -161,84 +161,162 @@ export default function StaffDashboardPage() {
     }
   };
 
-  if (isChecking || loading) return <div className="flex h-[80vh] items-center justify-center flex-col gap-4 font-cairo"><Loader2 className="w-12 h-12 text-indigo-600 animate-spin" /><p className="font-bold text-slate-500 animate-pulse">جاري تجهيز مساحة العمل...</p></div>;
+  // 🚀 شاشات الحماية والتحميل (الثيم الملكي)
+  if (isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative flex items-center justify-center">
+             <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
+             <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
+          </div>
+          <p className="text-indigo-500 font-black animate-pulse tracking-widest drop-shadow-md">جاري التحقق وتأمين الصلاحيات...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo relative z-10">
+        <div className="flex flex-col items-center gap-5">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.4)]"></div>
+          <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تجهيز مساحة العمل...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!staffData) return null;
 
   const hasPerm = (key: string) => staffData.permissions[key] === true;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6" dir="rtl">
-      <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 sm:p-10 rounded-[3rem] shadow-xl border border-slate-100 relative overflow-hidden mb-8">
-        <div className="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 z-0"></div>
-        <div className="flex items-center gap-6 z-10 w-full md:w-auto">
-          <div className="h-20 w-20 shrink-0 bg-gradient-to-br from-indigo-600 to-violet-700 text-white rounded-[1.5rem] flex items-center justify-center text-3xl font-black shadow-lg">{staffData.users?.full_name?.charAt(0)}</div>
-          <div>
-            <div className="flex items-center flex-wrap gap-3 mb-1">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900">{staffData.users?.full_name}</h1>
-              <span className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-black rounded-lg">{staffData.job_category}</span>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6 relative z-10" dir="rtl">
+      
+      {/* 🚀 الهيدر الفخم (Obsidian & Indigo/Violet) */}
+      <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0a0d1a] to-[#02040a] border border-white/10 p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)] mb-8">
+        <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8 text-center md:text-right">
+          
+          <div className="flex flex-col md:flex-row items-center gap-6 z-10 w-full md:w-auto">
+            <div className="relative group shrink-0">
+              <div className="h-24 w-24 sm:h-28 sm:w-28 bg-gradient-to-br from-indigo-500 to-violet-600 text-slate-950 rounded-[2rem] flex items-center justify-center text-4xl sm:text-5xl font-black shadow-[0_0_30px_rgba(99,102,241,0.3)] border-2 border-indigo-300/50 group-hover:scale-105 group-hover:rotate-3 transition-transform duration-500">
+                {staffData.users?.full_name?.charAt(0)}
+              </div>
+              <div className="absolute inset-0 bg-indigo-500/20 rounded-[2rem] blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
             </div>
-            <p className="text-indigo-600 font-black text-lg">{staffData.job_title}</p>
+            <div>
+              <div className="flex flex-col md:flex-row items-center md:items-center flex-wrap gap-2 sm:gap-3 mb-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-[10px] sm:text-xs font-black text-indigo-400 uppercase tracking-widest shadow-inner">
+                  <Shield className="w-3.5 h-3.5" /> مساحة الفريق الإداري
+                </div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-md">{staffData.users?.full_name}</h1>
+                <span className="px-3 py-1 sm:py-1.5 bg-[#0f1423] text-slate-300 text-[10px] sm:text-xs font-black rounded-lg border border-white/5 shadow-inner mt-2 md:mt-0">{staffData.job_category}</span>
+              </div>
+              <p className="text-indigo-400 font-black text-base sm:text-lg drop-shadow-sm">{staffData.job_title}</p>
+            </div>
           </div>
+          
+          <div className="bg-[#0f1423]/80 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 text-center min-w-[150px] sm:min-w-[180px] z-10 shadow-inner w-full md:w-auto">
+            <div className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-center gap-1.5 drop-shadow-sm">
+              <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" /> نطاق الصلاحيات
+            </div>
+            <div className="text-sm sm:text-base font-black text-indigo-400 bg-indigo-500/10 px-3 sm:px-4 py-2 rounded-xl border border-indigo-500/20 shadow-inner truncate max-w-full">
+              {staffData.scope_stage}
+            </div>
+          </div>
+
         </div>
-        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center min-w-[150px] z-10">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-center gap-1"><Shield className="w-3 h-3" /> نطاق الصلاحيات</div>
-          <div className="text-sm font-black text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">{staffData.scope_stage}</div>
-        </div>
+        <div className="absolute -left-10 -bottom-10 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-indigo-500/10 blur-[80px] pointer-events-none"></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <h2 className="text-xl font-black text-slate-800 px-2 flex items-center gap-2"><Settings className="w-5 h-5 text-indigo-500"/> أدوات مساحة العمل المعتمدة لك</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+        
+        {/* 🚀 Main Workspace Area */}
+        <div className="lg:col-span-2 space-y-6 lg:space-y-8">
+          <h2 className="text-lg sm:text-xl font-black text-white px-2 flex items-center gap-2 drop-shadow-sm">
+            <Settings className="w-5 h-5 text-indigo-400"/> أدوات مساحة العمل المعتمدة لك
+          </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
+            {/* 🚀 مكتب استقبال أولياء الأمور (القسم الأهم) */}
             {hasPerm('link_parents') && (
-              <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 sm:p-8 rounded-[2.5rem] shadow-xl text-white md:col-span-2 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="flex items-start justify-between mb-6 relative z-10">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] lg:rounded-[2.5rem] shadow-xl border border-white/10 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-48 h-48 sm:w-64 sm:h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
+                <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-6 sm:mb-8 relative z-10 gap-4 text-center sm:text-right">
                   <div>
-                    <h3 className="font-black text-2xl mb-2 flex items-center gap-3"><UserPlus className="w-6 h-6 text-indigo-300"/> مكتب استقبال أولياء الأمور</h3>
-                    <p className="text-indigo-200 text-sm font-bold opacity-90">ابحث عن الطلاب (يمكنك إضافة أكثر من طالب/إخوة)، ثم قم بربطهم جميعاً بملف ولي الأمر بضغطة واحدة.</p>
+                    <h3 className="font-black text-xl sm:text-2xl mb-2 flex items-center justify-center sm:justify-start gap-2 sm:gap-3 text-white drop-shadow-md">
+                      <div className="p-2 sm:p-2.5 bg-indigo-500/20 rounded-xl border border-indigo-500/30 shadow-inner shrink-0">
+                        <UserPlus className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400"/>
+                      </div> 
+                      مكتب استقبال أولياء الأمور
+                    </h3>
+                    <p className="text-slate-400 text-xs sm:text-sm font-bold opacity-90 max-w-xl mx-auto sm:mx-0 leading-relaxed">ابحث عن الطلاب (يمكنك إضافة أكثر من طالب/إخوة)، ثم قم بربطهم جميعاً بملف ولي الأمر بضغطة واحدة.</p>
                   </div>
                 </div>
                 
-                <div className="space-y-6 relative z-10">
-                  <div className="bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/20">
-                    <form onSubmit={handleAddStudentToList} className="flex flex-col sm:flex-row gap-3">
-                      <div className="relative flex-1">
-                        <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-300" />
-                        <input type="text" value={searchStudentId} onChange={(e) => setSearchStudentId(e.target.value)} placeholder="الرقم المدني للطالب..." className="w-full bg-slate-900/30 border border-indigo-400/30 text-white placeholder:text-indigo-300 rounded-xl py-3.5 pr-12 pl-4 font-bold outline-none focus:bg-slate-900/50 focus:border-indigo-400 transition-all text-lg" dir="ltr" style={{ textAlign: 'right' }} />
+                <div className="space-y-6 sm:space-y-8 relative z-10">
+                  {/* أداة البحث */}
+                  <div className="bg-[#0f1423]/60 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
+                    <form onSubmit={handleAddStudentToList} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                      <div className="relative flex-1 group/search">
+                        <Search className="absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-500 group-focus-within/search:text-indigo-400 transition-colors" />
+                        <input 
+                          type="text" 
+                          value={searchStudentId} 
+                          onChange={(e) => setSearchStudentId(e.target.value)} 
+                          placeholder="الرقم المدني للطالب..." 
+                          className="w-full bg-[#02040a]/60 border border-white/5 text-white placeholder:text-slate-500 rounded-xl sm:rounded-2xl py-3.5 sm:py-4 pr-12 pl-4 font-bold outline-none focus:bg-[#02040a]/80 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 transition-all text-sm sm:text-base shadow-inner" 
+                          dir="ltr" 
+                          style={{ textAlign: 'right' }} 
+                        />
                       </div>
-                      <button type="submit" disabled={linkStatus.type === 'loading' || !searchStudentId} className="bg-indigo-500 text-white font-black px-8 py-3.5 rounded-xl hover:bg-indigo-400 active:scale-95 disabled:opacity-50 shadow-lg shadow-indigo-500/20 whitespace-nowrap">
+                      <button type="submit" disabled={linkStatus.type === 'loading' || !searchStudentId} className="bg-indigo-600 text-white font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl hover:bg-indigo-500 active:scale-95 disabled:opacity-50 shadow-[0_0_15px_rgba(79,70,229,0.4)] whitespace-nowrap transition-all border border-indigo-400/50 text-sm sm:text-base w-full sm:w-auto">
                         إضافة للقائمة
                       </button>
                     </form>
                   </div>
 
+                  {/* قائمة الطلاب المحددين ونموذج ولي الأمر */}
                   <AnimatePresence>
                     {selectedStudents.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-white text-slate-900 p-6 sm:p-8 rounded-3xl shadow-2xl">
-                        <div className="mb-6 pb-6 border-b border-slate-100">
-                          <h4 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-3">الطلاب المراد ربطهم ({selectedStudents.length})</h4>
-                          <div className="flex flex-wrap gap-2">
+                      <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-[#02040a]/60 border border-white/10 p-5 sm:p-6 lg:p-8 rounded-[1.5rem] sm:rounded-[2rem] shadow-inner">
+                        <div className="mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-white/5">
+                          <h4 className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest mb-3 sm:mb-4 flex items-center gap-2">الطلاب المراد ربطهم ({selectedStudents.length})</h4>
+                          <div className="flex flex-wrap gap-2 sm:gap-3">
                             {selectedStudents.map(student => (
-                              <div key={student.id} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl border border-indigo-100">
-                                <UserCheck className="w-4 h-4 text-indigo-500"/>
-                                <span className="font-bold text-sm">{student.users?.full_name?.split(' ')[0]}</span>
-                                <button onClick={() => handleRemoveStudent(student.id)} className="ml-1 text-indigo-400 hover:text-rose-500"><X className="w-4 h-4"/></button>
+                              <div key={student.id} className="flex items-center gap-2 bg-indigo-500/10 text-indigo-300 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-indigo-500/20 shadow-inner">
+                                <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400"/>
+                                <span className="font-bold text-xs sm:text-sm truncate max-w-[150px] sm:max-w-none">{student.users?.full_name?.split(' ')[0]}</span>
+                                <button onClick={() => handleRemoveStudent(student.id)} className="ml-1 sm:ml-2 text-slate-500 hover:text-rose-400 bg-[#02040a]/50 p-1 rounded-md transition-colors"><X className="w-3 h-3 sm:w-4 sm:h-4"/></button>
                               </div>
                             ))}
                           </div>
                         </div>
 
-                        <form onSubmit={handleCreateParent} className="space-y-5">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                            <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">الاسم الكامل لولي الأمر</label><input type="text" required value={parentForm.full_name} onChange={e => setParentForm({...parentForm, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                            <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">الرقم المدني</label><input type="text" required value={parentForm.national_id} onChange={e => setParentForm({...parentForm, national_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none text-left" dir="ltr" /></div>
-                            <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">رقم الهاتف</label><input type="text" value={parentForm.phone} onChange={e => setParentForm({...parentForm, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none text-left" dir="ltr" /></div>
-                            <div className="space-y-1.5"><label className="text-xs font-black text-slate-500 uppercase">البريد الإلكتروني</label><input type="email" value={parentForm.email} onChange={e => setParentForm({...parentForm, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none text-left" dir="ltr" /></div>
+                        <form onSubmit={handleCreateParent} className="space-y-5 sm:space-y-6">
+                          <h4 className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest mb-2 sm:mb-4 flex items-center gap-2">بيانات ولي الأمر</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+                            <div className="space-y-1.5 sm:space-y-2">
+                              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-1">الاسم الكامل لولي الأمر <span className="text-rose-500">*</span></label>
+                              <input type="text" required value={parentForm.full_name} onChange={e => setParentForm({...parentForm, full_name: e.target.value})} className="w-full bg-[#0f1423]/60 border border-white/5 rounded-xl sm:rounded-2xl px-4 py-3 sm:py-3.5 font-bold outline-none focus:border-indigo-500/50 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/20 text-white shadow-inner transition-all text-sm sm:text-base" />
+                            </div>
+                            <div className="space-y-1.5 sm:space-y-2">
+                              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-1">الرقم المدني <span className="text-rose-500">*</span></label>
+                              <input type="text" required value={parentForm.national_id} onChange={e => setParentForm({...parentForm, national_id: e.target.value})} className="w-full bg-[#0f1423]/60 border border-white/5 rounded-xl sm:rounded-2xl px-4 py-3 sm:py-3.5 font-bold outline-none focus:border-indigo-500/50 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/20 text-white shadow-inner transition-all text-left text-sm sm:text-base" dir="ltr" />
+                            </div>
+                            <div className="space-y-1.5 sm:space-y-2">
+                              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-1">رقم الهاتف</label>
+                              <input type="text" value={parentForm.phone} onChange={e => setParentForm({...parentForm, phone: e.target.value})} className="w-full bg-[#0f1423]/60 border border-white/5 rounded-xl sm:rounded-2xl px-4 py-3 sm:py-3.5 font-bold outline-none focus:border-indigo-500/50 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/20 text-white shadow-inner transition-all text-left text-sm sm:text-base" dir="ltr" />
+                            </div>
+                            <div className="space-y-1.5 sm:space-y-2">
+                              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-1">البريد الإلكتروني</label>
+                              <input type="email" value={parentForm.email} onChange={e => setParentForm({...parentForm, email: e.target.value})} className="w-full bg-[#0f1423]/60 border border-white/5 rounded-xl sm:rounded-2xl px-4 py-3 sm:py-3.5 font-bold outline-none focus:border-indigo-500/50 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/20 text-white shadow-inner transition-all text-left text-sm sm:text-base" dir="ltr" />
+                            </div>
                           </div>
-                          <button type="submit" disabled={linkStatus.type === 'loading'} className="w-full bg-emerald-500 text-white font-black px-6 py-4 rounded-xl hover:bg-emerald-600 active:scale-95 disabled:opacity-70 flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 mt-4 text-lg">
-                            {linkStatus.type === 'loading' ? <Loader2 className="w-6 h-6 animate-spin"/> : <><PlusCircle className="w-6 h-6"/> تسجيل واعتماد ربط {selectedStudents.length > 1 ? 'الأبناء' : 'الابن'}</>}
+                          <button type="submit" disabled={linkStatus.type === 'loading'} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-slate-950 font-black px-6 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl hover:from-emerald-500 hover:to-teal-500 active:scale-95 disabled:opacity-50 flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.3)] mt-6 sm:mt-8 text-sm sm:text-base border border-emerald-400/50 transition-all">
+                            {linkStatus.type === 'loading' ? <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin"/> : <><PlusCircle className="w-5 h-5 sm:w-6 sm:h-6"/> تسجيل واعتماد ربط {selectedStudents.length > 1 ? 'الأبناء' : 'الابن'}</>}
                           </button>
                         </form>
                       </motion.div>
@@ -247,31 +325,47 @@ export default function StaffDashboardPage() {
 
                   <AnimatePresence>
                     {linkStatus.msg && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className={`overflow-hidden rounded-xl border mt-4 ${linkStatus.type === 'success' ? 'bg-emerald-500/20 border-emerald-400/30 text-emerald-100' : linkStatus.type === 'error' ? 'bg-rose-500/20 border-rose-400/30 text-rose-100' : 'bg-white/5 text-indigo-100'}`}>
-                        <div className="p-4 font-bold text-sm leading-relaxed">{linkStatus.msg}</div>
+                      <motion.div initial={{ opacity: 0, height: 0, scale: 0.95 }} animate={{ opacity: 1, height: 'auto', scale: 1 }} exit={{ opacity: 0, height: 0, scale: 0.95 }} className={`overflow-hidden rounded-xl sm:rounded-2xl border mt-4 sm:mt-5 ${linkStatus.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : linkStatus.type === 'error' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 shadow-[0_0_15px_rgba(225,29,72,0.2)]' : 'bg-white/5 text-indigo-300 border-white/10'}`}>
+                        <div className="p-4 sm:p-5 font-bold text-xs sm:text-sm leading-relaxed flex items-start sm:items-center gap-3">
+                          {linkStatus.type === 'success' ? <CheckCircle className="w-5 h-5 shrink-0" /> : linkStatus.type === 'error' ? <AlertTriangle className="w-5 h-5 shrink-0" /> : <Loader2 className="w-5 h-5 shrink-0 animate-spin" />}
+                          {linkStatus.msg}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
-              </div>
+              </motion.div>
             )}
 
+            {/* 🚀 سجل الطلاب */}
             {hasPerm('view_students') && (
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
-                <div className="w-12 h-12 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Users className="w-6 h-6"/></div>
-                <h3 className="font-black text-slate-800 text-lg mb-1">سجل الطلاب الشامل</h3>
-                <button className="w-full py-2.5 bg-slate-50 text-sky-600 font-black text-sm rounded-xl mt-4">فتح السجل</button>
-              </div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-sm hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/30 transition-all group relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 text-center sm:text-right">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-500/10 text-blue-400 rounded-xl sm:rounded-2xl border border-blue-500/20 flex items-center justify-center shrink-0 shadow-inner"><Users className="w-6 h-6 sm:w-7 sm:h-7"/></div>
+                    <div>
+                      <h3 className="font-black text-white text-lg sm:text-xl mb-1 drop-shadow-sm">سجل الطلاب الشامل</h3>
+                      <p className="text-slate-400 text-xs sm:text-sm font-bold">استعراض وتعديل بيانات جميع الطلاب المسجلين في المنصة.</p>
+                    </div>
+                  </div>
+                  <button className="w-full sm:w-auto px-6 py-2.5 sm:py-3 bg-[#02040a]/80 hover:bg-[#0f1423] text-blue-400 hover:text-blue-300 border border-blue-500/30 font-black text-xs sm:text-sm rounded-xl transition-all shadow-inner active:scale-95 shrink-0 whitespace-nowrap">فتح السجل</button>
+                </div>
+              </motion.div>
             )}
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-             <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-black mb-6 w-fit border border-slate-200"><Sparkles className="w-4 h-4"/> مساحة مشتركة</div>
-             <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2"><Bell className="w-5 h-5 text-amber-500" /> التعاميم الداخلية</h3>
-             <button className="w-full text-right px-4 py-3 bg-slate-50 hover:bg-indigo-50 text-slate-700 font-bold text-sm rounded-xl transition-colors mb-2">تقديم طلب إجازة</button>
-          </div>
+        {/* 🌟 Column 2: Narrow Area - Side Panel */}
+        <div className="space-y-6 lg:space-y-8 w-full mt-6 lg:mt-0">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="glass-panel p-6 sm:p-8 rounded-[2rem] shadow-sm border border-white/10 relative overflow-hidden">
+             <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+             <div className="relative z-10">
+               <div className="inline-flex items-center gap-2 bg-[#02040a]/60 text-slate-400 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-black mb-5 sm:mb-6 w-fit border border-white/5 shadow-inner"><Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400"/> مساحة مشتركة</div>
+               <h3 className="text-lg sm:text-xl font-black text-white mb-4 sm:mb-5 flex items-center gap-2 drop-shadow-sm"><Bell className="w-5 h-5 text-amber-500" /> التعاميم الداخلية</h3>
+               <button className="w-full text-center sm:text-right px-4 sm:px-5 py-3 sm:py-3.5 bg-[#02040a]/60 hover:bg-[#0f1423] border border-white/5 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-400 font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-inner active:scale-95">تقديم طلب إجازة</button>
+             </div>
+          </motion.div>
         </div>
       </div>
     </motion.div>
