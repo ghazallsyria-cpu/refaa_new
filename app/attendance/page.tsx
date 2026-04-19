@@ -68,7 +68,7 @@ export default function AttendancePage() {
   }, []);
 
   // ==========================================================
-  // 🚀 دوال الإدارة (تعمل فقط إذا كان المستخدم مديراً)
+  // 🚀 دوال الإدارة
   // ==========================================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin || !snapshotDate) return;
@@ -162,7 +162,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم (تعمل فقط إذا كان المستخدم معلماً)
+  // 🚀 دوال المعلم
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -222,7 +222,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال الطالب (تعمل فقط إذا كان المستخدم طالباً)
+  // 🚀 دوال الطالب
   // ==========================================================
   const fetchStudentDataDirectly = useCallback(async () => {
     if (currentRole !== 'student' || !user) return;
@@ -270,9 +270,6 @@ export default function AttendancePage() {
 
   useEffect(() => { if (Object.keys(groupedAttendanceRecords).length > 0 && !activeSubjectTab) setActiveSubjectTab(Object.keys(groupedAttendanceRecords)[0]); }, [groupedAttendanceRecords, activeSubjectTab]);
 
-  // ==========================================================
-  // شاشة حماية الوصول
-  // ==========================================================
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#090b14]">
@@ -285,7 +282,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة الإدارة (الميزة التي طلبها المدير: لا رصد بل نموذج إحصائي)
+  // 🚀 واجهة الإدارة 
   // ==========================================================
   if (isAdmin) {
     return (
@@ -402,7 +399,6 @@ export default function AttendancePage() {
         <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
         <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-8">
-          {/* ... محتوى الطالب كما هو بالظبط ... */}
           <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 p-6 sm:p-12 text-white shadow-[0_0_40px_rgba(79,70,229,0.3)]">
             <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-right">
               <div>
@@ -431,7 +427,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم (رصد الغياب)
+  // 🚀 واجهة المعلم (رصد الغياب + الإحصائيات العلوية التي طلبها المستخدم)
   // ==========================================================
   const presentCount = Object.values(attendance).filter(v => v === 'present').length;
   const absentCount = Object.values(attendance).filter(v => v === 'absent').length;
@@ -485,6 +481,32 @@ export default function AttendancePage() {
             <div className="mt-6 pt-5 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4"><div className="flex items-center gap-2 text-emerald-400/80 text-sm font-bold"><Info className="w-5 h-5 shrink-0" /> يرجى التأكد من كتابة عنوان الدرس لاعتماده في الإدارة.</div>{user?.id && <TeacherCheckInButton teacherId={user.id} periodNumber={period} selectedDate={date} className="w-full sm:w-auto" />}</div>
           )}
         </div>
+
+        {/* 🚀 إحصائيات المعلم العلوية (تم استرجاعها وتصميمها زجاجياً) */}
+        {students.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <Users className="h-6 w-6 text-indigo-400 mb-2" /><p className="text-2xl font-black text-white">{students.length}</p><p className="text-[10px] font-bold text-slate-400 uppercase mt-1">الطلاب</p>
+            </div>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <CheckCircle2 className="h-6 w-6 text-emerald-400 mb-2" /><p className="text-2xl font-black text-white">{presentCount}</p><p className="text-[10px] font-bold text-emerald-500/70 uppercase mt-1">حاضر</p>
+            </div>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <XCircle className="h-6 w-6 text-rose-400 mb-2" /><p className="text-2xl font-black text-white">{absentCount}</p><p className="text-[10px] font-bold text-rose-500/70 uppercase mt-1">غائب</p>
+            </div>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <Clock className="h-6 w-6 text-amber-400 mb-2" /><p className="text-2xl font-black text-white">{lateCount}</p><p className="text-[10px] font-bold text-amber-500/70 uppercase mt-1">متأخر</p>
+            </div>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <AlertCircle className="h-6 w-6 text-blue-400 mb-2" /><p className="text-2xl font-black text-white">{excusedCount}</p><p className="text-[10px] font-bold text-blue-500/70 uppercase mt-1">مستأذن</p>
+            </div>
+            <div className={`p-5 rounded-[1.5rem] border flex flex-col justify-center items-center text-center shadow-lg ${unmarkedCount > 0 ? 'bg-[#131836]/60 border-white/5' : 'bg-emerald-500/20 border-emerald-500/30'}`}>
+              {unmarkedCount > 0 ? <UserMinus className="h-6 w-6 text-slate-500 mb-2" /> : <CheckCircle2 className="h-6 w-6 text-emerald-400 mb-2" />}
+              <p className={`text-2xl font-black ${unmarkedCount > 0 ? 'text-white' : 'text-emerald-400'}`}>{unmarkedCount}</p>
+              <p className={`text-[10px] font-bold uppercase mt-1 ${unmarkedCount > 0 ? 'text-slate-500' : 'text-emerald-500/70'}`}>{unmarkedCount > 0 ? 'متبقي' : 'اكتمل'}</p>
+            </div>
+          </div>
+        )}
 
         {students.length > 0 && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
