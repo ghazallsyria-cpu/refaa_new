@@ -17,6 +17,7 @@ export function Header({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const router = useRouter();
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
+  const [imageError, setImageError] = useState(false); // حالة خطأ تحميل الصورة
 
   useEffect(() => {
     const fetchSchoolData = async () => {
@@ -47,8 +48,20 @@ export function Header({
         {!showMenuButton && (
           <Link href="/" className="flex items-center gap-4 group transition-transform hover:scale-105">
             <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-[#090b14] shadow-[0_0_20px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/30 relative overflow-hidden">
-       <Image src="/images/logo.png" alt="Logo" fill className="object-contain p-1.5 drop-shadow-lg" />
-
+               {/* 🚀 إضافة Fallback في حال عدم وجود الصورة */}
+               {!imageError ? (
+                 <Image 
+                   src="/images/logo.png" 
+                   alt="Logo" 
+                   fill 
+                   sizes="48px"
+                   priority
+                   className="object-contain p-1.5 drop-shadow-lg" 
+                   onError={() => setImageError(true)}
+                 />
+               ) : (
+                 <School className="w-6 h-6 text-emerald-400" />
+               )}
             </div>
             <div className="hidden sm:flex flex-col">
               <span className="text-lg font-black text-white tracking-tight leading-none group-hover:text-emerald-400 transition-colors drop-shadow-md">{schoolData.name}</span>
