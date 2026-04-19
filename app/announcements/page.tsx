@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAnnouncementsSystem, Announcement } from '@/hooks/useAnnouncementsSystem';
 import { useAuth } from '@/context/auth-context';
-import { Plus, Search, Edit2, Trash2, Megaphone, Bell, X, Users, Calendar, Filter, AlertCircle, ArrowRight, CheckCircle2, Loader2, Sparkles, ShieldAlert } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Megaphone, Bell, X, Users, Calendar, Filter, AlertCircle, ArrowRight, CheckCircle2, Loader2, Sparkles, ShieldAlert, ChevronLeft } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
