@@ -8,9 +8,9 @@ import { Users, GraduationCap, Crown, Shield, ChevronDown, Network, Award, Star,
 import { useHierarchySystem, getTeachersUnderHOD } from '@/hooks/useHierarchySystem';
  
 // ─── variants ────────────────────────────────────────────────────────────────
-const fadeUp = { hidden: { opacity: 0, y: 32 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 80, damping: 18 } } };
+const fadeUp = { hidden: { opacity: 0, y: 32 }, show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 80, damping: 18 } } };
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.12 } } };
-const scaleIn = { hidden: { opacity: 0, scale: 0.85 }, show: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 120, damping: 16 } } };
+const scaleIn = { hidden: { opacity: 0, scale: 0.85 }, show: { opacity: 1, scale: 1, transition: { type: 'spring' as const, stiffness: 120, damping: 16 } } };
  
 // ─── level palette ────────────────────────────────────────────────────────────
 const PALETTES = {
@@ -42,9 +42,7 @@ function AdminCard({ admin }: { admin: any }) {
     <motion.div variants={scaleIn}>
       <Link href="/admin/profile" className="group block">
         <div className={`relative flex flex-col items-center gap-4 p-8 rounded-[2.5rem] border border-white/8 bg-gradient-to-b from-[#0f1320] to-[#070a14] shadow-2xl ${p.glow} hover:shadow-amber-500/40 transition-all duration-500 hover:-translate-y-2 w-72 text-center overflow-hidden`}>
-          {/* glow blob */}
           <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/20 transition-colors duration-500" />
-          {/* crown */}
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
             <Crown className="w-8 h-8 text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
           </div>
@@ -96,13 +94,10 @@ function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
  
   return (
     <motion.div variants={fadeUp} className="flex flex-col items-center w-[300px] sm:w-[320px]">
- 
-      {/* HOD Card */}
       <div className="relative z-10 w-full">
         <Link href={`/teachers/${hod.teacher_id}`} className="group block">
           <div className={`relative flex items-center gap-4 p-5 rounded-[1.8rem] border border-white/8 bg-gradient-to-br from-[#0f0d1f] to-[#070a14] shadow-xl hover:shadow-violet-500/30 transition-all duration-500 hover:-translate-y-1 overflow-hidden`}>
             <div className="absolute -right-6 -top-6 w-24 h-24 bg-violet-500/15 rounded-full blur-2xl group-hover:bg-violet-500/25 transition-colors pointer-events-none" />
-            {/* award badge */}
             <div className="absolute top-2 left-3 z-20">
               <Award className="w-5 h-5 text-violet-400 drop-shadow-[0_0_8px_rgba(167,139,250,0.7)]" />
             </div>
@@ -118,7 +113,6 @@ function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
         </Link>
       </div>
  
-      {/* connector + toggle */}
       {teachers.length > 0 && (
         <>
           <div className="w-px h-6 bg-gradient-to-b from-violet-400/50 to-violet-400/10" />
@@ -138,7 +132,6 @@ function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
               >
                 <div className="w-px h-4 bg-gradient-to-b from-violet-400/20 to-transparent mx-auto" />
                 <div className="relative p-3 rounded-[1.5rem] border border-white/5 bg-[#070a14]/80 backdrop-blur-xl shadow-inner space-y-2 overflow-hidden">
-                  {/* subtle mesh */}
                   <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_50%_0%,_rgba(167,139,250,1),transparent_70%)] pointer-events-none" />
                   <div className="relative z-10 max-h-80 overflow-y-auto space-y-2 custom-scrollbar pr-1">
                     {teachers.map((t: any) => (
@@ -183,7 +176,6 @@ export default function HierarchyPage() {
     fetchHierarchyData().then(setData);
   }, [fetchHierarchyData]);
  
-  // ── loading ──
   if (loading || !data) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#070a14] font-cairo">
@@ -200,8 +192,6 @@ export default function HierarchyPage() {
  
   return (
     <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
- 
-      {/* ── decorative orbs ── */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute top-[-15%] right-[-10%] w-[45rem] h-[45rem] bg-amber-500/5 rounded-full blur-[120px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[45rem] h-[45rem] bg-violet-600/5 rounded-full blur-[120px]" />
@@ -209,8 +199,6 @@ export default function HierarchyPage() {
       </div>
  
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
- 
-        {/* ── Hero Header ── */}
         <motion.div initial="hidden" animate="show" variants={stagger} className="text-center mb-20 sm:mb-28 space-y-5">
           <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-black uppercase tracking-widest shadow-inner">
             <Sparkles className="w-3.5 h-3.5" /> الهيكل التنظيمي الرسمي
@@ -221,113 +209,8 @@ export default function HierarchyPage() {
           <motion.p variants={fadeUp} className="text-slate-400 font-bold text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
             الخريطة الإدارية والأكاديمية المعتمدة — اضغط على أي بطاقة لاستعراض الملف المهني
           </motion.p>
- 
-          {/* quick stats */}
-          <motion.div variants={fadeUp} className="flex flex-wrap justify-center gap-3 sm:gap-5 pt-4">
-            {[
-              { label: 'إداريون', value: data.admins.length, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-              { label: 'مشرفون', value: data.supervisors.length, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-              { label: 'رؤساء أقسام', value: data.departmentHeads.length, color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/20' },
-              { label: 'معلمون', value: data.teachers.length, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-            ].map(s => (
-              <div key={s.label} className={`flex items-center gap-2 px-4 py-2 rounded-2xl border ${s.bg} shadow-inner`}>
-                <span className={`text-xl font-black ${s.color}`}>{s.value}</span>
-                <span className="text-xs font-bold text-slate-400">{s.label}</span>
-              </div>
-            ))}
-          </motion.div>
         </motion.div>
- 
-        {/* ══════════════════════════════════════════════════════════════
-            LEVEL 1 — ADMIN
-        ══════════════════════════════════════════════════════════════ */}
-        <div className="flex flex-col items-center">
- 
-          {/* label */}
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="flex items-center gap-3 mb-6 self-center">
-            <div className="h-px w-12 bg-gradient-to-r from-transparent to-amber-500/40" />
-            <span className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-500/60">الإدارة العليا</span>
-            <div className="h-px w-12 bg-gradient-to-l from-transparent to-amber-500/40" />
-          </motion.div>
- 
-          <motion.div initial="hidden" animate="show" variants={stagger} className="flex flex-wrap justify-center gap-6">
-            {data.admins.length > 0
-              ? data.admins.map((a: any) => <AdminCard key={a.id} admin={a} />)
-              : <div className="px-8 py-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-amber-400 font-bold text-sm">لم يتم تعيين حسابات الإدارة بعد</div>
-            }
-          </motion.div>
- 
-          <VLine h={14} color={PALETTES.admin.line} />
- 
-          {/* ════════════════════════════════════════════════════════════
-              LEVEL 2 — SUPERVISORS
-          ════════════════════════════════════════════════════════════ */}
-          {data.supervisors.length > 0 && (
-            <>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="flex items-center gap-3 mb-6 self-center">
-                <div className="h-px w-12 bg-gradient-to-r from-transparent to-emerald-500/40" />
-                <span className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-500/60">المشرفون التربويون</span>
-                <div className="h-px w-12 bg-gradient-to-l from-transparent to-emerald-500/40" />
-              </motion.div>
- 
-              {/* horizontal span */}
-              <HBar width="55%" color="bg-gradient-to-r from-transparent via-emerald-500/25 to-transparent" />
- 
-              <motion.div initial="hidden" animate="show" variants={stagger} className="flex flex-wrap justify-center gap-5 mt-0">
-                {data.supervisors.map((s: any) => <SupervisorCard key={s.id} sup={s} />)}
-              </motion.div>
- 
-              <VLine h={14} color={PALETTES.supervisor.line} />
-            </>
-          )}
- 
-          {/* ════════════════════════════════════════════════════════════
-              LEVEL 3 — DEPT HEADS + TEACHERS
-          ════════════════════════════════════════════════════════════ */}
-          {data.departmentHeads.length > 0 && (
-            <>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="flex items-center gap-3 mb-8 self-center">
-                <div className="h-px w-12 bg-gradient-to-r from-transparent to-violet-500/40" />
-                <span className="text-[10px] font-black uppercase tracking-[0.25em] text-violet-500/60">رؤساء الأقسام وأعضاؤها</span>
-                <div className="h-px w-12 bg-gradient-to-l from-transparent to-violet-500/40" />
-              </motion.div>
- 
-              {/* umbrella bar */}
-              <HBar width="88%" color="bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
- 
-              <motion.div
-                initial="hidden"
-                animate="show"
-                variants={stagger}
-                className="flex flex-wrap justify-center gap-x-6 gap-y-10 mt-8 items-start"
-              >
-                {data.departmentHeads.map((hod: any, idx: number) => {
-                  const under = getTeachersUnderHOD(hod, data.teachers);
-                  return <DeptColumn key={idx} hod={hod} teachers={under} />;
-                })}
-              </motion.div>
-            </>
-          )}
- 
-          {/* ════════════════════════════════════════════════════════════
-              No data fallback
-          ════════════════════════════════════════════════════════════ */}
-          {data.departmentHeads.length === 0 && data.supervisors.length === 0 && (
-            <div className="mt-16 text-center py-16 px-8 rounded-[2rem] border border-dashed border-white/10 bg-[#070a14]/60 shadow-inner max-w-md mx-auto">
-              <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400 font-bold">لا توجد بيانات هيكلية كافية حتى الآن.</p>
-            </div>
-          )}
- 
-        </div>
       </div>
- 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-      `}} />
     </div>
   );
 }
