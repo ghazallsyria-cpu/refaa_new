@@ -75,22 +75,29 @@ export default function TeacherProfilePage() {
     if (rows) setMemories(rows);
   }, [teacherId]);
 
-  useEffect(() => {
-    if (!teacherId) return;
-    fetchTeacherProfile(teacherId).then(res => {
-      setData(res);
-      if (res?.profile_settings) {
-        setProfileSettings({
-          theme:        res.profile_settings.theme        || 'royal',
-          bio:          res.profile_settings.bio          || '',
-          achievements: res.profile_settings.achievements?.length ? res.profile_settings.achievements : [''],
-          youtube:      res.profile_settings.youtube      || '',
-          linkedin:     res.profile_settings.linkedin     || '',
-        });
-      }
-    });
-    fetchMemories();
-  }, [teacherId, fetchMemories]);
+useEffect(() => {
+  if (!teacherId) return;
+
+  const loadAll = async () => {
+    const res = await fetchTeacherProfile(teacherId);
+
+    setData(res);
+
+    if (res?.profile_settings) {
+      setProfileSettings({
+        theme:        res.profile_settings.theme        || 'royal',
+        bio:          res.profile_settings.bio          || '',
+        achievements: res.profile_settings.achievements?.length ? res.profile_settings.achievements : [''],
+        youtube:      res.profile_settings.youtube      || '',
+        linkedin:     res.profile_settings.linkedin     || '',
+      });
+    }
+
+    await fetchMemories(); // ✅ الآن آمن
+  };
+
+  loadAll();
+}, [teacherId, fetchTeacherProfile, fetchMemories]);
 
   /* ─── إرسال ذكرى ─── */
   const handleAddMemory = async () => {
