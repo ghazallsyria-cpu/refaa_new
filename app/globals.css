@@ -5,70 +5,68 @@
   --radius-3xl: 1.5rem;
   --radius-4xl: 2rem;
   
-  /* 🚀 ألوان الذهب اللامع الجديدة */
-  --color-brand-50: #fefce8;
-  --color-brand-100: #fef3c7;
-  --color-brand-500: #f59e0b; /* ذهبي ملكي */
+  /* 🚀 ألوان الذهب الخالص (Pure Gold) */
+  --color-brand-400: #fbbf24;
+  --color-brand-500: #f59e0b;
   --color-brand-600: #d97706;
-  --color-brand-700: #b45309;
 }
 
 @layer base {
   * {
-    @apply border-slate-200/50; /* حدود ناعمة ورقيقة */
+    @apply border-white/10;
   }
   body {
-    /* 🚀 خلفية أبيض لؤلؤي مضيء مع نص أسود فحمي لراحة العين والوضوح */
-    @apply bg-[#f8fafc] text-[#0f172a] relative overflow-x-hidden;
+    /* 🚀 أسود ملكي عميق جداً يبرز الذهب والأبيض */
+    @apply bg-[#02040a] text-slate-100 relative overflow-x-hidden;
   }
 
-  /* 🚀 النسيج السينمائي (Noise Texture) يكسر حدة الأبيض ويعطي ملمساً ورقياً فخماً */
+  /* نسيج خفيف جداً لمنع اللون الميت */
   body::before {
     content: "";
-    @apply fixed inset-0 pointer-events-none z-[-1] opacity-[0.3];
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    @apply fixed inset-0 pointer-events-none z-[-1] opacity-[0.05];
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
 }
 
 @layer components {
-  /* 🚀 زجاج مصنفر أبيض لؤلؤي (Advanced Glassmorphism) */
+  /* 🚀 زجاج داكن فخم (Smoked Glass) مع توهج عند مرور الماوس */
   .glass-panel {
-    @apply bg-white/60 backdrop-blur-3xl border border-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-all duration-500;
+    @apply bg-[#0f1423]/60 backdrop-blur-2xl border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.8)] hover:border-amber-500/40 hover:shadow-[0_0_30px_rgba(245,158,11,0.15)] transition-all duration-500;
   }
   
   .glass-header {
-    @apply bg-white/70 backdrop-blur-3xl border-b border-white/80 shadow-[0_4px_30px_rgba(0,0,0,0.03)];
+    @apply bg-[#02040a]/80 backdrop-blur-3xl border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.9)];
   }
   
   .glass-input {
-    @apply bg-white/50 backdrop-blur-md border border-slate-200 focus:bg-white focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 outline-none transition-all text-slate-800 placeholder:text-slate-400 shadow-sm hover:border-slate-300;
+    @apply bg-[#090c15]/80 backdrop-blur-md border border-white/10 focus:bg-[#0f1423] focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 outline-none transition-all text-white placeholder:text-slate-500 shadow-inner;
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-500 hover:bg-white/80 hover:text-slate-900 transition-all duration-300 font-bold;
+    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-300 font-bold;
   }
   
   .sidebar-link-active {
-    /* 🚀 زر نشط بالذهب اللامع مع ظل ذهبي خفيف */
-    @apply bg-gradient-to-r from-amber-400 to-amber-500 text-slate-900 font-black shadow-[0_0_20px_rgba(245,158,11,0.3)] border border-amber-300/50;
+    /* 🚀 زر نشط ينفجر بالفخامة الذهبية */
+    @apply bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black shadow-[0_0_25px_rgba(245,158,11,0.5)] border border-amber-300;
   }
 }
 
-/* 🚀 Custom Scrollbar (ناعم وأنيق) */
+/* 🚀 Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-transparent; }
-::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full hover:bg-amber-400 transition-colors; }
+::-webkit-scrollbar-track { @apply bg-[#02040a]; }
+::-webkit-scrollbar-thumb { @apply bg-slate-800 rounded-full hover:bg-amber-500 transition-colors; }
 
-/* 🚀 أنيميشن الكرات المضيئة (التنفس البطيء والعميق) */
-@keyframes blob-float {
-  0% { transform: translate(0px, 0px) scale(1); }
-  33% { transform: translate(30px, -50px) scale(1.05); }
-  66% { transform: translate(-20px, 20px) scale(0.95); }
-  100% { transform: translate(0px, 0px) scale(1); }
+/* 🚀 أنيميشن الكرات المضيئة (حركة سينمائية واضحة) */
+@keyframes cinematic-glow {
+  0% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.4; }
+  33% { transform: translate(40px, -60px) scale(1.1) rotate(15deg); opacity: 0.7; }
+  66% { transform: translate(-30px, 40px) scale(0.9) rotate(-15deg); opacity: 0.5; }
+  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); opacity: 0.4; }
 }
-.animate-blob { animation: blob-float 15s infinite alternate ease-in-out; }
-.animation-delay-2000 { animation-delay: 2s; }
-.animation-delay-4000 { animation-delay: 4s; }
+.animate-blob { animation: cinematic-glow 15s infinite alternate ease-in-out; }
+.animation-delay-2000 { animation-delay: 3s; }
+.animation-delay-4000 { animation-delay: 6s; }
 
 /* إعدادات الطباعة */
 @media print {
