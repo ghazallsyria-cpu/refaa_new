@@ -97,8 +97,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   }, []);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type: type === 'success' ? 'success' : 'message', message });
-    setTimeout(() => setNotification(null), 5000);
+setNotification({ type: type === 'success' ? 'success' : 'error', message });    setTimeout(() => setNotification(null), 5000);
   };
 
   const getStudentSectionName = (studentObj: any) => {
