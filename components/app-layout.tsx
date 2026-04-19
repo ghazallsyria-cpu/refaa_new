@@ -60,11 +60,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (isChecking || (!isAuthorized && !isPublicPage)) {
     return (
-      // 🚀 تم تغيير لون الخلفية لـ Slate 900 المريح
-      <div className="flex h-screen w-full items-center justify-center bg-[#0f172a]/80 backdrop-blur-md">
-        <div className="relative">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.5)]"></div>
-          <div className="absolute inset-0 flex items-center justify-center"><School className="h-6 w-6 text-emerald-400 animate-pulse"/></div>
+      <div className="flex h-screen w-full items-center justify-center bg-white/30 backdrop-blur-xl z-50 fixed inset-0">
+        <div className="relative flex flex-col items-center gap-4">
+          <div className="h-16 w-16 animate-spin rounded-full border-4 border-amber-500/20 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)]"></div>
+          <School className="absolute top-4 h-8 w-8 text-amber-600 animate-pulse"/>
         </div>
       </div>
     );
@@ -72,16 +71,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (platformClosed && !isPublicPage) {
     return (
-      // 🚀 تم تغيير لون الخلفية لـ Slate 900
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0f172a] p-4 text-center relative overflow-hidden" dir="rtl">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-500 to-red-600 shadow-[0_0_30px_rgba(244,63,94,0.4)] mb-8 border border-white/10">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-transparent p-4 text-center relative overflow-hidden" dir="rtl">
+        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-rose-500 to-red-600 shadow-[0_0_30px_rgba(244,63,94,0.3)] mb-8 border border-white/80 relative z-10">
           <School className="h-12 w-12 text-white" />
         </motion.div>
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-[#1e293b]/60 backdrop-blur-xl p-10 rounded-[2.5rem] shadow-2xl border border-white/10 max-w-md w-full">
-          <div className="flex justify-center mb-6"><div className="bg-amber-500/20 p-4 rounded-full border border-amber-500/30 animate-bounce"><AlertTriangle className="h-10 w-10 text-amber-400" /></div></div>
-          <h1 className="text-3xl font-black text-white mb-4 tracking-tight">المنصة مغلقة مؤقتاً</h1>
-          <p className="text-slate-300 mb-8 font-bold text-sm bg-[#0f172a]/50 p-4 rounded-2xl border border-white/5">{closeMessage}</p>
-          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-lg text-sm font-black text-white bg-emerald-600 hover:bg-emerald-500 transition-all active:scale-95">العودة لتسجيل الدخول</button>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel p-10 rounded-[2.5rem] max-w-md w-full relative z-10">
+          <div className="flex justify-center mb-6"><div className="bg-amber-100 p-4 rounded-full border border-amber-200 animate-bounce"><AlertTriangle className="h-10 w-10 text-amber-600" /></div></div>
+          <h1 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">المنصة مغلقة مؤقتاً</h1>
+          <p className="text-slate-600 mb-8 font-bold text-sm bg-slate-50 p-4 rounded-2xl border border-slate-200">{closeMessage}</p>
+          <button onClick={signOut} className="w-full py-4 rounded-[1.5rem] shadow-lg text-sm font-black text-slate-900 bg-amber-400 hover:bg-amber-500 transition-all active:scale-95">العودة لتسجيل الدخول</button>
         </motion.div>
       </div>
     );
@@ -92,11 +90,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !isPublicPage;
 
   return (
-    <div className="flex h-full overflow-hidden bg-transparent selection:bg-emerald-500/30 selection:text-emerald-200" dir="rtl">
+    <div className="flex h-full overflow-hidden bg-transparent selection:bg-amber-400/30 selection:text-amber-900" dir="rtl">
       
       <AnimatePresence>
         {isSidebarOpen && showSidebar && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-[#0f172a]/60 lg:hidden backdrop-blur-md" onClick={() => setIsSidebarOpen(false)} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
         )}
       </AnimatePresence>
       
