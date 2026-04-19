@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
-  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 
+  School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 , Crown
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
