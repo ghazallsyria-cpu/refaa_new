@@ -776,7 +776,7 @@ export default function TeacherDashboard() {
 
           </div>
         </div>
-      </motion.div>
+        </div>
     </div>
   );
 }
