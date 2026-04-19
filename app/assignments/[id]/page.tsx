@@ -20,6 +20,7 @@ import { useSchoolFormData } from '@/hooks/useSchoolFormData';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -39,12 +40,21 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+const renderContentWithMath = (content: string) => {
+   if (!content) return { __html: '' };
+   let html = content.replace(
+     /\$\$([\s\S]*?)\$\$/g, 
+     '<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
+   );
+   return { __html: html };
+};
+
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const assignmentId = resolvedParams.id;
   
   const router = useRouter();
-  const { user, authRole, userRole } = useAuth() as any;
+  const { user, authRole, userRole, isChecking: authLoading } = useAuth() as { user: any, authRole: string | null, userRole: string | null, isChecking: boolean };
   const currentRole = authRole || userRole;
   
   const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment, deleteSubmission } = useAssignmentsSystem();
@@ -73,7 +83,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [content, setContent] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [notification, setNotification] = useState<{type: 'success' | 'message', message: string} | null>(null);
+  const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
   const [selectedSection, setSelectedSection] = useState<string>('الكل');
   const [mounted, setMounted] = useState(false);
@@ -690,7 +700,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                   <tbody>
                                     {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
                                       let parsedAns: any[] = [];
-                                      try { parsedAns = JSON.parse((studentAns as string) || '[]'); } catch(e){}
+                                      try { 
+                                        if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
+                                        else if (Array.isArray(studentAns)) parsedAns = studentAns;
+                                      } catch(e){}
                                       return (
                                         <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors">
                                           <td className="p-4 border-b border-l border-white/5 font-bold text-slate-300 bg-[#090b14]/50 align-top">
@@ -716,7 +729,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               )}
                             </div>
                           ) : (
-                            <div className={`p-5 rounded-2xl border mb-4 shadow-inner ${isUnanswered ? 'bg-[#131836]/30 border-white/5 border-dashed' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
+                            <div className={`p-5 rounded-2xl border mb-4 shadow-inner ${isUnanswered ? 'bg-[#131836]/30 border-white/5 border-dashed text-slate-500 italic' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-white' : 'bg-rose-500/10 border-rose-500/20 text-white'}`}>
                               <div className="text-xs sm:text-sm font-black mb-3 flex items-center gap-2">
                                 {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-500" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-400"/> : <XCircle className="w-5 h-5 text-rose-400"/>}
                                 <span className={isUnanswered ? 'text-slate-400' : isCorrect ? 'text-emerald-400' : 'text-rose-400'}>إجابتك:</span>
