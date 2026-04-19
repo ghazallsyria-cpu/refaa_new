@@ -58,7 +58,6 @@ export default function AttendancePage() {
   const [adminLoading, setAdminLoading] = useState(false);
   
   const [deptHeads, setDeptHeads] = useState<Record<string, string>>({});
-  // 🚀 حالة جديدة لتخزين أسماء الأقسام المعدلة
   const [customDeptNames, setCustomDeptNames] = useState<Record<string, string>>({});
   const [excludedRecords, setExcludedRecords] = useState<Set<string>>(new Set());
 
@@ -99,9 +98,10 @@ export default function AttendancePage() {
       if (error) throw error;
       setDailyStats(data || []);
       setExcludedRecords(new Set()); 
-      // تهيئة أسماء الأقسام الافتراضية
+      
       const newCustomDeptNames: Record<string, string> = {};
-      data?.forEach(stat => {
+      // 🚀 إصلاح TypeScript (stat: any) لحل مشكلة Build Netlify
+      data?.forEach((stat: any) => {
         const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
         const subjName = subjData?.name || 'مادة غير محددة';
         let dept = 'أقسام أخرى';
@@ -113,7 +113,8 @@ export default function AttendancePage() {
         else if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) dept = 'قسم الاجتماعيات';
         else if (/(حاسوب|معلوماتية)/.test(subjName)) dept = 'قسم الحاسوب';
         
-        const classData: any = Array.isArray(stat.sections?.classes) ? stat.sections?.classes[0] : stat.sections?.classes;
+        const secObj: any = Array.isArray(stat.sections) ? stat.sections[0] : stat.sections;
+        const classData: any = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
         const className = classData?.name || '';
         const stage = /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className) ? 'المرحلة المتوسطة' : 'المرحلة الثانوية';
         
@@ -136,10 +137,12 @@ export default function AttendancePage() {
 
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = { 'المرحلة المتوسطة': {}, 'المرحلة الثانوية': {} };
-    dailyStats.forEach(stat => {
-      const classData: any = Array.isArray(stat.sections?.classes) ? stat.sections?.classes[0] : stat.sections?.classes;
+    // 🚀 إصلاح TypeScript (stat: any)
+    dailyStats.forEach((stat: any) => {
+      const secObj: any = Array.isArray(stat.sections) ? stat.sections[0] : stat.sections;
+      const classData: any = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
       const className = classData?.name || '';
-      const fullClassName = `${className} - ${stat.sections?.name || ''}`;
+      const fullClassName = `${className} - ${secObj?.name || ''}`;
       const stage = /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className) ? 'المرحلة المتوسطة' : 'المرحلة الثانوية';
       const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
       const subjName = subjData?.name || 'مادة غير محددة';
@@ -225,7 +228,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم مع الكاش اللحظي
+  // 🚀 دوال المعلم
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -449,7 +452,6 @@ export default function AttendancePage() {
                         <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 bg-[#090b14]/30">
                           <div className="flex items-center gap-3 w-full xl:w-auto">
                             <Layers className="w-6 h-6 text-emerald-400 shrink-0" />
-                            {/* 🚀 جعل اسم القسم قابلاً للتحرير للمدير */}
                             <input 
                               type="text" 
                               value={customDeptName}
@@ -584,8 +586,9 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم (رصد الغياب والتحكم)
+  // 🚀 واجهة المعلم 
   // ==========================================================
+  
   let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
   students.forEach(s => {
     const status = attendance[s.id];
@@ -702,7 +705,7 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* 🚀 جدول أسماء الطلاب (Responsive Table Fix) */}
+        {/* 🚀 جدول أسماء الطلاب */}
         {students.length > 0 && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
             <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#090b14]/30">
