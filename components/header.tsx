@@ -1,6 +1,6 @@
 'use client';
- 
-import { Search, User, LogOut, Menu, School } from 'lucide-react';
+
+import { User, LogOut, Menu, School } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { NotificationsBell } from '@/components/notifications-bell';
 import Link from 'next/link';
 import Image from 'next/image';
- 
+
 export function Header({ 
   onMenuClick, showMenuButton = true, user, authRole, userName, isSidebarCollapsed = false
 }: { 
@@ -18,7 +18,7 @@ export function Header({
   const router = useRouter();
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
   const [imageError, setImageError] = useState(false);
- 
+
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {
@@ -28,115 +28,48 @@ export function Header({
     };
     fetchSchoolData();
   }, []);
- 
+
   const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login'); };
- 
+
   const roleMap: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
- 
+
   return (
-    <header className="flex h-24 shrink-0 items-center justify-between glass-header px-4 sm:px-8 sticky top-0 z-40 transition-all">
-      <div className="flex flex-1 items-center gap-4 sm:gap-8">
- 
-        {/* حالة وجود زر القائمة الجانبية */}
+    <header className="relative flex h-20 shrink-0 items-center glass-header px-4 sm:px-6 sticky top-0 z-40" dir="rtl">
+
+      {/* يسار: زر القائمة + معلومات المستخدم */}
+      <div className="flex items-center gap-3 z-10">
         {onMenuClick && showMenuButton && (
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="p-2.5 sm:p-3 text-slate-400 hover:text-emerald-400 rounded-xl sm:rounded-2xl hover:bg-white/5 transition-all flex items-center justify-center active:scale-95 border border-transparent hover:border-white/10"
-              onClick={onMenuClick}
-              title="القائمة"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
- 
-            <Link href="/" className="group transition-transform hover:scale-105">
-              <div className="relative h-10 w-32 sm:h-12 sm:w-40">
-                {!imageError ? (
-                  <Image
-                    src="/images/logo.png"
-                    alt="مدرسة الرفعة النموذجية"
-                    fill
-                    sizes="(max-width: 640px) 128px, 160px"
-                    priority
-                    className="object-contain drop-shadow-lg"
-                    onError={() => setImageError(true)}
-                  />
-                ) : (
-                  <div className="flex items-center gap-2 h-full">
-                    <School className="w-5 h-5 text-emerald-400" />
-                    <span className="text-sm font-black text-white">{schoolData.name}</span>
-                  </div>
-                )}
-              </div>
-            </Link>
-          </div>
+          <button
+            type="button"
+            className="p-2.5 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-white/5 transition-all flex items-center justify-center active:scale-95 border border-transparent hover:border-white/10"
+            onClick={onMenuClick}
+            title="القائمة"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
         )}
- 
-        {/* حالة عدم وجود زر القائمة */}
-        {!showMenuButton && (
-          <Link href="/" className="group transition-transform hover:scale-105">
-            <div className="relative h-10 w-32 sm:h-12 sm:w-44">
-              {!imageError ? (
-                <Image
-                  src="/images/logo.png"
-                  alt="مدرسة الرفعة النموذجية"
-                  fill
-                  sizes="(max-width: 640px) 128px, 176px"
-                  priority
-                  className="object-contain drop-shadow-lg"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <div className="flex items-center gap-2 h-full">
-                  <School className="w-5 h-5 text-emerald-400" />
-                  <span className="text-sm font-black text-white">{schoolData.name}</span>
-                </div>
-              )}
-            </div>
-          </Link>
-        )}
- 
-        {/* شريط البحث */}
-        <div className="w-full max-w-xl relative hidden lg:block group">
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-5">
-            <Search className="h-5 w-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors duration-300" />
-          </div>
-          <input
-            type="search"
-            className="block w-full rounded-[1.2rem] py-3.5 pr-12 pl-16 glass-input"
-            placeholder="ابحث عن طالب، معلم، أو مادة..."
-          />
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 py-1.5 bg-white/5 rounded-lg border border-white/10 text-[10px] font-black text-slate-400 shadow-sm">
-            <span>⌘</span><span>K</span>
-          </div>
-        </div>
-      </div>
- 
-      <div className="flex items-center gap-3 sm:gap-6">
-        <div className="hidden sm:flex items-center gap-3">
-          <NotificationsBell />
-        </div>
- 
+
+        {/* معلومات المستخدم */}
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-3 sm:gap-4 p-1.5 sm:pr-4 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-white/10 hover:shadow-lg group active:scale-95"
+            className="flex items-center gap-2 sm:gap-3 p-1.5 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-white/10 group active:scale-95"
           >
-            <div className="hidden md:flex flex-col items-end">
-              <span className="text-sm font-black text-white truncate max-w-[150px] group-hover:text-emerald-400 transition-colors">
+            <div className="relative">
+              <div className="h-10 w-10 rounded-[0.8rem] bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.4)] ring-2 ring-[#090b14] group-hover:ring-emerald-400 transition-all">
+                <User className="h-5 w-5 text-[#090b14]" />
+              </div>
+              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-emerald-400 border-2 border-[#090b14] rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+            </div>
+            <div className="hidden sm:flex flex-col items-start">
+              <span className="text-sm font-black text-white truncate max-w-[120px] group-hover:text-emerald-400 transition-colors">
                 {userName || (user ? user.email.split('@')[0] : 'المستخدم')}
               </span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{displayRole}</span>
-            </div>
-            <div className="relative">
-              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-[1rem] bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center overflow-hidden shadow-[0_0_15px_rgba(16,185,129,0.4)] ring-2 ring-[#090b14] group-hover:ring-emerald-400 transition-all">
-                <User className="h-5 w-5 sm:h-6 sm:w-6 text-[#090b14]" />
-              </div>
-              <div className="absolute -bottom-1 -left-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-emerald-400 border-2 border-[#090b14] rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+              <span className="text-[10px] text-slate-400 font-bold tracking-widest">{displayRole}</span>
             </div>
           </button>
- 
+
           <AnimatePresence>
             {isDropdownOpen && user && (
               <>
@@ -146,7 +79,7 @@ export function Header({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                  className="absolute left-0 z-50 mt-3 w-64 origin-top-left rounded-[1.5rem] bg-[#131836]/95 backdrop-blur-3xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.7)] border border-white/10"
+                  className="absolute right-0 z-50 mt-3 w-64 origin-top-right rounded-[1.5rem] bg-[#131836]/95 backdrop-blur-3xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.7)] border border-white/10"
                 >
                   <div className="px-4 py-4 border-b border-white/5 mb-2 bg-[#090b14]/50 rounded-xl">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">حسابك الحالي</p>
@@ -172,6 +105,36 @@ export function Header({
           </AnimatePresence>
         </div>
       </div>
+
+      {/* الوسط: الشعار مركزي مطلق */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <Link href="/" className="pointer-events-auto group transition-transform hover:scale-105">
+          <div className="relative h-12 w-48 sm:h-14 sm:w-64 md:h-16 md:w-80">
+            {!imageError ? (
+              <Image
+                src="/images/logo.png"
+                alt="مدرسة الرفعة النموذجية"
+                fill
+                sizes="(max-width: 640px) 192px, (max-width: 768px) 256px, 320px"
+                priority
+                className="object-contain drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <div className="flex items-center justify-center gap-2 h-full">
+                <School className="w-6 h-6 text-emerald-400" />
+                <span className="text-lg font-black text-white">{schoolData.name}</span>
+              </div>
+            )}
+          </div>
+        </Link>
+      </div>
+
+      {/* اليمين: الإشعارات */}
+      <div className="flex items-center gap-3 mr-auto z-10">
+        <NotificationsBell />
+      </div>
+
     </header>
   );
 }
