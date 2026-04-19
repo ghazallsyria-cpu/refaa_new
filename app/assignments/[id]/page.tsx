@@ -1020,4 +1020,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       `}} />
     </div>
   );
-}
+
+      }
+
+      }
