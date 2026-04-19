@@ -30,7 +30,32 @@ export async function middleware(request: NextRequest) {
   );
 
   // 🚀 إنقاذ السيرفر: عدنا لاستخدام getSession لأنه يقرأ من الكاش المحلي (سريع جداً) ولا يتصل بـ Supabase مع كل نقرة
-  const { data: { session } } = await supabase.auth.getSession();
+ // const { data: { session } } = await supabase.auth.getSession();
+  //////////////////////////////////////////////////////////////////////
+  import { NextResponse, type NextRequest } from 'next/server';
+
+export function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  const isPublicRoute =
+    path.startsWith('/login') ||
+    path.startsWith('/reset-password') ||
+    path.startsWith('/live');
+
+  const token = request.cookies.get('sb-access-token')?.value;
+
+  if (!token && !isPublicRoute) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  if (token && path === '/login') {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  return NextResponse.next();
+}
+
+  ///////////////////////////////////////////////////////////
   const user = session?.user;
 
   const path = request.nextUrl.pathname;
