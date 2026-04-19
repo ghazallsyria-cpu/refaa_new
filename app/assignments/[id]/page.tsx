@@ -59,6 +59,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   
   const { fetchAssignmentDetails, submitAssignment, saveAssignment, deleteAssignment, deleteSubmission } = useAssignmentsSystem();
   
+  const { data: formData, isLoading: formLoading } = useSchoolFormData();
+  const subjects = formData?.subjects || [];
+  const sections = formData?.sections || [];
+  const teachers = formData?.teachers || [];
+  
   const [assignment, setAssignment] = useState<AssignmentWithMeta | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionWithStudent[]>([]);
@@ -445,7 +450,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   if (!mounted || loading || authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo text-slate-200">
+      <div className="flex h-[80vh] items-center justify-center bg-[#090b14] font-cairo text-slate-200">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-14 h-14 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
           <p className="text-slate-400 font-bold animate-pulse tracking-widest">جاري تحميل الواجب...</p>
@@ -692,9 +697,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 <table className="w-full text-right border-collapse min-w-[600px]">
                                   <thead>
                                     <tr className={isUnanswered ? 'bg-[#090b14]' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
-                                      <th className="p-4 border-b border-l border-white/5 font-black text-slate-300 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
-                                      <th className="p-4 border-b border-l border-white/5 font-black text-slate-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
-                                      <th className="p-4 border-b border-white/5 font-black text-slate-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
+                                      <th className="p-4 border-b border-l border-white/5 font-black text-slate-300 text-sm w-1/3">وجه المقارنة</th>
+                                      <th className="p-4 border-b border-l border-white/5 font-black text-slate-300 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
+                                      <th className="p-4 border-b border-white/5 font-black text-slate-300 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
                                     </tr>
                                   </thead>
                                   <tbody>
