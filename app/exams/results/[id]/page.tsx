@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import { ArrowRight, Users, CheckCircle2, AlertCircle, Eye, Search, Trash2, Trophy, Clock, BookOpen, Filter, Download, Printer, Layers, Loader2, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Users, CheckCircle2, AlertCircle, Eye, Search, Trash2, Trophy, Clock, BookOpen, Filter, Download, Printer, Layers, Loader2, ShieldAlert, Edit2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function TeacherExamResultsPage() {
