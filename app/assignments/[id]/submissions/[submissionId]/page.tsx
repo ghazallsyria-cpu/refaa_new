@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { ArrowRight, User, Calendar, Clock, CheckCircle, CheckCircle2, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye, Edit, XCircle, Columns, MinusCircle, Lock, Trophy, Upload, Loader2, X } from 'lucide-react';
+import { ArrowRight, User, Calendar, Clock, CheckCircle, CheckCircle2, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye, Edit, XCircle, Columns, MinusCircle, Lock, Trophy, Upload, Loader2, X, Award } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
