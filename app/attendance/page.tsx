@@ -126,7 +126,7 @@ export default function AttendancePage() {
       
       if (!groups[stage][dept]) groups[stage][dept] = [];
       groups[stage][dept].push({ 
-        id: stat.id, // 🚀 مهم جداً للاستبعاد والتحكم
+        id: stat.id, 
         teacher: teacherData?.full_name || 'غير محدد', 
         lesson: stat.lesson_title || 'لم يتم التسجيل', 
         subject: subjName, 
@@ -151,7 +151,7 @@ export default function AttendancePage() {
     return groups;
   }, [dailyStats]);
 
-  // 🚀 دالة الطباعة (تدعم رئيس القسم الديناميكي والسجلات المفلترة)
+  // 🚀 دالة الطباعة (تُخفي اسم المعلم المكرر وتدعم رئيس القسم)
   const printDepartmentReport = (stage: string, department: string, records: any[], headName: string) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
@@ -159,18 +159,22 @@ export default function AttendancePage() {
     const formattedDate = new Date(snapshotDate).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' });
     const finalHeadName = headName && headName.trim() !== '' ? `أ. ${headName}` : '........................';
 
-    const rows = records.map((r) => `
-      <tr>
-        <td><strong>${r.teacher}</strong></td>
-        <td style="text-align: right; padding-right: 10px;">${r.lesson}</td>
-        <td>${r.subject}</td>
-        <td style="font-weight: bold;">${r.total}</td>
-        <td style="color: #e11d48; font-weight: bold;">${r.absent}</td>
-        <td style="color: #059669; font-weight: bold;">${r.present}</td>
-        <td>${r.period}</td>
-        <td dir="ltr">${r.className}</td>
-      </tr>
-    `).join('');
+    // 🚀 التعديل المطلوب: فحص تكرار الاسم في الطباعة
+    const rows = records.map((r, i) => {
+      const showTeacher = i === 0 || r.teacher !== records[i - 1].teacher;
+      return `
+        <tr>
+          <td><strong>${showTeacher ? r.teacher : ''}</strong></td>
+          <td style="text-align: right; padding-right: 10px;">${r.lesson}</td>
+          <td>${r.subject}</td>
+          <td style="font-weight: bold;">${r.total}</td>
+          <td style="color: #e11d48; font-weight: bold;">${r.absent}</td>
+          <td style="color: #059669; font-weight: bold;">${r.present}</td>
+          <td>${r.period}</td>
+          <td dir="ltr">${r.className}</td>
+        </tr>
+      `;
+    }).join('');
 
     const html = `
       <html dir="rtl" lang="ar"><head><title>إحصائية ${department}</title><style>
@@ -380,7 +384,6 @@ export default function AttendancePage() {
                             <Layers className="w-6 h-6" /> {dept}
                           </h3>
                           
-                          {/* 🚀 أدوات تحكم المدير (تحديد رئيس القسم والطباعة) */}
                           <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
                             <div className="flex items-center gap-3 bg-[#090b14]/80 px-4 py-2.5 rounded-2xl border border-white/10 w-full sm:w-auto">
                                <span className="text-xs font-black text-slate-400 shrink-0">رئيس القسم:</span>
@@ -394,7 +397,6 @@ export default function AttendancePage() {
                             </div>
                             <button 
                               onClick={() => {
-                                // فلترة السجلات المطبوعة فقط لمن هم (مُضمنين)
                                 const finalRecords = recordsList.filter(r => !excludedRecords.has(r.id));
                                 printDepartmentReport(stage, dept, finalRecords, currentHead);
                               }} 
@@ -409,7 +411,6 @@ export default function AttendancePage() {
                           <table className="w-full text-right whitespace-nowrap">
                             <thead>
                               <tr className="bg-white/5 border-b border-white/5">
-                                {/* عمود התضمين للمدير */}
                                 <th className="py-4 px-4 text-xs font-black text-center text-slate-500">تضمين بالطباعة</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">اسم المدرس</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">عنوان الدرس</th>
@@ -424,6 +425,9 @@ export default function AttendancePage() {
                             <tbody className="divide-y divide-white/5">
                               {recordsList.map((r, i) => {
                                 const isExcluded = excludedRecords.has(r.id);
+                                // 🚀 التعديل المطلوب: إخفاء اسم المعلم إذا كان مكرراً من السطر السابق ليظهر مرة واحدة
+                                const showTeacher = i === 0 || r.teacher !== recordsList[i - 1].teacher;
+                                
                                 return (
                                   <tr key={i} className={`transition-colors ${isExcluded ? 'opacity-30 bg-[#090b14]' : 'hover:bg-white/[0.02]'}`}>
                                     <td className="py-4 px-4 text-center">
@@ -441,7 +445,10 @@ export default function AttendancePage() {
                                           className="w-4 h-4 cursor-pointer accent-emerald-500"
                                        />
                                     </td>
-                                    <td className={`py-4 px-6 font-black text-sm ${isExcluded ? 'line-through text-slate-600' : 'text-white'}`}>{r.teacher}</td>
+                                    {/* إخفاء الاسم المكرر */}
+                                    <td className={`py-4 px-6 font-black text-sm ${isExcluded ? 'line-through text-slate-600' : 'text-white'}`}>
+                                      {showTeacher ? r.teacher : ''}
+                                    </td>
                                     <td className="py-4 px-6 font-bold text-slate-300 text-sm truncate max-w-[200px]" title={r.lesson}>{r.lesson}</td>
                                     <td className="py-4 px-6 font-bold text-slate-400 text-sm text-center">{r.subject}</td>
                                     <td className="py-4 px-4 font-black text-white text-base text-center">{r.total}</td>
