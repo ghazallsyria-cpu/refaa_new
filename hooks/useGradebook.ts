@@ -23,7 +23,12 @@ export function useGradebook() {
       const { data: customColsData } = await supabase.from('gradebook_columns').select('*').eq('section_id', sectionId).eq('subject_id', subjectId).order('created_at', { ascending: true });
       
       // 🚀 1. سحب الواجبات بأمان تام (استخدام * لتفادي خطأ الأعمدة المفقودة)
-      const { data: rawAssignments, error: assignErr } = await supabase.from('assignments').select('*'.eq('subject_id', subjectId).contains('section_ids', [sectionId]).eq('teacher_id', user.id);
+const { data: rawAssignments, error: assignErr } = await supabase
+  .from('assignments')
+  .select('*')
+  .eq('subject_id', subjectId)
+  .contains('section_ids', [sectionId])
+  .eq('teacher_id', user.id);
       if (assignErr) console.error("Assignments Fetch Error:", assignErr);
       
       const assignmentsData = (rawAssignments || []).filter(a => {
