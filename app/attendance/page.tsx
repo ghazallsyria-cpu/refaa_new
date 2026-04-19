@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, 
   LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, 
-  Bug, RefreshCw, Calculator, Layers, PieChart, Loader2, BookType, Printer
+  Bug, RefreshCw, Calculator, Layers, PieChart, Loader2, BookType, Printer, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -43,6 +43,12 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
+  // 🚀 مفتاح الكاش اللحظي الخاص بالمعلم بناءً على اختياراته
+  const draftKey = useMemo(() => {
+    if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
+    return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
+  }, [user?.id, selectedSection, selectedSubject, date, period, currentRole]);
+
   // =====================================
   // 2. حالات الإدارة (الميزة الجديدة للمدير)
   // =====================================
@@ -50,7 +56,6 @@ export default function AttendancePage() {
   const [dailyStats, setDailyStats] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   
-  // 🚀 حالات التحكم بالطباعة (رئيس القسم والأعضاء)
   const [deptHeads, setDeptHeads] = useState<Record<string, string>>({});
   const [excludedRecords, setExcludedRecords] = useState<Set<string>>(new Set());
 
@@ -91,7 +96,7 @@ export default function AttendancePage() {
 
       if (error) throw error;
       setDailyStats(data || []);
-      setExcludedRecords(new Set()); // إعادة ضبط المستبعدين عند جلب بيانات جديدة
+      setExcludedRecords(new Set()); 
     } catch (error: any) {
       console.error("Admin Fetch Error:", error);
     } finally {
@@ -103,7 +108,6 @@ export default function AttendancePage() {
     if (isAdmin) fetchDailySnapshot();
   }, [isAdmin, fetchDailySnapshot]);
 
-  // 🚀 محرك الفرز الذكي (يجمع المدرسين ويرتبهم حسب الحصة بشكل متسلسل)
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = { 'المرحلة المتوسطة': {}, 'المرحلة الثانوية': {} };
     dailyStats.forEach(stat => {
@@ -138,7 +142,6 @@ export default function AttendancePage() {
       });
     });
 
-    // 🚀 الفرز المتسلسل: ترتيب حسب اسم المعلم أولاً ثم الحصة
     Object.keys(groups).forEach(stage => {
       Object.keys(groups[stage]).forEach(dept => {
         groups[stage][dept].sort((a, b) => {
@@ -151,7 +154,6 @@ export default function AttendancePage() {
     return groups;
   }, [dailyStats]);
 
-  // 🚀 دالة الطباعة (تُخفي اسم المعلم المكرر وتدعم رئيس القسم)
   const printDepartmentReport = (stage: string, department: string, records: any[], headName: string) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
@@ -159,7 +161,6 @@ export default function AttendancePage() {
     const formattedDate = new Date(snapshotDate).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' });
     const finalHeadName = headName && headName.trim() !== '' ? `أ. ${headName}` : '........................';
 
-    // 🚀 التعديل المطلوب: فحص تكرار الاسم في الطباعة
     const rows = records.map((r, i) => {
       const showTeacher = i === 0 || r.teacher !== records[i - 1].teacher;
       return `
@@ -198,7 +199,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم
+  // 🚀 دوال المعلم مع الكاش اللحظي (Auto-Save Cache)
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -234,12 +235,41 @@ export default function AttendancePage() {
           const userB = Array.isArray(b.users) ? b.users[0] : b.users;
           return (userA?.full_name || '').localeCompare(userB?.full_name || '', 'ar'); 
         });
-        setStudents(sortedStudents); setAttendance(res.attendance); setLessonTitle(res.savedLessonTitle || '');
+        setStudents(sortedStudents); 
+        
+        // 🚀 استرجاع الكاش اللحظي إن وجد لتلك الحصة بعينها
+        const cacheKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
+        const cachedStr = localStorage.getItem(cacheKey);
+        
+        if (cachedStr) {
+          try {
+            const parsed = JSON.parse(cachedStr);
+            setAttendance(parsed.attendance && Object.keys(parsed.attendance).length > 0 ? parsed.attendance : res.attendance);
+            setLessonTitle(parsed.lessonTitle !== undefined && parsed.lessonTitle !== '' ? parsed.lessonTitle : (res.savedLessonTitle || ''));
+          } catch(e) {
+            setAttendance(res.attendance); 
+            setLessonTitle(res.savedLessonTitle || '');
+          }
+        } else {
+          setAttendance(res.attendance); 
+          setLessonTitle(res.savedLessonTitle || '');
+        }
       }
     }
-  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole]);
+  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole, user?.id]);
 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
+
+  // 🚀 حفظ الكاش التلقائي عند أي تغيير
+  useEffect(() => {
+    if (currentRole === 'teacher' && draftKey && students.length > 0) {
+      // لا تحفظ كاش فارغ تماماً إذا لم يكن هناك شيء
+      if (Object.keys(attendance).length > 0 || lessonTitle) {
+        const draft = { attendance, lessonTitle };
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+      }
+    }
+  }, [attendance, lessonTitle, draftKey, currentRole, students.length]);
 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => { setAttendance(prev => ({ ...prev, [studentId]: status })); };
   const markAllAs = (status: AttendanceStatus) => { const newAttendance = { ...attendance }; students.forEach(s => { newAttendance[s.id] = status; }); setAttendance(newAttendance); };
@@ -249,6 +279,10 @@ export default function AttendancePage() {
     try {
       await saveAttendance(selectedSection, selectedSubject, date, period, attendance, students, lessonTitle);
       setMessage({ text: 'تم حفظ سجل الحضور والغياب بنجاح!', type: 'success' });
+      
+      // 🚀 تنظيف الكاش بعد الاعتماد بنجاح
+      if (draftKey) localStorage.removeItem(draftKey);
+      
       loadStudentsAndAttendance(); 
       setTimeout(() => setMessage({ text: '', type: '' }), 4000);
     } catch (error: any) {
@@ -353,9 +387,9 @@ export default function AttendancePage() {
             <div className="flex items-center gap-3 text-emerald-400 font-black text-lg">
               <Calendar className="w-6 h-6" /> اختر يوم الإحصائية لعرضه:
             </div>
-            <div className="flex gap-3 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
               <input type="date" value={snapshotDate} onChange={(e) => setSnapshotDate(e.target.value)} className="w-full sm:w-auto rounded-2xl border border-white/10 py-3.5 px-6 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" style={{ colorScheme: 'dark' }} />
-              <button onClick={fetchDailySnapshot} className="px-5 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0">تحديث</button>
+              <button onClick={fetchDailySnapshot} className="w-full sm:w-auto px-5 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0">تحديث الإحصائيات</button>
             </div>
           </div>
 
@@ -380,7 +414,7 @@ export default function AttendancePage() {
                     return (
                       <div key={dept} className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
                         <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 bg-[#090b14]/30">
-                          <h3 className="text-xl font-black text-emerald-400 flex items-center gap-3">
+                          <h3 className="text-xl font-black text-emerald-400 flex items-center gap-3 shrink-0">
                             <Layers className="w-6 h-6" /> {dept}
                           </h3>
                           
@@ -407,11 +441,11 @@ export default function AttendancePage() {
                           </div>
                         </div>
                         
-                        <div className="overflow-x-auto pb-4">
-                          <table className="w-full text-right whitespace-nowrap">
+                        <div className="overflow-x-auto pb-4 custom-scrollbar">
+                          <table className="w-full text-right whitespace-nowrap min-w-[900px]">
                             <thead>
                               <tr className="bg-white/5 border-b border-white/5">
-                                <th className="py-4 px-4 text-xs font-black text-center text-slate-500">تضمين بالطباعة</th>
+                                <th className="py-4 px-4 text-xs font-black text-center text-slate-500 w-24">تضمين بالطباعة</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">اسم المدرس</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">عنوان الدرس</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400 text-center">المادة</th>
@@ -425,7 +459,6 @@ export default function AttendancePage() {
                             <tbody className="divide-y divide-white/5">
                               {recordsList.map((r, i) => {
                                 const isExcluded = excludedRecords.has(r.id);
-                                // 🚀 التعديل المطلوب: إخفاء اسم المعلم إذا كان مكرراً من السطر السابق ليظهر مرة واحدة
                                 const showTeacher = i === 0 || r.teacher !== recordsList[i - 1].teacher;
                                 
                                 return (
@@ -442,10 +475,9 @@ export default function AttendancePage() {
                                               return newSet;
                                             });
                                           }}
-                                          className="w-4 h-4 cursor-pointer accent-emerald-500"
+                                          className="w-5 h-5 cursor-pointer accent-emerald-500 rounded"
                                        />
                                     </td>
-                                    {/* إخفاء الاسم المكرر */}
                                     <td className={`py-4 px-6 font-black text-sm ${isExcluded ? 'line-through text-slate-600' : 'text-white'}`}>
                                       {showTeacher ? r.teacher : ''}
                                     </td>
@@ -556,61 +588,127 @@ export default function AttendancePage() {
 
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div className="space-y-2"><label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">التاريخ</label><div className="relative"><Calendar className="absolute inset-y-0 right-4 h-full w-5 text-slate-500" /><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" style={{ colorScheme: 'dark' }} /></div></div>
-            <div className="space-y-2"><label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">الحصة</label><div className="relative"><Clock className="absolute inset-y-0 right-4 h-full w-5 text-slate-500" /><select value={period} onChange={(e) => setPeriod(parseInt(e.target.value))} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none [&>option]:bg-[#131836]">{daySchedule.length > 0 ? daySchedule.map(s => <option key={s.period} value={s.period}>الحصة {s.period}</option>) : <option value={1}>لا توجد حصص</option>}</select></div></div>
-            <div className="space-y-2"><label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">الفصل والمادة</label><div className="relative"><BookOpen className="absolute inset-y-0 right-4 h-full w-5 text-slate-500" /><select value={`${selectedSection}${selectedSubject ? `-${selectedSubject}` : ''}`} onChange={(e) => { const parts = e.target.value.split('-'); setSelectedSection(parts[0]); setSelectedSubject(parts[1] || ''); }} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none [&>option]:bg-[#131836]">{sections.length > 0 ? sections.map((s, idx) => <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>) : <option>لا توجد فصول</option>}</select></div></div>
-            <div className="space-y-2"><label className="text-[10px] sm:text-xs font-black text-emerald-400 flex gap-1 pl-2">عنوان الدرس <span className="text-rose-500">*</span></label><div className="relative"><BookType className="absolute inset-y-0 right-4 h-full w-5 text-slate-500" /><input type="text" required placeholder="مثال: قوانين نيوتن..." value={lessonTitle} onChange={(e) => setLessonTitle(e.target.value)} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none placeholder:text-slate-600" /></div></div>
+            <div className="space-y-2 flex flex-col w-full">
+               <label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">التاريخ</label>
+               <div className="relative w-full">
+                  <Calendar className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 pointer-events-none" />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" style={{ colorScheme: 'dark' }} />
+               </div>
+            </div>
+            <div className="space-y-2 flex flex-col w-full">
+               <label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">الحصة</label>
+               <div className="relative w-full">
+                  <Clock className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 pointer-events-none" />
+                  <select value={period} onChange={(e) => setPeriod(parseInt(e.target.value))} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none appearance-none [&>option]:bg-[#131836]">
+                     {daySchedule.length > 0 ? daySchedule.map(s => <option key={s.period} value={s.period}>الحصة {s.period}</option>) : <option value={1}>لا توجد حصص</option>}
+                  </select>
+               </div>
+            </div>
+            <div className="space-y-2 flex flex-col w-full">
+               <label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">الفصل والمادة</label>
+               <div className="relative w-full">
+                  <BookOpen className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 pointer-events-none" />
+                  <select value={`${selectedSection}${selectedSubject ? `-${selectedSubject}` : ''}`} onChange={(e) => { const parts = e.target.value.split('-'); setSelectedSection(parts[0]); setSelectedSubject(parts[1] || ''); }} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none appearance-none [&>option]:bg-[#131836] truncate">
+                     {sections.length > 0 ? sections.map((s, idx) => <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>) : <option>لا توجد فصول</option>}
+                  </select>
+               </div>
+            </div>
+            <div className="space-y-2 flex flex-col w-full">
+               <label className="text-[10px] sm:text-xs font-black text-emerald-400 flex gap-1 pl-2">عنوان الدرس <span className="text-rose-500">*</span></label>
+               <div className="relative w-full">
+                  <BookType className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 pointer-events-none" />
+                  <input type="text" required placeholder="مثال: قوانين نيوتن..." value={lessonTitle} onChange={(e) => setLessonTitle(e.target.value)} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none placeholder:text-slate-600 transition-all" />
+               </div>
+            </div>
           </div>
           {selectedSection && selectedSubject && (
-            <div className="mt-6 pt-5 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4"><div className="flex items-center gap-2 text-emerald-400/80 text-sm font-bold"><Info className="w-5 h-5 shrink-0" /> يرجى التأكد من كتابة عنوان الدرس لاعتماده في الإدارة.</div>{user?.id && <TeacherCheckInButton teacherId={user.id} periodNumber={period} selectedDate={date} className="w-full sm:w-auto" />}</div>
+            <div className="mt-6 pt-5 border-t border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+               <div className="flex items-center gap-2 text-emerald-400/80 text-xs sm:text-sm font-bold w-full sm:w-auto">
+                  <Info className="w-5 h-5 shrink-0" /> <span className="leading-tight">يرجى التأكد من كتابة عنوان الدرس لاعتماده في الإدارة.</span>
+               </div>
+               {user?.id && <div className="w-full sm:w-auto"><TeacherCheckInButton teacherId={user.id} periodNumber={period} selectedDate={date} className="w-full sm:w-auto" /></div>}
+            </div>
           )}
         </div>
 
+        {/* 🚀 إحصائيات المعلم العلوية الزجاجية */}
         {students.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
-              <Users className="h-6 w-6 text-indigo-400 mb-2" /><p className="text-2xl font-black text-white">{students.length}</p><p className="text-[10px] font-bold text-slate-400 uppercase mt-1">الطلاب</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400 mb-2" /><p className="text-xl sm:text-2xl font-black text-white">{students.length}</p><p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase mt-1">الطلاب</p>
             </div>
-            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
-              <CheckCircle2 className="h-6 w-6 text-emerald-400 mb-2" /><p className="text-2xl font-black text-white">{presentCount}</p><p className="text-[10px] font-bold text-emerald-500/70 uppercase mt-1">حاضر</p>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 mb-2" /><p className="text-xl sm:text-2xl font-black text-white">{presentCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-emerald-500/70 uppercase mt-1">حاضر</p>
             </div>
-            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
-              <XCircle className="h-6 w-6 text-rose-400 mb-2" /><p className="text-2xl font-black text-white">{absentCount}</p><p className="text-[10px] font-bold text-rose-500/70 uppercase mt-1">غائب</p>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <XCircle className="h-5 w-5 sm:h-6 sm:w-6 text-rose-400 mb-2" /><p className="text-xl sm:text-2xl font-black text-white">{absentCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-rose-500/70 uppercase mt-1">غائب</p>
             </div>
-            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
-              <Clock className="h-6 w-6 text-amber-400 mb-2" /><p className="text-2xl font-black text-white">{lateCount}</p><p className="text-[10px] font-bold text-amber-500/70 uppercase mt-1">متأخر</p>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400 mb-2" /><p className="text-xl sm:text-2xl font-black text-white">{lateCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-amber-500/70 uppercase mt-1">متأخر</p>
             </div>
-            <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
-              <AlertCircle className="h-6 w-6 text-blue-400 mb-2" /><p className="text-2xl font-black text-white">{excusedCount}</p><p className="text-[10px] font-bold text-blue-500/70 uppercase mt-1">مستأذن</p>
+            <div className="bg-[#131836]/60 backdrop-blur-md p-4 sm:p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
+              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 mb-2" /><p className="text-xl sm:text-2xl font-black text-white">{excusedCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-blue-500/70 uppercase mt-1">مستأذن</p>
             </div>
-            <div className={`p-5 rounded-[1.5rem] border flex flex-col justify-center items-center text-center shadow-lg ${unmarkedCount > 0 ? 'bg-[#131836]/60 border-white/5' : 'bg-emerald-500/20 border-emerald-500/30'}`}>
-              {unmarkedCount > 0 ? <UserMinus className="h-6 w-6 text-slate-500 mb-2" /> : <CheckCircle2 className="h-6 w-6 text-emerald-400 mb-2" />}
-              <p className={`text-2xl font-black ${unmarkedCount > 0 ? 'text-white' : 'text-emerald-400'}`}>{unmarkedCount}</p>
-              <p className={`text-[10px] font-bold uppercase mt-1 ${unmarkedCount > 0 ? 'text-slate-500' : 'text-emerald-500/70'}`}>{unmarkedCount > 0 ? 'متبقي' : 'اكتمل'}</p>
+            <div className={`p-4 sm:p-5 rounded-[1.5rem] border flex flex-col justify-center items-center text-center shadow-lg ${unmarkedCount > 0 ? 'bg-[#131836]/60 border-white/5' : 'bg-emerald-500/20 border-emerald-500/30'}`}>
+              {unmarkedCount > 0 ? <UserMinus className="h-5 w-5 sm:h-6 sm:w-6 text-slate-500 mb-2" /> : <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 mb-2" />}
+              <p className={`text-xl sm:text-2xl font-black ${unmarkedCount > 0 ? 'text-white' : 'text-emerald-400'}`}>{unmarkedCount}</p>
+              <p className={`text-[9px] sm:text-[10px] font-bold uppercase mt-1 ${unmarkedCount > 0 ? 'text-slate-500' : 'text-emerald-500/70'}`}>{unmarkedCount > 0 ? 'متبقي' : 'اكتمل'}</p>
             </div>
           </div>
         )}
 
+        {/* 🚀 جدول أسماء الطلاب (Responsive Table) */}
         {students.length > 0 && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
-            <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-center gap-6 bg-[#090b14]/30">
-              <div className="flex items-center gap-4"><div className="h-12 w-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center"><Users className="h-6 w-6" /></div><h3 className="text-xl font-black text-white">قائمة الطلاب</h3></div>
-              <div className="flex gap-2 bg-[#090b14]/50 p-1.5 rounded-2xl border border-white/5"><button onClick={() => markAllAs('present')} className="px-4 py-2 text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-xl font-black flex gap-2"><CheckCircle2 className="w-4 h-4" /> الكل حاضر</button><button onClick={() => markAllAs('absent')} className="px-4 py-2 text-sm text-rose-400 hover:bg-rose-500/20 rounded-xl font-black flex gap-2"><XCircle className="w-4 h-4" /> الكل غائب</button></div>
+            <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#090b14]/30">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0"><Users className="h-5 w-5 sm:h-6 sm:w-6" /></div>
+                <h3 className="text-lg sm:text-xl font-black text-white">قائمة الطلاب</h3>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 bg-[#090b14]/50 p-1.5 rounded-2xl border border-white/5 w-full lg:w-auto">
+                 <button onClick={() => markAllAs('present')} className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs sm:text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-xl font-black flex items-center justify-center gap-2 transition-all active:scale-95"><CheckCircle2 className="w-4 h-4" /> الكل حاضر</button>
+                 <button onClick={() => markAllAs('absent')} className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs sm:text-sm text-rose-400 hover:bg-rose-500/20 rounded-xl font-black flex items-center justify-center gap-2 transition-all active:scale-95"><XCircle className="w-4 h-4" /> الكل غائب</button>
+              </div>
             </div>
-            <div className="overflow-x-auto pb-6">
-              <table className="w-full text-right"><tbody className="divide-y divide-white/5">
-                {students.map((student: any) => (
-                  <tr key={student.id} className="hover:bg-white/[0.02]">
-                    <td className="py-4 pr-8 pl-4"><div className="flex items-center gap-4"><div className="h-12 w-12 rounded-2xl bg-[#090b14] border border-white/5 text-indigo-400 flex items-center justify-center font-black text-lg">{student.users?.full_name?.charAt(0)}</div><span className="font-black text-white text-sm">{student.users?.full_name}</span></div></td>
-                    {ATTENDANCE_OPTIONS.map((opt) => (
-                      <td key={opt.status} className="px-2 py-4 text-center"><label className="cursor-pointer inline-block w-full"><input type="radio" checked={attendance[student.id] === opt.status} onChange={() => handleStatusChange(student.id, opt.status as any)} className="sr-only" /><div className={`px-4 py-3 rounded-2xl border flex justify-center gap-2 font-black text-xs ${attendance[student.id] === opt.status ? opt.activeClasses : opt.inactiveClasses}`}><opt.icon className="w-4 h-4" /> {opt.label}</div></label></td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody></table>
+            
+            <div className="overflow-x-auto pb-6 custom-scrollbar">
+              <table className="w-full text-right border-collapse min-w-[800px] sm:min-w-full">
+                <tbody className="divide-y divide-white/5">
+                  {students.map((student: any) => (
+                    <tr key={student.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-4 pr-6 sm:pr-8 pl-4">
+                         <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-[#090b14] border border-white/5 text-indigo-400 flex items-center justify-center font-black text-base sm:text-lg shrink-0">{student.users?.full_name?.charAt(0)}</div>
+                            <span className="font-black text-white text-xs sm:text-sm truncate max-w-[150px] sm:max-w-xs">{student.users?.full_name}</span>
+                         </div>
+                      </td>
+                      {ATTENDANCE_OPTIONS.map((opt) => (
+                        <td key={opt.status} className="px-1 sm:px-2 py-4 text-center">
+                           <label className="cursor-pointer inline-block w-full">
+                              <input type="radio" checked={attendance[student.id] === opt.status} onChange={() => handleStatusChange(student.id, opt.status as any)} className="sr-only" />
+                              <div className={`px-2 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border flex items-center justify-center gap-1.5 sm:gap-2 font-black text-[10px] sm:text-xs transition-all active:scale-95 ${attendance[student.id] === opt.status ? opt.activeClasses : opt.inactiveClasses}`}>
+                                 <opt.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+                                 <span className="hidden sm:inline">{opt.label}</span>
+                                 <span className="sm:hidden">{opt.mobileLabel}</span>
+                              </div>
+                           </label>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
+        
+        {/* Custom Scrollbar Styling */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+          .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
+        `}} />
       </motion.div>
     </div>
   );
