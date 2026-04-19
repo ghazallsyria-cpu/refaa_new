@@ -1,6 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
-
+ 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, 
@@ -9,13 +9,13 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-
+ 
 import { supabase } from '@/lib/supabase'; 
 import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSystem';
 import { useAuth } from '@/context/auth-context';
 import TeacherCheckInButton from '@/components/TeacherCheckInButton';
 import { format } from 'date-fns';
-
+ 
 // 🚀 الألوان الملكية والتباين العالي الجديد للخيارات
 const ATTENDANCE_OPTIONS = [
   { status: 'present', icon: CheckCircle2, label: 'حاضر', mobileLabel: 'حاضر', activeClasses: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]', inactiveClasses: 'bg-[#02040a]/60 border-white/5 text-slate-500 hover:border-white/20 hover:bg-[#0f1423]' },
@@ -23,14 +23,14 @@ const ATTENDANCE_OPTIONS = [
   { status: 'late', icon: Clock, label: 'متأخر', mobileLabel: 'تأخر', activeClasses: 'bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]', inactiveClasses: 'bg-[#02040a]/60 border-white/5 text-slate-500 hover:border-white/20 hover:bg-[#0f1423]' },
   { status: 'excused', icon: AlertCircle, label: 'مستأذن', mobileLabel: 'عذر', activeClasses: 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.3)]', inactiveClasses: 'bg-[#02040a]/60 border-white/5 text-slate-500 hover:border-white/20 hover:bg-[#0f1423]' }
 ];
-
+ 
 export default function AttendancePage() {
   const { user, authRole, userRole, isChecking } = useAuth() as any; 
   const currentRole = authRole || userRole;
   const isAdmin = currentRole === 'admin' || currentRole === 'management';
-
+ 
   const { sections, daySchedule, loading: systemLoading, fetchDaySchedule, fetchSections, fetchStudentsAndAttendance, saveAttendance } = useAttendanceSystem();
-
+ 
   // =====================================
   // 1. حالات المعلم
   // =====================================
@@ -43,14 +43,14 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
-
+ 
   const [activeKey, setActiveKey] = useState<string | null>(null);
-
+ 
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
     return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
   }, [user?.id, selectedSection, selectedSubject, date, period, currentRole]);
-
+ 
   // =====================================
   // 2. حالات الإدارة 
   // =====================================
@@ -61,7 +61,7 @@ export default function AttendancePage() {
   const [deptHeads, setDeptHeads] = useState<Record<string, string>>({});
   const [customDeptNames, setCustomDeptNames] = useState<Record<string, string>>({});
   const [excludedRecords, setExcludedRecords] = useState<Set<string>>(new Set());
-
+ 
   // =====================================
   // 3. حالات الطالب
   // =====================================
@@ -71,13 +71,13 @@ export default function AttendancePage() {
   const [isStudentLoading, setIsStudentLoading] = useState(false);
   const [studentDbError, setStudentDbError] = useState<string | null>(null);
   const [activeSubjectTab, setActiveSubjectTab] = useState<string | null>(null);
-
+ 
   useEffect(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
     setDate(today);
     setSnapshotDate(today);
   }, []);
-
+ 
   // ==========================================================
   // 🚀 دوال الإدارة
   // ==========================================================
@@ -95,7 +95,7 @@ export default function AttendancePage() {
         `)
         .eq('date', snapshotDate)
         .order('period', { ascending: true });
-
+ 
       if (error) throw error;
       setDailyStats(data || []);
       setExcludedRecords(new Set()); 
@@ -130,11 +130,11 @@ export default function AttendancePage() {
       setAdminLoading(false);
     }
   }, [user, isAdmin, snapshotDate]);
-
+ 
   useEffect(() => {
     if (isAdmin) fetchDailySnapshot();
   }, [isAdmin, fetchDailySnapshot]);
-
+ 
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = { 'المرحلة المتوسطة': {}, 'المرحلة الثانوية': {} };
     dailyStats.forEach((stat: any) => {
@@ -169,7 +169,7 @@ export default function AttendancePage() {
         className: fullClassName 
       });
     });
-
+ 
     Object.keys(groups).forEach(stage => {
       Object.keys(groups[stage]).forEach(dept => {
         groups[stage][dept].sort((a, b) => {
@@ -178,17 +178,17 @@ export default function AttendancePage() {
         });
       });
     });
-
+ 
     return groups;
   }, [dailyStats]);
-
+ 
   const printDepartmentReport = (stage: string, department: string, records: any[], headName: string) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
     
     const formattedDate = new Date(snapshotDate).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' });
     const finalHeadName = headName && headName.trim() !== '' ? `أ. ${headName}` : '........................';
-
+ 
     const rows = records.map((r, i) => {
       const showTeacher = i === 0 || r.teacher !== records[i - 1].teacher;
       return `
@@ -204,7 +204,7 @@ export default function AttendancePage() {
         </tr>
       `;
     }).join('');
-
+ 
     const html = `
       <html dir="rtl" lang="ar"><head><title>إحصائية ${department}</title><style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
@@ -225,7 +225,7 @@ export default function AttendancePage() {
     `;
     printWindow.document.write(html); printWindow.document.close();
   };
-
+ 
   // ==========================================================
   // 🚀 دوال المعلم
   // ==========================================================
@@ -242,7 +242,7 @@ export default function AttendancePage() {
       });
     }
   }, [date, currentRole, fetchDaySchedule]);
-
+ 
   useEffect(() => {
     if (date && period && currentRole === 'teacher') {
       fetchSections(date, period).then(sectionsData => {
@@ -253,7 +253,7 @@ export default function AttendancePage() {
       });
     }
   }, [date, period, fetchSections, currentRole]);
-
+ 
   const loadStudentsAndAttendance = useCallback(async () => {
     if (selectedSection && date && currentRole === 'teacher') {
       setActiveKey(null);
@@ -271,7 +271,7 @@ export default function AttendancePage() {
         const cachedStr = localStorage.getItem(localDraftKey);
         
         const hasDbData = res.attendance && Object.keys(res.attendance).length > 0;
-
+ 
         if (hasDbData) {
            setAttendance(res.attendance);
            setLessonTitle(res.savedLessonTitle || '');
@@ -293,9 +293,9 @@ export default function AttendancePage() {
       }
     }
   }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole, user?.id]);
-
+ 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
-
+ 
   useEffect(() => {
     if (currentRole === 'teacher' && draftKey && activeKey === draftKey && students.length > 0) {
       if (Object.keys(attendance).length > 0 || lessonTitle) {
@@ -304,10 +304,10 @@ export default function AttendancePage() {
       }
     }
   }, [attendance, lessonTitle, draftKey, activeKey, currentRole, students.length]);
-
+ 
   const handleStatusChange = (studentId: string, status: AttendanceStatus) => { setAttendance(prev => ({ ...prev, [studentId]: status })); };
   const markAllAs = (status: AttendanceStatus) => { const newAttendance = { ...attendance }; students.forEach(s => { newAttendance[s.id] = status; }); setAttendance(newAttendance); };
-
+ 
   const handleSave = async () => {
     setSaving(true); setMessage({ text: '', type: '' });
     try {
@@ -324,7 +324,7 @@ export default function AttendancePage() {
       setTimeout(() => setMessage({ text: '', type: '' }), 8000);
     } finally { setSaving(false); }
   };
-
+ 
   // ==========================================================
   // 🚀 دوال الطالب
   // ==========================================================
@@ -337,20 +337,20 @@ export default function AttendancePage() {
       const sec: any = studentData.sections; const secObj = Array.isArray(sec) ? sec[0] : sec;
       const className = (Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes)?.name || '';
       const fullClassName = className ? `${className} - ${secObj?.name || ''}` : 'فصل الطالب';
-
+ 
       const { data: records, error: recErr } = await supabase.from('attendance_records').select(`id, date, period, status, subjects(name), teachers(users(full_name))`).eq('student_id', studentData.id).order('date', { ascending: false });
       if (recErr) throw recErr;
-
+ 
       if (records) {
         const calculatedStats = { present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 };
         const subjectsMap = new Map<string, any>();
         const enrichedRecords: any[] = [];
-
+ 
         records.forEach((r: any) => {
           if (r.status === 'present') calculatedStats.present++; else if (r.status === 'absent') calculatedStats.absent++; else if (r.status === 'late') calculatedStats.late++; else if (r.status === 'excused') calculatedStats.excused++;
           const subjName = (Array.isArray(r.subjects) ? r.subjects[0]?.name : r.subjects?.name) || 'مادة غير محددة';
           const teacherName = (Array.isArray(r.teachers) ? r.teachers[0]?.users?.full_name : r.teachers?.users?.full_name) || 'معلم';
-
+ 
           if (!subjectsMap.has(subjName)) subjectsMap.set(subjName, { name: subjName, present: 0, absent: 0, late: 0, excused: 0 });
           const sStats = subjectsMap.get(subjName);
           if (r.status === 'present') sStats.present++; else if (r.status === 'absent') sStats.absent++;
@@ -361,9 +361,9 @@ export default function AttendancePage() {
       }
     } catch (error: any) { setStudentDbError(error.message); } finally { setIsStudentLoading(false); }
   }, [currentRole, user]);
-
+ 
   useEffect(() => { fetchStudentDataDirectly(); }, [fetchStudentDataDirectly]);
-
+ 
   const groupedAttendanceRecords = useMemo(() => {
     return studentAttendance.reduce((acc, record) => {
       if (!acc[record.subjectName]) acc[record.subjectName] = [];
@@ -371,9 +371,9 @@ export default function AttendancePage() {
       return acc;
     }, {} as Record<string, any[]>);
   }, [studentAttendance]);
-
+ 
   useEffect(() => { if (Object.keys(groupedAttendanceRecords).length > 0 && !activeSubjectTab) setActiveSubjectTab(Object.keys(groupedAttendanceRecords)[0]); }, [groupedAttendanceRecords, activeSubjectTab]);
-
+ 
   // 🚀 شاشات الحماية (الملكية)
   if (isChecking) {
     return (
@@ -388,7 +388,7 @@ export default function AttendancePage() {
       </div>
     );
   }
-
+ 
   // ==========================================================
   // 🚀 واجهة الإدارة 
   // ==========================================================
@@ -402,7 +402,7 @@ export default function AttendancePage() {
               <BarChart2 className="w-5 h-5" /> تقارير الإنذارات الشاملة
             </Link>
           </div>
-
+ 
           <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] border border-white/10 p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
             <div className="relative z-10 flex flex-col gap-4 text-center sm:text-right">
               <div className="inline-flex w-fit mx-auto sm:mx-0 items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-xs font-black text-blue-400 uppercase tracking-widest shadow-sm">
@@ -417,7 +417,7 @@ export default function AttendancePage() {
             </div>
             <div className="absolute -left-10 -top-10 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none"></div>
           </div>
-
+ 
           <div className="glass-panel p-5 sm:p-6 lg:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
             <div className="flex items-center gap-3 text-white font-black text-base sm:text-lg drop-shadow-sm w-full md:w-auto">
               <div className="p-2 sm:p-2.5 bg-blue-500/10 rounded-lg sm:rounded-xl border border-blue-500/20"><Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /></div> اختر يوم الإحصائية:
@@ -427,7 +427,7 @@ export default function AttendancePage() {
               <button onClick={fetchDailySnapshot} className="w-full sm:w-auto px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-black transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-400/50 shrink-0 active:scale-95">تحديث الإحصائيات</button>
             </div>
           </div>
-
+ 
           {adminLoading ? (
             <div className="py-20 flex justify-center"><Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-blue-500 animate-spin drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" /></div>
           ) : dailyStats.length === 0 ? (
@@ -449,7 +449,7 @@ export default function AttendancePage() {
                     const deptKey = `${stage}-${dept}`;
                     const currentHead = deptHeads[deptKey] || '';
                     const customDeptName = customDeptNames[deptKey] || dept;
-
+ 
                     return (
                       <div key={dept} className="glass-panel rounded-[1.5rem] sm:rounded-[2.5rem] relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 left-0 w-32 h-32 sm:w-48 sm:h-48 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none"></div>
@@ -548,11 +548,11 @@ export default function AttendancePage() {
               );
             })
           )}
-       </div>
+        </div>
       </div>
     );
   }
-
+ 
   // ==========================================================
   // 🚀 واجهة المعلم (Mobile-First Royal Grid)
   // ==========================================================
@@ -567,7 +567,7 @@ export default function AttendancePage() {
   
   const markedCount = presentCount + absentCount + lateCount + excusedCount;
   const unmarkedCount = students.length - markedCount;
-
+ 
   return (
     <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo" dir="rtl">
       
@@ -580,7 +580,7 @@ export default function AttendancePage() {
             </motion.div>
           )}
         </AnimatePresence>
-
+ 
         {/* 🚀 الهيدر الفخم للمعلم */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem]">
           <div>
@@ -600,7 +600,7 @@ export default function AttendancePage() {
             </button>
           </div>
         </div>
-
+ 
         {/* 🚀 أدوات الرصد */}
         <div className="glass-panel p-5 sm:p-6 lg:p-8 rounded-[2rem] sm:rounded-[2.5rem]">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
@@ -647,7 +647,7 @@ export default function AttendancePage() {
             </div>
           )}
         </div>
-
+ 
         {/* 🚀 إحصائيات الرصد */}
         {students.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
@@ -673,7 +673,7 @@ export default function AttendancePage() {
             </div>
           </div>
         )}
-
+ 
         {/* 🚀 قائمة الطلاب المتجاوبة (Mobile First Royal List) */}
         {students.length > 0 && (
           <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden">
@@ -700,7 +700,7 @@ export default function AttendancePage() {
                       </div>
                       <span className="font-black text-white text-sm sm:text-base truncate drop-shadow-sm">{student.users?.full_name}</span>
                     </div>
-
+ 
                     {/* 🚀 خيارات الحضور (متجاوبة تماماً للجوال) */}
                     <div className="grid grid-cols-4 lg:flex lg:flex-1 gap-1.5 sm:gap-2 lg:justify-end">
                       {ATTENDANCE_OPTIONS.map((opt) => (
