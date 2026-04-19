@@ -43,14 +43,14 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 🚀 مفتاح الكاش اللحظي الخاص بالمعلم
+  // 🚀 مفتاح الكاش اللحظي الخاص بالمعلم بناءً على اختياراته
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
     return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
   }, [user?.id, selectedSection, selectedSubject, date, period, currentRole]);
 
   // =====================================
-  // 2. حالات الإدارة (الميزة الإدارية)
+  // 2. حالات الإدارة (الميزة الجديدة للمدير)
   // =====================================
   const [snapshotDate, setSnapshotDate] = useState<string>('');
   const [dailyStats, setDailyStats] = useState<any[]>([]);
@@ -77,7 +77,7 @@ export default function AttendancePage() {
   }, []);
 
   // ==========================================================
-  // 🚀 دوال الإدارة 
+  // 🚀 دوال الإدارة (تعمل فقط إذا كان المستخدم مديراً)
   // ==========================================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin || !snapshotDate) return;
@@ -96,7 +96,7 @@ export default function AttendancePage() {
 
       if (error) throw error;
       setDailyStats(data || []);
-      setExcludedRecords(new Set()); 
+      setExcludedRecords(new Set()); // إعادة ضبط المستبعدين عند جلب بيانات جديدة
     } catch (error: any) {
       console.error("Admin Fetch Error:", error);
     } finally {
@@ -199,7 +199,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم + الكاش اللحظي
+  // 🚀 دوال المعلم مع الكاش اللحظي 
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -235,12 +235,11 @@ export default function AttendancePage() {
           const userB = Array.isArray(b.users) ? b.users[0] : b.users;
           return (userA?.full_name || '').localeCompare(userB?.full_name || '', 'ar'); 
         });
-        
         setStudents(sortedStudents); 
         
-        // 🚀 استرجاع الكاش اللحظي (Auto-Load Cache)
-        const localDraftKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
-        const cachedStr = localStorage.getItem(localDraftKey);
+        // 🚀 استرجاع الكاش اللحظي بأمان 
+        const cacheKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
+        const cachedStr = localStorage.getItem(cacheKey);
         
         if (cachedStr) {
           try {
@@ -261,11 +260,12 @@ export default function AttendancePage() {
 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
 
-  // 🚀 حفظ الكاش اللحظي مع أي تغيير
+  // 🚀 حفظ الكاش التلقائي عند أي تغيير
   useEffect(() => {
     if (currentRole === 'teacher' && draftKey && students.length > 0) {
       if (Object.keys(attendance).length > 0 || lessonTitle) {
-        localStorage.setItem(draftKey, JSON.stringify({ attendance, lessonTitle }));
+        const draft = { attendance, lessonTitle };
+        localStorage.setItem(draftKey, JSON.stringify(draft));
       }
     }
   }, [attendance, lessonTitle, draftKey, currentRole, students.length]);
@@ -351,7 +351,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة الإدارة 
+  // 🚀 واجهة الإدارة (الميزة التي طلبها المدير)
   // ==========================================================
   if (isAdmin) {
     return (
@@ -542,10 +542,10 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم (رصد الغياب الدقيق والمحصن)
+  // 🚀 واجهة المعلم (رصد الغياب والتحكم)
   // ==========================================================
   
-  // 🚀 الإصلاح الجذري للإحصائيات: يتم حسابها فقط من للطلاب المتواجدين حالياً في المصفوفة (لمنع الأرقام السالبة)
+  // 🚀 حل مشكلة الإحصائيات: يتم حسابها فقط من للطلاب المتواجدين حالياً في المصفوفة
   let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
   students.forEach(s => {
     const status = attendance[s.id];
@@ -592,7 +592,7 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* 🚀 أدوات البحث والفلترة (تم جعلها متجاوبة 100% مع الجوال) */}
+        {/* 🚀 أدوات البحث والفلترة (تم إصلاح التشوه بإضافة | للـ split) */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="space-y-2 flex flex-col w-full">
@@ -615,8 +615,8 @@ export default function AttendancePage() {
                <label className="text-[10px] sm:text-xs font-bold text-slate-400 pl-2">الفصل والمادة</label>
                <div className="relative w-full">
                   <BookOpen className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 pointer-events-none" />
-                  <select value={`${selectedSection}${selectedSubject ? `-${selectedSubject}` : ''}`} onChange={(e) => { const parts = e.target.value.split('-'); setSelectedSection(parts[0]); setSelectedSubject(parts[1] || ''); }} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none appearance-none [&>option]:bg-[#131836] truncate">
-                     {sections.length > 0 ? sections.map((s, idx) => <option key={`${s.id}-${s.subject_id || idx}`} value={`${s.id}${s.subject_id ? `-${s.subject_id}` : ''}`}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>) : <option>لا توجد فصول</option>}
+                  <select value={`${selectedSection}|${selectedSubject}`} onChange={(e) => { const parts = e.target.value.split('|'); setSelectedSection(parts[0]); setSelectedSubject(parts[1] || ''); }} className="w-full rounded-2xl border-0 py-3.5 pr-12 pl-4 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none appearance-none [&>option]:bg-[#131836] truncate">
+                     {sections.length > 0 ? sections.map((s, idx) => <option key={`${s.id}|${s.subject_id || idx}`} value={`${s.id}|${s.subject_id || ''}`}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>) : <option>لا توجد فصول</option>}
                   </select>
                </div>
             </div>
@@ -664,7 +664,7 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* 🚀 جدول أسماء الطلاب (Responsive Table Fix) */}
+        {/* 🚀 جدول أسماء الطلاب (Responsive Table) */}
         {students.length > 0 && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
             <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#090b14]/30">
@@ -694,7 +694,7 @@ export default function AttendancePage() {
                            <label className="cursor-pointer inline-block w-full">
                               <input type="radio" checked={attendance[student.id] === opt.status} onChange={() => handleStatusChange(student.id, opt.status as any)} className="sr-only" />
                               <div className={`px-2 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border flex items-center justify-center gap-1.5 sm:gap-2 font-black text-[10px] sm:text-xs transition-all active:scale-95 ${attendance[student.id] === opt.status ? opt.activeClasses : opt.inactiveClasses}`}>
-                                 <opt.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+                                 <opt.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> 
                                  <span className="hidden sm:inline">{opt.label}</span>
                                  <span className="sm:hidden">{opt.mobileLabel}</span>
                               </div>
@@ -709,7 +709,6 @@ export default function AttendancePage() {
           </div>
         )}
         
-        {/* Custom Scrollbar Styling */}
         <style dangerouslySetInnerHTML={{ __html: `
           .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
           .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
