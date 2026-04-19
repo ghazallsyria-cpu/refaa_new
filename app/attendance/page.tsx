@@ -49,6 +49,10 @@ export default function AttendancePage() {
   const [snapshotDate, setSnapshotDate] = useState<string>('');
   const [dailyStats, setDailyStats] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  
+  // 🚀 حالات التحكم بالطباعة (رئيس القسم والأعضاء)
+  const [deptHeads, setDeptHeads] = useState<Record<string, string>>({});
+  const [excludedRecords, setExcludedRecords] = useState<Set<string>>(new Set());
 
   // =====================================
   // 3. حالات الطالب
@@ -68,7 +72,7 @@ export default function AttendancePage() {
   }, []);
 
   // ==========================================================
-  // 🚀 دوال الإدارة
+  // 🚀 دوال الإدارة (تعمل فقط إذا كان المستخدم مديراً)
   // ==========================================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin || !snapshotDate) return;
@@ -87,6 +91,7 @@ export default function AttendancePage() {
 
       if (error) throw error;
       setDailyStats(data || []);
+      setExcludedRecords(new Set()); // إعادة ضبط المستبعدين عند جلب بيانات جديدة
     } catch (error: any) {
       console.error("Admin Fetch Error:", error);
     } finally {
@@ -98,6 +103,7 @@ export default function AttendancePage() {
     if (isAdmin) fetchDailySnapshot();
   }, [isAdmin, fetchDailySnapshot]);
 
+  // 🚀 محرك الفرز الذكي (يجمع المدرسين ويرتبهم حسب الحصة بشكل متسلسل)
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = { 'المرحلة المتوسطة': {}, 'المرحلة الثانوية': {} };
     dailyStats.forEach(stat => {
@@ -107,6 +113,7 @@ export default function AttendancePage() {
       const stage = /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className) ? 'المرحلة المتوسطة' : 'المرحلة الثانوية';
       const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
       const subjName = subjData?.name || 'مادة غير محددة';
+      
       let dept = 'أقسام أخرى';
       if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) dept = 'قسم العلوم';
       else if (/(رياضيات)/.test(subjName)) dept = 'قسم الرياضيات';
@@ -118,15 +125,40 @@ export default function AttendancePage() {
       const teacherData: any = Array.isArray(stat.users) ? stat.users[0] : stat.users;
       
       if (!groups[stage][dept]) groups[stage][dept] = [];
-      groups[stage][dept].push({ teacher: teacherData?.full_name || 'غير محدد', lesson: stat.lesson_title || 'لم يتم التسجيل', subject: subjName, total: stat.total_students, absent: stat.absent_count, present: stat.present_count, period: stat.period, className: fullClassName });
+      groups[stage][dept].push({ 
+        id: stat.id, // 🚀 مهم جداً للاستبعاد والتحكم
+        teacher: teacherData?.full_name || 'غير محدد', 
+        lesson: stat.lesson_title || 'لم يتم التسجيل', 
+        subject: subjName, 
+        total: stat.total_students, 
+        absent: stat.absent_count, 
+        present: stat.present_count, 
+        period: stat.period, 
+        className: fullClassName 
+      });
     });
+
+    // 🚀 الفرز المتسلسل: ترتيب حسب اسم المعلم أولاً ثم الحصة
+    Object.keys(groups).forEach(stage => {
+      Object.keys(groups[stage]).forEach(dept => {
+        groups[stage][dept].sort((a, b) => {
+          if (a.teacher === b.teacher) return Number(a.period) - Number(b.period);
+          return a.teacher.localeCompare(b.teacher, 'ar');
+        });
+      });
+    });
+
     return groups;
   }, [dailyStats]);
 
-  const printDepartmentReport = (stage: string, department: string, records: any[]) => {
+  // 🚀 دالة الطباعة (تدعم رئيس القسم الديناميكي والسجلات المفلترة)
+  const printDepartmentReport = (stage: string, department: string, records: any[], headName: string) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
+    
     const formattedDate = new Date(snapshotDate).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' });
+    const finalHeadName = headName && headName.trim() !== '' ? `أ. ${headName}` : '........................';
+
     const rows = records.map((r) => `
       <tr>
         <td><strong>${r.teacher}</strong></td>
@@ -154,7 +186,7 @@ export default function AttendancePage() {
       </style></head><body>
         <div class="header"><h3>مدرسة الرفعة النموذجية ( ${department} )</h3><h4>إحصائية غياب الطلبة خلال حصص ${department} ${formattedDate.replace('،', '')}</h4></div>
         <table><thead><tr><th width="15%">اسم المدرس</th><th width="25%">عنوان الدرس</th><th width="12%">المادة</th><th width="8%">الإجمالي</th><th width="8%">الغياب</th><th width="8%">الحضور</th><th width="8%">الحصة</th><th width="16%">الصف</th></tr></thead><tbody>${rows}</tbody></table>
-        <div class="signatures"><div>رئيس القسم<br/><p>أ / رائد عبد الستار</p></div><div>مدير المدرسة<br/><p>أ / صالح المطيري</p></div></div>
+        <div class="signatures"><div>رئيس القسم<br/><p>${finalHeadName}</p></div><div>مدير المدرسة<br/><p>أ. صالح المطيري</p></div></div>
         <script>window.onload = () => { setTimeout(() => window.print(), 500); }</script>
       </body></html>
     `;
@@ -282,7 +314,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة الإدارة 
+  // 🚀 واجهة الإدارة (الميزة التي طلبها المدير)
   // ==========================================================
   if (isAdmin) {
     return (
@@ -307,7 +339,7 @@ export default function AttendancePage() {
                 إحصائيات الأقسام الإدارية
               </h1>
               <p className="text-slate-400 text-sm sm:text-base font-bold max-w-2xl leading-relaxed">
-                هذه الصفحة مخصصة لمدير المدرسة لرؤية اللقطات الإحصائية اليومية مجمعة حسب القسم والمرحلة، جاهزة للطباعة والتوقيع.
+                هذه الصفحة مخصصة لمدير المدرسة لرؤية اللقطات الإحصائية مجمعة حسب القسم والمرحلة. يمكنك كتابة اسم <span className="text-emerald-400">رئيس القسم</span> واستبعاد من لا ينتمي للقسم قبل الطباعة.
               </p>
             </div>
             <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none"></div>
@@ -317,9 +349,9 @@ export default function AttendancePage() {
             <div className="flex items-center gap-3 text-emerald-400 font-black text-lg">
               <Calendar className="w-6 h-6" /> اختر يوم الإحصائية لعرضه:
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 w-full sm:w-auto">
               <input type="date" value={snapshotDate} onChange={(e) => setSnapshotDate(e.target.value)} className="w-full sm:w-auto rounded-2xl border border-white/10 py-3.5 px-6 text-white bg-[#090b14]/80 focus:ring-2 focus:ring-emerald-400 text-sm font-bold outline-none" style={{ colorScheme: 'dark' }} />
-              <button onClick={fetchDailySnapshot} className="px-5 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black transition-all">تحديث</button>
+              <button onClick={fetchDailySnapshot} className="px-5 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0">تحديث</button>
             </div>
           </div>
 
@@ -338,20 +370,47 @@ export default function AttendancePage() {
                   
                   {Object.keys(stageData).map(dept => {
                     const recordsList = stageData[dept];
+                    const deptKey = `${stage}-${dept}`;
+                    const currentHead = deptHeads[deptKey] || '';
+
                     return (
                       <div key={dept} className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
-                        <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#090b14]/30">
+                        <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 bg-[#090b14]/30">
                           <h3 className="text-xl font-black text-emerald-400 flex items-center gap-3">
                             <Layers className="w-6 h-6" /> {dept}
                           </h3>
-                          <button onClick={() => printDepartmentReport(stage, dept, recordsList)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black transition-all border border-white/10 active:scale-95">
-                            <Printer className="w-4 h-4" /> طباعة إحصائية القسم
-                          </button>
+                          
+                          {/* 🚀 أدوات تحكم المدير (تحديد رئيس القسم والطباعة) */}
+                          <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
+                            <div className="flex items-center gap-3 bg-[#090b14]/80 px-4 py-2.5 rounded-2xl border border-white/10 w-full sm:w-auto">
+                               <span className="text-xs font-black text-slate-400 shrink-0">رئيس القسم:</span>
+                               <input 
+                                 type="text" 
+                                 placeholder="اكتب الاسم لاعتماده..." 
+                                 value={currentHead}
+                                 onChange={(e) => setDeptHeads(prev => ({...prev, [deptKey]: e.target.value}))}
+                                 className="bg-transparent border-none text-emerald-400 font-black text-sm outline-none w-full sm:w-48 placeholder:text-slate-600 focus:ring-0"
+                               />
+                            </div>
+                            <button 
+                              onClick={() => {
+                                // فلترة السجلات المطبوعة فقط لمن هم (مُضمنين)
+                                const finalRecords = recordsList.filter(r => !excludedRecords.has(r.id));
+                                printDepartmentReport(stage, dept, finalRecords, currentHead);
+                              }} 
+                              className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black transition-all border border-white/10 active:scale-95 w-full sm:w-auto shrink-0"
+                            >
+                              <Printer className="w-4 h-4" /> اعتماد وطباعة
+                            </button>
+                          </div>
                         </div>
+                        
                         <div className="overflow-x-auto pb-4">
                           <table className="w-full text-right whitespace-nowrap">
                             <thead>
                               <tr className="bg-white/5 border-b border-white/5">
+                                {/* عمود התضمين للمدير */}
+                                <th className="py-4 px-4 text-xs font-black text-center text-slate-500">تضمين بالطباعة</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">اسم المدرس</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400">عنوان الدرس</th>
                                 <th className="py-4 px-6 text-xs font-black uppercase text-slate-400 text-center">المادة</th>
@@ -363,18 +422,36 @@ export default function AttendancePage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                              {recordsList.map((r, i) => (
-                                <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                                  <td className="py-4 px-6 font-black text-white text-sm">{r.teacher}</td>
-                                  <td className="py-4 px-6 font-bold text-slate-300 text-sm truncate max-w-[200px]" title={r.lesson}>{r.lesson}</td>
-                                  <td className="py-4 px-6 font-bold text-slate-400 text-sm text-center">{r.subject}</td>
-                                  <td className="py-4 px-4 font-black text-white text-base text-center">{r.total}</td>
-                                  <td className="py-4 px-4 font-black text-rose-400 text-base text-center">{r.absent}</td>
-                                  <td className="py-4 px-4 font-black text-emerald-400 text-base text-center">{r.present}</td>
-                                  <td className="py-4 px-4 font-black text-slate-300 text-sm text-center bg-white/5 border-x border-white/5">{r.period}</td>
-                                  <td className="py-4 px-6 font-black text-slate-300 text-sm text-center" dir="ltr">{r.className}</td>
-                                </tr>
-                              ))}
+                              {recordsList.map((r, i) => {
+                                const isExcluded = excludedRecords.has(r.id);
+                                return (
+                                  <tr key={i} className={`transition-colors ${isExcluded ? 'opacity-30 bg-[#090b14]' : 'hover:bg-white/[0.02]'}`}>
+                                    <td className="py-4 px-4 text-center">
+                                       <input 
+                                          type="checkbox" 
+                                          checked={!isExcluded}
+                                          onChange={() => {
+                                            setExcludedRecords(prev => {
+                                              const newSet = new Set(prev);
+                                              if (newSet.has(r.id)) newSet.delete(r.id);
+                                              else newSet.add(r.id);
+                                              return newSet;
+                                            });
+                                          }}
+                                          className="w-4 h-4 cursor-pointer accent-emerald-500"
+                                       />
+                                    </td>
+                                    <td className={`py-4 px-6 font-black text-sm ${isExcluded ? 'line-through text-slate-600' : 'text-white'}`}>{r.teacher}</td>
+                                    <td className="py-4 px-6 font-bold text-slate-300 text-sm truncate max-w-[200px]" title={r.lesson}>{r.lesson}</td>
+                                    <td className="py-4 px-6 font-bold text-slate-400 text-sm text-center">{r.subject}</td>
+                                    <td className="py-4 px-4 font-black text-white text-base text-center">{r.total}</td>
+                                    <td className="py-4 px-4 font-black text-rose-400 text-base text-center">{r.absent}</td>
+                                    <td className="py-4 px-4 font-black text-emerald-400 text-base text-center">{r.present}</td>
+                                    <td className="py-4 px-4 font-black text-slate-300 text-sm text-center bg-white/5 border-x border-white/5">{r.period}</td>
+                                    <td className="py-4 px-6 font-black text-slate-300 text-sm text-center" dir="ltr">{r.className}</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -427,7 +504,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم (رصد الغياب + الإحصائيات العلوية التي طلبها المستخدم)
+  // 🚀 واجهة المعلم 
   // ==========================================================
   const presentCount = Object.values(attendance).filter(v => v === 'present').length;
   const absentCount = Object.values(attendance).filter(v => v === 'absent').length;
@@ -482,7 +559,6 @@ export default function AttendancePage() {
           )}
         </div>
 
-        {/* 🚀 إحصائيات المعلم العلوية (تم استرجاعها وتصميمها زجاجياً) */}
         {students.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-[#131836]/60 backdrop-blur-md p-5 rounded-[1.5rem] border border-white/5 flex flex-col justify-center items-center text-center shadow-lg">
