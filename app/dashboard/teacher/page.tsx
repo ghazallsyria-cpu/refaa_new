@@ -117,7 +117,7 @@ export default function TeacherDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
+      // 🚀 تم إزالة setLoading(true) من هنا ووضعها في الـ useEffect لكي لا تصفر الشاشة في كل مرة
       const data = await fetchTeacherDashboardData();
       
       if (data) {
@@ -234,9 +234,11 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     if (!isChecking && (authRole === 'teacher' || authRole === 'admin' || authRole === 'management')) {
+      // 🚀 استدعاء التحميل لأول مرة فقط
+      if (!teacherData) setLoading(true);
       fetchData();
     }
-  }, [fetchData, isChecking, authRole]);
+  }, [fetchData, isChecking, authRole, teacherData]);
 
   const todaysSchedule = useMemo(() => {
     const today = new Date().getDay() + 1; 
@@ -247,10 +249,14 @@ export default function TeacherDashboard() {
     return messages.filter(m => !m.is_read).length;
   }, [messages]);
 
-  // 🚀 شاشات التحميل والحماية بالثيم الملكي
-  if (isChecking) {
+  // =======================================================
+  // 🚀 التعديل السحري: الاعتماد على وجود البيانات لمنع الوميض
+  // =======================================================
+
+  // لا نعرض شاشة "التحقق" إذا كان المستخدم مسجلاً وموجوداً بالفعل في الذاكرة
+  if (isChecking && !user) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent">
+      <div className="flex h-screen items-center justify-center bg-transparent">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.4)]"></div>
@@ -264,7 +270,7 @@ export default function TeacherDashboard() {
 
   if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent p-4">
+      <div className="flex h-screen items-center justify-center bg-transparent p-4">
         <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
            <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
            <h2 className="text-2xl font-black text-white mb-2">وصول مقيد</h2>
@@ -274,9 +280,10 @@ export default function TeacherDashboard() {
     );
   }
 
-  if (loading) {
+  // لا نعرض شاشة التحميل إذا كانت بيانات المعلم محملة مسبقاً! (تحديث صامت)
+  if (loading && !teacherData) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent relative z-10">
+      <div className="flex h-screen items-center justify-center bg-transparent relative z-10">
         <div className="flex flex-col items-center gap-5">
           <div className="h-16 w-16 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]"></div>
           <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري إعداد لوحتك المدرسية...</p>
@@ -491,9 +498,9 @@ export default function TeacherDashboard() {
         </div>
 
         {/* 🚀 Main Grids */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8 items-start">
           
-          <div className="xl:col-span-2 space-y-6 lg:space-y-8">
+          <div className="xl:col-span-2 space-y-6 lg:space-y-8 w-full">
             {/* Today's Schedule */}
             <motion.div variants={itemVariants} className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] -mr-10 -mt-10 pointer-events-none"></div>
@@ -727,9 +734,6 @@ export default function TeacherDashboard() {
                 <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
                   <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 shadow-inner"><MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 drop-shadow-sm" /></div> صندوق الرسائل
                 </h2>
-                {unreadMessagesCount > 0 && (
-                  <span className="flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-rose-600 text-[9px] sm:text-[10px] font-black text-white shadow-[0_0_10px_rgba(225,29,72,0.8)] animate-pulse relative z-10 border border-rose-400 shrink-0">{unreadMessagesCount}</span>
-                )}
               </div>
               <div className="divide-y divide-white/5 bg-transparent">
                 {messages.length > 0 ? (
@@ -772,7 +776,7 @@ export default function TeacherDashboard() {
 
           </div>
         </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 }
