@@ -381,7 +381,7 @@ export default function AnnouncementsPage() {
                         src={selectedAnnouncement.image_url} 
                         alt={selectedAnnouncement.title} 
                         fill
-                        className="object-contain hover:scale-105 transition-transform duration-700"
+                        className="object-contain md:object-cover hover:scale-105 transition-transform duration-700"
                         referrerPolicy="no-referrer"
                       />
                     </div>
