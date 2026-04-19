@@ -2,14 +2,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, BookOpen, User, ArrowRight, Loader2, AlertCircle, Sparkles } from 'lucide-react';
+import { Calendar, Clock, BookOpen, User, ArrowRight, Loader2, AlertCircle, Sparkles, Play, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale'; 
 import Link from 'next/link';
 
-import { useDashboardSystem } from '../../../../hooks/useDashboardSystem';
+// 🚀 مسارات دقيقة لتجنب الأخطاء
+import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../context/auth-context';
+import { cn } from '../../../../lib/utils';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -19,53 +21,82 @@ const DAYS = [
   { id: 5, name: 'الخميس' },
 ];
 
+const normalizeUrl = (url?: string) => {
+  if (!url) return '';
+  const clean = url.trim();
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+};
+
 export default function StudentSchedulePage() {
-  const { authRole, isChecking } = useAuth() as any; 
+  const { user, authRole, isChecking } = useAuth() as any; 
 
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  
-  const { fetchStudentSchedule: fetchScheduleData } = useDashboardSystem();
 
-  const fetchStudentSchedule = useCallback(async () => {
-    if (authRole !== 'student') return;
+  // 🚀 الإصلاح الجذري (The Sniper Fetch): 
+  // جلب دقيق ومباشر من قاعدة البيانات يضمن عدم تداخل أي جداول لصفوف أخرى!
+  const fetchPreciseSchedule = useCallback(async () => {
+    if (authRole !== 'student' || !user?.id) return;
 
     setLoading(true);
     try {
-      const data = await fetchScheduleData();
-      if (data) {
-        setStudentInfo(data.student);
-        setSchedule(data.schedule);
-        setPeriods(data.periods);
+      // 1. تحديد فصل الطالب بدقة قاطعة
+      const { data: studentData, error: stuErr } = await supabase
+        .from('students')
+        .select('id, section_id, sections(id, name, classes(name))')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (stuErr || !studentData) throw new Error("لم يتم العثور على بيانات الطالب");
+
+      const actualSectionId = studentData.section_id || (Array.isArray(studentData.sections) ? studentData.sections[0]?.id : studentData.sections?.id);
+      setStudentInfo(studentData);
+
+      // 2. جلب حصص هذا الفصل حصرياً! (يستحيل تداخلها مع صفوف أخرى)
+      if (actualSectionId) {
+        const { data: preciseSchedule } = await supabase
+          .from('schedules')
+          .select(`
+            id, day_of_week, period, section_id,
+            subjects(name),
+            teachers(users(full_name), zoom_link)
+          `)
+          .eq('section_id', actualSectionId); // 🎯 القفل الأمني
+        
+        setSchedule(preciseSchedule || []);
       }
+
+      // 3. جلب أوقات الحصص
+      const { data: periodsData } = await supabase
+        .from('periods')
+        .select('*')
+        .order('period_number', { ascending: true });
+
+      setPeriods(periodsData || []);
+
     } catch (error) {
-      console.error('Error fetching student schedule:', error);
+      console.error('Error fetching precise schedule:', error);
     } finally {
       setLoading(false);
     }
-  }, [fetchScheduleData, authRole]);
+  }, [authRole, user]);
 
   useEffect(() => {
-    if (!isChecking) fetchStudentSchedule();
+    if (!isChecking) fetchPreciseSchedule();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
-  }, [fetchStudentSchedule, isChecking]);
+  }, [fetchPreciseSchedule, isChecking]);
 
-  // 🚀 الإصلاح الجذري (The Sniper Fix): 
-  // إجبار الدالة على مطابقة (رقم الفصل) مع الحصة لمنع تداخل جداول الصفوف الأخرى!
+  // دالة الاستخراج أصبحت سريعة وآمنة لأن المصفوفة تحتوي فقط على حصص هذا الطالب
   const getCellData = useCallback((day: number, period: number) => {
-    const studentSectionId = studentInfo?.section_id || studentInfo?.sections?.id;
-    if (!studentSectionId) return null;
-    
     return schedule.find(s => 
-      String(s.day_of_week) === String(day) && 
-      String(s.period) === String(period) &&
-      String(s.section_id) === String(studentSectionId) // 🎯 شرط التطابق الصارم
+      Number(s.day_of_week) === Number(day) && 
+      Number(s.period) === Number(period)
     );
-  }, [schedule, studentInfo]);
+  }, [schedule]);
 
   const isCurrentClass = useCallback((day: number, period: any) => {
     if (!period?.start_time || !period?.end_time) return false;
@@ -94,9 +125,10 @@ export default function StudentSchedulePage() {
     return startTime > now && (startTime.getTime() - now.getTime()) < 120 * 60000;
   }, [currentTime]);
 
+  // 🚀 شاشة التحميل وحماية الوصول
   if (isChecking) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-[#090b14]">
+      <div className="flex h-[80vh] items-center justify-center bg-[#090b14] font-cairo">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-14 h-14 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
           <p className="text-slate-400 font-bold animate-pulse tracking-widest">جاري التحقق وتأمين الصلاحيات...</p>
@@ -106,19 +138,22 @@ export default function StudentSchedulePage() {
   }
 
   if (authRole !== 'student') {
-    return <div className="p-10 text-center font-black text-rose-500 min-h-[80vh] flex items-center justify-center bg-[#090b14]">هذه الصفحة مخصصة للطلاب فقط.</div>;
+    return <div className="p-10 text-center font-black text-rose-500 min-h-[80vh] flex items-center justify-center bg-[#090b14] font-cairo">هذه الصفحة مخصصة للطلاب فقط.</div>;
   }
 
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-[#090b14] relative z-10">
+      <div className="flex h-[80vh] items-center justify-center bg-[#090b14] relative z-10 font-cairo">
         <div className="flex flex-col items-center gap-4">
           <div className="h-14 w-14 animate-spin rounded-full border-4 border-indigo-500/20 border-t-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.5)]"></div>
-          <p className="text-slate-400 font-bold animate-pulse tracking-widest">جاري تحميل الجدول الأسبوعي...</p>
+          <p className="text-slate-400 font-bold animate-pulse tracking-widest">جاري سحب الجدول المخصص لك...</p>
         </div>
       </div>
     );
   }
+
+  const secObj = Array.isArray(studentInfo?.sections) ? studentInfo?.sections[0] : studentInfo?.sections;
+  const className = Array.isArray(secObj?.classes) ? secObj?.classes[0]?.name : secObj?.classes?.name;
 
   return (
     <motion.div 
@@ -126,13 +161,13 @@ export default function StudentSchedulePage() {
       className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo"
       dir="rtl"
     >
-      {/* 🚀 الخلفية المضيئة */}
+      {/* 🚀 الخلفية المضيئة للوضع الزجاجي */}
       <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="space-y-8 max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* 🚀 زر العودة */}
+        {/* زر العودة */}
         <div className="flex justify-start">
           <Link href="/dashboard/student" className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 font-bold bg-[#131836]/60 backdrop-blur-xl px-5 py-2.5 rounded-2xl border border-white/5 transition-all w-fit group text-sm sm:text-base shadow-lg">
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /> العودة للوحة الطالب
@@ -150,11 +185,11 @@ export default function StudentSchedulePage() {
                 جدولي الدراسي الأسبوعي
               </h1>
               <p className="text-slate-400 text-sm sm:text-base font-bold max-w-2xl leading-relaxed">
-                عرض الحصص الدراسية لصفك: <span className="text-emerald-400 font-black">{studentInfo?.sections?.classes?.name} - {studentInfo?.sections?.name}</span>
+                عرض الحصص الدراسية المخصصة لصفك: <span className="text-emerald-400 font-black px-1">{className} - {secObj?.name}</span>
               </p>
             </div>
             
-            <div className="flex items-center gap-4 bg-[#090b14]/50 p-4 rounded-[2rem] border border-white/5 shrink-0 w-full lg:w-auto">
+            <div className="flex items-center gap-4 bg-[#090b14]/50 p-4 rounded-[2rem] border border-white/5 shrink-0 w-full lg:w-auto shadow-inner">
               <div className="h-14 w-14 rounded-[1.5rem] bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-inner">
                 <Clock className="h-7 w-7" />
               </div>
@@ -234,8 +269,13 @@ export default function StudentSchedulePage() {
                                       أ. {cellData.teachers?.users?.full_name || 'غير محدد'}
                                     </div>
                                   </div>
-                                  {isCurrent && (
-                                    <div className="mt-1 inline-flex items-center justify-center py-1.5 px-3 bg-slate-900 rounded-xl text-[10px] font-black text-emerald-400 shadow-md">
+                                  {cellData.teachers?.zoom_link && (
+                                    <a href={normalizeUrl(cellData.teachers.zoom_link)} target="_blank" rel="noopener noreferrer" className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black transition-colors ${isCurrent ? 'bg-[#090b14]/80 text-emerald-400 hover:bg-[#090b14]' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-slate-900 border border-emerald-500/30'}`}>
+                                      <Video className="w-3.5 h-3.5" /> دخول البث
+                                    </a>
+                                  )}
+                                  {isCurrent && !cellData.teachers?.zoom_link && (
+                                    <div className="inline-flex items-center justify-center py-1.5 px-3 bg-slate-900 rounded-xl text-[10px] font-black text-emerald-400 shadow-md w-full">
                                       <span className="relative flex h-2 w-2 ml-2">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -244,7 +284,7 @@ export default function StudentSchedulePage() {
                                     </div>
                                   )}
                                   {isNext && !isCurrent && (
-                                    <div className="mt-1 inline-flex items-center justify-center py-1.5 px-3 bg-amber-500/30 rounded-xl text-[10px] font-black text-amber-300 border border-amber-500/50">
+                                    <div className="inline-flex items-center justify-center py-1.5 px-3 bg-amber-500/30 rounded-xl text-[10px] font-black text-amber-300 border border-amber-500/50 w-full">
                                       الحصة القادمة
                                     </div>
                                   )}
