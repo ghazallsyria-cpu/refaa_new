@@ -170,6 +170,7 @@ function HBar({ width = '60%', color = 'bg-white/10' }: { width?: string; color?
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function HierarchyPage() {
   // 🚀 1. إضافة حالة التأكد من التحميل على المتصفح (Bypass SSR)
+// 🚀 1. إضافة حالة التأكد من التحميل على المتصفح (Bypass SSR)
   const [isMounted, setIsMounted] = useState(false);
   const { loading, fetchHierarchyData } = useHierarchySystem();
   const [data, setData] = useState<any>(null);
@@ -177,7 +178,8 @@ export default function HierarchyPage() {
 
   // 🚀 2. تفعيل المكون فقط بعد تحميله في المتصفح لمنع Netlify من التدخل
   useEffect(() => {
-    setIsMounted(true);
+    const timer = setTimeout(() => setIsMounted(true), 0);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
