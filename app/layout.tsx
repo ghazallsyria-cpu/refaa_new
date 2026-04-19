@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#090b14", // 🚀 مطابقة لون متصفح الجوال مع الثيم
+  themeColor: "#0f172a", // 🚀 مطابقة لون متصفح الجوال مع الثيم الجديد (Slate 900)
 };
 
 export default function RootLayout({
@@ -55,12 +55,15 @@ export default function RootLayout({
         />
       </head>
 
-      <body className="antialiased bg-[#090b14] text-slate-200 font-sans relative min-h-screen overflow-x-hidden">
+      {/* 🚀 تحديث لون الخلفية والنص ليكون مريحاً وفخماً */}
+      <body className="antialiased bg-[#0f172a] text-slate-300 font-sans relative min-h-screen overflow-x-hidden">
         
-        {/* 🚀 السحر يبدأ هنا: الخلفية المضيئة العالمية (Global Glowing Blobs) */}
+        {/* 🚀 הסحر يبدأ هنا: الكرات المضيئة المتحركة (Animated Cinematic Blobs) */}
         <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none print:hidden">
-          <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[120px]" />
-          <div className="absolute bottom-[-10%] left-[-5%] w-[700px] h-[700px] bg-emerald-500/10 rounded-full blur-[120px]" />
+          {/* إضاءة نيلية هادئة متحركة في الزاوية العلوية */}
+          <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-indigo-500/20 rounded-full blur-[140px] animate-blob mix-blend-screen" />
+          {/* إضاءة زمردية هادئة متحركة في الزاوية السفلية */}
+          <div className="absolute bottom-[-10%] left-[-5%] w-[700px] h-[700px] bg-emerald-500/15 rounded-full blur-[140px] animate-blob animation-delay-2000 mix-blend-screen" />
         </div>
 
         <AuthProvider>
