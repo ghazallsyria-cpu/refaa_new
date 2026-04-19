@@ -1,10 +1,10 @@
-/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon, Play, Loader2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion'; // 🚀 السطر الذي كان مفقوداً وتم إضافته
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
 import ForumEditor from '@/components/ForumEditor';
