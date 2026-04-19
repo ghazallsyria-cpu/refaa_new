@@ -11,11 +11,10 @@ export default function Home() {
   }, [router]);
 
   return (
-    // 🚀 تحديث لون الخلفية لـ Slate 900
-    <div className="flex h-screen items-center justify-center bg-[#0f172a]">
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]"></div>
-        <p className="text-slate-400 font-bold animate-pulse">جاري تجهيز المنصة...</p>
+    <div className="flex h-screen items-center justify-center bg-transparent">
+      <div className="flex flex-col items-center gap-6 glass-panel p-12 rounded-[3rem]">
+        <div className="h-14 w-14 animate-spin rounded-full border-4 border-amber-500/20 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]"></div>
+        <p className="text-slate-800 font-black animate-pulse text-lg tracking-widest">جاري تجهيز المنصة...</p>
       </div>
     </div>
   );
