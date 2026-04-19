@@ -912,7 +912,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           )}
         </div>
       )}
-
+           </div>
       {/* Delete Assignment Modal */}
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
