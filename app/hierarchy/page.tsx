@@ -1,17 +1,17 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
- 
+
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, GraduationCap, Crown, Shield, ChevronDown, Network, Award, Star, Sparkles, BookOpen, ChevronRight } from 'lucide-react';
 import { useHierarchySystem, getTeachersUnderHOD } from '@/hooks/useHierarchySystem';
- 
+
 // ─── variants ────────────────────────────────────────────────────────────────
 const fadeUp = { hidden: { opacity: 0, y: 32 }, show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 80, damping: 18 } } };
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.12 } } };
 const scaleIn = { hidden: { opacity: 0, scale: 0.85 }, show: { opacity: 1, scale: 1, transition: { type: 'spring' as const, stiffness: 120, damping: 16 } } };
- 
+
 // ─── level palette ────────────────────────────────────────────────────────────
 const PALETTES = {
   admin:     { ring: 'ring-amber-400/60',     glow: 'shadow-amber-500/30',  badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',   icon: 'bg-amber-500/15 text-amber-400',  line: 'from-amber-400/60 to-amber-300/20' },
@@ -19,7 +19,7 @@ const PALETTES = {
   hod:       { ring: 'ring-violet-400/60',    glow: 'shadow-violet-500/20',  badge: 'bg-violet-500/20 text-violet-300 border-violet-500/40',  icon: 'bg-violet-500/15 text-violet-400',  line: 'from-violet-400/50 to-violet-300/10' },
   teacher:   { ring: 'ring-blue-400/40',      glow: 'shadow-blue-500/10',    badge: 'bg-blue-500/15 text-blue-300 border-blue-500/30',        icon: 'bg-blue-500/10 text-blue-400',      line: '' },
 };
- 
+
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ url, name, size = 'lg', palette }: { url?: string; name?: string; size?: 'sm'|'md'|'lg'|'xl'; palette: typeof PALETTES['admin'] }) {
   const dims = { sm: 'h-11 w-11 text-base rounded-2xl', md: 'h-16 w-16 text-xl rounded-[1.2rem]', lg: 'h-24 w-24 text-3xl rounded-[1.8rem]', xl: 'h-32 w-32 text-4xl rounded-[2rem]' };
@@ -34,7 +34,7 @@ function Avatar({ url, name, size = 'lg', palette }: { url?: string; name?: stri
     </div>
   );
 }
- 
+
 // ─── Admin Card ───────────────────────────────────────────────────────────────
 function AdminCard({ admin }: { admin: any }) {
   const p = PALETTES.admin;
@@ -60,7 +60,7 @@ function AdminCard({ admin }: { admin: any }) {
     </motion.div>
   );
 }
- 
+
 // ─── Supervisor Card ──────────────────────────────────────────────────────────
 function SupervisorCard({ sup }: { sup: any }) {
   const p = PALETTES.supervisor;
@@ -85,13 +85,13 @@ function SupervisorCard({ sup }: { sup: any }) {
     </motion.div>
   );
 }
- 
+
 // ─── HOD + Teachers Column ────────────────────────────────────────────────────
 function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
   const [expanded, setExpanded] = useState(true);
   const p = PALETTES.hod;
   const tp = PALETTES.teacher;
- 
+
   return (
     <motion.div variants={fadeUp} className="flex flex-col items-center w-[300px] sm:w-[320px]">
       <div className="relative z-10 w-full">
@@ -112,7 +112,7 @@ function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
           </div>
         </Link>
       </div>
- 
+
       {teachers.length > 0 && (
         <>
           <div className="w-px h-6 bg-gradient-to-b from-violet-400/50 to-violet-400/10" />
@@ -120,7 +120,7 @@ function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
             <Users className="w-2.5 h-2.5" /> {teachers.length} أعضاء
             <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
           </button>
- 
+
           <AnimatePresence initial={false}>
             {expanded && (
               <motion.div
@@ -157,30 +157,38 @@ function DeptColumn({ hod, teachers }: { hod: any; teachers: any[] }) {
     </motion.div>
   );
 }
- 
+
 // ─── Connector Line ───────────────────────────────────────────────────────────
 function VLine({ from, h = 16, color = 'from-white/20 to-transparent' }: { from?: string; h?: number; color?: string }) {
   return <div className={`w-px bg-gradient-to-b ${color} mx-auto`} style={{ height: `${h * 4}px` }} />;
 }
- 
+
 function HBar({ width = '60%', color = 'bg-white/10' }: { width?: string; color?: string }) {
   return <div className={`h-px ${color} mx-auto`} style={{ width }} />;
 }
- 
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function HierarchyPage() {
+  // 🚀 1. إضافة حالة التأكد من التحميل على المتصفح (Bypass SSR)
+  const [isMounted, setIsMounted] = useState(false);
   const { loading, fetchHierarchyData } = useHierarchySystem();
   const [data, setData] = useState<any>(null);
-  const fetchedRef = useRef(false); // 🚀 جدار الحماية ضد الحلقة المفرغة!
- 
+  const fetchedRef = useRef(false);
+
+  // 🚀 2. تفعيل المكون فقط بعد تحميله في المتصفح لمنع Netlify من التدخل
   useEffect(() => {
-    if (!fetchedRef.current) {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isMounted && !fetchedRef.current) {
       fetchedRef.current = true;
       fetchHierarchyData().then(setData);
     }
-  }, [fetchHierarchyData]);
- 
-  if (loading || !data) {
+  }, [isMounted, fetchHierarchyData]);
+
+  // 🚀 3. عرض مؤشر التحميل أثناء انتظار الرد أو إذا كنا على السيرفر
+  if (!isMounted || loading || !data) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#070a14] font-cairo">
         <div className="flex flex-col items-center gap-6">
@@ -193,7 +201,7 @@ export default function HierarchyPage() {
       </div>
     );
   }
- 
+
   return (
     <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -201,7 +209,7 @@ export default function HierarchyPage() {
         <div className="absolute bottom-[-10%] left-[-10%] w-[45rem] h-[45rem] bg-violet-600/5 rounded-full blur-[120px]" />
         <div className="absolute top-[40%] left-[30%] w-[25rem] h-[25rem] bg-blue-600/4 rounded-full blur-[100px]" />
       </div>
- 
+
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div initial="hidden" animate="show" variants={stagger} className="text-center mb-20 sm:mb-28 space-y-5">
           <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-black uppercase tracking-widest shadow-inner">
@@ -214,7 +222,80 @@ export default function HierarchyPage() {
             الخريطة الإدارية والأكاديمية المعتمدة — اضغط على أي بطاقة لاستعراض الملف المهني
           </motion.p>
         </motion.div>
+
+        {/* 🚀 The Tree */}
+        <motion.div initial="hidden" animate="show" variants={stagger} className="flex flex-col items-center select-none relative z-10">
+          
+          {/* Level 1: Admin */}
+          {data.admin && (
+            <div className="flex flex-col items-center">
+              <AdminCard admin={data.admin} />
+              {(data.supervisors.length > 0 || data.hods.length > 0) && (
+                <VLine h={12} color="from-amber-500/50 to-amber-500/10" />
+              )}
+            </div>
+          )}
+
+          {/* Level 2: Supervisors */}
+          {data.supervisors.length > 0 && (
+            <div className="flex flex-col items-center w-full">
+              {data.supervisors.length > 1 && (
+                <HBar width="40%" color="bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+              )}
+              {data.supervisors.length > 1 && (
+                <div className="flex justify-around w-[40%]">
+                  <VLine h={6} color="from-amber-500/30 to-emerald-500/30" />
+                  <VLine h={6} color="from-amber-500/30 to-emerald-500/30" />
+                </div>
+              )}
+              <div className="flex flex-wrap justify-center gap-6 sm:gap-12 mt-4">
+                {data.supervisors.map((sup: any) => (
+                  <SupervisorCard key={sup.id} sup={sup} />
+                ))}
+              </div>
+              {data.hods.length > 0 && (
+                <div className="mt-4">
+                  <VLine h={16} color="from-emerald-500/40 to-emerald-500/10" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Level 3: HODs & Teachers */}
+          {data.hods.length > 0 && (
+            <div className="flex flex-col items-center w-full mt-4">
+              {data.hods.length > 1 && (
+                <HBar width="70%" color="bg-gradient-to-r from-transparent via-emerald-500/30 to-transparent" />
+              )}
+              {data.hods.length > 1 && (
+                <div className="flex justify-between w-[70%] px-[10%]">
+                  {data.hods.map((_: any, i: number) => (
+                    <VLine key={i} h={8} color="from-emerald-500/30 to-violet-500/30" />
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex flex-wrap justify-center gap-8 sm:gap-16 mt-6">
+                {data.hods.map((hod: any) => (
+                  <DeptColumn 
+                    key={hod.id} 
+                    hod={hod} 
+                    teachers={getTeachersUnderHOD(hod, data.teachers)} 
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+        </motion.div>
       </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.3); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.6); }
+      `}} />
     </div>
   );
 }
