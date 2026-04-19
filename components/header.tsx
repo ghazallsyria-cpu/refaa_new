@@ -42,7 +42,7 @@ export function Header({
         {onMenuClick && showMenuButton && (
           <button
             type="button"
-            className="p-2.5 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-white/5 transition-all flex items-center justify-center active:scale-95 border border-transparent hover:border-white/10"
+            className="p-2.5 text-slate-500 hover:text-amber-500 rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center active:scale-95 border border-transparent hover:border-slate-200"
             onClick={onMenuClick}
             title="القائمة"
           >
@@ -54,19 +54,19 @@ export function Header({
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-2 sm:gap-3 p-1.5 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-white/10 group active:scale-95"
+            className="flex items-center gap-2 sm:gap-3 p-1.5 rounded-2xl hover:bg-slate-100 transition-all border border-transparent hover:border-slate-200 group active:scale-95"
           >
             <div className="relative">
-              <div className="h-10 w-10 rounded-[0.8rem] bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.4)] ring-2 ring-[#090b14] group-hover:ring-emerald-400 transition-all">
-                <User className="h-5 w-5 text-[#090b14]" />
+              <div className="h-10 w-10 rounded-[0.8rem] bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center shadow-sm ring-2 ring-white group-hover:ring-amber-200 transition-all">
+                <User className="h-5 w-5 text-slate-900" />
               </div>
-              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-emerald-400 border-2 border-[#090b14] rounded-full shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
             </div>
             <div className="hidden sm:flex flex-col items-start">
-              <span className="text-sm font-black text-white truncate max-w-[120px] group-hover:text-emerald-400 transition-colors">
+              <span className="text-sm font-black text-slate-900 truncate max-w-[120px] group-hover:text-amber-600 transition-colors">
                 {userName || (user ? user.email.split('@')[0] : 'المستخدم')}
               </span>
-              <span className="text-[10px] text-slate-400 font-bold tracking-widest">{displayRole}</span>
+              <span className="text-[10px] text-slate-500 font-bold tracking-widest">{displayRole}</span>
             </div>
           </button>
 
@@ -79,24 +79,24 @@ export function Header({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                  className="absolute right-0 z-50 mt-3 w-64 origin-top-right rounded-[1.5rem] bg-[#131836]/95 backdrop-blur-3xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.7)] border border-white/10"
+                  className="absolute right-0 z-50 mt-3 w-64 origin-top-right rounded-[1.5rem] bg-white/95 backdrop-blur-3xl p-3 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-slate-200"
                 >
-                  <div className="px-4 py-4 border-b border-white/5 mb-2 bg-[#090b14]/50 rounded-xl">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">حسابك الحالي</p>
-                    <p className="text-sm font-black text-white truncate">{user.email}</p>
+                  <div className="px-4 py-4 border-b border-slate-100 mb-2 bg-slate-50 rounded-xl">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">حسابك الحالي</p>
+                    <p className="text-sm font-black text-slate-900 truncate">{user.email}</p>
                   </div>
                   <div className="space-y-1">
                     <button
                       onClick={() => { setIsDropdownOpen(false); router.push('/settings'); }}
-                      className="flex w-full items-center px-4 py-3.5 text-sm text-slate-300 hover:bg-white/5 hover:text-emerald-400 rounded-xl transition-colors font-black group"
+                      className="flex w-full items-center px-4 py-3.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-amber-600 rounded-xl transition-colors font-black group"
                     >
-                      <User className="ml-3 h-4 w-4 text-slate-500 group-hover:text-emerald-400 transition-colors" /> إعدادات الحساب
+                      <User className="ml-3 h-4 w-4 text-slate-400 group-hover:text-amber-500 transition-colors" /> إعدادات الحساب
                     </button>
                     <button
                       onClick={handleSignOut}
-                      className="flex w-full items-center px-4 py-3.5 text-sm text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 rounded-xl transition-colors font-black group"
+                      className="flex w-full items-center px-4 py-3.5 text-sm text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors font-black group"
                     >
-                      <LogOut className="ml-3 h-4 w-4 text-rose-500 group-hover:text-rose-400 transition-colors" /> تسجيل الخروج الآمن
+                      <LogOut className="ml-3 h-4 w-4 text-rose-400 group-hover:text-rose-500 transition-colors" /> تسجيل الخروج الآمن
                     </button>
                   </div>
                 </motion.div>
@@ -117,13 +117,13 @@ export function Header({
                 fill
                 sizes="(max-width: 640px) 192px, (max-width: 768px) 256px, 320px"
                 priority
-                className="object-contain drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                className="object-contain drop-shadow-sm"
                 onError={() => setImageError(true)}
               />
             ) : (
               <div className="flex items-center justify-center gap-2 h-full">
-                <School className="w-6 h-6 text-emerald-400" />
-                <span className="text-lg font-black text-white">{schoolData.name}</span>
+                <School className="w-6 h-6 text-amber-500" />
+                <span className="text-lg font-black text-slate-900">{schoolData.name}</span>
               </div>
             )}
           </div>
