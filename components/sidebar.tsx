@@ -14,7 +14,7 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog 
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator 
 } from 'lucide-react';
 
 const navigation = [
@@ -39,6 +39,8 @@ const navigation = [
   { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
   { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
+  // 🚀 تمت إضافة سجل الدرجات هنا
+  { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
   { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
   { name: 'الحصص الحية', href: '/live', icon: Clock },
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
@@ -72,12 +74,12 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const filteredNavigation = navigation.filter(item => {
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
-    // 🚀 ربط ملف الـ CV أو الملف الشخصي للمعلم
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
     
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    if (authRole === 'teacher') return ['لوحة التحكم', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
+    // 🚀 تمت إضافة سجل الدرجات للمعلم
+    if (authRole === 'teacher') return ['لوحة التحكم', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
     
     if (authRole === 'student') return ['لوحة التحكم', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
     
@@ -92,7 +94,6 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   return (
     <div className={cn("flex h-full flex-col bg-[#0a0d16]/80 backdrop-blur-3xl text-slate-300 border-l border-white/5 relative overflow-hidden transition-all duration-500 z-50", isCollapsed ? "w-20" : "w-72", "group/sidebar")} dir="rtl">
       
-      {/* 🚀 إضاءة ذهبية خافتة تتبع الشريط الجانبي */}
       <div className="absolute inset-y-0 left-0 w-[1px] bg-gradient-to-b from-transparent via-amber-500/20 to-transparent" />
       
       <div className={cn("flex h-24 shrink-0 items-center border-b border-white/5 relative z-10 transition-all duration-500 bg-[#02040a]/40", isCollapsed ? "justify-center px-0" : "justify-between px-6")}>
@@ -131,14 +132,12 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
           {filteredNavigation.map((item, idx) => {
             let itemHref = item.href;
             
-            // 🚀 التوجيه الذكي للصفحات الخاصة بالرتب
             if (item.name === 'لوحة التحكم') {
               if (authRole === 'student') itemHref = '/dashboard/student'; 
               else if (authRole === 'teacher') itemHref = '/dashboard/teacher'; 
               else if (authRole === 'parent') itemHref = '/dashboard/parent'; 
               else if (authRole === 'admin' || authRole === 'management') itemHref = '/dashboard';
             } 
-            // 🚀 ربط رابط الـ CV الخاص بالمعلم بحسابه التعريفي
             else if (item.name === 'ملفي الشخصي (CV)') { 
               itemHref = `/teachers/${user?.id || user?.user_id}`; 
             }
@@ -163,7 +162,6 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
                     {item.name}
                   </span>
                   
-                  {/* 🚀 توهج جانبي للزر النشط */}
                   {isActive && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-amber-400 rounded-l-full shadow-[0_0_15px_rgba(245,158,11,0.8)]" />}
                 </Link>
               </motion.div>
