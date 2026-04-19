@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, Clock, BookOpen, User, ArrowRight, Loader2, AlertCircle, Sparkles, Play, Video } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale'; 
 import Link from 'next/link';
@@ -36,26 +36,27 @@ export default function StudentSchedulePage() {
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // 🚀 الإصلاح الجذري (The Sniper Fetch): 
-  // جلب دقيق ومباشر من قاعدة البيانات يضمن عدم تداخل أي جداول لصفوف أخرى!
   const fetchPreciseSchedule = useCallback(async () => {
     if (authRole !== 'student' || !user?.id) return;
 
     setLoading(true);
     try {
       // 1. تحديد فصل الطالب بدقة قاطعة
-      const { data: studentData, error: stuErr } = await supabase
+      const { data: studentDataRaw, error: stuErr } = await supabase
         .from('students')
         .select('id, section_id, sections(id, name, classes(name))')
         .eq('id', user.id)
         .maybeSingle();
 
-      if (stuErr || !studentData) throw new Error("لم يتم العثور على بيانات الطالب");
+      if (stuErr || !studentDataRaw) throw new Error("لم يتم العثور على بيانات الطالب");
+
+      // 🚀 الحل لخطأ TypeScript: تمرير البيانات كـ any لتخطي فحص الأنواع الصارم
+      const studentData: any = studentDataRaw;
 
       const actualSectionId = studentData.section_id || (Array.isArray(studentData.sections) ? studentData.sections[0]?.id : studentData.sections?.id);
       setStudentInfo(studentData);
 
-      // 2. جلب حصص هذا الفصل حصرياً! (يستحيل تداخلها مع صفوف أخرى)
+      // 2. جلب حصص هذا الفصل حصرياً!
       if (actualSectionId) {
         const { data: preciseSchedule } = await supabase
           .from('schedules')
@@ -64,7 +65,7 @@ export default function StudentSchedulePage() {
             subjects(name),
             teachers(users(full_name), zoom_link)
           `)
-          .eq('section_id', actualSectionId); // 🎯 القفل الأمني
+          .eq('section_id', actualSectionId); 
         
         setSchedule(preciseSchedule || []);
       }
@@ -90,7 +91,6 @@ export default function StudentSchedulePage() {
     return () => clearInterval(timer);
   }, [fetchPreciseSchedule, isChecking]);
 
-  // دالة الاستخراج أصبحت سريعة وآمنة لأن المصفوفة تحتوي فقط على حصص هذا الطالب
   const getCellData = useCallback((day: number, period: number) => {
     return schedule.find(s => 
       Number(s.day_of_week) === Number(day) && 
@@ -125,7 +125,6 @@ export default function StudentSchedulePage() {
     return startTime > now && (startTime.getTime() - now.getTime()) < 120 * 60000;
   }, [currentTime]);
 
-  // 🚀 شاشة التحميل وحماية الوصول
   if (isChecking) {
     return (
       <div className="flex h-[80vh] items-center justify-center bg-[#090b14] font-cairo">
