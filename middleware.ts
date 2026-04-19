@@ -31,7 +31,6 @@ export async function middleware(request: NextRequest) {
 
   // 🚀 إنقاذ السيرفر: عدنا لاستخدام getSession لأنه يقرأ من الكاش المحلي (سريع جداً) ولا يتصل بـ Supabase مع كل نقرة
  // const { data: { session } } = await supabase.auth.getSession();
-  //////////////////////////////////////////////////////////////////////
   import { NextResponse, type NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
@@ -55,7 +54,7 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-  ///////////////////////////////////////////////////////////
+  
   const user = session?.user;
 
   const path = request.nextUrl.pathname;
