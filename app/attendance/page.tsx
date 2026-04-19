@@ -43,14 +43,14 @@ export default function AttendancePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 🚀 مفتاح الكاش اللحظي الخاص بالمعلم بناءً على اختياراته
+  // 🚀 مفتاح الكاش اللحظي الخاص بالمعلم
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
     return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
   }, [user?.id, selectedSection, selectedSubject, date, period, currentRole]);
 
   // =====================================
-  // 2. حالات الإدارة (الميزة الجديدة للمدير)
+  // 2. حالات الإدارة (الميزة الإدارية)
   // =====================================
   const [snapshotDate, setSnapshotDate] = useState<string>('');
   const [dailyStats, setDailyStats] = useState<any[]>([]);
@@ -77,7 +77,7 @@ export default function AttendancePage() {
   }, []);
 
   // ==========================================================
-  // 🚀 دوال الإدارة (تعمل فقط إذا كان المستخدم مديراً)
+  // 🚀 دوال الإدارة 
   // ==========================================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin || !snapshotDate) return;
@@ -199,7 +199,7 @@ export default function AttendancePage() {
   };
 
   // ==========================================================
-  // 🚀 دوال المعلم مع الكاش اللحظي (Auto-Save Cache)
+  // 🚀 دوال المعلم + الكاش اللحظي
   // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
@@ -235,11 +235,12 @@ export default function AttendancePage() {
           const userB = Array.isArray(b.users) ? b.users[0] : b.users;
           return (userA?.full_name || '').localeCompare(userB?.full_name || '', 'ar'); 
         });
+        
         setStudents(sortedStudents); 
         
-        // 🚀 استرجاع الكاش اللحظي إن وجد لتلك الحصة بعينها
-        const cacheKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
-        const cachedStr = localStorage.getItem(cacheKey);
+        // 🚀 استرجاع الكاش اللحظي (Auto-Load Cache)
+        const localDraftKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
+        const cachedStr = localStorage.getItem(localDraftKey);
         
         if (cachedStr) {
           try {
@@ -260,13 +261,11 @@ export default function AttendancePage() {
 
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
 
-  // 🚀 حفظ الكاش التلقائي عند أي تغيير
+  // 🚀 حفظ الكاش اللحظي مع أي تغيير
   useEffect(() => {
     if (currentRole === 'teacher' && draftKey && students.length > 0) {
-      // لا تحفظ كاش فارغ تماماً إذا لم يكن هناك شيء
       if (Object.keys(attendance).length > 0 || lessonTitle) {
-        const draft = { attendance, lessonTitle };
-        localStorage.setItem(draftKey, JSON.stringify(draft));
+        localStorage.setItem(draftKey, JSON.stringify({ attendance, lessonTitle }));
       }
     }
   }, [attendance, lessonTitle, draftKey, currentRole, students.length]);
@@ -352,7 +351,7 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة الإدارة (الميزة التي طلبها المدير)
+  // 🚀 واجهة الإدارة 
   // ==========================================================
   if (isAdmin) {
     return (
@@ -543,12 +542,19 @@ export default function AttendancePage() {
   }
 
   // ==========================================================
-  // 🚀 واجهة المعلم 
+  // 🚀 واجهة المعلم (رصد الغياب الدقيق والمحصن)
   // ==========================================================
-  const presentCount = Object.values(attendance).filter(v => v === 'present').length;
-  const absentCount = Object.values(attendance).filter(v => v === 'absent').length;
-  const lateCount = Object.values(attendance).filter(v => v === 'late').length;
-  const excusedCount = Object.values(attendance).filter(v => v === 'excused').length;
+  
+  // 🚀 الإصلاح الجذري للإحصائيات: يتم حسابها فقط من للطلاب المتواجدين حالياً في المصفوفة (لمنع الأرقام السالبة)
+  let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
+  students.forEach(s => {
+    const status = attendance[s.id];
+    if (status === 'present') presentCount++;
+    else if (status === 'absent') absentCount++;
+    else if (status === 'late') lateCount++;
+    else if (status === 'excused') excusedCount++;
+  });
+  
   const markedCount = presentCount + absentCount + lateCount + excusedCount;
   const unmarkedCount = students.length - markedCount;
 
@@ -586,6 +592,7 @@ export default function AttendancePage() {
           </div>
         </div>
 
+        {/* 🚀 أدوات البحث والفلترة (تم جعلها متجاوبة 100% مع الجوال) */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl border border-white/10">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="space-y-2 flex flex-col w-full">
@@ -657,7 +664,7 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {/* 🚀 جدول أسماء الطلاب (Responsive Table) */}
+        {/* 🚀 جدول أسماء الطلاب (Responsive Table Fix) */}
         {students.length > 0 && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
             <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#090b14]/30">
