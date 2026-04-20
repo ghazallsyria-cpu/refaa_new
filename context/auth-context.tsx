@@ -1,12 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, usePathname } from 'next/navigation';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { UserRole } from '@/types';
 
-import { Settings, Clock } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface AuthContextType {
@@ -39,6 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
+  // حارس أمني لمنع التكرار
+  const fetchedUserId = useRef<string | null>(null);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('platformClosed');
@@ -103,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
+      
       setUser(authResult.user);
       setAuthRole(userData.role as UserRole);
       setUserName(name);
@@ -113,7 +117,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       router.refresh(); 
 
-      // 🚀 Ehab -->>> redirection by role to dashboard 
       if (userData.must_reset_password) {
         setMustResetPassword(true);
         router.push('/reset-password');
@@ -125,13 +128,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (userData.role === 'student') {
           router.push('/dashboard/student');
         } else if (userData.role === 'staff') {
-          router.push('/dashboard/staff'); // 👈 توجيه الموظف الجديد
+          router.push('/dashboard/staff'); 
         } else {
           router.push('/'); 
         }
       }
-    } // 👈 هذا القوس المهم الذي كان مفقوداً لإغلاق if (authResult.user)
-  }; // 👈 وهذا القوس المهم لإغلاق دالة signIn بالكامل
+    } 
+  }; 
 
   const requestPasswordReset = async (civilId: string) => {
     const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
@@ -158,7 +161,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     setMustResetPassword(false);
 
-    // 🚀 التوجيه الذكي التلقائي بمجرد نجاح تغيير كلمة المرور
     if (authRole === 'admin' || authRole === 'management') {
       router.push('/admin/dashboard');
     } else if (authRole === 'teacher') {
@@ -166,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else if (authRole === 'student') {
       router.push('/dashboard/student');
     } else if (authRole === 'staff') {
-      router.push('/dashboard/staff'); // 👈 سيأخذه لغرفته فوراً
+      router.push('/dashboard/staff'); 
     } else {
       router.push('/');
     }
@@ -183,7 +185,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUser(null);
           sessionStorage.clear();
-          localStorage.clear();
           if (!isPublicPage) router.push('/login');
           setIsChecking(false);
         }
@@ -200,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setAuthRole(null);
         sessionStorage.clear();
-        localStorage.clear();
+        fetchedUserId.current = null; // تصفير الحارس عند الخروج
         if (!isPublicPage) router.push('/login');
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         if (session?.user) setUser(session.user);
@@ -209,13 +210,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [isPublicPage, isLoginPage, router]);
+  }, [isPublicPage, isLoginPage]); // 🚀 إزالة router لمنع التحديث العشوائي
 
   useEffect(() => {
     if (!user) {
       setAuthRole(null);
+      fetchedUserId.current = null;
       return;
     }
+
+    // 🚀 حارس أمني يمنع الـ Infinite Loop
+    if (fetchedUserId.current === user.id) return;
+    fetchedUserId.current = user.id;
 
     const fetchUserData = async () => {
       setIsChecking(true);
@@ -269,7 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchUserData();
-  }, [user, isPublicPage, isLoginPage, authRole, userName]);
+  }, [user, isPublicPage]); // 🚀 مصفوفة مراقبة نظيفة وآمنة تماماً
 
   useEffect(() => {
     if (!rawSettings) return;
@@ -284,6 +290,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     evaluatePlatformStatus(); 
+    // يمكنك التخلي عن الـ setInterval هنا إذا أردت تقليل الضغط أكثر، 
+    // ولكن الـ setInterval هنا آمن لأنه لا يتصل بـ Supabase (يفحص rawSettings فقط).
     const interval = setInterval(evaluatePlatformStatus, 5000); 
     return () => clearInterval(interval);
   }, [rawSettings, authRole]);
@@ -292,6 +300,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setAuthRole(null);
+    fetchedUserId.current = null;
     sessionStorage.clear();
     localStorage.clear();
     window.location.href = '/login?cleared=' + new Date().getTime();
@@ -299,19 +308,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   if (platformClosed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 relative overflow-hidden font-cairo" dir="rtl">
-        {/* مؤثرات بصرية خلفية مذهلة (خارجية فقط) */}
+      <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 mix-blend-overlay"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay"></div>
 
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }} 
           animate={{ opacity: 1, scale: 1 }} 
           transition={{ duration: 0.5 }}
-          className="relative z-10 max-w-3xl w-full p-4"
+          className="relative z-10 max-w-2xl w-full p-4"
         >
-          <div className="bg-white/10 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 border border-white/10 shadow-2xl shadow-black/50 text-center">
+          <div className="bg-[#0f1423]/80 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center">
             
             <div className="flex justify-center mb-8 relative">
               <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 rounded-full"></div>
@@ -320,17 +328,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             
-            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-8 leading-tight">
+            <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-8 leading-tight drop-shadow-md">
               المنصة في وضع <span className="text-transparent bg-clip-text bg-gradient-to-l from-indigo-400 to-emerald-400">التطوير والصيانة</span>
             </h1>
             
-            {/* 🚀 السحر يبدأ هنا: هذا السطر سيقوم بتشغيل أكواد الـ HTML التي يكتبها الإدمن! */}
             <div 
-              className="w-full relative z-10 text-right"
+              className="w-full relative z-10 text-center bg-[#02040a]/60 p-6 rounded-3xl border border-white/5 shadow-inner"
               dangerouslySetInnerHTML={{ __html: closeMessage }} 
             />
             
-            <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white transition-colors underline decoration-dotted">تسجيل الخروج والعودة للرئيسية</button>
+            <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white transition-colors underline decoration-dotted active:scale-95">تسجيل الخروج والعودة للرئيسية</button>
           </div>
         </motion.div>
       </div>
