@@ -1,119 +1,164 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  Plus, Search, Edit, Trash2, X, Key, Download, 
+  Search, Edit, Trash2, X, Key, Download, 
   UserPlus, Users, AlertCircle, FileSpreadsheet, 
-  GraduationCap, ChevronRight, ChevronLeft, BookOpen,
+  ChevronRight, ChevronLeft, BookOpen,
   UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileText, ClipboardPaste, Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
-import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';
 import GrantBadgeModal from '@/components/GrantBadgeModal';
+import { supabase } from '@/lib/supabase';
+
+// 🧩 1. عزل مكون سطر الجدول لمنع الـ Re-render لكامل الصفحة
+const StudentTableRow = ({ student, onGrantBadge, onResetPassword, onEdit, onDelete }: any) => {
+  const userData = Array.isArray(student.users) ? student.users[0] : student.users;
+  const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
+  const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
+  const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
+  const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
+
+  return (
+    <tr className="hover:bg-slate-50/80 transition-colors group">
+      <td className="whitespace-nowrap py-4 pr-8 pl-4">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm border border-indigo-100 group-hover:scale-110 transition-transform">
+            {userData?.full_name?.charAt(0) || 'ط'}
+          </div>
+          <div>
+            <p className="font-black text-slate-900">{userData?.full_name || 'غير معروف'}</p>
+            <p className="text-[10px] text-slate-400 font-bold">{userData?.email || 'لا يوجد بريد'}</p>
+          </div>
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-4 text-sm font-bold text-slate-600 font-mono">{student.national_id}</td>
+      <td className="whitespace-nowrap px-4 py-4">
+        <div className="flex flex-col">
+          <span className="text-sm font-black text-slate-900">{classData?.name || 'بدون صف'}</span>
+          <span className="text-[10px] font-bold text-indigo-500">{secData?.name || 'بدون شعبة'}</span>
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-4 py-4">
+        {classData?.level === 10 || classData?.name?.includes('العاشر') ? (
+          student.next_year_track ? (
+            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${student.next_year_track === 'scientific' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+              {student.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}
+            </span>
+          ) : <span className="text-[10px] font-bold text-slate-400">لم يحدد</span>
+        ) : <span className="text-slate-300">-</span>}
+      </td>
+      <td className="whitespace-nowrap px-4 py-4 text-sm font-bold text-slate-600">
+        {parentUserData?.full_name || 'غير مسجل'}
+      </td>
+      <td className="whitespace-nowrap py-4 pl-8 pr-4 text-left">
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => onGrantBadge(student)} className="p-2 text-slate-400 hover:text-amber-600 bg-white hover:bg-amber-50 rounded-lg shadow-sm border border-slate-200 transition-all" title="منح وسام"><Award className="w-4 h-4" /></button>
+          <button onClick={() => onResetPassword(student)} className="p-2 text-slate-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-slate-200 transition-all" title="كلمة المرور"><Key className="w-4 h-4" /></button>
+          <button onClick={() => onEdit(student)} className="p-2 text-slate-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-slate-200 transition-all" title="تعديل"><Edit className="w-4 h-4" /></button>
+          <button onClick={() => onDelete(student.id)} className="p-2 text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 rounded-lg shadow-sm border border-slate-200 transition-all" title="حذف"><Trash2 className="w-4 h-4" /></button>
+        </div>
+      </td>
+    </tr>
+  );
+};
 
 export default function StudentsPage() {
   const { user } = useAuth();
   const {
-    students, sections, parents, loading,
-    fetchStudents, fetchSections, fetchParents,
+    sections, parents, fetchSections, fetchParents, fetchStudentsPaginated,
     addStudent, updateStudent, deleteUser, resetPassword
   } = useUsersSystem();
 
+  // 🚀 حالات البيانات من السيرفر
+  const [studentsList, setStudentsList] = useState<any[]>([]);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({ total: 0, scientific: 0, literary: 0, unassigned: 0 });
+
+  // حالات الفلترة والصفحات
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSection, setSelectedSection] = useState('all');
   const [selectedTrack, setSelectedTrack] = useState('all');
-
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
+  const totalPages = Math.ceil(totalStudents / itemsPerPage) || 1;
 
+  // حالات النوافذ المنبثقة
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
-  
-  // 🚀 حالات نظام الاستيراد الجماعي الذكي
   const [showImportModal, setShowImportModal] = useState(false);
+  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
+
+  // بيانات النوافذ
+  const [editingStudent, setEditingStudent] = useState<any>(null);
+  const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
+  const [studentForBadge, setStudentForBadge] = useState<{id: string, name: string} | null>(null);
+  const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
+  const [addForm, setAddForm] = useState({ full_name: '', national_id: '', email: '', phone: '', section_id: '', parent_id: '' });
+  const [editForm, setEditForm] = useState<any>({ full_name: '', national_id: '', email: '', phone: '', parent_id: '', next_year_track: '' });
+
+  // بيانات الاستيراد
   const [importSectionId, setImportSectionId] = useState('');
-  const [importMethod, setImportMethod] = useState<'excel' | 'pdf'>('pdf'); // PDF هو الافتراضي
+  const [importMethod, setImportMethod] = useState<'excel' | 'pdf'>('pdf');
   const [rawPdfText, setRawPdfText] = useState('');
   const [importData, setImportData] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, successful: 0, failed: 0, errors: [] as string[] });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [editingStudent, setEditingStudent] = useState<any>(null);
-  const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
-  const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
-  
-  // 🚀 حالات نافذة الأوسمة
-  const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
-  const [studentForBadge, setStudentForBadge] = useState<{id: string, name: string} | null>(null);
+  // 🚀 1. جلب الإعدادات الأساسية والإحصائيات مرة واحدة فقط
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      fetchSections(),
+      fetchParents(),
+      supabase.from('students').select('id, next_year_track, section_id, sections!inner(classes!inner(level))')
+    ]).then(([_, __, statsData]) => {
+      if (mounted && statsData.data) {
+        const tenth = statsData.data.filter((s: any) => s.sections?.classes?.level === 10);
+        setStats({
+          total: statsData.data.length,
+          scientific: tenth.filter((s: any) => s.next_year_track === 'scientific').length,
+          literary: tenth.filter((s: any) => s.next_year_track === 'literary').length,
+          unassigned: statsData.data.filter((s: any) => !s.section_id).length
+        });
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
 
-  const [addForm, setAddForm] = useState({
-    full_name: '', national_id: '', email: '', phone: '', section_id: '', parent_id: ''
-  });
-  const [editForm, setEditForm] = useState<{
-    full_name: string; national_id: string; email: string; phone: string; parent_id: string; next_year_track: 'scientific' | 'literary' | '' | null;
-  }>({ full_name: '', national_id: '', email: '', phone: '', parent_id: '', next_year_track: '' });
+  // 🚀 2. جلب الطلاب بنظام الصفحات والفلترة (مع Debounce للبحث)
+  const loadStudents = useCallback(async () => {
+    setIsLoading(true);
+    const result = await fetchStudentsPaginated(currentPage, itemsPerPage, searchTerm, selectedSection, selectedTrack);
+    setStudentsList(result.data);
+    setTotalStudents(result.totalCount);
+    setIsLoading(false);
+  }, [currentPage, itemsPerPage, searchTerm, selectedSection, selectedTrack]);
 
   useEffect(() => {
-    fetchStudents();
-    fetchSections();
-    fetchParents();
-  }, [fetchStudents, fetchSections, fetchParents]);
+    const delayDebounceFn = setTimeout(() => { loadStudents(); }, 300);
+    return () => clearTimeout(delayDebounceFn);
+  }, [loadStudents]);
 
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => {
-      const userData = Array.isArray(s.users) ? s.users[0] : s.users;
-      const fullName = userData?.full_name || '';
-      const email = userData?.email || '';
-
-      const matchesSection = selectedSection === 'all' || String(s.section_id) === String(selectedSection);
-      const matchesTrack = selectedTrack === 'all' || 
-        (selectedTrack === 'none' ? !s.next_year_track : s.next_year_track === selectedTrack);
-      const matchesSearch = 
-        fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.national_id || '').includes(searchTerm);
-      
-      return matchesSection && matchesTrack && matchesSearch;
-    });
-  }, [students, searchTerm, selectedSection, selectedTrack]);
-
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage) || 1;
-  const currentStudents = filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  const stats = useMemo(() => {
-    const tenthGradeStudents = students.filter(s => {
-      const secData = Array.isArray(s.sections) ? s.sections[0] : s.sections;
-      const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
-      return classData?.name?.includes('العاشر') || classData?.level === 10;
-    });
-
-    return {
-      total: students.length,
-      scientific: tenthGradeStudents.filter(s => s.next_year_track === 'scientific').length,
-      literary: tenthGradeStudents.filter(s => s.next_year_track === 'literary').length,
-      unassigned: students.filter(s => !s.section_id).length,
-    };
-  }, [students]);
-
-  // ================= دوال الاستيراد الجماعي والمحلل الذكي =================
-  
+  // ================= دوال الاستيراد الجماعي =================
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
       const wb = XLSX.read(bstr, { type: 'binary' });
       const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname]);
       
       let processed: any[] = [];
       data.forEach((row: any) => {
@@ -125,12 +170,9 @@ export default function StudentsPage() {
           const names = String(row[nameKey]).split('\n').map(s => s.trim()).filter(Boolean);
           const ids = String(row[idKey]).split('\n').map(s => s.trim().replace(/\D/g, '')).filter(Boolean);
           const phones = phoneKey ? String(row[phoneKey]).split('\n').map(s => s.trim()).filter(Boolean) : [];
-
           const maxLen = Math.max(names.length, ids.length);
           for (let i = 0; i < maxLen; i++) {
-            if (names[i] && ids[i] && ids[i].length >= 10) {
-               processed.push({ full_name: names[i], national_id: ids[i], phone: phones[i] || '' });
-            }
+            if (names[i] && ids[i] && ids[i].length >= 10) processed.push({ full_name: names[i], national_id: ids[i], phone: phones[i] || '' });
           }
         }
       });
@@ -140,10 +182,8 @@ export default function StudentsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // 🚀 تم إصلاح المحلل الذكي لمنع حذف حرف الميم!
   const handlePdfTextParse = () => {
     if (!rawPdfText.trim()) return alert('يرجى لصق النص المنسوخ أولاً');
-
     const lines = rawPdfText.split('\n').map(l => l.trim()).filter(Boolean);
     let processed: any[] = [];
     const existingIdsInBatch = new Set();
@@ -151,49 +191,27 @@ export default function StudentsPage() {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const civilIdMatch = line.match(/\b[23]\d{11}\b/);
-
       if (civilIdMatch) {
         const national_id = civilIdMatch[0];
-        let full_name = "";
-        let phone = "";
-
+        let full_name = ""; let phone = "";
         const phoneMatch = line.match(/\b[569]\d{7}\b/);
         if (phoneMatch) phone = phoneMatch[0];
 
-        // 🚀 تم إزالة |م من الفلترة لكي لا نأكل حرف الميم من الأسماء
-        let cleanedLine = line
-          .replace(national_id, '')
-          .replace(phone, '')
-          .replace(/ذكر|انثى|أنثى|ملاحظات/g, '')
-          .replace(/[0-9]/g, '')
-          .replace(/["',-]/g, '')
-          .replace(/\s+/g, ' ') // إزالة المسافات الزائدة
-          .trim();
+        let cleanedLine = line.replace(national_id, '').replace(phone, '').replace(/ذكر|انثى|أنثى|ملاحظات/g, '').replace(/[0-9]/g, '').replace(/["',-]/g, '').replace(/\s+/g, ' ').trim();
 
         if (cleanedLine.length > 8 && /[\u0600-\u06FF]/.test(cleanedLine)) {
           full_name = cleanedLine;
         } else {
           for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
-             let prevLine = lines[j]
-               .replace(/ذكر|انثى|أنثى|ملاحظات/g, '')
-               .replace(/[0-9]/g, '')
-               .replace(/["',-]/g, '')
-               .replace(/\s+/g, ' ')
-               .trim();
-             if (prevLine.length > 8 && /[\u0600-\u06FF]/.test(prevLine)) {
-                full_name = prevLine;
-                break;
-             }
+             let prevLine = lines[j].replace(/ذكر|انثى|أنثى|ملاحظات/g, '').replace(/[0-9]/g, '').replace(/["',-]/g, '').replace(/\s+/g, ' ').trim();
+             if (prevLine.length > 8 && /[\u0600-\u06FF]/.test(prevLine)) { full_name = prevLine; break; }
           }
         }
 
         if (!phone) {
            for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 2); j++) {
                const pMatch = lines[j].match(/\b[569]\d{7}\b/);
-               if (pMatch) {
-                   phone = pMatch[0];
-                   break;
-               }
+               if (pMatch) { phone = pMatch[0]; break; }
            }
         }
 
@@ -204,12 +222,8 @@ export default function StudentsPage() {
         }
       }
     }
-
-    if (processed.length === 0) {
-      alert('لم يتم العثور على أرقام مدنية صحيحة في النص.');
-    } else {
-      setImportData(processed);
-    }
+    if (processed.length === 0) alert('لم يتم العثور على أرقام مدنية صحيحة في النص.');
+    else setImportData(processed);
   };
 
   const startBulkImport = async () => {
@@ -218,29 +232,17 @@ export default function StudentsPage() {
 
     setIsImporting(true);
     setImportProgress({ current: 0, total: importData.length, successful: 0, failed: 0, errors: [] });
+    let successCount = 0; let failCount = 0; let currentErrors: string[] = [];
 
-    let successCount = 0;
-    let failCount = 0;
-    let currentErrors: string[] = [];
-
-    const existingIds = new Set(students.map(s => s.national_id));
+    const { data: existingData } = await supabase.from('students').select('national_id');
+    const existingIds = new Set((existingData || []).map((s:any) => s.national_id));
 
     for (let i = 0; i < importData.length; i++) {
       const student = importData[i];
       setImportProgress(prev => ({ ...prev, current: i + 1 }));
-
       try {
-        if (existingIds.has(student.national_id)) {
-          throw new Error('الرقم المدني مسجل مسبقاً في النظام');
-        }
-
-        await addStudent({
-          full_name: student.full_name,
-          national_id: student.national_id,
-          phone: student.phone,
-          section_id: importSectionId,
-        });
-        
+        if (existingIds.has(student.national_id)) throw new Error('الرقم المدني مسجل مسبقاً في النظام');
+        await addStudent({ full_name: student.full_name, national_id: student.national_id, phone: student.phone, section_id: importSectionId });
         successCount++;
         existingIds.add(student.national_id);
       } catch (err: any) {
@@ -248,23 +250,12 @@ export default function StudentsPage() {
         currentErrors.push(`الطالب (${student.full_name}): ${err.message}`);
       }
     }
-
     setImportProgress(prev => ({ ...prev, successful: successCount, failed: failCount, errors: currentErrors }));
     setIsImporting(false);
-    fetchStudents();
+    loadStudents();
   };
 
-  // 🚀 دالة فتح مودال الأوسمة
-  const handleGrantBadgeClick = (student: any) => {
-    const userData = Array.isArray(student.users) ? student.users[0] : student.users;
-    setStudentForBadge({
-      id: student.id,
-      name: userData?.full_name || 'غير معروف'
-    });
-    setIsBadgeModalOpen(true);
-  };
-
-  // ================= باقي الدوال التنفيذية =================
+  // ================= الدوال التنفيذية الفردية =================
   const handleAddSubmit = async () => {
     try {
       if (!addForm.full_name || !addForm.national_id) return alert('يرجى تعبئة الحقول الإلزامية');
@@ -272,43 +263,33 @@ export default function StudentsPage() {
       alert('تمت الإضافة بنجاح');
       setShowAddModal(false);
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', section_id: '', parent_id: '' });
+      loadStudents();
     } catch (error: any) { alert(error.message || 'حدث خطأ أثناء الإضافة'); }
-  };
-
-  const handleEditClick = (student: any) => {
-    setEditingStudent(student);
-    const userData = Array.isArray(student.users) ? student.users[0] : student.users;
-    setEditForm({
-      full_name: userData?.full_name || '',
-      national_id: student.national_id || '',
-      email: userData?.email || '',
-      phone: userData?.phone || '',
-      parent_id: student.parent_id || '',
-      next_year_track: student.next_year_track || ''
-    });
-    setShowEditModal(true);
   };
 
   const handleEditSubmit = async () => {
     try {
       if (!editingStudent) return;
       const updateData = {
-        full_name: editForm.full_name,
-        national_id: editForm.national_id,
-        email: editForm.email,
-        phone: editForm.phone,
-        parent_id: editForm.parent_id || null,
-        next_year_track: editForm.next_year_track === '' ? null : (editForm.next_year_track as 'scientific' | 'literary')
+        full_name: editForm.full_name, national_id: editForm.national_id, email: editForm.email, phone: editForm.phone,
+        parent_id: editForm.parent_id || null, next_year_track: editForm.next_year_track === '' ? null : editForm.next_year_track
       };
       await updateStudent(editingStudent.id, editingStudent.national_id, updateData);
       alert('تم التحديث بنجاح');
       setShowEditModal(false);
+      loadStudents();
     } catch (error: any) { alert(error.message); }
   };
 
-  const handleResetPasswordClick = (student: any) => {
-    setResetPasswordForm({ userId: student.id, newPassword: '' });
-    setShowPasswordResetModal(true);
+  const confirmDelete = async () => {
+    if (!studentToDelete) return;
+    try {
+      await deleteUser(studentToDelete);
+      alert('تم الحذف بنجاح');
+      setShowDeleteModal(false);
+      setStudentToDelete(null);
+      loadStudents();
+    } catch (error: any) { alert(error.message); }
   };
 
   const handleResetPasswordSubmit = async () => {
@@ -319,30 +300,17 @@ export default function StudentsPage() {
     } catch (error: any) { alert(error.message); }
   };
 
-  const handleDeleteClick = (id: string) => {
-    setStudentToDelete(id);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!studentToDelete) return;
-    try {
-      await deleteUser(studentToDelete);
-      alert('تم الحذف بنجاح');
-      setShowDeleteModal(false);
-      setStudentToDelete(null);
-      fetchStudents();
-    } catch (error: any) { alert(error.message); }
-  };
-
-  const exportToExcel = () => {
-    const data = filteredStudents.map(student => {
+  const exportToExcel = async () => {
+    alert("جاري تجهيز الملف الشامل، قد يستغرق الأمر ثواني قليلة...");
+    const { data } = await supabase.from('students').select(`id, national_id, next_year_track, users!students_id_fkey(full_name, email, phone), sections(name, classes(name)), parents(users!fk_parents_users(full_name))`);
+    if (!data || data.length === 0) return alert('لا يوجد بيانات للتصدير');
+    
+    const excelData = data.map((student: any) => {
       const userData = Array.isArray(student.users) ? student.users[0] : student.users;
       const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
       const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
       const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
       const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
-
       return {
         'الاسم الرباعي': userData?.full_name || 'غير معروف',
         'الرقم المدني': student.national_id,
@@ -355,8 +323,7 @@ export default function StudentsPage() {
       };
     });
     
-    if (data.length === 0) return alert('لا يوجد بيانات للتصدير');
-    const worksheet = XLSX.utils.json_to_sheet(data);
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "الطلاب");
     XLSX.writeFile(workbook, "قائمة_الطلاب.xlsx");
@@ -364,7 +331,7 @@ export default function StudentsPage() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 font-cairo selection:bg-indigo-200" dir="rtl">
-      
+      {/* خلفية جمالية */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-500/10 blur-[120px] opacity-70" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] rounded-full bg-violet-500/10 blur-[120px] opacity-70" />
@@ -372,27 +339,26 @@ export default function StudentsPage() {
 
       <div className="relative z-10 max-w-[1600px] mx-auto space-y-8 pb-20 px-4 sm:px-6 lg:px-8 pt-8">
         
+        {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">إدارة الطلاب</h1>
             <p className="text-slate-500 mt-2 font-bold">قاعدة بيانات شاملة لجميع الطلاب المسجلين في النظام.</p>
           </div>
-          
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={exportToExcel} className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 transition-all active:scale-95 hover:shadow-md">
               <Download className="h-5 w-5 text-slate-400" /> تصدير Excel
             </button>
-            
             <button onClick={() => { setShowImportModal(true); setImportData([]); setImportProgress({ current: 0, total: 0, successful: 0, failed: 0, errors: [] }); setRawPdfText(''); }} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-50 px-5 py-3 text-sm font-black text-indigo-700 shadow-sm border border-indigo-100 hover:bg-indigo-100 transition-all active:scale-95">
-              <FileSpreadsheet className="h-5 w-5 text-indigo-500" /> استيراد دفعة واحدة
+              <FileSpreadsheet className="h-5 w-5 text-indigo-500" /> استيراد ذكي
             </button>
-
             <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 hover:shadow-indigo-300">
               <UserPlus className="h-5 w-5" /> إضافة طالب
             </button>
           </div>
         </div>
 
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
             <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600"><Users className="h-6 w-6"/></div>
@@ -414,10 +380,11 @@ export default function StudentsPage() {
           </div>
         </div>
 
+        {/* Filters */}
         <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col md:flex-row items-center gap-4">
           <div className="relative flex-1 w-full group">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-            <input type="text" className="w-full rounded-xl border-0 py-3.5 pr-12 pl-5 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold transition-all" placeholder="البحث بالاسم، الرقم المدني..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+            <input type="text" className="w-full rounded-xl border-0 py-3.5 pr-12 pl-5 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold transition-all" placeholder="البحث بالاسم أو الرقم المدني..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
           </div>
           <div className="flex gap-2 w-full md:w-auto">
             <select value={selectedSection} onChange={(e) => { setSelectedSection(e.target.value); setCurrentPage(1); }} className="flex-1 md:w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
@@ -433,8 +400,9 @@ export default function StudentsPage() {
           </div>
         </div>
 
+        {/* Data Table */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
-          <div className="hidden lg:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto min-h-[400px]">
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/50">
                 <tr>
@@ -447,80 +415,44 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {loading ? (
-                  <tr><td colSpan={6} className="py-32 text-center"><div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" /><p className="font-bold text-slate-400">جاري التحميل...</p></td></tr>
-                ) : currentStudents.length === 0 ? (
-                  <tr><td colSpan={6} className="py-32 text-center"><div className="bg-slate-50 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4"><Search className="h-8 w-8 text-slate-300"/></div><p className="font-bold text-slate-500">لا يوجد نتائج تطابق الفلاتر</p></td></tr>
+                {isLoading ? (
+                  <tr><td colSpan={6} className="py-32 text-center"><div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" /><p className="font-bold text-slate-400">جاري التحميل من الخادم...</p></td></tr>
+                ) : studentsList.length === 0 ? (
+                  <tr><td colSpan={6} className="py-32 text-center"><div className="bg-slate-50 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4"><Search className="h-8 w-8 text-slate-300"/></div><p className="font-bold text-slate-500">لا يوجد طلاب يطابقون بحثك</p></td></tr>
                 ) : (
-                  currentStudents.map((student) => {
-                    const userData = Array.isArray(student.users) ? student.users[0] : student.users;
-                    const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
-                    const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
-                    const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
-                    const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
-
-                    return (
-                    <tr key={student.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="whitespace-nowrap py-4 pr-8 pl-4">
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm border border-indigo-100 group-hover:scale-110 transition-transform">
-                            {userData?.full_name?.charAt(0) || 'ط'}
-                          </div>
-                          <div>
-                            <p className="font-black text-slate-900">{userData?.full_name || 'غير معروف'}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{userData?.email || 'لا يوجد بريد'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-sm font-bold text-slate-600 font-mono">{student.national_id}</td>
-                      <td className="whitespace-nowrap px-4 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-black text-slate-900">{classData?.name || 'بدون صف'}</span>
-                          <span className="text-[10px] font-bold text-indigo-500">{secData?.name || 'بدون شعبة'}</span>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-4">
-                        {classData?.level === 10 || classData?.name?.includes('العاشر') ? (
-                          student.next_year_track ? (
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${student.next_year_track === 'scientific' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-                              {student.next_year_track === 'scientific' ? 'علمي' : 'أدبي'}
-                            </span>
-                          ) : <span className="text-[10px] font-bold text-slate-400">لم يحدد</span>
-                        ) : <span className="text-slate-300">-</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-4 text-sm font-bold text-slate-600">
-                        {parentUserData?.full_name || 'غير مسجل'}
-                      </td>
-                      <td className="whitespace-nowrap py-4 pl-8 pr-4 text-left">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {/* 🚀 زر منح الوسام مضاف هنا */}
-                          <button onClick={() => handleGrantBadgeClick(student)} className="p-2 text-slate-400 hover:text-amber-600 bg-white hover:bg-amber-50 rounded-lg shadow-sm border border-slate-200 transition-all" title="منح وسام تقديري"><Award className="w-4 h-4" /></button>
-                          <button onClick={() => handleResetPasswordClick(student)} className="p-2 text-slate-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-slate-200 transition-all"><Key className="w-4 h-4" /></button>
-                          <button onClick={() => handleEditClick(student)} className="p-2 text-slate-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 rounded-lg shadow-sm border border-slate-200 transition-all"><Edit className="w-4 h-4" /></button>
-                          <button onClick={() => handleDeleteClick(student.id)} className="p-2 text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 rounded-lg shadow-sm border border-slate-200 transition-all"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })
+                  studentsList.map((student) => (
+                    <StudentTableRow 
+                       key={student.id} 
+                       student={student} 
+                       onGrantBadge={(s:any) => { setStudentForBadge({ id: s.id, name: (Array.isArray(s.users) ? s.users[0] : s.users)?.full_name }); setIsBadgeModalOpen(true); }}
+                       onResetPassword={(s:any) => { setResetPasswordForm({ userId: s.id, newPassword: '' }); setShowPasswordResetModal(true); }}
+                       onEdit={(s:any) => {
+                          setEditingStudent(s);
+                          const ud = Array.isArray(s.users) ? s.users[0] : s.users;
+                          setEditForm({ full_name: ud?.full_name || '', national_id: s.national_id || '', email: ud?.email || '', phone: ud?.phone || '', parent_id: s.parent_id || '', next_year_track: s.next_year_track || '' });
+                          setShowEditModal(true);
+                       }}
+                       onDelete={(id: string) => { setStudentToDelete(id); setShowDeleteModal(true); }}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
           </div>
 
+          {/* الموبايل */}
           <div className="lg:hidden p-4 grid gap-4 bg-slate-50/50">
-             {loading ? (
+            {isLoading ? (
                <div className="py-10 text-center text-slate-400 font-bold">جاري التحميل...</div>
-             ) : currentStudents.length === 0 ? (
+            ) : studentsList.length === 0 ? (
                <div className="py-10 text-center text-slate-400 font-bold">لا يوجد نتائج</div>
-             ) : (
-               currentStudents.map((student) => {
+            ) : (
+               studentsList.map((student) => {
                  const userData = Array.isArray(student.users) ? student.users[0] : student.users;
                  const secData = Array.isArray(student.sections) ? student.sections[0] : student.sections;
                  const classData = Array.isArray(secData?.classes) ? secData?.classes[0] : secData?.classes;
                  const parentData = Array.isArray(student.parents) ? student.parents[0] : student.parents;
                  const parentUserData = Array.isArray(parentData?.users) ? parentData?.users[0] : parentData?.users;
-
                  return (
                  <div key={student.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                     <div className="flex items-start justify-between">
@@ -529,11 +461,10 @@ export default function StudentsPage() {
                           <div><p className="font-black text-slate-900">{userData?.full_name || 'غير معروف'}</p><p className="text-xs font-bold text-slate-500 font-mono">{student.national_id}</p></div>
                        </div>
                        <div className="flex gap-1 flex-wrap justify-end max-w-[120px]">
-                          {/* 🚀 زر منح الوسام مضاف هنا */}
-                          <button onClick={() => handleGrantBadgeClick(student)} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-50 rounded-lg"><Award className="w-4 h-4" /></button>
-                          <button onClick={() => handleResetPasswordClick(student)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Key className="w-4 h-4" /></button>
-                          <button onClick={() => handleEditClick(student)} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Edit className="w-4 h-4" /></button>
-                          <button onClick={() => handleDeleteClick(student.id)} className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => { setStudentForBadge({ id: student.id, name: userData?.full_name }); setIsBadgeModalOpen(true); }} className="p-1.5 text-slate-400 hover:text-amber-600 bg-slate-50 rounded-lg"><Award className="w-4 h-4" /></button>
+                          <button onClick={() => { setResetPasswordForm({ userId: student.id, newPassword: '' }); setShowPasswordResetModal(true); }} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Key className="w-4 h-4" /></button>
+                          <button onClick={() => { setEditingStudent(student); setEditForm({ full_name: userData?.full_name || '', national_id: student.national_id || '', email: userData?.email || '', phone: userData?.phone || '', parent_id: student.parent_id || '', next_year_track: student.next_year_track || '' }); setShowEditModal(true); }} className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 rounded-lg"><Edit className="w-4 h-4" /></button>
+                          <button onClick={() => { setStudentToDelete(student.id); setShowDeleteModal(true); }} className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                        </div>
                     </div>
                     <div className="flex justify-between text-xs font-bold bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -543,25 +474,26 @@ export default function StudentsPage() {
                  </div>
                  );
                })
-             )}
+            )}
           </div>
 
+          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-4">
               <p className="text-sm font-bold text-slate-500">
-                إظهار <span className="font-black text-slate-900">{((currentPage - 1) * itemsPerPage) + 1}</span> إلى <span className="font-black text-slate-900">{Math.min(currentPage * itemsPerPage, filteredStudents.length)}</span> من أصل <span className="font-black text-slate-900">{filteredStudents.length}</span>
+                إظهار <span className="font-black text-slate-900">{((currentPage - 1) * itemsPerPage) + 1}</span> إلى <span className="font-black text-slate-900">{Math.min(currentPage * itemsPerPage, totalStudents)}</span> من أصل <span className="font-black text-slate-900">{totalStudents}</span>
               </p>
               <div className="flex gap-2">
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"><ChevronRight className="w-5 h-5"/></button>
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isLoading} className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"><ChevronRight className="w-5 h-5"/></button>
                 <div className="flex items-center gap-1 px-2 font-black text-sm text-slate-700">{currentPage} / {totalPages}</div>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || isLoading} className="p-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-50 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* 🚀 نافذة الاستيراد الجماعي (Bulk Import Modal with PDF/Excel Smart Options) */}
+      {/* النوافذ المنبثقة Modals */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden my-8">
@@ -661,16 +593,12 @@ export default function StudentsPage() {
                 <div className="space-y-6 py-4">
                   <div className="text-center space-y-2">
                     {isImporting ? <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mx-auto"/> : <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto"/>}
-                    <h3 className="text-xl font-black text-slate-900">{isImporting ? 'جاري تسجيل الطلاب وإنشاء الحسابات، يرجى عدم إغلاق النافذة...' : 'اكتملت عملية التسجيل!'}</h3>
+                    <h3 className="text-xl font-black text-slate-900">{isImporting ? 'جاري تسجيل الطلاب، يرجى عدم إغلاق النافذة...' : 'اكتملت عملية التسجيل!'}</h3>
                     <p className="text-sm font-bold text-slate-500">تم معالجة {importProgress.current} من أصل {importProgress.total}</p>
                   </div>
                   
                   <div className="h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                    <motion.div 
-                      className="h-full bg-indigo-500"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
-                    />
+                    <motion.div className="h-full bg-indigo-500" initial={{ width: 0 }} animate={{ width: `${(importProgress.current / importProgress.total) * 100}%` }} />
                   </div>
 
                   <div className="flex gap-4">
@@ -747,7 +675,7 @@ export default function StudentsPage() {
                  <div><label className="text-xs font-black text-slate-700 block mb-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
                  <div><label className="text-xs font-black text-slate-700 block mb-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" /></div>
                  <div><label className="text-xs font-black text-slate-700 block mb-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
-                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">ولي الأمر</label><select value={editForm.parent_id} onChange={e => setEditForm({...editForm, parent_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون ولي أمر</option>
+                 <div className="sm:col-span-2"><label className="text-xs font-black text-slate-700 block mb-2">ولي الأمر</label><select value={editForm.parent_id || ''} onChange={e => setEditForm({...editForm, parent_id: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">بدون ولي أمر</option>
                  {parents.map(p => {
                     const pUserData = Array.isArray(p.users) ? p.users[0] : p.users;
                     return <option key={p.id} value={p.id}>{pUserData?.full_name}</option>;
@@ -803,14 +731,10 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* 🚀 استدعاء مكون نافذة منح الأوسمة الجديد أسفل الصفحة */}
       {studentForBadge && (
         <GrantBadgeModal
           isOpen={isBadgeModalOpen}
-          onClose={() => {
-            setIsBadgeModalOpen(false);
-            setStudentForBadge(null);
-          }}
+          onClose={() => { setIsBadgeModalOpen(false); setStudentForBadge(null); }}
           recipientId={studentForBadge.id}
           recipientName={studentForBadge.name}
           granterId={user?.id || 'admin'} 
