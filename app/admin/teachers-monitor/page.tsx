@@ -10,6 +10,10 @@ import {
   CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, 
   ShieldAlert, BarChart2, RefreshCw, Zap, Info, School, Folder, Crown
 } from "lucide-react";
+// أضف هذه السطور في أعلى الملف مع بقية الـ imports
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
+
 import Link from "next/link";
 import { supabase } from "@/lib/supabase"; 
 
