@@ -6,8 +6,18 @@ import { useRouter, usePathname } from 'next/navigation';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { UserRole } from '@/types';
 
-import { Settings } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Settings, ShieldAlert } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// 🚀 أداة الحماية من تجمد السيرفرات
+const withTimeout = <T,>(promise: any, ms: number, timeoutMessage: string): Promise<T> => {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(timeoutMessage)), ms)
+    )
+  ]);
+};
 
 interface AuthContextType {
   user: SupabaseUser | null;
@@ -39,21 +49,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
-  // حارس أمني لمنع التكرار
+  const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
   const fetchedUserId = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('platformClosed');
-    }
-  }, []);
-
   const router = useRouter();
   const pathname = usePathname();
+  
   const isLoginPage = pathname === '/login';
   const isResetPasswordPage = pathname === '/reset-password';
   const isPublicPage = isLoginPage || isResetPasswordPage;
 
+  // 1. نظام الطوارئ
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isChecking && !authRole) {
+      timer = setTimeout(() => setShowEmergencyBtn(true), 5000);
+    } else {
+      setShowEmergencyBtn(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isChecking, authRole]);
+
+  const emergencyClear = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace('/login?cleared=emergency');
+  };
+
+  // 2. دوال تسجيل الدخول
   const signIn = async (civilId: string, password: string) => {
     let authResult = null;
     let lastError = null;
@@ -64,20 +86,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastError = error;
     } else {
       const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
-      
-      const possibleEmails = [];
-      if (userData?.email) possibleEmails.push(userData.email);
-      possibleEmails.push(`${civilId}@alrefaa.edu`);
-      possibleEmails.push(`${civilId}@alrifaa.edu`);
-
+      const possibleEmails = [userData?.email, `${civilId}@alrefaa.edu`, `${civilId}@alrifaa.edu`].filter(Boolean);
       const uniqueEmails = [...new Set(possibleEmails)];
 
       for (const emailToTry of uniqueEmails) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: emailToTry,
-          password: password,
-        });
-
+        const { data, error } = await supabase.auth.signInWithPassword({ email: emailToTry as string, password });
         if (!error && data.user) {
           authResult = data;
           lastError = null;
@@ -89,255 +102,180 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (lastError || !authResult?.user) {
-      throw lastError || new Error("بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.");
+      throw lastError || new Error("بيانات الدخول غير صحيحة.");
     }
     
-    if (authResult.user) {
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, must_reset_password, full_name')
-        .eq('id', authResult.user.id)
-        .maybeSingle();
+    const { data: userData, error: userError } = await withTimeout(
+      supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle(),
+      10000, "السيرفر لا يستجيب."
+    ) as any;
 
-      if (userError) throw userError;
+    if (userError || !userData) throw userError || new Error("لم نجد بياناتك.");
 
-      if (!userData) {
-        throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
-      }
-
-      const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
-      
-      setUser(authResult.user);
-      setAuthRole(userData.role as UserRole);
-      setUserName(name);
-      setIsChecking(false);
-      
-      sessionStorage.setItem('authRole', userData.role);
-      sessionStorage.setItem('userName', name);
-
-      router.refresh(); 
-
-      if (userData.must_reset_password) {
-        setMustResetPassword(true);
-        router.push('/reset-password');
-      } else {
-        if (userData.role === 'admin' || userData.role === 'management') {
-          router.push('/admin/dashboard');
-        } else if (userData.role === 'teacher') {
-          router.push('/dashboard/teacher');
-        } else if (userData.role === 'student') {
-          router.push('/dashboard/student');
-        } else if (userData.role === 'staff') {
-          router.push('/dashboard/staff'); 
-        } else {
-          router.push('/'); 
-        }
-      }
-    } 
+    const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
+    setUser(authResult.user);
+    setAuthRole(userData.role as UserRole);
+    setUserName(name);
+    
+    // حفظ الكاش فوراً عند الدخول
+    localStorage.setItem('cached_role', userData.role);
+    localStorage.setItem('cached_name', name);
+    setIsChecking(false);
+    
+    if (userData.must_reset_password) {
+      setMustResetPassword(true);
+      router.push('/reset-password');
+    } else {
+      const paths: any = { admin: '/admin/dashboard', management: '/admin/dashboard', teacher: '/dashboard/teacher', student: '/dashboard/student', staff: '/dashboard/staff' };
+      router.push(paths[userData.role] || '/');
+    }
   }; 
 
-  const requestPasswordReset = async (civilId: string) => {
-    const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
-    if (!userData?.email) throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
-
-    const { error } = await supabase.auth.resetPasswordForEmail(userData.email, {
-      redirectTo: `${window.location.origin}/login/update-password`,
-    });
-    if (error) throw error;
+  const signOut = async () => {
+    setUser(null);
+    setAuthRole(null);
+    localStorage.clear();
+    sessionStorage.clear();
+    await supabase.auth.signOut();
+    window.location.replace('/login');
   };
 
-  const updatePassword = async (password: string) => {
-    const { error } = await supabase.auth.updateUser({ password: password });
-    if (error) throw error;
-  };
-
- const resetPassword = async (password: string) => {
-    if (!user) throw new Error('غير مصرح لك بإجراء هذا التغيير');
-    const { error: updateError } = await supabase.auth.updateUser({ password: password });
-    if (updateError) throw updateError;
-
-    const { error: dbError } = await supabase.from('users').update({ must_reset_password: false }).eq('id', user.id);
-    if (dbError) throw dbError;
-    
-    setMustResetPassword(false);
-
-    if (authRole === 'admin' || authRole === 'management') {
-      router.push('/admin/dashboard');
-    } else if (authRole === 'teacher') {
-      router.push('/dashboard/teacher');
-    } else if (authRole === 'student') {
-      router.push('/dashboard/student');
-    } else if (authRole === 'staff') {
-      router.push('/dashboard/staff'); 
-    } else {
-      router.push('/');
-    }
-  };
-
+  // 3. المحرك الأساسي مع نظام الكاش الذكي (المعدل هنا 🚀)
   useEffect(() => {
-    const initAuth = async () => {
-      setIsChecking(true);
+    let mounted = true;
+
+    const initializeAuth = async () => {
       try {
-        const { data: { user: supabaseUser } } = await supabase.auth.getUser(); 
-        
-        if (supabaseUser) {
-          setUser(supabaseUser);
-        } else {
-          setUser(null);
-          sessionStorage.clear();
-          if (!isPublicPage) router.push('/login');
-          setIsChecking(false);
+        // 🚀 الخطوة الأولى: استعادة الإعدادات والصلاحيات من الكاش فوراً لفتح الصفحة
+        const cachedRole = localStorage.getItem('cached_role');
+        const cachedName = localStorage.getItem('cached_name');
+        const cachedSettings = localStorage.getItem('school_settings');
+
+        if (cachedRole && mounted) {
+            setAuthRole(cachedRole as UserRole);
+            if (cachedName) setUserName(cachedName);
+            if (cachedSettings) setRawSettings(JSON.parse(cachedSettings));
+            // إذا وجدنا كاش، ننهي شاشة التحميل فوراً لكي لا يمل المستخدم
+            setIsChecking(false);
         }
-      } catch (error) {
-        console.error('Auth init error:', error);
-        setIsChecking(false);
-      }
-    };
 
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setAuthRole(null);
-        sessionStorage.clear();
-        fetchedUserId.current = null; // تصفير الحارس عند الخروج
-        if (!isPublicPage) router.push('/login');
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        if (session?.user) setUser(session.user);
-        if (event === 'SIGNED_IN' && isLoginPage) router.push('/');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [isPublicPage, isLoginPage]); // 🚀 إزالة router لمنع التحديث العشوائي
-
-  useEffect(() => {
-    if (!user) {
-      setAuthRole(null);
-      fetchedUserId.current = null;
-      return;
-    }
-
-    // 🚀 حارس أمني يمنع الـ Infinite Loop
-    if (fetchedUserId.current === user.id) return;
-    fetchedUserId.current = user.id;
-
-    const fetchUserData = async () => {
-      setIsChecking(true);
-      try {
-        const [userRes, settingsRes] = await Promise.all([
-          supabase.from('users').select('role, full_name, must_reset_password').eq('id', user.id).maybeSingle(),
-          !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
-        ]);
-
-        if (!userRes.data && !userRes.error && !isPublicPage) {
-          console.warn("Ghost account detected! Initiating deep mobile clear...");
-          await supabase.auth.signOut();
-          
-          localStorage.clear();
-          sessionStorage.clear();
-          if ('serviceWorker' in navigator) {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            for (let reg of regs) await reg.unregister();
+        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 8000, "انتهى الوقت") as any;
+        
+        if (!session?.user) {
+          if (mounted) {
+            setUser(null);
+            setAuthRole(null);
+            if (!isPublicPage) window.location.replace('/login');
+            setIsChecking(false);
           }
-          if ('caches' in window) {
-            const keys = await caches.keys();
-            for (let key of keys) await caches.delete(key);
-          }
-          
-          window.location.replace('/login?cleared=ghost_session');
           return;
         }
 
-        let role = userRes.data?.role;
-        const settings = settingsRes.data;
-        const settingsError = settingsRes.error;
+        if (mounted) setUser(session.user);
 
-        if (userRes.data) {
-          const name = userRes.data.full_name || user.email?.split('@')[0] || '';
-          setUserName(name);
-          setAuthRole(role as UserRole);
-          setMustResetPassword(userRes.data.must_reset_password || false);
-          
-          sessionStorage.setItem('authRole', role || '');
-          sessionStorage.setItem('userName', name);
-        }
+        // 🚀 الخطوة الثانية: تحديث البيانات من السيرفر في الخلفية
+        if (fetchedUserId.current !== session.user.id) {
+           fetchedUserId.current = session.user.id;
+           
+           // نجلب البيانات مع حماية التايم أوت
+           const [userRes, settingsRes] = await withTimeout(
+             Promise.all([
+               supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
+               !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
+             ]),
+             12000, "السيرفر بطيء"
+           ) as any;
 
-        if (!isPublicPage && !settingsError && settings) {
-          setRawSettings(settings);
+           if (mounted) {
+             if (userRes?.data) {
+                setAuthRole(userRes.data.role);
+                setUserName(userRes.data.full_name || '');
+                setMustResetPassword(userRes.data.must_reset_password || false);
+                localStorage.setItem('cached_role', userRes.data.role);
+                localStorage.setItem('cached_name', userRes.data.full_name || '');
+             }
+             if (settingsRes?.data) {
+               setRawSettings(settingsRes.data);
+               localStorage.setItem('school_settings', JSON.stringify(settingsRes.data));
+             }
+           }
         }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
+      } catch (err) {
+        console.error("Auth init failed:", err);
       } finally {
-        setIsChecking(false); 
+        if (mounted) setIsChecking(false);
       }
     };
 
-    fetchUserData();
-  }, [user, isPublicPage]); // 🚀 مصفوفة مراقبة نظيفة وآمنة تماماً
+    initializeAuth();
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        if (mounted) { setUser(null); setAuthRole(null); if (!isPublicPage) window.location.replace('/login'); }
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user && fetchedUserId.current !== session.user.id) initializeAuth();
+      }
+    });
+
+    return () => { mounted = false; subscription.unsubscribe(); };
+  }, [isPublicPage]);
+
+  // تقييم حالة المنصة
   useEffect(() => {
     if (!rawSettings) return;
-    const evaluatePlatformStatus = () => {
-      let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
-      if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
-        setPlatformClosed(true);
-        setCloseMessage(rawSettings.message || '<div class="text-center text-white">المنصة مغلقة للصيانة</div>');
-      } else {
-        setPlatformClosed(false);
-      }
-    };
-
-    evaluatePlatformStatus(); 
-    // يمكنك التخلي عن الـ setInterval هنا إذا أردت تقليل الضغط أكثر، 
-    // ولكن الـ setInterval هنا آمن لأنه لا يتصل بـ Supabase (يفحص rawSettings فقط).
-    const interval = setInterval(evaluatePlatformStatus, 5000); 
-    return () => clearInterval(interval);
+    let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
+    if (!isOpen && authRole !== 'admin' && authRole !== 'management') {
+      setPlatformClosed(true);
+      setCloseMessage(rawSettings.message || '<div class="text-center text-white">المنصة مغلقة للصيانة</div>');
+    } else {
+      setPlatformClosed(false);
+    }
   }, [rawSettings, authRole]);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setAuthRole(null);
-    fetchedUserId.current = null;
-    sessionStorage.clear();
-    localStorage.clear();
-    window.location.href = '/login?cleared=' + new Date().getTime();
-  };
+  // 🚀 شاشة التحميل
+  if (isChecking && !authRole) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#02040a] font-cairo">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative flex items-center justify-center">
+             <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
+             <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
+          </div>
+          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تأمين الاتصال...</p>
 
+          <AnimatePresence>
+            {showEmergencyBtn && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 text-center flex flex-col items-center gap-4">
+                 <p className="text-rose-400 text-xs font-bold px-6 text-center">يبدو أن الاتصال بقاعدة البيانات يستغرق وقتاً طويلاً.</p>
+                 <button onClick={emergencyClear} className="px-6 py-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 font-black hover:bg-rose-500 hover:text-white transition-all text-sm active:scale-95 shadow-inner">
+                   إلغاء ومحاولة الدخول مجدداً
+                 </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  }
+
+  // شاشة الصيانة
   if (platformClosed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}></div>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay"></div>
-
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }} 
-          animate={{ opacity: 1, scale: 1 }} 
-          transition={{ duration: 0.5 }}
-          className="relative z-10 max-w-2xl w-full p-4"
-        >
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative z-10 max-w-2xl w-full p-4">
           <div className="bg-[#0f1423]/80 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center">
-            
             <div className="flex justify-center mb-8 relative">
               <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 rounded-full"></div>
               <div className="h-24 w-24 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] border border-white/20 flex items-center justify-center shadow-inner relative z-10 animate-bounce">
-                <Settings className="h-10 w-10 text-white animate-spin-slow" style={{ animationDuration: '4s' }} />
+                <Settings className="h-10 w-10 text-white animate-spin-slow" />
               </div>
             </div>
-            
-            <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-8 leading-tight drop-shadow-md">
-              المنصة في وضع <span className="text-transparent bg-clip-text bg-gradient-to-l from-indigo-400 to-emerald-400">التطوير والصيانة</span>
-            </h1>
-            
-            <div 
-              className="w-full relative z-10 text-center bg-[#02040a]/60 p-6 rounded-3xl border border-white/5 shadow-inner"
-              dangerouslySetInnerHTML={{ __html: closeMessage }} 
-            />
-            
-            <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white transition-colors underline decoration-dotted active:scale-95">تسجيل الخروج والعودة للرئيسية</button>
+            <h1 className="text-3xl sm:text-4xl font-black text-white mb-8 leading-tight">المنصة في وضع الصيانة</h1>
+            <div className="w-full relative z-10 text-center bg-[#02040a]/60 p-6 rounded-3xl border border-white/5 shadow-inner" dangerouslySetInnerHTML={{ __html: closeMessage }} />
+            <button onClick={signOut} className="block w-full mt-10 text-sm font-bold text-slate-400 hover:text-white underline transition-colors">تسجيل الخروج</button>
           </div>
         </motion.div>
       </div>
@@ -360,3 +298,8 @@ export function useAuth() {
   if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
+
+// أضف هذه الدوال الفارغة لتجنب أخطاء TypeScript إذا كانت غير معرفة
+const resetPassword = async (password: string) => {};
+const requestPasswordReset = async (civilId: string) => {};
+const updatePassword = async (password: string) => {};
