@@ -73,7 +73,7 @@ export default function AttendanceReportsPage() {
   }, [user, isAdmin, snapshotDate]);
 
 
-  // ==========================================
+// ==========================================
   // 2. جلب تقارير الطلاب (للمعلم والمدير) مبرمجة لتخفيف الضغط
   // ==========================================
   const fetchAnalyticsData = useCallback(async () => {
@@ -107,12 +107,12 @@ export default function AttendanceReportsPage() {
         setRecords([]); setLoading(false); return;
       }
 
-      // 🚀 التحسين الخارق: تطبيق فلاتر التاريخ داخل الـ Query مباشرة لتخفيف حجم البيانات المسحوبة
+      // 🚀 التحسين الخارق: إضافة !students_id_fkey لمنع تعارض قاعدة البيانات وإنهاء الخطأ 500 للأبد!
       let query = supabase
         .from('attendance_records')
         .select(`
           id, date, period, status, section_id,
-          students (id, users (full_name, avatar_url)),
+          students (id, users!students_id_fkey (full_name, avatar_url)),
           sections (name, classes(name))
         `);
 
