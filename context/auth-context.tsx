@@ -9,10 +9,10 @@ import { UserRole } from '@/types';
 import { Settings, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// 🚀 أداة الحماية من تجمد السيرفرات (Timeout Wrapper)
-const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutMessage: string) => {
+// 🚀 أداة الحماية من تجمد السيرفرات (تم إصلاح خطأ TypeScript لـ Netlify)
+const withTimeout = <T,>(promise: any, ms: number, timeoutMessage: string): Promise<T> => {
   return Promise.race([
-    promise,
+    Promise.resolve(promise), // تحويل استعلام Supabase إلى Promise قياسي
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(timeoutMessage)), ms)
     )
