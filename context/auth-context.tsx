@@ -7,7 +7,7 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 import { UserRole } from '@/types';
 
 import { Settings, ShieldAlert } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // 🚀 أداة الحماية من تجمد السيرفرات (تم إصلاح خطأ TypeScript لـ Netlify)
 const withTimeout = <T,>(promise: any, ms: number, timeoutMessage: string): Promise<T> => {
