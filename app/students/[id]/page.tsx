@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback, use, useMemo } from 'react';
 import { 
   GraduationCap, Calendar, Clock, BookOpen, 
   FileText, CheckCircle2, XCircle, AlertCircle, 
@@ -23,7 +23,7 @@ import { useBadgesSystem } from '@/hooks/useBadgesSystem';
 import * as Dialog from '@radix-ui/react-dialog'; 
 
 // ============================================================================
-// 🧩 مكونات التبويبات المعزولة (لتحسين الأداء ومنع إعادة الرسم العشوائي)
+// 🧩 1. مكونات التبويبات المعزولة (لتحسين الأداء)
 // ============================================================================
 
 const OverviewTab = ({ attendance, exams, assignments, stats }: any) => (
@@ -274,7 +274,7 @@ const PrivateNotesTab = ({ privateNotes, newNote, setNewNote, handleAddPrivateNo
 );
 
 // ============================================================================
-// 🧩 المكون الرئيسي للصفحة
+// 🧩 2. المكون الرئيسي للصفحة
 // ============================================================================
 
 export default function StudentProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -304,7 +304,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
   const [badgeToRevoke, setBadgeToRevoke] = useState<{ id: string, name: string } | null>(null); 
 
-  // 🚀 1. جلب البيانات المتوازي (Parallel Fetching) لسرعة البرق
+  // 🚀 جلب البيانات المتوازي (نسخة محصنة ضد أخطاء النوع TypeScript لضمان نجاح الـ Build)
   const fetchStudentData = useCallback(async () => {
     if (!user || !userRole) return;
     setLoading(true);
@@ -317,28 +317,27 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // ضرب كل الجداول في نفس اللحظة (لا مزيد من الانتظار المتسلسل)
-      const queries = [
+      // 🛡️ ضرب كل الاستعلامات في نفس اللحظة مع ضمان وجود حقل error في القيمة البديلة (Fallback)
+      const queries: any[] = [
         supabase.from('students').select('*, users(full_name, avatar_url, email), sections(name, classes(name))').eq('id', studentId).maybeSingle(),
         supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
-        currentTeacherId 
-          ? supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', studentId).eq('teacher_id', currentTeacherId).order('date', { ascending: false })
-          : supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', studentId).order('date', { ascending: false }),
+        supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', studentId).order('date', { ascending: false }),
         supabase.from('exam_attempts').select('id, score, status, completed_at, exams(id, title, max_score, total_marks, teacher_id, subjects(name))').eq('student_id', studentId).eq('status', 'graded').order('completed_at', { ascending: false }),
         supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(id, title, total_marks, teacher_id, subjects(name), assignment_questions(points))').eq('student_id', studentId).eq('status', 'graded').order('submitted_at', { ascending: false }),
         (userRole === 'teacher' && currentTeacherId) 
           ? supabase.from('private_student_notes').select('*').eq('student_id', studentId).eq('teacher_id', currentTeacherId).order('created_at', { ascending: false }) 
-          : Promise.resolve({ data: [] })
+          : Promise.resolve({ data: [], error: null }) // 👈 القيمة البديلة الآن متوافقة تماماً
       ];
 
-      const [
-        { data: studentData, error: studentErr },
-        { data: badgesData },
-        { data: attendanceData },
-        { data: examsData },
-        { data: assignmentsData },
-        { data: notesData }
-      ] = await Promise.all(queries);
+      const responses = await Promise.all(queries);
+      
+      // تفكيك الاستجابات بواسطة الفهرس (Index) لضمان الأمان البرمجي
+      const { data: studentData, error: studentErr } = responses[0];
+      const { data: badgesData } = responses[1];
+      const { data: attendanceData } = responses[2];
+      const { data: examsData } = responses[3];
+      const { data: assignmentsData } = responses[4];
+      const { data: notesData } = responses[5];
 
       if (studentErr || !studentData) {
         setFetchError("تعذر العثور على بيانات الطالب أو أنك لا تملك صلاحية للوصول إليها.");
@@ -348,7 +347,11 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
       setStudent(studentData);
       setStudentBadges(badgesData || []);
-      setAttendance(attendanceData || []);
+      
+      // فلترة الغياب حسب المعلم الحالي إذا لزم الأمر
+      const filteredAttendance = currentTeacherId ? (attendanceData || []).filter((a: any) => a.teacher_id === currentTeacherId) : (attendanceData || []);
+      setAttendance(filteredAttendance);
+      
       if (notesData) setPrivateNotes(notesData as any);
 
       let finalExams = examsData || [];
@@ -359,11 +362,11 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       if (currentTeacherId) finalAssignments = finalAssignments.filter((a: any) => a.assignments?.teacher_id === currentTeacherId);
       setAssignments(finalAssignments);
 
-      // Calculations (محمية ضد الأخطاء)
+      // Calculations (حساب الإحصائيات)
       let attRate = 0;
-      if (attendanceData && attendanceData.length > 0) {
-        const presents = attendanceData.filter((a: any) => a.status === 'present' || a.status === 'late').length;
-        attRate = Math.round((presents / attendanceData.length) * 100);
+      if (filteredAttendance.length > 0) {
+        const presents = filteredAttendance.filter((a: any) => a.status === 'present' || a.status === 'late').length;
+        attRate = Math.round((presents / filteredAttendance.length) * 100);
       }
 
       let exAvg = 0;
@@ -488,14 +491,12 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo" dir="rtl">
       
-      {/* Header Actions */}
-      <div className="pt-6 flex justify-between items-center">
+      <div className="pt-6 flex justify-between items-center no-print">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-black bg-white px-5 py-2.5 rounded-2xl shadow-sm border border-slate-100 transition-all group">
           <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للقائمة
         </button>
       </div>
 
-      {/* Hero Section */}
       <div className={cn("relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] p-8 sm:p-12 text-white shadow-2xl transition-colors duration-1000 bg-gradient-to-r", heroGradient)}>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-30 mix-blend-overlay"></div>
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/10 rounded-full blur-[80px]"></div>
@@ -525,7 +526,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             </div>
 
             {(userRole === 'teacher' || userRole === 'admin' || userRole === 'management') && (
-              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setIsBadgeModalOpen(true)} className="mt-8 flex items-center justify-center sm:justify-start gap-3 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-900 px-8 py-4 rounded-2xl text-sm font-black shadow-xl shadow-amber-500/20 transition-all border border-amber-300 w-full sm:w-auto">
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setIsBadgeModalOpen(true)} className="mt-8 flex items-center justify-center sm:justify-start gap-3 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-900 px-8 py-4 rounded-2xl text-sm font-black shadow-xl shadow-amber-500/20 transition-all border border-amber-300 w-full sm:w-auto no-print">
                 <Award className="w-5 h-5" /> تتويج الطالب بوسام تميز
               </motion.button>
             )}
@@ -541,14 +542,16 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
               {studentBadges.map((badgeEntry, index) => (
                 <div key={badgeEntry.id || index} className="flex-shrink-0 bg-white/10 backdrop-blur-md rounded-[2rem] p-5 border border-white/20 flex items-center gap-5 w-[24rem] hover:bg-white/20 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 group relative overflow-hidden">
                   {(userRole === 'admin' || userRole === 'management' || userRole === 'teacher') && (
-                    <button onClick={(e) => { e.stopPropagation(); setBadgeToRevoke({ id: badgeEntry.id, name: badgeEntry.badge?.name }); }} className="absolute top-3 left-3 p-2 bg-rose-500/80 hover:bg-rose-600 text-white rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-md" title="سحب الوسام">
+                    <button onClick={(e) => { e.stopPropagation(); setBadgeToRevoke({ id: badgeEntry.id, name: badgeEntry.badge?.name }); }} className="absolute top-3 left-3 p-2 bg-rose-500/80 hover:bg-rose-600 text-white rounded-xl shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 backdrop-blur-md no-print" title="سحب الوسام">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center p-1">
                     <div className="absolute inset-0 bg-white/10 rounded-3xl blur-xl group-hover:bg-white/20 transition-colors"></div>
                     {badgeEntry.badge?.image_url ? (
-                      <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-2xl relative z-10" />
+                      <div className="relative w-full h-full">
+                         <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized className="object-contain drop-shadow-2xl relative z-10" />
+                      </div>
                     ) : (
                       <Award className="w-full h-full text-yellow-300 relative z-10 drop-shadow-lg p-2" />
                     )}
@@ -590,14 +593,14 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       </div>
       
       {userRole === 'teacher' && (
-        <div className="flex items-center gap-3 bg-sky-50/80 backdrop-blur-sm text-sky-700 px-6 py-4 rounded-2xl text-sm font-black border border-sky-100 shadow-sm">
+        <div className="flex items-center gap-3 bg-sky-50/80 backdrop-blur-sm text-sky-700 px-6 py-4 rounded-2xl text-sm font-black border border-sky-100 shadow-sm no-print">
           <Activity className="w-5 h-5 shrink-0 animate-pulse text-sky-500" />
           <span className="opacity-90">هذه الإحصائيات تعكس أداء الطالب في حصصك فقط، للحفاظ على الخصوصية.</span>
         </div>
       )}
 
       {/* 🚀 Tabs Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide bg-white p-2.5 rounded-[2rem] shadow-sm border border-slate-100 sticky top-4 z-30">
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide bg-white p-2.5 rounded-[2rem] shadow-sm border border-slate-100 sticky top-4 z-30 no-print">
         {[
           { id: 'overview', label: 'نظرة عامة', icon: Activity },
           { id: 'attendance', label: 'سجل الغياب', icon: CalendarDays, count: attendance.length },
@@ -623,8 +626,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         ))}
       </div>
 
-      {/* 🚀 Dynamic Tab Content Rendering */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[400px] overflow-hidden">
+      <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[400px] overflow-hidden no-print">
         <AnimatePresence mode="wait">
           {activeTab === 'overview' && <OverviewTab attendance={attendance} exams={exams} assignments={assignments} stats={stats} />}
           {activeTab === 'attendance' && <AttendanceTab attendance={attendance} />}
@@ -634,7 +636,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         </AnimatePresence>
       </div>
 
-      {/* Modals */}
       {student && (
         <GrantBadgeModal
           isOpen={isBadgeModalOpen}
