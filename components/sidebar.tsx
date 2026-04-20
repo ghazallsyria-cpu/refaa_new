@@ -39,7 +39,6 @@ const navigation = [
   { name: 'هيدر المنتديات', href: '/admin/forum-hero', icon: LayoutTemplate },
   { name: 'المنتديات', href: '/forums', icon: Compass },
   { name: 'الاختبارات والدرجات', href: '/exams', icon: FileText },
-  // 🚀 تمت إضافة سجل الدرجات هنا
   { name: 'سجل الدرجات', href: '/gradebook', icon: Calculator },
   { name: 'الجدول الدراسي', href: '/schedule', icon: CalendarDays },
   { name: 'الحصص الحية', href: '/live', icon: Clock },
@@ -78,7 +77,6 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    // 🚀 تمت إضافة سجل الدرجات للمعلم
     if (authRole === 'teacher') return ['لوحة التحكم', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
     
     if (authRole === 'student') return ['لوحة التحكم', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
@@ -149,6 +147,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
                 <Link 
                   href={itemHref} 
                   onClick={onClose} 
+                  prefetch={false} // 🚀 الدرع الواقي هنا! يمنع الهجوم الذاتي الصامت
                   className={cn(
                     "flex items-center rounded-xl text-sm font-bold transition-all duration-300 group relative overflow-hidden", 
                     isCollapsed ? "justify-center p-3" : "px-4 py-3.5", 
