@@ -3,12 +3,12 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
 export function useGradebook() {
-  const { user, userRole, authRole } = useAuth() as any;
-  const currentRole = authRole || userRole;
-  
+  const { user } = useAuth() as any;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [teacherSections, setTeacherSections] = useState<any[]>([]);
+  
+  // 🚀 حالة لتخزين المواد الخاصة بالمعلم
+  const [teacherSubjects, setTeacherSubjects] = useState<string[]>([]);
   
   const [gradeData, setGradeData] = useState<{ 
     students: any[], assessments: any[], scores: any[], customColumns: any[], customScores: any[], assignments: any[], assignmentScores: any[]
@@ -16,42 +16,26 @@ export function useGradebook() {
     students: [], assessments: [], scores: [], customColumns: [], customScores: [], assignments: [], assignmentScores: []
   });
 
-  // 🚀 جلب الفصول المخصصة للمعلم فقط
-  const fetchTeacherSections = useCallback(async () => {
+  // 🚀 دالة جلب المواد المخصصة للمعلم من جدول teacher_subjects
+  const fetchTeacherSubjects = useCallback(async () => {
     if (!user) return;
     try {
       const { data, error } = await supabase
-        .from('teacher_sections')
-        .select(`
-          id,
-          section_id,
-          subject_id,
-          sections:section_id(id, name, classes:class_id(id, name)),
-          subjects:subject_id(id, name)
-        `)
+        .from('teacher_subjects')
+        .select('subject_id')
         .eq('teacher_id', user.id);
-
-      if (error) throw error;
-
-      // 🚀 تنسيق البيانات لتصبح أسهل في الفلترة على الواجهة
-      const formattedSections = (data || []).map((item: any) => {
-         const className = Array.isArray(item.sections?.classes) ? item.sections.classes[0]?.name : item.sections?.classes?.name;
-         return {
-            id: item.section_id,
-            name: `${className || 'فصل غير محدد'} - ${item.sections?.name || 'شعبة غير محددة'}`,
-            subject_id: item.subject_id,
-            subject_name: item.subjects?.name || 'مادة غير محددة'
-         };
-      });
-
-      setTeacherSections(formattedSections);
+        
+      if (!error && data) {
+        // استخراج مصفوفة الـ IDs فقط لتسهيل الفلترة
+        setTeacherSubjects(data.map((d: any) => d.subject_id));
+      }
     } catch (err) {
-      console.error('Error fetching teacher sections:', err);
+      console.error('Error fetching teacher subjects:', err);
     }
   }, [user]);
 
   const fetchGradebook = useCallback(async (sectionId: string, subjectId: string) => {
-    if (!sectionId || !subjectId || !user) return;
+    if (!sectionId || !subjectId) return;
     setLoading(true);
 
     try {
@@ -169,5 +153,5 @@ export function useGradebook() {
     } finally { setSaving(false); }
   };
 
-  return { fetchTeacherSections, teacherSections, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk };
+  return { fetchTeacherSubjects, teacherSubjects, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk };
 }
