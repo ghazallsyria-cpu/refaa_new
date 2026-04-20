@@ -6,7 +6,6 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import Image from 'next/image';
 import { useAuth } from '@/context/auth-context';
 import { 
   LayoutDashboard, Users, GraduationCap, School, BookOpen, 
@@ -26,6 +25,8 @@ const navigation = [
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
+  // 🚀 الرابط الجديد للتقييم الذي طلبته
+  { name: 'تقييم المعلمين', href: '/admin/evaluations/new', icon: Activity },
   { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
   { name: 'رصد الغياب الآلي', href: '/admin/teacher-attendance', icon: ShieldAlert },
   { name: 'إنذارات الغياب', href: '/admin/absence-warnings', icon: AlertTriangle },
@@ -74,6 +75,8 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
+    // 🚀 السماح للإدارة برؤية التقييمات
+    if (item.name === 'تقييم المعلمين') return (authRole === 'admin' || authRole === 'management');
     
     if (authRole === 'admin' || authRole === 'management') return true; 
     
@@ -97,7 +100,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
       <div className={cn("flex h-24 shrink-0 items-center border-b border-white/5 relative z-10 transition-all duration-500 bg-[#02040a]/40", isCollapsed ? "justify-center px-0" : "justify-between px-6")}>
         <motion.div initial={false} animate={{ opacity: isCollapsed ? 0 : 1, scale: isCollapsed ? 0.8 : 1, x: isCollapsed ? -20 : 0 }} className={cn("flex items-center gap-3 transition-all duration-300", isCollapsed ? "pointer-events-none absolute" : "relative")}>
           <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-[#0f1423] shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30 group-hover/sidebar:rotate-3 transition-transform duration-300 overflow-hidden relative border border-white/10 shrink-0">
-            {schoolData.logo_url ? <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-1.5" /> : <School className="h-6 w-6 text-amber-500" />}
+            {schoolData.logo_url ? <img src={schoolData.logo_url} alt="Logo" className="w-full h-full object-contain p-1.5" /> : <School className="h-6 w-6 text-amber-500" />}
           </div>
           <div className="flex flex-col min-w-0 pr-1">
             <span className="text-lg font-black text-white tracking-tight leading-none drop-shadow-md truncate">{schoolData.name}</span>
@@ -107,7 +110,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
         
         {isCollapsed && (
           <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-[#0f1423] shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30 relative z-20 overflow-hidden border border-white/10 shrink-0">
-            {schoolData.logo_url ? <Image src={schoolData.logo_url} alt="Logo" fill className="object-contain p-1.5" /> : <School className="h-6 w-6 text-amber-500" />}
+            {schoolData.logo_url ? <img src={schoolData.logo_url} alt="Logo" className="w-full h-full object-contain p-1.5" /> : <School className="h-6 w-6 text-amber-500" />}
           </motion.div>
         )}
 
