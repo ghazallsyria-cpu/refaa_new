@@ -28,8 +28,17 @@ export function Header({
     fetchSchoolData();
   }, []);
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login'); };
-
+const handleSignOut = async () => { 
+    // 1. تسجيل الخروج من قاعدة البيانات
+    await supabase.auth.signOut(); 
+    
+    // 2. تنظيف الذاكرة المؤقتة والكاش الذي يسبب المشاكل
+    sessionStorage.clear();
+    localStorage.clear();
+    
+    // 3. توجيه إجباري ينظف المتصفح من أي بقايا
+    window.location.href = '/login?cleared=' + new Date().getTime();
+  };
   const roleMap: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
 
