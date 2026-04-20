@@ -3,9 +3,12 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
 export function useGradebook() {
-  const { user } = useAuth() as any;
+  const { user, userRole, authRole } = useAuth() as any;
+  const currentRole = authRole || userRole;
+  
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [teacherSections, setTeacherSections] = useState<any[]>([]);
   
   const [gradeData, setGradeData] = useState<{ 
     students: any[], assessments: any[], scores: any[], customColumns: any[], customScores: any[], assignments: any[], assignmentScores: any[]
@@ -13,8 +16,42 @@ export function useGradebook() {
     students: [], assessments: [], scores: [], customColumns: [], customScores: [], assignments: [], assignmentScores: []
   });
 
+  // 🚀 جلب الفصول المخصصة للمعلم فقط
+  const fetchTeacherSections = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('teacher_sections')
+        .select(`
+          id,
+          section_id,
+          subject_id,
+          sections:section_id(id, name, classes:class_id(id, name)),
+          subjects:subject_id(id, name)
+        `)
+        .eq('teacher_id', user.id);
+
+      if (error) throw error;
+
+      // 🚀 تنسيق البيانات لتصبح أسهل في الفلترة على الواجهة
+      const formattedSections = (data || []).map((item: any) => {
+         const className = Array.isArray(item.sections?.classes) ? item.sections.classes[0]?.name : item.sections?.classes?.name;
+         return {
+            id: item.section_id,
+            name: `${className || 'فصل غير محدد'} - ${item.sections?.name || 'شعبة غير محددة'}`,
+            subject_id: item.subject_id,
+            subject_name: item.subjects?.name || 'مادة غير محددة'
+         };
+      });
+
+      setTeacherSections(formattedSections);
+    } catch (err) {
+      console.error('Error fetching teacher sections:', err);
+    }
+  }, [user]);
+
   const fetchGradebook = useCallback(async (sectionId: string, subjectId: string) => {
-    if (!sectionId || !subjectId) return;
+    if (!sectionId || !subjectId || !user) return;
     setLoading(true);
 
     try {
@@ -22,13 +59,13 @@ export function useGradebook() {
       const { data: examsData } = await supabase.from('exams').select('id, title, max_score, status').eq('subject_id', subjectId).in('status', ['published', 'archived']);
       const { data: customColsData } = await supabase.from('gradebook_columns').select('*').eq('section_id', sectionId).eq('subject_id', subjectId).order('created_at', { ascending: true });
       
-      // 🚀 1. سحب الواجبات بأمان تام (استخدام * لتفادي خطأ الأعمدة المفقودة)
-const { data: rawAssignments, error: assignErr } = await supabase
-  .from('assignments')
-  .select('*')
-  .eq('subject_id', subjectId)
-  .contains('section_ids', [sectionId])
-  .eq('teacher_id', user.id);
+      const { data: rawAssignments, error: assignErr } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('subject_id', subjectId)
+        .contains('section_ids', [sectionId])
+        .eq('teacher_id', user.id);
+        
       if (assignErr) console.error("Assignments Fetch Error:", assignErr);
       
       const assignmentsData = (rawAssignments || []).filter(a => {
@@ -55,7 +92,6 @@ const { data: rawAssignments, error: assignErr } = await supabase
         const { data: grades } = await supabase.from('grades').select('student_id, exam_id, score').in('student_id', studentIds).eq('subject_id', subjectId).eq('section_id', sectionId).eq('exam_type', 'exam');
         archivedGradesData = grades || [];
 
-        // 🚀 2. سحب التسليمات بأمان تام
         if (assignmentIds.length > 0) {
            const { data: submissions, error: subErr } = await supabase.from('assignment_submissions').select('*').in('assignment_id', assignmentIds).in('student_id', studentIds);
            if (subErr) console.error("Submissions Fetch Error:", subErr);
@@ -89,7 +125,7 @@ const { data: rawAssignments, error: assignErr } = await supabase
       });
 
     } catch (error) { console.error('Error fetching gradebook:', error); } finally { setLoading(false); }
-  }, []);
+  }, [user]);
 
   const addCustomColumn = async (sectionId: string, subjectId: string, title: string, maxScore: number) => {
     if (!user) return;
@@ -133,5 +169,5 @@ const { data: rawAssignments, error: assignErr } = await supabase
     } finally { setSaving(false); }
   };
 
-  return { fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk };
+  return { fetchTeacherSections, teacherSections, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk };
 }
