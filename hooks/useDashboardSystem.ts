@@ -168,8 +168,9 @@ export function useDashboardSystem() {
   // ==========================================
   // 3. TEACHER FUNCTIONS (The Perfected Version)
   // ==========================================
-  const fetchTeacherDashboardData = useCallback(async (forceRefresh = true) => { 
-    if (!user) return null;
+// غير forceRefresh = true إلى forceRefresh = false
+const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
+  if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
         const { data: teacher, error: teacherErr } = await supabase.from('teachers').select('*, users!teachers_id_fkey(*)').eq('id', user.id).maybeSingle();
