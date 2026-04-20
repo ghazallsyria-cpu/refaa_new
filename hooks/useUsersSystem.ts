@@ -1,20 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Student, Teacher, Parent, Section, Subject } from '@/types';
 
-export interface StudentProfile {
-  student: Student;
-  attendanceStats: {
-    total: number;
-    present: number;
-    partial: number;
-    absent: number;
-    rate: number;
-  } | null;
-  absentDates: string[];
-  recentGrades: any[];
-}
-
+// استخراج الاسم الرباعي من كائن المستخدم المربوط
 const extractName = (item: any): string => {
   if (!item || !item.users) return '';
   const userObj = Array.isArray(item.users) ? item.users[0] : item.users;
@@ -27,12 +16,31 @@ export function useUsersSystem() {
   const [parents, setParents] = useState<Parent[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]); // 🏢 الأقسام الجديدة
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ======================================================================
-  // 🚀 الدالة الجديدة لصفحة إدارة الطلاب (Server-Side Pagination & Filtering)
-  // ======================================================================
+  // ============================================================================
+  // 🏢 1. نظام الأقسام الأكاديمية (Academic Departments)
+  // ============================================================================
+  
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('academic_departments')
+        .select('*')
+        .order('name');
+      if (error) throw error;
+      setDepartments(data || []);
+    } catch (err) {
+      console.error('Error fetching departments:', err);
+    }
+  }, []);
+
+  // ============================================================================
+  // 👨‍🎓 2. إدارة الطلاب بنظام الصفحات والبحث (Students Pagination)
+  // ============================================================================
+  
   const fetchStudentsPaginated = useCallback(async (
     page: number = 1,
     limit: number = 12,
@@ -41,7 +49,6 @@ export function useUsersSystem() {
     track: string = 'all'
   ): Promise<{ data: any[]; totalCount: number }> => {
     setLoading(true);
-    setError(null);
     try {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
@@ -49,27 +56,19 @@ export function useUsersSystem() {
       let query = supabase
         .from('students')
         .select(`
-          id, national_id, gender, parent_id, section_id, next_year_track, track_selection_date,
+          id, national_id, gender, parent_id, section_id, next_year_track,
           users!students_id_fkey(full_name, email, phone, avatar_url),
           sections(id, name, classes(id, name, level)),
           parents(users!fk_parents_users(full_name))
         `, { count: 'exact' });
 
-      // 1. فلترة القسم
-      if (sectionId && sectionId !== 'all') {
-        query = query.eq('section_id', sectionId);
+      if (sectionId !== 'all') query = query.eq('section_id', sectionId);
+      if (track !== 'all') {
+        if (track === 'none') query = query.is('next_year_track', null);
+        else query = query.eq('next_year_track', track);
       }
 
-      // 2. فلترة المسار
-      if (track && track !== 'all') {
-        if (track === 'none') {
-          query = query.is('next_year_track', null);
-        } else {
-          query = query.eq('next_year_track', track);
-        }
-      }
-
-      // 3. فلترة البحث (الرقم المدني فقط هنا لسرعة الأداء في Postgrest)
+      // البحث بالرقم المدني (رقمي)
       if (searchTerm && !isNaN(Number(searchTerm))) {
         query = query.like('national_id', `%${searchTerm}%`);
       }
@@ -80,354 +79,191 @@ export function useUsersSystem() {
       let finalData = data || [];
       let finalCount = count || 0;
 
-      // 4. البحث النصي الذكي (بالاسم) - إذا كان المستخدم يبحث بنص وليس رقم مدني
-      // نضطر لاستخدام ilike على الجدول المربوط، ولتفادي تعقيدات Postgrest نسحب عينة صغيرة ونفلترها
+      // البحث بالاسم (نصي) - يتطلب استعلام منفصل بـ inner join للسرعة
       if (searchTerm && isNaN(Number(searchTerm))) {
-        const { data: searchData, error: searchErr } = await supabase
+        const { data: sData } = await supabase
           .from('students')
-          .select(`
-            id, national_id, gender, parent_id, section_id, next_year_track, track_selection_date,
-            users!students_id_fkey!inner(full_name, email, phone, avatar_url),
-            sections(id, name, classes(id, name, level)),
-            parents(users!fk_parents_users(full_name))
-          `)
+          .select(`id, national_id, users!students_id_fkey!inner(full_name, email), sections(name, classes(name))`)
           .ilike('users.full_name', `%${searchTerm}%`)
-          .limit(50); // نضع حد أعلى لنتائج البحث النصي لضمان الأداء
-
-        if (!searchErr) {
-            finalData = searchData || [];
-            finalCount = searchData?.length || 0;
-        }
+          .limit(50);
+        finalData = sData || [];
+        finalCount = finalData.length;
       }
 
       return { data: finalData, totalCount: finalCount };
-    } catch (err: unknown) {
-      console.error('Error fetching paginated students:', err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ');
+    } catch (err) {
+      console.error(err);
       return { data: [], totalCount: 0 };
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // ======================================================================
-  // الدوال القديمة (يتم الاحتفاظ بها لعدم كسر الأنظمة الأخرى)
-  // ======================================================================
-  const fetchStudents = useCallback(async (): Promise<void> => {
+  // ============================================================================
+  // 👨‍🏫 3. إدارة المعلمين بنظام الصفحات والأقسام (Teachers Pagination & HOD)
+  // ============================================================================
+  
+  const fetchTeachersPaginated = useCallback(async (
+    page: number = 1,
+    limit: number = 12,
+    searchTerm: string = '',
+    departmentId: string = 'all'
+  ): Promise<{ data: any[]; totalCount: number }> => {
     setLoading(true);
-    setError(null);
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select(`
-          id, national_id, gender, parent_id, section_id, next_year_track, track_selection_date,
-          users!students_id_fkey (full_name, email, phone, avatar_url),
-          sections (id, name, classes (id, name, level)),
-          parents (users!fk_parents_users (full_name))
-        `)
-        .limit(5000);
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
 
-      if (error) throw error;
-      const sortedData = (data as any[] || []).sort((a, b) => extractName(a).localeCompare(extractName(b), 'ar'));
-      setStudents((sortedData as unknown) as Student[]);
-    } catch (err: unknown) {
-      console.error('Error fetching students:', err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchTeachers = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('teachers')
         .select(`
-          id, specialization, zoom_link, custom_titles, national_id,
-          users!teachers_id_fkey (full_name, email, phone, avatar_url),
-          department_heads (id, subject_id, stage_name, subjects(name)),
-          teacher_sections (section_id, subject_id, sections (name, classes (name)), subjects (name))
-        `)
-        .limit(5000);
+          id, specialization, custom_titles, national_id, department_id,
+          users!teachers_id_fkey(full_name, email, phone, avatar_url),
+          academic_departments(id, name, head_id),
+          department_heads(id, subject_id, stage_name)
+        `, { count: 'exact' });
 
+      if (departmentId !== 'all') query = query.eq('department_id', departmentId);
+      if (searchTerm && !isNaN(Number(searchTerm))) query = query.like('national_id', `%${searchTerm}%`);
+
+      const { data, count, error } = await query.range(from, to).order('created_at', { ascending: false });
       if (error) throw error;
-      const sortedData = (data as any[] || []).sort((a, b) => extractName(a).localeCompare(extractName(b), 'ar'));
-      setTeachers((sortedData as unknown) as Teacher[]);
-    } catch (err: unknown) {
-      console.error('Error fetching teachers:', err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ');
+
+      // تحديد من هو رئيس القسم برمجياً بناءً على head_id
+      const processed = (data || []).map(t => ({
+        ...t,
+        isHOD: t.academic_departments?.head_id === t.id || (t.department_heads && t.department_heads.length > 0)
+      }));
+
+      return { data: processed, totalCount: count || 0 };
+    } catch (err) {
+      console.error(err);
+      return { data: [], totalCount: 0 };
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchParents = useCallback(async (): Promise<void> => {
+  // ============================================================================
+  // 🔄 4. الدوال القديمة (للتوافق مع باقي النظام)
+  // ============================================================================
+
+  const fetchStudents = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const { data, error } = await supabase
-        .from('parents')
-        .select(`
-          id, national_id, job_title, workplace, address, 
-          users!fk_parents_users (full_name, email, phone, avatar_url),
-          students (id, users!students_id_fkey(full_name)) 
-        `)
-        .limit(5000);
-
+      const { data, error } = await supabase.from('students').select('*, users!students_id_fkey(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))').limit(1000);
       if (error) throw error;
-      const sortedData = (data as any[] || []).sort((a, b) => extractName(a).localeCompare(extractName(b), 'ar'));
-      setParents((sortedData as unknown) as Parent[]);
-    } catch (err: unknown) {
-      console.error('Error fetching parents:', err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ');
-    } finally {
-      setLoading(false);
-    }
+      const sorted = (data || []).sort((a, b) => extractName(a).localeCompare(extractName(b), 'ar'));
+      setStudents(sorted as any);
+    } finally { setLoading(false); }
   }, []);
 
-  const fetchSections = useCallback(async (): Promise<void> => {
+  const fetchTeachers = useCallback(async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase.from('sections').select('id, name, classes(name, level)').limit(5000);
+      const { data, error } = await supabase.from('teachers').select('*, users!teachers_id_fkey(full_name, email, phone, avatar_url), department_heads(id, subject_id, subjects(name)), academic_departments(id, name)').limit(1000);
       if (error) throw error;
-      const sortedData = (data as any[] || []).sort((a, b) => {
-        const classA = Array.isArray(a.classes) ? a.classes[0]?.name : a.classes?.name;
-        const classB = Array.isArray(b.classes) ? b.classes[0]?.name : b.classes?.name;
-        return `${classA || ''} ${a.name || ''}`.localeCompare(`${classB || ''} ${b.name || ''}`, 'ar', { numeric: true });
-      });
-      setSections((sortedData as unknown) as Section[]);
-    } catch (err: unknown) { console.error('Error fetching sections:', err); }
+      const sorted = (data || []).sort((a, b) => extractName(a).localeCompare(extractName(b), 'ar'));
+      setTeachers(sorted as any);
+    } finally { setLoading(false); }
   }, []);
 
-  const fetchSubjects = useCallback(async (): Promise<void> => {
+  const fetchParents = useCallback(async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase.from('subjects').select('id, name').limit(1000);
+      const { data, error } = await supabase.from('parents').select('id, national_id, users!fk_parents_users(full_name, email, phone, avatar_url), students(id, users!students_id_fkey(full_name))').limit(5000);
       if (error) throw error;
-      const sortedData = (data as any[] || []).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
-      setSubjects((sortedData as unknown) as Subject[]);
-    } catch (err: unknown) { console.error('Error fetching subjects:', err); }
+      setParents(data as any);
+    } finally { setLoading(false); }
   }, []);
 
-  // ======================================================================
-  // دوال الإضافة والتعديل والحذف (Actions)
-  // ======================================================================
-  const addStudent = useCallback(async (studentData: any): Promise<{ success: boolean }> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const safeEmail = studentData.email || `${studentData.national_id}@alrefaa.edu`;
-      const response = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ email: safeEmail, password: '123456', full_name: studentData.full_name, national_id: studentData.national_id, phone: studentData.phone, role: 'student', section_id: studentData.section_id || null, parent_id: studentData.parent_id || null }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'فشل إنشاء حساب الطالب');
-      return { success: true };
-    } catch (err: unknown) { console.error('Error adding student:', err); throw err; }
+  const fetchSections = useCallback(async () => {
+    const { data } = await supabase.from('sections').select('id, name, classes(name, level)').order('name');
+    setSections(data as any);
   }, []);
 
-  const updateStudent = useCallback(async (studentId: string, oldNationalId: string, updateData: any): Promise<{ success: boolean }> => {
-    try {
-      const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
-      let newEmail = updateData.email;
-      if (nationalIdChanged) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/api/users/update-national-id', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ userId: studentId, newNationalId: updateData.national_id }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني');
-        newEmail = result.newEmail;
+  const fetchSubjects = useCallback(async () => {
+    const { data } = await supabase.from('subjects').select('id, name').order('name');
+    setSubjects(data as any);
+  }, []);
+
+  // ============================================================================
+  // ⚡ 5. العمليات التنفيذية (Add, Update, Delete, Reset)
+  // ============================================================================
+
+  const addStudent = useCallback(async (data: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const email = data.email || `${data.national_id}@alrefaa.edu`;
+    const res = await fetch('/api/users/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ ...data, email, password: '123456', role: 'student' }),
+    });
+    if (!res.ok) throw new Error('فشل الإضافة');
+    return await res.json();
+  }, []);
+
+  const updateStudent = useCallback(async (id: string, oldId: string, data: any) => {
+    const res = await fetch('/api/users/update-student', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: id, updateData: data }),
+    });
+    if (!res.ok) throw new Error('فشل التحديث');
+    return true;
+  }, []);
+
+  const addTeacher = useCallback(async (data: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const email = data.email || `${data.national_id}@alrefaa.edu`;
+    const res = await fetch('/api/users/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ ...data, email, password: '123456', role: 'teacher' }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'فشل إضافة المعلم');
+    return result;
+  }, []);
+
+  const updateTeacher = async (id: string, oldId: string, payload: any, hodData?: any) => {
+    // تحديث جدول المستخدمين العام
+    await supabase.from('users').update({ full_name: payload.full_name, email: payload.email, phone: payload.phone }).eq('id', id);
+    // تحديث جدول المعلمين (بما في ذلك القسم)
+    await supabase.from('teachers').update({ specialization: payload.specialization, zoom_link: payload.zoom_link, custom_titles: payload.custom_titles, department_id: payload.department_id }).eq('id', id);
+    
+    // إدارة مناصب رئاسة الأقسام
+    if (hodData) {
+      await supabase.from('department_heads').delete().eq('teacher_id', id);
+      if (hodData.isHead) {
+        await supabase.from('department_heads').insert({ teacher_id: id, subject_id: hodData.subject_id, stage_name: hodData.stage_name });
+        // تحديث الـ head_id في جدول الأقسام أيضاً لضمان الربط الثنائي
+        await supabase.from('academic_departments').update({ head_id: id }).eq('id', payload.department_id);
       }
-      const response = await fetch('/api/users/update-student', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, updateData, newEmail }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to update student');
-      return { success: true };
-    } catch (err: unknown) { console.error('Error updating student:', err); throw err; }
-  }, []);
-
-  const addTeacher = useCallback(async (teacherData: any): Promise<{ success: boolean, password?: string }> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const safeEmail = teacherData.email || `${teacherData.national_id}@alrefaa.edu`;
-      const response = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ email: safeEmail, password: '123456', full_name: teacherData.full_name, national_id: teacherData.national_id, phone: teacherData.phone, role: 'teacher', specialization: teacherData.specialization, zoom_link: teacherData.zoom_link }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'فشل إنشاء حساب المعلم');
-      await fetchTeachers();
-      return { success: true, password: data.password };
-    } catch (err: unknown) { console.error('Error adding teacher:', err); throw err; }
-  }, [fetchTeachers]);
-
-  const updateTeacher = async (id: string, oldNationalId: string, payload: any, hodData?: any) => {
-    try {
-      const userUpdate: any = {
-        full_name: payload.full_name,
-        email: payload.email,
-        phone: payload.phone,
-      };
-      if (payload.national_id) userUpdate.national_id = payload.national_id;
-
-      const { error: userErr } = await supabase.from('users').update(userUpdate).eq('id', id);
-      if (userErr) throw userErr;
-
-      const teacherUpdate: any = {
-        specialization: payload.specialization,
-        zoom_link: payload.zoom_link,
-        custom_titles: payload.custom_titles,
-      };
-      if (payload.national_id) teacherUpdate.national_id = payload.national_id;
-
-      const { error: teacherErr } = await supabase.from('teachers').update(teacherUpdate).eq('id', id);
-      if (teacherErr) throw teacherErr;
-
-      if (hodData !== undefined) {
-        await supabase.from('department_heads').delete().eq('teacher_id', id);
-        if (hodData.isHead && hodData.subject_id) {
-          const { error: hodErr } = await supabase.from('department_heads').insert({
-            teacher_id: id,
-            subject_id: hodData.subject_id,
-            stage_name: hodData.stage_name || 'الكل'
-          });
-          if (hodErr) throw hodErr;
-        }
-      }
-
-      await fetchTeachers();
-      return true;
-    } catch (error) {
-      console.error('Update Teacher Error:', error);
-      throw error;
     }
+    return true;
   };
 
-  const addParent = useCallback(async (parentData: any): Promise<{ success: boolean, password?: string }> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const safeEmail = parentData.email || `${parentData.national_id}@alrefaa.edu`;
-      const response = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ 
-          email: safeEmail, 
-          password: '123456', 
-          full_name: parentData.full_name, 
-          national_id: parentData.national_id, 
-          phone: parentData.phone, 
-          role: 'parent', 
-          job_title: parentData.job_title, 
-          address: parentData.address 
-        }),
-      });
-      
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'فشل إنشاء حساب ولي الأمر');
-      
-      if (parentData.student_ids && parentData.student_ids.length > 0) {
-        await supabase.from('students').update({ parent_id: data.user.id }).in('id', parentData.student_ids);
-      }
-      
-      await fetchParents();
-      return { success: true, password: data.password };
-    } catch (err: unknown) { throw err; }
-  }, [fetchParents]);
-
-  const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any): Promise<{ success: boolean }> => {
-    try {
-      const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
-      let newEmail = updateData.email;
-      
-      if (nationalIdChanged) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const response = await fetch('/api/users/update-national-id', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ userId: parentId, newNationalId: updateData.national_id }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'فشل التحديث');
-        newEmail = result.newEmail;
-      }
-
-      const { student_ids, ...pureUpdateData } = updateData;
-
-      const response = await fetch('/api/users/update-parent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parentId, updateData: pureUpdateData, newEmail }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to update parent');
-
-      await supabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
-      
-      if (student_ids && student_ids.length > 0) {
-        await supabase.from('students').update({ parent_id: parentId }).in('id', student_ids);
-      }
-
-      await fetchParents();
-      return { success: true };
-    } catch (err: unknown) { throw err; }
-  }, [fetchParents]);
-
-  const deleteUser = useCallback(async (userId: string): Promise<{ success: boolean }> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`/api/users/delete?id=${userId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${session?.access_token}` }
-      });
-      if (!response.ok) throw new Error('فشل حذف المستخدم');
-      return { success: true };
-    } catch (err: unknown) { throw err; }
+  const deleteUser = useCallback(async (id: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    await fetch(`/api/users/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+    return true;
   }, []);
 
-    const resetPassword = useCallback(async (userId: string, newPassword?: string): Promise<{ success: boolean, newPassword?: string }> => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/users/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ userId, newPassword: newPassword || '' })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'فشل التغيير');
-      
-      return { success: true, newPassword: data.newPassword || newPassword };
-    } catch (err: unknown) { 
-      throw err; 
-    }
-  }, []);
-
-  const fetchStudentProfile = useCallback(async (studentId: string): Promise<any> => {
-    try {
-      const { data: student, error } = await supabase.from('students').select('*, users!students_id_fkey(*), sections(*, classes(*))').eq('id', studentId).single();
-      if (error) throw error;
-      return { student, attendanceStats: null, absentDates: [], recentGrades: [] };
-    } catch (err: unknown) { throw err; }
-  }, []);
-
-  const selectTrack = useCallback(async (studentId: string, track: 'scientific' | 'literary'): Promise<{ success: boolean }> => {
-    try {
-      const { error } = await supabase.from('students').update({ next_year_track: track, track_selection_date: new Date().toISOString() }).eq('id', studentId);
-      if (error) throw error;
-      return { success: true };
-    } catch (err: unknown) { throw err; }
+  const resetPassword = useCallback(async (userId: string, newPassword?: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/users/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ userId, newPassword: newPassword || '' })
+    });
+    return await res.json();
   }, []);
 
   return {
-    students, teachers, parents, sections, subjects, loading, error,
-    fetchStudents, fetchTeachers, fetchParents, fetchSections, fetchSubjects, fetchStudentProfile, fetchStudentsPaginated,
-    selectTrack, addStudent, updateStudent, addTeacher, updateTeacher, addParent, updateParent, deleteUser, resetPassword
+    students, teachers, parents, sections, subjects, departments, loading, error,
+    fetchStudents, fetchTeachers, fetchParents, fetchSections, fetchSubjects, fetchDepartments,
+    fetchStudentsPaginated, fetchTeachersPaginated,
+    addStudent, updateStudent, addTeacher, updateTeacher, deleteUser, resetPassword
   };
 }
