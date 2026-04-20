@@ -25,8 +25,8 @@ const navigation = [
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
-  // 🚀 الرابط الجديد للتقييم الذي طلبته
-  { name: 'تقييم المعلمين', href: '/admin/evaluations/new', icon: Activity },
+  // 🚀 تم التعديل هنا: توجيه المدير إلى الأرشيف الشامل
+  { name: 'تقييم المعلمين', href: '/admin/evaluations', icon: Activity },
   { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
   { name: 'رصد الغياب الآلي', href: '/admin/teacher-attendance', icon: ShieldAlert },
   { name: 'إنذارات الغياب', href: '/admin/absence-warnings', icon: AlertTriangle },
@@ -75,6 +75,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
+    
     // 🚀 السماح للإدارة برؤية التقييمات
     if (item.name === 'تقييم المعلمين') return (authRole === 'admin' || authRole === 'management');
     
@@ -150,7 +151,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
                 <Link 
                   href={itemHref} 
                   onClick={onClose} 
-                  prefetch={false} // 🚀 الدرع الواقي هنا! يمنع الهجوم الذاتي الصامت
+                  prefetch={false} 
                   className={cn(
                     "flex items-center rounded-xl text-sm font-bold transition-all duration-300 group relative overflow-hidden", 
                     isCollapsed ? "justify-center p-3" : "px-4 py-3.5", 
