@@ -7,7 +7,7 @@ export function useGradebook() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  // 🚀 حالة لتخزين المواد الخاصة بالمعلم
+  // 🚀 مصفوفة لتخزين معرفات (IDs) المواد المخصصة للمعلم
   const [teacherSubjects, setTeacherSubjects] = useState<string[]>([]);
   
   const [gradeData, setGradeData] = useState<{ 
@@ -16,7 +16,7 @@ export function useGradebook() {
     students: [], assessments: [], scores: [], customColumns: [], customScores: [], assignments: [], assignmentScores: []
   });
 
-  // 🚀 دالة جلب المواد المخصصة للمعلم من جدول teacher_subjects
+  // 🚀 جلب المواد المخصصة للمعلم من جدول teacher_subjects
   const fetchTeacherSubjects = useCallback(async () => {
     if (!user) return;
     try {
@@ -26,7 +26,7 @@ export function useGradebook() {
         .eq('teacher_id', user.id);
         
       if (!error && data) {
-        // استخراج مصفوفة الـ IDs فقط لتسهيل الفلترة
+        // استخراج مصفوفة الـ IDs فقط لتسهيل الفلترة في الواجهة
         setTeacherSubjects(data.map((d: any) => d.subject_id));
       }
     } catch (err) {
