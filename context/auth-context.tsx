@@ -159,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsChecking(false);
         }
 
-        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 8000, "انتهى الوقت");
+        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 8000, "انتهى الوقت") as any;
         
         if (!session?.user) {
           if (mounted) {
