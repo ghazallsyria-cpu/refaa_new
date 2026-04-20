@@ -9,6 +9,16 @@ import { UserRole } from '@/types';
 import { Settings, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+// 🚀 أداة الحماية من تجمد السيرفرات (Timeout Wrapper)
+const withTimeout = <T,>(promise: Promise<T>, ms: number, timeoutMessage: string) => {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(timeoutMessage)), ms)
+    )
+  ]);
+};
+
 interface AuthContextType {
   user: SupabaseUser | null;
   authRole: UserRole | null;
@@ -39,6 +49,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
+  // 🚀 حالة زر الطوارئ
+  const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
+  
   const fetchedUserId = useRef<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -47,7 +60,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isResetPasswordPage = pathname === '/reset-password';
   const isPublicPage = isLoginPage || isResetPasswordPage;
 
-  // 1. إدارة تسجيل الدخول
+  // 🚀 إظهار زر الطوارئ إذا طال التحميل أكثر من 5 ثوانٍ
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isChecking && !authRole) {
+      timer = setTimeout(() => setShowEmergencyBtn(true), 5000);
+    } else {
+      setShowEmergencyBtn(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isChecking, authRole]);
+
+  const emergencyClear = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace('/login?cleared=emergency');
+  };
+
   const signIn = async (civilId: string, password: string) => {
     let authResult = null;
     let lastError = null;
@@ -82,18 +111,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw lastError || new Error("بيانات الدخول غير صحيحة، تأكد من الرقم المدني وكلمة المرور.");
     }
     
-    // جلب تفاصيل المستخدم الدقيقة بعد الدخول الناجح
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role, must_reset_password, full_name')
-      .eq('id', authResult.user.id)
-      .maybeSingle();
+    // جلب التفاصيل مع مهلة زمنية صارمة
+    const { data: userData, error: userError } = await withTimeout(
+      supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle(),
+      10000,
+      "السيرفر لا يستجيب حالياً، يرجى المحاولة مجدداً."
+    ) as any;
 
     if (userError) throw userError;
-
-    if (!userData) {
-      throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام. يرجى مراجعة الإدارة.`);
-    }
+    if (!userData) throw new Error(`تم تسجيل الدخول، ولكن لم نجد بياناتك في النظام.`);
 
     const name = userData.full_name || authResult.user.email?.split('@')[0] || '';
     
@@ -101,7 +127,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthRole(userData.role as UserRole);
     setUserName(name);
     
-    // 🚀 الكاش الأمني لتسريع العرض
     localStorage.setItem('cached_role', userData.role);
     localStorage.setItem('cached_name', name);
     sessionStorage.setItem('authRole', userData.role);
@@ -109,7 +134,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setIsChecking(false);
     
-    // التوجيه الذكي
     if (userData.must_reset_password) {
       setMustResetPassword(true);
       router.push('/reset-password');
@@ -122,7 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }; 
 
-  // 2. دوال إعادة تعيين كلمة المرور
   const requestPasswordReset = async (civilId: string) => {
     const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
     if (!userData?.email) throw new Error('لم يتم العثور على حساب مرتبط بهذا الرقم المدني');
@@ -161,14 +184,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login');
   };
 
-  // 3. المحرك الأساسي (الذي كان يسبب المشكلة وتم إصلاحه)
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // حماية جلب الجلسة بمؤقت زمني 10 ثوانٍ
+        const sessionResult: any = await withTimeout(
+          supabase.auth.getSession(),
+          10000,
+          "انتهى وقت طلب الجلسة"
+        );
         
+        const session = sessionResult.data?.session;
+        const sessionError = sessionResult.error;
+
         if (sessionError) throw sessionError;
 
         if (!session?.user) {
@@ -176,31 +206,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(null);
             setAuthRole(null);
             localStorage.removeItem('cached_role');
-            if (!isPublicPage) router.replace('/login');
+            if (!isPublicPage) window.location.replace('/login');
             setIsChecking(false);
           }
           return;
         }
 
-        // 🚀 الاعتماد الفوري على الكاش لمنع الشاشات البيضاء والطرد المؤقت
         const cachedRole = localStorage.getItem('cached_role');
         const cachedName = localStorage.getItem('cached_name');
         
         if (mounted) {
           setUser(session.user);
-          if (cachedRole) setAuthRole(cachedRole as UserRole);
+          if (cachedRole) {
+             setAuthRole(cachedRole as UserRole);
+             setIsChecking(false); // ✅ إنهاء التحميل فوراً إذا وجدنا الكاش
+          }
           if (cachedName) setUserName(cachedName);
         }
 
-        // جلب البيانات الطازجة من السيرفر بصمت
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
            
-           // نجلب بيانات المستخدم والإعدادات في طلب واحد متزامن إذا لم تكن صفحة عامة
-           const [userRes, settingsRes] = await Promise.all([
-             supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
-             !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
-           ]);
+           // حماية الاستعلامات الثقيلة بمؤقت 15 ثانية
+           const [userRes, settingsRes] = await withTimeout(
+             Promise.all([
+               supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
+               !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
+             ]),
+             15000,
+             "قاعدة البيانات بطيئة جداً ولا تستجيب"
+           ) as any;
 
            if (mounted) {
              if (userRes.data) {
@@ -211,11 +246,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUserName(freshName);
                 setMustResetPassword(userRes.data.must_reset_password || false);
                 
-                // تحديث الكاش
                 localStorage.setItem('cached_role', freshRole);
                 localStorage.setItem('cached_name', freshName);
              } else if (!userRes.error && !isPublicPage) {
-                // حساب شبح (لا يوجد في جدول users)، يجب طرده بصمت دون الدخول في حلقة
                 console.warn("Ghost account detected. Forcing clean sign out.");
                 await signOut();
                 return;
@@ -223,7 +256,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
              if (settingsRes.data && !settingsRes.error) {
                setRawSettings(settingsRes.data);
-               // حفظ الإعدادات لتجنب طلبها مئات المرات لاحقاً
                localStorage.setItem('cached_settings', JSON.stringify(settingsRes.data));
              }
            }
@@ -235,7 +267,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // جلب الكاش السريع للإعدادات إذا كان السيرفر بطيئاً (522)
     const cachedSettings = localStorage.getItem('cached_settings');
     if (cachedSettings) {
       try { setRawSettings(JSON.parse(cachedSettings)); } catch (e) {}
@@ -250,7 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAuthRole(null);
           fetchedUserId.current = null;
           localStorage.removeItem('cached_role');
-          if (!isPublicPage) router.replace('/login');
+          if (!isPublicPage) window.location.replace('/login');
         }
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user && fetchedUserId.current !== session.user.id) {
@@ -263,9 +294,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [isPublicPage]); // 🚀 مراقبة آمنة تماماً بدون loops
+  }, [isPublicPage]);
 
-  // 4. تقييم حالة فتح/إغلاق المنصة
   useEffect(() => {
     if (!rawSettings) return;
     let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
@@ -277,7 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [rawSettings, authRole]);
 
-  // 🚀 شاشة التحميل الآمنة (إذا طالت استجابة السيرفر)
+  // 🚀 شاشة التحميل الآمنة (مع زر الطوارئ)
   if (isChecking && !authRole) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#02040a] font-cairo">
@@ -287,12 +317,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
              <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
           </div>
           <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تأمين الاتصال...</p>
+
+          <AnimatePresence>
+            {showEmergencyBtn && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-8 text-center flex flex-col items-center gap-4">
+                 <p className="text-rose-400 text-xs font-bold px-6">يبدو أن سيرفر قاعدة البيانات بطيء أو لا يستجيب حالياً.</p>
+                 <button onClick={emergencyClear} className="px-6 py-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 font-black hover:bg-rose-500 hover:text-white transition-all text-sm active:scale-95 shadow-inner">
+                   إلغاء وإعادة تسجيل الدخول
+                 </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     );
   }
 
-  // 🚀 شاشة المنصة المغلقة
   if (platformClosed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
