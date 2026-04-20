@@ -3,10 +3,11 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   Plus, Search, Edit, Trash2, X, Key, BookOpen, AlertCircle, 
-  Users, GraduationCap, Folder, ChevronLeft, Award, Crown, CheckCircle2, LayoutGrid, List,
+  Users, GraduationCap, Folder, ChevronLeft, ChevronRight, // 👈 تم إضافة ChevronRight و ChevronLeft
+  Award, Crown, CheckCircle2, LayoutGrid, List,
   Loader2, UserPlus, Send, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,7 +22,7 @@ import { supabase } from '@/lib/supabase';
 // ============================================================================
 const TeacherTableRow = ({ teacher, onGrantBadge, onResetPassword, onEdit, onDelete, onAssign }: any) => {
   const userData = Array.isArray(teacher.users) ? teacher.users[0] : teacher.users;
-  const isHOD = teacher.isHOD; // يتم حسابه في المكون الرئيسي
+  const isHOD = teacher.isHOD;
   const departmentName = teacher.academic_departments?.name || 'غير محدد';
 
   return (
@@ -79,11 +80,11 @@ export default function TeachersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, hods: 0, unassigned: 0 });
 
-  // 🚀 حالات النوافذ والعمليات (Submitting States)
-  const [submitting, setSubmitting] = useState(false); // 👈 هذا هو المتغير الذي كان مفقوداً وسبب الخطأ
+  // 🚀 حالات العمليات
+  const [submitting, setSubmitting] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
-  // حالات التحكم
+  // حالات العرض والتحكم
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
@@ -105,18 +106,19 @@ export default function TeachersPage() {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
 
-  // البيانات
+  // البيانات المؤقتة للنماذج
   const [editingTeacher, setEditingTeacher] = useState<any>(null);
   const [teacherToDelete, setTeacherToDelete] = useState<string | null>(null);
   const [teacherForBadge, setTeacherForBadge] = useState<any>(null);
   const [resetPasswordForm, setResetPasswordForm] = useState({ userId: '', newPassword: '' });
   const [addForm, setAddForm] = useState({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '', department_id: '' });
   const [editForm, setEditForm] = useState<any>({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '', department_id: '', custom_titles: '', isHOD: false, hod_subject_id: '', hod_stage: 'الكل' });
+  
   const [selectedTeacherForAssign, setSelectedTeacherForAssign] = useState<any>(null);
   const [teacherSections, setTeacherSections] = useState<any[]>([]);
   const [bulkAssignData, setBulkAssignData] = useState<{ section_ids: string[], subject_ids: string[] }>({ section_ids: [], subject_ids: [] });
 
-  // جلب البيانات
+  // جلب البيانات الأولية
   useEffect(() => {
     const initPage = async () => {
       if (fetchDepartments) await fetchDepartments();
@@ -128,6 +130,7 @@ export default function TeachersPage() {
     initPage();
   }, []);
 
+  // جلب المعلمين بنظام الصفحات
   const loadTeachers = useCallback(async () => {
     setIsLoading(true);
     const result = await fetchTeachersPaginated(currentPage, itemsPerPage, searchQuery, selectedDepartment);
@@ -141,9 +144,9 @@ export default function TeachersPage() {
     return () => clearTimeout(timer);
   }, [loadTeachers]);
 
-  // العمليات
+  // الدوال التنفيذية
   const handleAddSubmit = async () => { 
-    if (!addForm.full_name || !addForm.national_id || !addForm.department_id) return showNotification('error', 'أكمل الحقول الإلزامية'); 
+    if (!addForm.full_name || !addForm.national_id || !addForm.department_id) return showNotification('error', 'يرجى تعبئة الحقول المطلوبة'); 
     setSubmitting(true);
     try { 
       await addTeacher(addForm); 
@@ -151,12 +154,25 @@ export default function TeachersPage() {
          const { data } = await supabase.from('users').select('id').eq('national_id', addForm.national_id).single();
          if (data) await supabase.from('teachers').update({ department_id: addForm.department_id }).eq('id', data.id);
       }
-      showNotification('success', `تم الإضافة بنجاح`); 
+      showNotification('success', 'تمت إضافة المعلم بنجاح'); 
       setShowAddModal(false); 
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', specialization: '', zoom_link: '', department_id: '' }); 
       loadTeachers();
     } catch (e: any) { showNotification('error', e.message); } 
     finally { setSubmitting(false); }
+  };
+
+  const handleOpenEditModal = (teacher: any) => {
+    setEditingTeacher(teacher);
+    const isHod = teacher.isHOD;
+    const ud = Array.isArray(teacher.users) ? teacher.users[0] : teacher.users;
+    setEditForm({ 
+      full_name: ud?.full_name || '', national_id: teacher.national_id || '', email: ud?.email || '', phone: ud?.phone || '', 
+      specialization: teacher.specialization || '', zoom_link: teacher.zoom_link || '', 
+      department_id: teacher.department_id || '', custom_titles: (teacher.custom_titles || []).join('، '), 
+      isHOD: isHod, hod_subject_id: isHod ? teacher.department_heads[0]?.subject_id : '', hod_stage: 'الكل' 
+    });
+    setShowEditModal(true);
   };
 
   const handleEditSubmit = async () => {
@@ -166,30 +182,45 @@ export default function TeachersPage() {
       const hodData = { isHead: editForm.isHOD, subject_id: editForm.hod_subject_id, stage_name: editForm.hod_stage };
       await updateTeacher(editingTeacher.id, editingTeacher.national_id, payload, hodData);
       if (editForm.department_id) await supabase.from('teachers').update({ department_id: editForm.department_id }).eq('id', editingTeacher.id);
-      showNotification('success', 'تم التحديث');
+      showNotification('success', 'تم تحديث البيانات');
       setShowEditModal(false);
       loadTeachers();
     } catch (e: any) { showNotification('error', e.message); }
     finally { setSubmittingEdit(false); }
   };
 
-  const handleResetPasswordSubmit = async () => { 
-    try { 
-      const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
-      showNotification('success', `تم التغيير: ${result.newPassword}`); 
-      setShowPasswordModal(false); 
-    } catch (e: any) { showNotification('error', e.message); } 
+  const handleAssignmentClick = async (teacher: any) => {
+    setSelectedTeacherForAssign(teacher);
+    setBulkAssignData({ section_ids: [], subject_ids: [] });
+    try {
+      const assignments = await fetchTeacherAssignments(teacher.id);
+      setTeacherSections(assignments);
+      setShowAssignmentModal(true);
+    } catch (e) { showNotification('error', 'خطأ في جلب البيانات'); }
+  };
+
+  const toggleAssignment = async (sectionId: string, subjectId: string) => {
+    const existing = teacherSections.find(ts => ts.section_id === sectionId && ts.subject_id === subjectId);
+    try {
+      if (existing) {
+        await deleteAssignment(selectedTeacherForAssign.id, sectionId, subjectId);
+        setTeacherSections(prev => prev.filter(ts => !(ts.section_id === sectionId && ts.subject_id === subjectId)));
+      } else {
+        await saveAssignments([{ teacher_id: selectedTeacherForAssign.id, section_id: sectionId, subject_id: subjectId }]);
+        setTeacherSections(await fetchTeacherAssignments(selectedTeacherForAssign.id));
+      }
+    } catch (e) { showNotification('error', 'فشل التحديث'); }
   };
 
   const handleBulkAssign = async () => {
     if (bulkAssignData.section_ids.length === 0 || bulkAssignData.subject_ids.length === 0) return showNotification('error', 'اختر فصلاً ومادة');
-    const news: any[] = [];
-    bulkAssignData.section_ids.forEach(sid => bulkAssignData.subject_ids.forEach(subid => news.push({ teacher_id: selectedTeacherForAssign.id, section_id: sid, subject_id: subid })));
     try {
+      const news: any[] = [];
+      bulkAssignData.section_ids.forEach(sid => bulkAssignData.subject_ids.forEach(subid => news.push({ teacher_id: selectedTeacherForAssign.id, section_id: sid, subject_id: subid })));
       await saveAssignments(news);
       setTeacherSections(await fetchTeacherAssignments(selectedTeacherForAssign.id));
       setBulkAssignData({ section_ids: [], subject_ids: [] });
-      showNotification('success', 'تم التعيين');
+      showNotification('success', 'تم التعيين الجماعي بنجاح');
     } catch (e) { showNotification('error', 'فشل التعيين'); }
   };
 
@@ -208,10 +239,10 @@ export default function TeachersPage() {
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">إدارة المعلمين</h1>
-            <p className="text-slate-500 mt-2 font-bold">تنظيم الهيكلية المدرسية، المناصب، وتوزيع الفصول.</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight text-right">إدارة المعلمين</h1>
+            <p className="text-slate-500 mt-2 font-bold text-right">تنظيم الهيكلية المدرسية، المناصب، وتوزيع الفصول.</p>
           </div>
-          <button onClick={() => setShowAddModal(true)} className="px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-2">
+          <button onClick={() => setShowAddModal(true)} className="px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
             <Plus size={20}/> إضافة معلم جديد
           </button>
         </div>
@@ -363,45 +394,48 @@ export default function TeachersPage() {
               <h3 className="text-xl font-black">جدول حصص: {selectedTeacherForAssign?.users?.full_name}</h3>
               <button onClick={() => setShowAssignmentModal(false)}><X size={24}/></button>
             </div>
-            <div className="p-8 max-h-[60vh] overflow-y-auto space-y-8">
+            <div className="p-8 max-h-[60vh] overflow-y-auto space-y-8 text-right">
               <div className="bg-amber-50 p-6 rounded-[2rem] border border-amber-100">
                 <h4 className="font-black text-sm mb-4">التعيين السريع</h4>
                 <div className="grid grid-cols-2 gap-6">
-                  <div className="flex flex-wrap gap-2">{subjects?.map((s:any) => <button key={s.id} onClick={() => setBulkAssignData(prev => ({ ...prev, subject_ids: prev.subject_ids.includes(s.id) ? prev.subject_ids.filter(id => id !== s.id) : [...prev.subject_ids, s.id] }))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${bulkAssignData.subject_ids.includes(s.id) ? 'bg-amber-500 text-white' : 'bg-white text-amber-700'}`}>{s.name}</button>)}</div>
-                  <div className="flex flex-wrap gap-2">{sections?.map((s:any) => <button key={s.id} onClick={() => setBulkAssignData(prev => ({ ...prev, section_ids: prev.section_ids.includes(s.id) ? prev.section_ids.filter(id => id !== s.id) : [...prev.section_ids, s.id] }))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${bulkAssignData.section_ids.includes(s.id) ? 'bg-amber-500 text-white' : 'bg-white text-amber-700'}`}>{s.classes?.name} - {s.name}</button>)}</div>
+                  <div className="flex flex-wrap gap-2 justify-end">{subjects?.map((s:any) => <button key={s.id} onClick={() => setBulkAssignData(prev => ({ ...prev, subject_ids: prev.subject_ids.includes(s.id) ? prev.subject_ids.filter(id => id !== s.id) : [...prev.subject_ids, s.id] }))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${bulkAssignData.subject_ids.includes(s.id) ? 'bg-amber-500 text-white shadow-md' : 'bg-white text-amber-700 hover:border-amber-400'}`}>{s.name}</button>)}</div>
+                  <div className="flex flex-wrap gap-2 justify-end">{sections?.map((s:any) => <button key={s.id} onClick={() => setBulkAssignData(prev => ({ ...prev, section_ids: prev.section_ids.includes(s.id) ? prev.section_ids.filter(id => id !== s.id) : [...prev.section_ids, s.id] }))} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${bulkAssignData.section_ids.includes(s.id) ? 'bg-amber-500 text-white shadow-md' : 'bg-white text-amber-700 hover:border-amber-400'}`}>{s.classes?.name} - {s.name}</button>)}</div>
                 </div>
-                <button onClick={handleBulkAssign} className="w-full mt-6 py-3 bg-amber-500 text-white rounded-xl font-black">حفظ التعيين</button>
+                <button onClick={handleBulkAssign} className="w-full mt-6 py-3 bg-amber-500 text-white rounded-xl font-black shadow-lg hover:bg-amber-600 transition-all">حفظ التعيين</button>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {sections?.map((sec:any) => (
-                  <div key={sec.id} className="bg-slate-50 p-4 rounded-xl">
+                  <div key={sec.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <h4 className="font-black text-xs mb-2 text-slate-700">{sec.classes?.name} - {sec.name}</h4>
-                    <div className="flex flex-wrap gap-1">{subjects?.map((sub:any) => <button key={sub.id} onClick={() => toggleAssignment(sec.id, sub.id)} className={`px-2 py-1 rounded text-[9px] font-bold border ${teacherSections.some(ts => ts.section_id === sec.id && ts.subject_id === sub.id) ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-slate-400 border-slate-200'}`}>{sub.name}</button>)}</div>
+                    <div className="flex flex-wrap gap-1 justify-end">{subjects?.map((sub:any) => <button key={sub.id} onClick={() => toggleAssignment(sec.id, sub.id)} className={`px-2 py-1 rounded text-[9px] font-bold border transition-all ${teacherSections.some(ts => ts.section_id === sec.id && ts.subject_id === sub.id) ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'}`}>{sub.name}</button>)}</div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="bg-slate-50 p-6 flex justify-end"><button onClick={() => setShowAssignmentModal(false)} className="px-10 py-3 bg-slate-900 text-white rounded-xl font-black">إغلاق</button></div>
+            <div className="bg-slate-50 p-6 flex justify-end border-t"><button onClick={() => setShowAssignmentModal(false)} className="px-10 py-3 bg-slate-900 text-white rounded-xl font-black hover:bg-slate-800 transition-all">إغلاق</button></div>
           </div>
         </div>
       )}
 
       {/* مودال الأوسمة وكلمة المرور والحذف */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60" dir="rtl">
-          <div className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+          <div className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl border border-slate-100">
+            <div className="mx-auto w-16 h-16 bg-sky-50 text-sky-600 flex items-center justify-center rounded-2xl mb-4"><Key size={32}/></div>
             <h3 className="text-xl font-black mb-6">تغيير كلمة المرور</h3>
-            <input type="text" placeholder="كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border rounded-xl px-5 py-4 font-bold text-center text-lg mb-6" dir="ltr"/>
-            <div className="flex gap-3"><button onClick={handleResetPasswordSubmit} className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-black">حفظ</button><button onClick={() => setShowPasswordModal(false)} className="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-xl font-black">إلغاء</button></div>
+            <input type="text" placeholder="كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border rounded-xl px-5 py-4 font-bold text-center text-lg mb-6 outline-none focus:ring-2 focus:ring-indigo-500" dir="ltr"/>
+            <div className="flex gap-3"><button onClick={handleResetPasswordSubmit} className="flex-1 bg-indigo-600 text-white py-3.5 rounded-xl font-black hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">حفظ</button><button onClick={() => setShowPasswordModal(false)} className="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-xl font-black hover:bg-slate-200 transition-all">إلغاء</button></div>
           </div>
         </div>
       )}
 
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60" dir="rtl">
-          <div className="bg-white p-8 rounded-[2rem] text-center max-w-sm w-full shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+          <div className="bg-white p-8 rounded-[2rem] text-center max-w-sm w-full shadow-2xl border border-slate-100">
+            <div className="mx-auto w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4"><Trash2 size={32}/></div>
             <h3 className="text-xl font-black mb-4">حذف نهائي؟</h3>
-            <div className="flex gap-3"><button onClick={confirmDelete} className="bg-rose-600 text-white py-3.5 rounded-xl font-black flex-1">حذف</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 py-3.5 rounded-xl font-black flex-1">تراجع</button></div>
+            <p className="text-slate-500 font-bold text-sm mb-6">هذا الإجراء سيقوم بحذف المعلم وجميع سجلاته نهائياً من النظام.</p>
+            <div className="flex gap-3"><button onClick={confirmDelete} className="bg-rose-600 text-white py-3.5 rounded-xl font-black flex-1 hover:bg-rose-700 shadow-lg shadow-rose-200 transition-all">نعم، حذف</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 py-3.5 rounded-xl font-black flex-1 border border-slate-200 hover:bg-slate-200">تراجع</button></div>
           </div>
         </div>
       )}
