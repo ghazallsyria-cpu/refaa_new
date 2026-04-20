@@ -37,10 +37,10 @@ export default function GradebookPage() {
     }
   }, [isChecking, isAdmin, authRole, fetchTeacherSubjects]);
 
-  // جميع الفصول تظهر للمعلم والمدير
+  // 🚀 الفصول: تظهر كاملة للمعلم (لأنه قد يدرس عدة شعب)
   const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
   
-  // 🚀 فلترة المواد: المدير يرى الكل، والمعلم يرى مواده فقط بناءً على teacher_subjects
+  // 🚀 المواد: المدير يرى الكل، والمعلم يرى مواده فقط (بناءً على teacher_subjects)
   const subjects = isAdmin 
       ? formData?.subjects || []
       : (formData?.subjects || []).filter((s: any) => teacherSubjects.includes(s.id));
@@ -239,7 +239,7 @@ export default function GradebookPage() {
               <div className="flex flex-col sm:flex-row w-full lg:w-auto items-center gap-3 sm:gap-4 mt-2 lg:mt-0">
                 <div className="relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                  <select value={selectedSection} onChange={(e) => { setSelectedSection(e.target.value); }} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
+                  <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
                     <option value="">-- اختر الفصل --</option>
                     {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
                   </select>
@@ -275,11 +275,12 @@ export default function GradebookPage() {
             <div className="glass-panel rounded-[2rem] sm:rounded-[3rem] border border-white/10 p-10 sm:p-20 flex flex-col items-center justify-center text-center shadow-2xl print:hidden mt-4 relative overflow-hidden bg-[#0f1423]/60">
               <div className="absolute top-0 left-0 w-48 h-48 bg-rose-500/10 rounded-full blur-[80px] pointer-events-none"></div>
               <Users className="h-16 w-16 sm:h-20 sm:w-20 text-slate-500 mb-6 drop-shadow-md relative z-10" />
-              <h2 className="text-xl sm:text-2xl font-black text-white relative z-10">لا يوجد طلاب مسجلين</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-white relative z-10">لا يوجد طلاب مسجلين في هذا الفصل</h2>
             </div>
           ) : (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 sm:space-y-10 print:space-y-0 relative z-10">
               
+              {/* التبويبات الفخمة */}
               <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 bg-[#02040a]/60 backdrop-blur-xl p-1.5 sm:p-2 rounded-[1.5rem] sm:rounded-[2rem] shadow-inner border border-white/5 w-fit mx-auto print:hidden">
                  <button onClick={() => setActiveTab('custom')} className={`px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl sm:rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 ${activeTab === 'custom' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02] border border-emerald-400/50' : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'}`}><Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> التقييم المستمر</button>
                  <button onClick={() => setActiveTab('exams')} className={`px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl sm:rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 ${activeTab === 'exams' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] scale-[1.02] border border-indigo-400/50' : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'}`}><Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> الاختبارات</button>
