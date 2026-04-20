@@ -14,7 +14,7 @@ import { useAuth } from '@/context/auth-context';
 export default function GradebookPage() {
   const { authRole, isChecking } = useAuth();
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
-  const { fetchTeacherSections, teacherSections, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
+  const { fetchTeacherSubjects, teacherSubjects, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
 
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -28,25 +28,22 @@ export default function GradebookPage() {
 
   const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); 
 
-  // 🚀 فلترة ذكية: إذا كان معلماً، نستخدم الفصول والمواد المخصصة له فقط
-  const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
   const isAdmin = authRole === 'admin' || authRole === 'management';
-  
-  // تجميع الفصول والمواد بدون تكرار
-  const sections = isAdmin 
-      ? formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || []
-      : Array.from(new Set(teacherSections.map(s => JSON.stringify({ id: s.id, name: s.name })))).map(s => JSON.parse(s));
 
-  // جلب المواد المرتبطة بالفصل المحدد فقط للمعلم لتجنب الأخطاء
+  // 🚀 جلب المواد المخصصة للمعلم عند الدخول
+  useEffect(() => {
+    if (!isChecking && !isAdmin && authRole === 'teacher') {
+      fetchTeacherSubjects();
+    }
+  }, [isChecking, isAdmin, authRole, fetchTeacherSubjects]);
+
+  // جميع الفصول تظهر للمعلم والمدير
+  const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
+  
+  // 🚀 فلترة المواد: المدير يرى الكل، والمعلم يرى مواده فقط بناءً على teacher_subjects
   const subjects = isAdmin 
       ? formData?.subjects || []
-      : Array.from(new Set(teacherSections.filter(s => s.id === selectedSection).map(s => JSON.stringify({ id: s.subject_id, name: s.subject_name })))).map(s => JSON.parse(s));
-
-  useEffect(() => {
-     if (!isChecking && !isAdmin) {
-       fetchTeacherSections();
-     }
-  }, [isChecking, isAdmin, fetchTeacherSections]);
+      : (formData?.subjects || []).filter((s: any) => teacherSubjects.includes(s.id));
 
   useEffect(() => {
     if (selectedSection && selectedSubject && !isChecking) {
@@ -174,7 +171,7 @@ export default function GradebookPage() {
     );
   }
 
-  if (!isTeacherOrAdmin) {
+  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent p-4 font-cairo">
         <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
@@ -204,7 +201,6 @@ export default function GradebookPage() {
         }
       `}} />
 
-      {/* 🚀 الخلفية الزجاجية المضيئة */}
       <div className="fixed top-1/4 right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
 
@@ -240,19 +236,18 @@ export default function GradebookPage() {
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight drop-shadow-lg leading-tight">سجل التقييم الشامل</h1>
               </div>
 
-              {/* حقول الاختيار الزجاجية (الآن تعرض ما يخص المعلم فقط!) */}
               <div className="flex flex-col sm:flex-row w-full lg:w-auto items-center gap-3 sm:gap-4 mt-2 lg:mt-0">
                 <div className="relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                  <select value={selectedSection} onChange={(e) => { setSelectedSection(e.target.value); setSelectedSubject(''); }} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
+                  <select value={selectedSection} onChange={(e) => { setSelectedSection(e.target.value); }} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
                     <option value="">-- اختر الفصل --</option>
-                    {sections.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
                   </select>
                 </div>
                 
-                <div className={`relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all ${!selectedSection ? 'opacity-50 cursor-not-allowed' : 'hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30'}`}>
+                <div className="relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30">
                   <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                  <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selectedSection} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white disabled:cursor-not-allowed">
+                  <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
                     <option value="">-- اختر المادة --</option>
                     {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -285,7 +280,6 @@ export default function GradebookPage() {
           ) : (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 sm:space-y-10 print:space-y-0 relative z-10">
               
-              {/* التبويبات الفخمة */}
               <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 bg-[#02040a]/60 backdrop-blur-xl p-1.5 sm:p-2 rounded-[1.5rem] sm:rounded-[2rem] shadow-inner border border-white/5 w-fit mx-auto print:hidden">
                  <button onClick={() => setActiveTab('custom')} className={`px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl sm:rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 ${activeTab === 'custom' ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02] border border-emerald-400/50' : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'}`}><Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> التقييم المستمر</button>
                  <button onClick={() => setActiveTab('exams')} className={`px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl sm:rounded-[1.5rem] font-black text-xs sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 ${activeTab === 'exams' ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] scale-[1.02] border border-indigo-400/50' : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'}`}><Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> الاختبارات</button>
