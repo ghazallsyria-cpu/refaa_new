@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { NotificationsBell } from '@/components/notifications-bell';
 import Link from 'next/link';
-import Image from 'next/image';
 
 export function Header({ 
   onMenuClick, showMenuButton = true, user, authRole, userName, isSidebarCollapsed = false
@@ -22,7 +21,7 @@ export function Header({
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {
-        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
+        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').maybeSingle();
         if (data) setSchoolData({ name: data.school_name || 'الرفعة النموذجية', logo_url: data.logo_url || '' });
       } catch (err) { console.error('Error fetching school data:', err); }
     };
@@ -33,6 +32,9 @@ export function Header({
 
   const roleMap: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
+
+  // 🚀 تحديد مسار الشعار (من الإعدادات أو الافتراضي)
+  const finalLogoSrc = schoolData.logo_url || "/images/logo.png";
 
   return (
     <header className="relative flex h-20 shrink-0 items-center glass-header px-4 sm:px-6 sticky top-0 z-40" dir="rtl">
@@ -108,16 +110,15 @@ export function Header({
 
       {/* الوسط: الشعار مركزي مطلق */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <Link href="/" className="pointer-events-auto group transition-transform hover:scale-105">
-          <div className="relative h-12 w-48 sm:h-14 sm:w-64 md:h-16 md:w-80">
+        {/* 🚀 إضافة prefetch={false} للوقاية القصوى */}
+        <Link href="/" prefetch={false} className="pointer-events-auto group transition-transform hover:scale-105">
+          <div className="relative h-12 w-48 sm:h-14 sm:w-64 md:h-16 md:w-80 flex items-center justify-center">
             {!imageError ? (
-              <Image
-                src="/images/logo.png"
-                alt="مدرسة الرفعة النموذجية"
-                fill
-                sizes="(max-width: 640px) 192px, (max-width: 768px) 256px, 320px"
-                priority
-                className="object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]"
+              /* 🚀 استخدام img العادي لتفادي أخطاء 400 من Next.js مع الروابط الخارجية */
+              <img
+                src={finalLogoSrc}
+                alt={schoolData.name}
+                className="max-h-full max-w-full object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]"
                 onError={() => setImageError(true)}
               />
             ) : (
