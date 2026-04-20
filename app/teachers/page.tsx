@@ -4,9 +4,11 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+// ابحث عن هذا السطر في أعلى الملف وقم بتغييره ليصبح هكذا:
 import { 
   Plus, Search, Edit, Trash2, X, Key, BookOpen, AlertCircle, 
-  Users, GraduationCap, Folder, ChevronLeft, School, Layers, Award, Crown, ChevronRight, CheckCircle2, LayoutGrid, List
+  Users, GraduationCap, Folder, ChevronLeft, School, Layers, Award, Crown, ChevronRight, CheckCircle2, LayoutGrid, List,
+  Loader2, UserPlus // 🚀 أضف هاتين الأيقونتين هنا
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
