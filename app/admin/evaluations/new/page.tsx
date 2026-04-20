@@ -63,7 +63,7 @@ export default function NewEvaluationPage() {
     setEvaluations(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teacherId || !subject || !period || !className) {
       setMessage({ text: 'يرجى إكمال جميع البيانات الأساسية', type: 'error' });
@@ -72,7 +72,7 @@ export default function NewEvaluationPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.from('teacher_evaluations').insert({
+      const { data, error } = await supabase.from('teacher_evaluations').insert({
         teacher_id: teacherId,
         evaluator_id: user.id,
         evaluation_date: date,
@@ -87,15 +87,18 @@ export default function NewEvaluationPage() {
         periodic_exams: evaluations.periodicExams,
         strengths,
         improvements
-      });
+      }).select(); // 🚀 جلبنا الـ ID الجديد
 
       if (error) throw error;
 
-      setMessage({ text: 'تم حفظ التقييم بنجاح!', type: 'success' });
-      setTimeout(() => {
-        // يمكنك توجيهه لصفحة الأرشيف أو تفريغ النموذج هنا
-        router.push('/admin/dashboard'); 
-      }, 2000);
+      setMessage({ text: 'تم حفظ التقييم بنجاح! جاري تحويلك للطباعة...', type: 'success' });
+      
+      // 🚀 التحويل التلقائي لصفحة الطباعة
+      if (data && data.length > 0) {
+        setTimeout(() => {
+          router.push(`/admin/evaluations/${data[0].id}/print`); 
+        }, 1500);
+      }
 
     } catch (error: any) {
       setMessage({ text: error.message, type: 'error' });
