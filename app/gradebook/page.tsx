@@ -14,7 +14,7 @@ import { useAuth } from '@/context/auth-context';
 export default function GradebookPage() {
   const { authRole, isChecking } = useAuth();
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
-  const { fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
+  const { fetchTeacherSections, teacherSections, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
 
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -28,8 +28,25 @@ export default function GradebookPage() {
 
   const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); 
 
-  const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
-  const subjects = formData?.subjects || [];
+  // 🚀 فلترة ذكية: إذا كان معلماً، نستخدم الفصول والمواد المخصصة له فقط
+  const isTeacherOrAdmin = authRole === 'teacher' || authRole === 'admin' || authRole === 'management';
+  const isAdmin = authRole === 'admin' || authRole === 'management';
+  
+  // تجميع الفصول والمواد بدون تكرار
+  const sections = isAdmin 
+      ? formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || []
+      : Array.from(new Set(teacherSections.map(s => JSON.stringify({ id: s.id, name: s.name })))).map(s => JSON.parse(s));
+
+  // جلب المواد المرتبطة بالفصل المحدد فقط للمعلم لتجنب الأخطاء
+  const subjects = isAdmin 
+      ? formData?.subjects || []
+      : Array.from(new Set(teacherSections.filter(s => s.id === selectedSection).map(s => JSON.stringify({ id: s.subject_id, name: s.subject_name })))).map(s => JSON.parse(s));
+
+  useEffect(() => {
+     if (!isChecking && !isAdmin) {
+       fetchTeacherSections();
+     }
+  }, [isChecking, isAdmin, fetchTeacherSections]);
 
   useEffect(() => {
     if (selectedSection && selectedSubject && !isChecking) {
@@ -143,7 +160,6 @@ export default function GradebookPage() {
     return { name: col.title, متوسط_الدرجات: count > 0 ? Number((totalScore / count).toFixed(1)) : 0, fullMark: col.max_score };
   });
 
-  // 🚀 شاشات الحماية والتحميل الملكية
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
@@ -158,7 +174,7 @@ export default function GradebookPage() {
     );
   }
 
-  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
+  if (!isTeacherOrAdmin) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent p-4 font-cairo">
         <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
@@ -188,19 +204,17 @@ export default function GradebookPage() {
         }
       `}} />
 
-      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
+      {/* 🚀 الخلفية الزجاجية المضيئة */}
       <div className="fixed top-1/4 right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
 
       <div className="relative z-10 pt-6">
         
-        {/* ترويسة الطباعة فقط */}
         <div className="hidden print:block text-center py-6 border-b-2 border-slate-900 mb-8">
           <h1 className="text-2xl font-black text-slate-900">سجل الأعمال الشامل</h1>
           <p className="text-slate-600 font-bold mt-2">الفصل: {sections.find((s:any) => s.id === selectedSection)?.name || '-'} | المادة: {subjects.find((s:any) => s.id === selectedSubject)?.name || '-'}</p>
         </div>
 
-        {/* 🚀 الهيدر الفخم (Royal Banner) */}
         <header className="px-4 sm:px-6 lg:px-8 print:hidden relative z-10 max-w-7xl mx-auto">
           <div className="flex flex-col overflow-hidden bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] rounded-[2rem] sm:rounded-[3rem] relative">
             <div className="absolute inset-0 bg-emerald-500/5 blur-[100px] pointer-events-none"></div>
@@ -226,19 +240,19 @@ export default function GradebookPage() {
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight drop-shadow-lg leading-tight">سجل التقييم الشامل</h1>
               </div>
 
-              {/* حقول الاختيار الزجاجية */}
+              {/* حقول الاختيار الزجاجية (الآن تعرض ما يخص المعلم فقط!) */}
               <div className="flex flex-col sm:flex-row w-full lg:w-auto items-center gap-3 sm:gap-4 mt-2 lg:mt-0">
                 <div className="relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                  <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
+                  <select value={selectedSection} onChange={(e) => { setSelectedSection(e.target.value); setSelectedSubject(''); }} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
                     <option value="">-- اختر الفصل --</option>
-                    {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
+                    {sections.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 
-                <div className="relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30">
+                <div className={`relative w-full sm:w-56 lg:w-64 bg-[#0f1423]/80 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl flex items-center px-4 shadow-inner group transition-all ${!selectedSection ? 'opacity-50 cursor-not-allowed' : 'hover:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/30'}`}>
                   <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
-                  <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
+                  <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selectedSection} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white disabled:cursor-not-allowed">
                     <option value="">-- اختر المادة --</option>
                     {subjects.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
