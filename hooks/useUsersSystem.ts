@@ -131,6 +131,27 @@ export function useUsersSystem() {
     return true;
   };
 
+  // 🚀 إضافة دوال أولياء الأمور المفقودة
+  const addParent = useCallback(async (parentData: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) });
+    const result = await res.json();
+    if (parentData.student_ids && result.user) {
+      await supabase.from('students').update({ parent_id: result.user.id }).in('id', parentData.student_ids);
+    }
+    return result;
+  }, []);
+
+  const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
+    const { student_ids, ...pureData } = updateData;
+    const res = await fetch('/api/users/update-parent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId, updateData: pureData }) });
+    if (student_ids) {
+      await supabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
+      if (student_ids.length > 0) await supabase.from('students').update({ parent_id: parentId }).in('id', student_ids);
+    }
+    return res.ok;
+  }, []);
+
   const deleteUser = useCallback(async (id: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     await fetch(`/api/users/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${session?.access_token}` } });
@@ -147,6 +168,8 @@ export function useUsersSystem() {
     students, teachers, parents, sections, subjects, departments, loading, error,
     fetchStudents, fetchTeachers, fetchParents, fetchSections, fetchSubjects, fetchDepartments,
     fetchStudentsPaginated, fetchTeachersPaginated,
-    addStudent, updateStudent, addTeacher, updateTeacher, deleteUser, resetPassword
+    addStudent, updateStudent, addTeacher, updateTeacher, 
+    addParent, updateParent, // 👈 تم إرجاعهما الآن لتعمل صفحة أولياء الأمور
+    deleteUser, resetPassword
   };
 }
