@@ -30,6 +30,89 @@ export function useUsersSystem() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ======================================================================
+  // 🚀 الدالة الجديدة لصفحة إدارة الطلاب (Server-Side Pagination & Filtering)
+  // ======================================================================
+  const fetchStudentsPaginated = useCallback(async (
+    page: number = 1,
+    limit: number = 12,
+    searchTerm: string = '',
+    sectionId: string = 'all',
+    track: string = 'all'
+  ): Promise<{ data: any[]; totalCount: number }> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      let query = supabase
+        .from('students')
+        .select(`
+          id, national_id, gender, parent_id, section_id, next_year_track, track_selection_date,
+          users!students_id_fkey(full_name, email, phone, avatar_url),
+          sections(id, name, classes(id, name, level)),
+          parents(users!fk_parents_users(full_name))
+        `, { count: 'exact' });
+
+      // 1. فلترة القسم
+      if (sectionId && sectionId !== 'all') {
+        query = query.eq('section_id', sectionId);
+      }
+
+      // 2. فلترة المسار
+      if (track && track !== 'all') {
+        if (track === 'none') {
+          query = query.is('next_year_track', null);
+        } else {
+          query = query.eq('next_year_track', track);
+        }
+      }
+
+      // 3. فلترة البحث (الرقم المدني فقط هنا لسرعة الأداء في Postgrest)
+      if (searchTerm && !isNaN(Number(searchTerm))) {
+        query = query.like('national_id', `%${searchTerm}%`);
+      }
+
+      const { data, count, error } = await query.range(from, to).order('created_at', { ascending: false });
+      if (error) throw error;
+
+      let finalData = data || [];
+      let finalCount = count || 0;
+
+      // 4. البحث النصي الذكي (بالاسم) - إذا كان المستخدم يبحث بنص وليس رقم مدني
+      // نضطر لاستخدام ilike على الجدول المربوط، ولتفادي تعقيدات Postgrest نسحب عينة صغيرة ونفلترها
+      if (searchTerm && isNaN(Number(searchTerm))) {
+        const { data: searchData, error: searchErr } = await supabase
+          .from('students')
+          .select(`
+            id, national_id, gender, parent_id, section_id, next_year_track, track_selection_date,
+            users!students_id_fkey!inner(full_name, email, phone, avatar_url),
+            sections(id, name, classes(id, name, level)),
+            parents(users!fk_parents_users(full_name))
+          `)
+          .ilike('users.full_name', `%${searchTerm}%`)
+          .limit(50); // نضع حد أعلى لنتائج البحث النصي لضمان الأداء
+
+        if (!searchErr) {
+            finalData = searchData || [];
+            finalCount = searchData?.length || 0;
+        }
+      }
+
+      return { data: finalData, totalCount: finalCount };
+    } catch (err: unknown) {
+      console.error('Error fetching paginated students:', err);
+      setError(err instanceof Error ? err.message : 'حدث خطأ');
+      return { data: [], totalCount: 0 };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ======================================================================
+  // الدوال القديمة (يتم الاحتفاظ بها لعدم كسر الأنظمة الأخرى)
+  // ======================================================================
   const fetchStudents = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -80,7 +163,6 @@ export function useUsersSystem() {
     }
   }, []);
 
-  // 🚀 التحديث الجوهري 1: جلب الأبناء المرتبطين بولي الأمر
   const fetchParents = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -127,6 +209,9 @@ export function useUsersSystem() {
     } catch (err: unknown) { console.error('Error fetching subjects:', err); }
   }, []);
 
+  // ======================================================================
+  // دوال الإضافة والتعديل والحذف (Actions)
+  // ======================================================================
   const addStudent = useCallback(async (studentData: any): Promise<{ success: boolean }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -138,10 +223,9 @@ export function useUsersSystem() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'فشل إنشاء حساب الطالب');
-      await fetchStudents();
       return { success: true };
     } catch (err: unknown) { console.error('Error adding student:', err); throw err; }
-  }, [fetchStudents]);
+  }, []);
 
   const updateStudent = useCallback(async (studentId: string, oldNationalId: string, updateData: any): Promise<{ success: boolean }> => {
     try {
@@ -165,10 +249,9 @@ export function useUsersSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to update student');
-      await fetchStudents();
       return { success: true };
     } catch (err: unknown) { console.error('Error updating student:', err); throw err; }
-  }, [fetchStudents]);
+  }, []);
 
   const addTeacher = useCallback(async (teacherData: any): Promise<{ success: boolean, password?: string }> => {
     try {
@@ -228,7 +311,6 @@ export function useUsersSystem() {
     }
   };
 
-  // 🚀 التحديث الجوهري 2: إضافة ولي الأمر وربط الأبناء بطريقة آمنة
   const addParent = useCallback(async (parentData: any): Promise<{ success: boolean, password?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -251,7 +333,6 @@ export function useUsersSystem() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'فشل إنشاء حساب ولي الأمر');
       
-      // ربط الطلاب المحددين بهذا الأب
       if (parentData.student_ids && parentData.student_ids.length > 0) {
         await supabase.from('students').update({ parent_id: data.user.id }).in('id', parentData.student_ids);
       }
@@ -261,7 +342,6 @@ export function useUsersSystem() {
     } catch (err: unknown) { throw err; }
   }, [fetchParents]);
 
-  // 🚀 التحديث الجوهري 3: تحديث بيانات الأب وإدارة ارتباطات الأبناء بذكاء
   const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any): Promise<{ success: boolean }> => {
     try {
       const nationalIdChanged = updateData.national_id !== (oldNationalId || '');
@@ -279,7 +359,6 @@ export function useUsersSystem() {
         newEmail = result.newEmail;
       }
 
-      // فصل الأبناء من الكائن قبل الإرسال للـ API الذي لا يقبل مصفوفات
       const { student_ids, ...pureUpdateData } = updateData;
 
       const response = await fetch('/api/users/update-parent', {
@@ -290,7 +369,6 @@ export function useUsersSystem() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to update parent');
 
-      // 🔥 فك ارتباط الأبناء القدامى ثم ربط الجدد لضمان الدقة
       await supabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
       
       if (student_ids && student_ids.length > 0) {
@@ -320,7 +398,6 @@ export function useUsersSystem() {
       const response = await fetch('/api/users/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        // إرسال البيانات بدقة كما كانت في نظامك القديم
         body: JSON.stringify({ userId, newPassword: newPassword || '' })
       });
       const data = await response.json();
@@ -344,14 +421,13 @@ export function useUsersSystem() {
     try {
       const { error } = await supabase.from('students').update({ next_year_track: track, track_selection_date: new Date().toISOString() }).eq('id', studentId);
       if (error) throw error;
-      await fetchStudents();
       return { success: true };
     } catch (err: unknown) { throw err; }
-  }, [fetchStudents]);
+  }, []);
 
   return {
     students, teachers, parents, sections, subjects, loading, error,
-    fetchStudents, fetchTeachers, fetchParents, fetchSections, fetchSubjects, fetchStudentProfile,
+    fetchStudents, fetchTeachers, fetchParents, fetchSections, fetchSubjects, fetchStudentProfile, fetchStudentsPaginated,
     selectTrack, addStudent, updateStudent, addTeacher, updateTeacher, addParent, updateParent, deleteUser, resetPassword
   };
 }
