@@ -14,7 +14,7 @@ import { useAuth } from '@/context/auth-context';
 export default function GradebookPage() {
   const { authRole, isChecking } = useAuth();
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
-  const { fetchTeacherSubjects, teacherSubjects, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
+  const { fetchTeacherScope, teacherSections, teacherSubjects, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
 
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -30,20 +30,21 @@ export default function GradebookPage() {
 
   const isAdmin = authRole === 'admin' || authRole === 'management';
 
-  // 🚀 جلب المواد المخصصة للمعلم عند الدخول
+  // 🚀 جلب نطاق المعلم (فصول ومواد) عند الدخول
   useEffect(() => {
     if (!isChecking && !isAdmin && authRole === 'teacher') {
-      fetchTeacherSubjects();
+      fetchTeacherScope();
     }
-  }, [isChecking, isAdmin, authRole, fetchTeacherSubjects]);
+  }, [isChecking, isAdmin, authRole, fetchTeacherScope]);
 
-  // 🚀 الفصول: تظهر كاملة للمعلم (لأنه قد يدرس عدة شعب)
-  const sections = formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || [];
-  
-  // 🚀 المواد: المدير يرى الكل، والمعلم يرى مواده فقط (بناءً على teacher_subjects)
+  // 🚀 الفصول والمواد (ديناميكية بناءً على الصلاحية)
+  const sections = isAdmin 
+      ? formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || []
+      : teacherSections;
+      
   const subjects = isAdmin 
       ? formData?.subjects || []
-      : (formData?.subjects || []).filter((s: any) => teacherSubjects.includes(s.id));
+      : teacherSubjects;
 
   useEffect(() => {
     if (selectedSection && selectedSubject && !isChecking) {
@@ -201,6 +202,7 @@ export default function GradebookPage() {
         }
       `}} />
 
+      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
       <div className="fixed top-1/4 right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
 
@@ -241,7 +243,7 @@ export default function GradebookPage() {
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 shrink-0" />
                   <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} className="w-full bg-transparent border-none py-3.5 sm:py-4 px-3 text-xs sm:text-sm font-bold text-white outline-none appearance-none cursor-pointer focus:ring-0 [&>option]:bg-[#0f1423] [&>option]:text-white">
                     <option value="">-- اختر الفصل --</option>
-                    {sections.map((s: any) => <option key={s.id} value={s.id}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>)}
+                    {sections.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 
