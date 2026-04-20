@@ -2,7 +2,10 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next();
+  // 1. تمرير الطلب لضمان التعامل مع الـ Headers بشكل صحيح
+  let supabaseResponse = NextResponse.next({
+    request,
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,14 +16,17 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
-
-          response = NextResponse.next();
-
+          
+          // تحديث كائن الاستجابة
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options)
           );
         },
       },
@@ -43,10 +49,18 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && path === '/login') {
-    return NextResponse.redirect(new URL('/', request.url));
+    // 2. إصلاح: إنشاء استجابة التوجيه (Redirect)
+    const redirectResponse = NextResponse.redirect(new URL('/', request.url));
+    
+    // 3. إصلاح: نقل أي كوكيز تم تحديثها للتو إلى استجابة التوجيه الجديدة لكي لا تضيع
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+
+    return redirectResponse;
   }
 
-  return response;
+  return supabaseResponse;
 }
 
 export const config = {
