@@ -552,175 +552,270 @@ export default function AttendancePage() {
       </div>
     );
   }
- 
+
   // ==========================================================
-  // 🚀 واجهة المعلم (Mobile-First Royal Grid)
+  // 🚀 واجهة الطالب (Student Royal Dashboard)
   // ==========================================================
-  let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
-  students.forEach(s => {
-    const status = attendance[s.id];
-    if (status === 'present') presentCount++;
-    else if (status === 'absent') absentCount++;
-    else if (status === 'late') lateCount++;
-    else if (status === 'excused') excusedCount++;
-  });
-  
-  const markedCount = presentCount + absentCount + lateCount + excusedCount;
-  const unmarkedCount = students.length - markedCount;
- 
-  return (
-    <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo" dir="rtl">
-      
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10">
-        
-        <AnimatePresence>
-          {message.text && (
-            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-5 sm:px-6 py-3 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] font-bold text-white text-xs sm:text-sm flex items-center gap-3 border backdrop-blur-3xl w-[90%] sm:w-auto ${message.type === 'success' ? 'bg-emerald-950/90 border-emerald-500/50' : 'bg-rose-950/90 border-rose-500/50'}`}>
-              {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-rose-400" />} {message.text}
-            </motion.div>
-          )}
-        </AnimatePresence>
- 
-        {/* 🚀 الهيدر الفخم للمعلم */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem]">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest mb-3 shadow-inner">
-              <LayoutGrid className="w-3.5 h-3.5" /> تسجيل الغياب اليومي
-            </div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight mb-2 drop-shadow-md">لوحة رصد الحضور</h1>
-            <p className="text-xs sm:text-sm text-slate-400 font-bold max-w-md">يتم حفظ لقطة إحصائية متكاملة للإدارة عند اعتماد السجل من قبلك.</p>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto mt-2 lg:mt-0">
-            <Link href="/attendance/reports" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl bg-[#0f1423]/80 border border-white/10 px-5 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-300 hover:bg-[#02040a] hover:text-amber-400 transition-all shrink-0 shadow-inner">
-              <BarChart2 className="h-5 w-5 opacity-70" /> تقارير طلابي
-            </Link>
-            <button onClick={handleSave} disabled={saving || students.length === 0 || !lessonTitle} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-600 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:from-amber-400 hover:to-yellow-500 transition-all active:scale-95 disabled:opacity-50 shrink-0 border border-amber-300/50">
-              {saving ? <div className="h-5 w-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div> : <Save className="h-5 w-5" />}
-              {saving ? 'جاري الحفظ...' : 'اعتماد السجل'}
-            </button>
-          </div>
-        </div>
- 
-        {/* 🚀 أدوات الرصد */}
-        <div className="glass-panel p-5 sm:p-6 lg:p-8 rounded-[2rem] sm:rounded-[2.5rem]">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-            <div className="space-y-2 flex flex-col w-full">
-               <label className="text-[10px] sm:text-xs font-black text-slate-400 pl-1 uppercase tracking-widest">التاريخ</label>
-               <div className="relative w-full">
-                  <Calendar className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-white/5 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#02040a]/60 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs sm:text-sm font-bold outline-none shadow-inner transition-all" style={{ colorScheme: 'dark' }} />
-               </div>
-            </div>
-            <div className="space-y-2 flex flex-col w-full">
-               <label className="text-[10px] sm:text-xs font-black text-slate-400 pl-1 uppercase tracking-widest">الحصة</label>
-               <div className="relative w-full">
-                  <Clock className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
-                  <select value={period} onChange={(e) => setPeriod(parseInt(e.target.value))} className="w-full rounded-xl sm:rounded-2xl border border-white/5 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#02040a]/60 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs sm:text-sm font-bold outline-none appearance-none [&>option]:bg-[#0f1423] shadow-inner transition-all">
-                     {daySchedule.length > 0 ? daySchedule.map(s => <option key={s.period} value={s.period}>الحصة {s.period}</option>) : <option value={1}>لا توجد حصص</option>}
-                  </select>
-               </div>
-            </div>
-            <div className="space-y-2 flex flex-col w-full">
-               <label className="text-[10px] sm:text-xs font-black text-slate-400 pl-1 uppercase tracking-widest">الفصل والمادة</label>
-               <div className="relative w-full">
-                  <BookOpen className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
-                  <select value={`${selectedSection}|${selectedSubject}`} onChange={(e) => { const parts = e.target.value.split('|'); setSelectedSection(parts[0]); setSelectedSubject(parts[1] || ''); }} className="w-full rounded-xl sm:rounded-2xl border border-white/5 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#02040a]/60 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs sm:text-sm font-bold outline-none appearance-none [&>option]:bg-[#0f1423] truncate shadow-inner transition-all">
-                     {sections.length > 0 ? sections.map((s, idx) => <option key={`${s.id}|${s.subject_id || idx}`} value={`${s.id}|${s.subject_id || ''}`}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>) : <option>لا توجد فصول</option>}
-                  </select>
-               </div>
-            </div>
-            <div className="space-y-2 flex flex-col w-full">
-               <label className="text-[10px] sm:text-xs font-black text-amber-400 flex gap-1 pl-1 uppercase tracking-widest">عنوان الدرس <span className="text-rose-500">*</span></label>
-               <div className="relative w-full">
-                  <BookType className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
-                  <input type="text" required placeholder="مثال: قوانين نيوتن..." value={lessonTitle} onChange={(e) => setLessonTitle(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-amber-500/30 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#0f1423]/80 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 text-xs sm:text-sm font-bold outline-none placeholder:text-slate-600 transition-all shadow-inner" />
-               </div>
-            </div>
-          </div>
+  if (currentRole === 'student') {
+    if (isStudentLoading) {
+      return <div className="py-20 flex justify-center items-center min-h-screen"><Loader2 className="w-12 h-12 text-emerald-500 animate-spin" /></div>;
+    }
+
+    return (
+      <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6 sm:space-y-8">
           
-          {selectedSection && selectedSubject && (
-            <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-               <div className="flex items-center gap-2 text-amber-400/80 text-[10px] sm:text-xs font-black w-full sm:w-auto bg-amber-500/10 px-3 py-2 rounded-xl border border-amber-500/20 shadow-inner">
-                  <Info className="w-4 h-4 shrink-0" /> <span className="leading-tight">يرجى التأكد من كتابة عنوان الدرس لاعتماده في الإدارة.</span>
-               </div>
-               {user?.id && <div className="w-full sm:w-auto"><TeacherCheckInButton teacherId={user.id} periodNumber={period} selectedDate={date} className="w-full sm:w-auto shadow-[0_0_15px_rgba(59,130,246,0.3)]" /></div>}
+          <div className="glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs font-black text-emerald-400 uppercase tracking-widest mb-3">
+                <BarChart2 className="w-4 h-4" /> تقريري الشخصي
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2 drop-shadow-md">سجل الحضور والغياب</h1>
+              <p className="text-sm text-slate-400 font-bold">مرحباً بك، يمكنك هنا متابعة تفاصيل حضورك وغيابك في جميع المواد.</p>
             </div>
-          )}
-        </div>
- 
-        {/* 🚀 إحصائيات الرصد */}
-        {students.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-            <div className="glass-panel p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white mb-2 opacity-50" /><p className="text-xl sm:text-2xl font-black text-white">{students.length}</p><p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase mt-1">الطلاب</p>
+            {studentStats.fullDaysAbsent > 0 && (
+              <div className="bg-rose-500/10 border border-rose-500/30 p-4 rounded-2xl text-rose-400 flex items-center gap-3">
+                <ShieldAlert className="w-8 h-8 shrink-0" />
+                <div>
+                  <p className="font-black text-lg">تنبيه غياب!</p>
+                  <p className="text-xs font-bold text-rose-300">لقد تجاوزت {studentStats.fullDaysAbsent} يوم غياب فعلي.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="glass-panel p-6 rounded-[2rem] flex flex-col justify-center items-center text-center border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+              <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-3" /><p className="text-3xl font-black text-white">{studentStats.present}</p><p className="text-xs font-bold text-emerald-400 mt-1">حصة حضور</p>
             </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
-              <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-emerald-400 drop-shadow-sm">{presentCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-emerald-500/70 uppercase mt-1">حاضر</p>
+            <div className="glass-panel p-6 rounded-[2rem] flex flex-col justify-center items-center text-center border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.1)]">
+              <XCircle className="h-8 w-8 text-rose-400 mb-3" /><p className="text-3xl font-black text-white">{studentStats.absent}</p><p className="text-xs font-bold text-rose-400 mt-1">حصة غياب</p>
             </div>
-            <div className="bg-rose-500/10 border border-rose-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
-              <XCircle className="h-5 w-5 sm:h-6 sm:w-6 text-rose-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-rose-400 drop-shadow-sm">{absentCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-rose-500/70 uppercase mt-1">غائب</p>
+            <div className="glass-panel p-6 rounded-[2rem] flex flex-col justify-center items-center text-center border-amber-500/20">
+              <Clock className="h-8 w-8 text-amber-400 mb-3" /><p className="text-3xl font-black text-white">{studentStats.late}</p><p className="text-xs font-bold text-amber-400 mt-1">حصة تأخير</p>
             </div>
-            <div className="bg-amber-500/10 border border-amber-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
-              <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-amber-400 drop-shadow-sm">{lateCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-amber-500/70 uppercase mt-1">متأخر</p>
-            </div>
-            <div className="bg-blue-500/10 border border-blue-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
-              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-blue-400 drop-shadow-sm">{excusedCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-blue-500/70 uppercase mt-1">مستأذن</p>
-            </div>
-            <div className={`p-4 sm:p-5 rounded-[1.5rem] border flex flex-col justify-center items-center text-center shadow-inner transition-colors ${unmarkedCount > 0 ? 'bg-[#02040a]/60 border-white/5' : 'bg-emerald-500/20 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]'}`}>
-              {unmarkedCount > 0 ? <UserMinus className="h-5 w-5 sm:h-6 sm:w-6 text-slate-500 mb-2" /> : <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 mb-2 drop-shadow-md" />}
-              <p className={`text-xl sm:text-2xl font-black drop-shadow-sm ${unmarkedCount > 0 ? 'text-white' : 'text-emerald-400'}`}>{unmarkedCount}</p>
-              <p className={`text-[9px] sm:text-[10px] font-bold uppercase mt-1 ${unmarkedCount > 0 ? 'text-slate-500' : 'text-emerald-500'}`}>{unmarkedCount > 0 ? 'متبقي' : 'اكتمل'}</p>
+            <div className="glass-panel p-6 rounded-[2rem] flex flex-col justify-center items-center text-center border-blue-500/20">
+              <AlertCircle className="h-8 w-8 text-blue-400 mb-3" /><p className="text-3xl font-black text-white">{studentStats.excused}</p><p className="text-xs font-bold text-blue-400 mt-1">استئذان</p>
             </div>
           </div>
-        )}
- 
-        {/* 🚀 قائمة الطلاب المتجاوبة (Mobile First Royal List) */}
-        {students.length > 0 && (
-          <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden">
-            <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#02040a]/40">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-inner"><Users className="h-5 w-5 sm:h-6 sm:w-6" /></div>
-                <h3 className="text-lg sm:text-xl font-black text-white drop-shadow-md">قائمة الطلاب</h3>
+
+          {Object.keys(groupedAttendanceRecords).length > 0 ? (
+            <div className="glass-panel rounded-[2rem] overflow-hidden">
+              <div className="flex overflow-x-auto custom-scrollbar border-b border-white/5 bg-[#02040a]/40 p-2">
+                {Object.keys(groupedAttendanceRecords).map(subject => (
+                  <button key={subject} onClick={() => setActiveSubjectTab(subject)} className={`px-6 py-3 font-black text-sm rounded-xl transition-all whitespace-nowrap ${activeSubjectTab === subject ? 'bg-white/10 text-emerald-400 shadow-inner border border-white/5' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                    {subject}
+                  </button>
+                ))}
               </div>
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 bg-[#0f1423]/60 p-1.5 sm:p-2 rounded-xl sm:rounded-2xl border border-white/5 w-full lg:w-auto shadow-inner">
-                 <button onClick={() => markAllAs('present')} className="w-full sm:w-auto px-4 py-3 sm:py-2.5 text-xs sm:text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg sm:rounded-xl font-black flex items-center justify-center gap-2 transition-all active:scale-95 border border-transparent hover:border-emerald-500/30"><CheckCircle2 className="w-4 h-4 shrink-0" /> الكل حاضر</button>
-                 <button onClick={() => markAllAs('absent')} className="w-full sm:w-auto px-4 py-3 sm:py-2.5 text-xs sm:text-sm text-rose-400 hover:bg-rose-500/20 rounded-lg sm:rounded-xl font-black flex items-center justify-center gap-2 transition-all active:scale-95 border border-transparent hover:border-rose-500/30"><XCircle className="w-4 h-4 shrink-0" /> الكل غائب</button>
-              </div>
-            </div>
-            
-            <div className="bg-transparent p-2 sm:p-4">
-              <div className="space-y-3 sm:space-y-0 sm:divide-y divide-white/5">
-                {students.map((student: any) => (
-                  <div key={student.id} className="p-3 sm:p-4 bg-[#02040a]/40 sm:bg-transparent rounded-2xl sm:rounded-none border border-white/5 sm:border-transparent hover:bg-white/[0.02] transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-                    
-                    {/* 🚀 معلومات الطالب */}
-                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 lg:w-1/3 shrink-0 px-1 sm:px-0">
-                      <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-[#0f1423] border border-white/10 text-slate-400 flex items-center justify-center font-black text-base sm:text-lg shrink-0 shadow-inner group-hover:text-amber-400 transition-colors">
-                        {student.users?.full_name?.charAt(0)}
+              <div className="p-4 sm:p-6 divide-y divide-white/5">
+                {activeSubjectTab && groupedAttendanceRecords[activeSubjectTab]?.map((record: any, idx: number) => (
+                  <div key={idx} className="py-4 px-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-white/[0.02] transition-colors rounded-xl">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-xl border ${record.status === 'absent' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : record.status === 'late' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-blue-500/10 border-blue-500/30 text-blue-400'}`}>
+                        {record.status === 'absent' ? <XCircle className="w-5 h-5" /> : record.status === 'late' ? <Clock className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
                       </div>
-                      <span className="font-black text-white text-sm sm:text-base truncate drop-shadow-sm">{student.users?.full_name}</span>
+                      <div>
+                        <p className="font-black text-white text-sm sm:text-base">{record.date}</p>
+                        <p className="text-xs font-bold text-slate-400 mt-1">الحصة {record.period} • {record.teacherName}</p>
+                      </div>
                     </div>
- 
-                    {/* 🚀 خيارات الحضور (متجاوبة تماماً للجوال) */}
-                    <div className="grid grid-cols-4 lg:flex lg:flex-1 gap-1.5 sm:gap-2 lg:justify-end">
-                      {ATTENDANCE_OPTIONS.map((opt) => (
-                        <label key={opt.status} className="cursor-pointer block lg:w-32">
-                          <input type="radio" checked={attendance[student.id] === opt.status} onChange={() => handleStatusChange(student.id, opt.status as any)} className="sr-only" />
-                          <div className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-all active:scale-95 text-center h-full ${attendance[student.id] === opt.status ? opt.activeClasses : opt.inactiveClasses}`}>
-                             <opt.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 drop-shadow-md" /> 
-                             <span className="text-[10px] sm:text-xs font-black">{opt.mobileLabel}</span>
-                          </div>
-                        </label>
-                      ))}
+                    <div className={`px-4 py-1.5 rounded-lg text-xs font-black border ${record.status === 'absent' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : record.status === 'late' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-blue-500/20 text-blue-400 border-blue-500/30'}`}>
+                      {record.status === 'absent' ? 'غياب' : record.status === 'late' ? 'تأخير' : 'عذر'}
                     </div>
-                    
                   </div>
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="glass-panel py-20 text-center rounded-[2rem] border-dashed">
+              <CheckCircle2 className="w-16 h-16 text-emerald-500/50 mx-auto mb-4" />
+              <p className="text-emerald-400 font-bold text-xl">سجلك نظيف! لا توجد غيابات أو تأخيرات.</p>
+            </div>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+ 
+  // ==========================================================
+  // 🚀 واجهة المعلم (Mobile-First Royal Grid)
+  // ==========================================================
+  if (currentRole === 'teacher') {
+    let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
+    students.forEach(s => {
+      const status = attendance[s.id];
+      if (status === 'present') presentCount++;
+      else if (status === 'absent') absentCount++;
+      else if (status === 'late') lateCount++;
+      else if (status === 'excused') excusedCount++;
+    });
+    
+    const markedCount = presentCount + absentCount + lateCount + excusedCount;
+    const unmarkedCount = students.length - markedCount;
+
+    return (
+      <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo" dir="rtl">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 sm:space-y-8 max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10">
+          
+          <AnimatePresence>
+            {message.text && (
+              <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-5 sm:px-6 py-3 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] font-bold text-white text-xs sm:text-sm flex items-center gap-3 border backdrop-blur-3xl w-[90%] sm:w-auto ${message.type === 'success' ? 'bg-emerald-950/90 border-emerald-500/50' : 'bg-rose-950/90 border-rose-500/50'}`}>
+                {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-rose-400" />} {message.text}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 🚀 الهيدر الفخم للمعلم */}
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem]">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest mb-3 shadow-inner">
+                <LayoutGrid className="w-3.5 h-3.5" /> تسجيل الغياب اليومي
+              </div>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight mb-2 drop-shadow-md">لوحة رصد الحضور</h1>
+              <p className="text-xs sm:text-sm text-slate-400 font-bold max-w-md">يتم حفظ لقطة إحصائية متكاملة للإدارة عند اعتماد السجل من قبلك.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto mt-2 lg:mt-0">
+              <Link href="/attendance/reports" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl bg-[#0f1423]/80 border border-white/10 px-5 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-300 hover:bg-[#02040a] hover:text-amber-400 transition-all shrink-0 shadow-inner">
+                <BarChart2 className="h-5 w-5 opacity-70" /> تقارير طلابي
+              </Link>
+              <button onClick={handleSave} disabled={saving || students.length === 0 || !lessonTitle} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-600 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:from-amber-400 hover:to-yellow-500 transition-all active:scale-95 disabled:opacity-50 shrink-0 border border-amber-300/50">
+                {saving ? <div className="h-5 w-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div> : <Save className="h-5 w-5" />}
+                {saving ? 'جاري الحفظ...' : 'اعتماد السجل'}
+              </button>
+            </div>
           </div>
-        )}
-      </motion.div>
+
+          {/* 🚀 أدوات الرصد */}
+          <div className="glass-panel p-5 sm:p-6 lg:p-8 rounded-[2rem] sm:rounded-[2.5rem]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              <div className="space-y-2 flex flex-col w-full">
+                <label className="text-[10px] sm:text-xs font-black text-slate-400 pl-1 uppercase tracking-widest">التاريخ</label>
+                <div className="relative w-full">
+                  <Calendar className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-white/5 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#02040a]/60 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs sm:text-sm font-bold outline-none shadow-inner transition-all" style={{ colorScheme: 'dark' }} />
+                </div>
+              </div>
+              <div className="space-y-2 flex flex-col w-full">
+                <label className="text-[10px] sm:text-xs font-black text-slate-400 pl-1 uppercase tracking-widest">الحصة</label>
+                <div className="relative w-full">
+                  <Clock className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
+                  <select value={period} onChange={(e) => setPeriod(parseInt(e.target.value))} className="w-full rounded-xl sm:rounded-2xl border border-white/5 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#02040a]/60 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs sm:text-sm font-bold outline-none appearance-none [&>option]:bg-[#0f1423] shadow-inner transition-all">
+                    {daySchedule.length > 0 ? daySchedule.map(s => <option key={s.period} value={s.period}>الحصة {s.period}</option>) : <option value={1}>لا توجد حصص</option>}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2 flex flex-col w-full">
+                <label className="text-[10px] sm:text-xs font-black text-slate-400 pl-1 uppercase tracking-widest">الفصل والمادة</label>
+                <div className="relative w-full">
+                  <BookOpen className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
+                  <select value={`${selectedSection}|${selectedSubject}`} onChange={(e) => { const parts = e.target.value.split('|'); setSelectedSection(parts[0]); setSelectedSubject(parts[1] || ''); }} className="w-full rounded-xl sm:rounded-2xl border border-white/5 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#02040a]/60 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 text-xs sm:text-sm font-bold outline-none appearance-none [&>option]:bg-[#0f1423] truncate shadow-inner transition-all">
+                    {sections.length > 0 ? sections.map((s, idx) => <option key={`${s.id}|${s.subject_id || idx}`} value={`${s.id}|${s.subject_id || ''}`}>{(s as any).classes?.[0]?.name || (s as any).classes?.name} - {s.name}</option>) : <option>لا توجد فصول</option>}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2 flex flex-col w-full">
+                <label className="text-[10px] sm:text-xs font-black text-amber-400 flex gap-1 pl-1 uppercase tracking-widest">عنوان الدرس <span className="text-rose-500">*</span></label>
+                <div className="relative w-full">
+                  <BookType className="absolute inset-y-0 right-4 h-full w-4 sm:w-5 text-slate-500 pointer-events-none" />
+                  <input type="text" required placeholder="مثال: قوانين نيوتن..." value={lessonTitle} onChange={(e) => setLessonTitle(e.target.value)} className="w-full rounded-xl sm:rounded-2xl border border-amber-500/30 py-3 sm:py-3.5 pr-10 sm:pr-12 pl-4 text-white bg-[#0f1423]/80 focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 text-xs sm:text-sm font-bold outline-none placeholder:text-slate-600 transition-all shadow-inner" />
+                </div>
+              </div>
+            </div>
+            
+            {selectedSection && selectedSubject && (
+              <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-amber-400/80 text-[10px] sm:text-xs font-black w-full sm:w-auto bg-amber-500/10 px-3 py-2 rounded-xl border border-amber-500/20 shadow-inner">
+                  <Info className="w-4 h-4 shrink-0" /> <span className="leading-tight">يرجى التأكد من كتابة عنوان الدرس لاعتماده في الإدارة.</span>
+                </div>
+                {user?.id && <div className="w-full sm:w-auto"><TeacherCheckInButton teacherId={user.id} periodNumber={period} selectedDate={date} className="w-full sm:w-auto shadow-[0_0_15px_rgba(59,130,246,0.3)]" /></div>}
+              </div>
+            )}
+          </div>
+
+          {/* 🚀 إحصائيات الرصد */}
+          {students.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+              <div className="glass-panel p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white mb-2 opacity-50" /><p className="text-xl sm:text-2xl font-black text-white">{students.length}</p><p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase mt-1">الطلاب</p>
+              </div>
+              <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
+                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-emerald-400 drop-shadow-sm">{presentCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-emerald-500/70 uppercase mt-1">حاضر</p>
+              </div>
+              <div className="bg-rose-500/10 border border-rose-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
+                <XCircle className="h-5 w-5 sm:h-6 sm:w-6 text-rose-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-rose-400 drop-shadow-sm">{absentCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-rose-500/70 uppercase mt-1">غائب</p>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-amber-400 drop-shadow-sm">{lateCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-amber-500/70 uppercase mt-1">متأخر</p>
+              </div>
+              <div className="bg-blue-500/10 border border-blue-500/30 p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center shadow-inner">
+                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400 mb-2 drop-shadow-md" /><p className="text-xl sm:text-2xl font-black text-blue-400 drop-shadow-sm">{excusedCount}</p><p className="text-[9px] sm:text-[10px] font-bold text-blue-500/70 uppercase mt-1">مستأذن</p>
+              </div>
+              <div className={`p-4 sm:p-5 rounded-[1.5rem] border flex flex-col justify-center items-center text-center shadow-inner transition-colors ${unmarkedCount > 0 ? 'bg-[#02040a]/60 border-white/5' : 'bg-emerald-500/20 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]'}`}>
+                {unmarkedCount > 0 ? <UserMinus className="h-5 w-5 sm:h-6 sm:w-6 text-slate-500 mb-2" /> : <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 mb-2 drop-shadow-md" />}
+                <p className={`text-xl sm:text-2xl font-black drop-shadow-sm ${unmarkedCount > 0 ? 'text-white' : 'text-emerald-400'}`}>{unmarkedCount}</p>
+                <p className={`text-[9px] sm:text-[10px] font-bold uppercase mt-1 ${unmarkedCount > 0 ? 'text-slate-500' : 'text-emerald-500'}`}>{unmarkedCount > 0 ? 'متبقي' : 'اكتمل'}</p>
+              </div>
+            </div>
+          )}
+
+          {/* 🚀 قائمة الطلاب المتجاوبة (Mobile First Royal List) */}
+          {students.length > 0 && (
+            <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden">
+              <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#02040a]/40">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-inner"><Users className="h-5 w-5 sm:h-6 sm:w-6" /></div>
+                  <h3 className="text-lg sm:text-xl font-black text-white drop-shadow-md">قائمة الطلاب</h3>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 bg-[#0f1423]/60 p-1.5 sm:p-2 rounded-xl sm:rounded-2xl border border-white/5 w-full lg:w-auto shadow-inner">
+                   <button onClick={() => markAllAs('present')} className="w-full sm:w-auto px-4 py-3 sm:py-2.5 text-xs sm:text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg sm:rounded-xl font-black flex items-center justify-center gap-2 transition-all active:scale-95 border border-transparent hover:border-emerald-500/30"><CheckCircle2 className="w-4 h-4 shrink-0" /> الكل حاضر</button>
+                   <button onClick={() => markAllAs('absent')} className="w-full sm:w-auto px-4 py-3 sm:py-2.5 text-xs sm:text-sm text-rose-400 hover:bg-rose-500/20 rounded-lg sm:rounded-xl font-black flex items-center justify-center gap-2 transition-all active:scale-95 border border-transparent hover:border-rose-500/30"><XCircle className="w-4 h-4 shrink-0" /> الكل غائب</button>
+                </div>
+              </div>
+              
+              <div className="bg-transparent p-2 sm:p-4">
+                <div className="space-y-3 sm:space-y-0 sm:divide-y divide-white/5">
+                  {students.map((student: any) => (
+                    <div key={student.id} className="p-3 sm:p-4 bg-[#02040a]/40 sm:bg-transparent rounded-2xl sm:rounded-none border border-white/5 sm:border-transparent hover:bg-white/[0.02] transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+                      
+                      {/* 🚀 معلومات الطالب */}
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0 lg:w-1/3 shrink-0 px-1 sm:px-0">
+                        <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-[#0f1423] border border-white/10 text-slate-400 flex items-center justify-center font-black text-base sm:text-lg shrink-0 shadow-inner group-hover:text-amber-400 transition-colors">
+                          {student.users?.full_name?.charAt(0)}
+                        </div>
+                        <span className="font-black text-white text-sm sm:text-base truncate drop-shadow-sm">{student.users?.full_name}</span>
+                      </div>
+
+                      {/* 🚀 خيارات الحضور (متجاوبة تماماً للجوال) */}
+                      <div className="grid grid-cols-4 lg:flex lg:flex-1 gap-1.5 sm:gap-2 lg:justify-end">
+                        {ATTENDANCE_OPTIONS.map((opt) => (
+                          <label key={opt.status} className="cursor-pointer block lg:w-32">
+                            <input type="radio" checked={attendance[student.id] === opt.status} onChange={() => handleStatusChange(student.id, opt.status as any)} className="sr-only" />
+                            <div className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border transition-all active:scale-95 text-center h-full ${attendance[student.id] === opt.status ? opt.activeClasses : opt.inactiveClasses}`}>
+                               <opt.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 drop-shadow-md" /> 
+                               <span className="text-[10px] sm:text-xs font-black">{opt.mobileLabel}</span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+
+  // 🚀 في حال حاول شخص غريب (غير مصرح له) الدخول للصفحة
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen font-cairo bg-[#02040a]">
+      <ShieldAlert className="w-16 h-16 text-rose-500 mb-4" />
+      <h2 className="text-2xl font-black text-white">وصول مقيد</h2>
+      <p className="text-slate-400 mt-2">عذراً، ليس لديك صلاحية لعرض هذه الصفحة.</p>
     </div>
   );
 }
