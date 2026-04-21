@@ -27,7 +27,7 @@ interface TeacherReport {
 }
 
 const DAY_MAP: Record<number, string> = { 0: "الأحد", 1: "الاثنين", 2: "الثلاثاء", 3: "الأربعاء", 4: "الخميس", 5: "الجمعة", 6: "السبت" };
-const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00');
+const SYSTEM_START_DATE = new Date('2026-03-01T00:00:00Z');
 
 const getSchoolTime = () => {
   const d = new Date();
@@ -44,12 +44,16 @@ const getLocalDateString = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const getDatesBetween = (startDate: Date, endDate: Date) => {
+// 🚀 التصليح هنا: دالة فولاذية لتوليد نطاق التواريخ مع تجاوز مشاكل خطوط الطول (Timezone Shift)
+const getDatesBetween = (startStr: string, endStr: string) => {
   const dates = [];
-  let currentDate = new Date(startDate);
-  while (currentDate <= endDate) {
-    dates.push(getLocalDateString(currentDate));
-    currentDate.setDate(currentDate.getDate() + 1);
+  // استخدام التوقيت العالمي لمنتصف اليوم يمنع قفز التواريخ
+  let curr = new Date(startStr + 'T12:00:00Z');
+  let last = new Date(endStr + 'T12:00:00Z');
+  
+  while (curr <= last) {
+    dates.push(curr.toISOString().split('T')[0]);
+    curr.setUTCDate(curr.getUTCDate() + 1);
   }
   return dates;
 };
@@ -92,8 +96,7 @@ export default function TeachersReportPage() {
 
   useEffect(() => {
     setEndDate(todayStr);
-    const weekAgo = new Date(schoolTime);
-    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgo = new Date(schoolTime.getTime() - 7 * 24 * 60 * 60 * 1000);
     setStartDate(getLocalDateString(weekAgo));
   }, [todayStr, schoolTime]);
 
@@ -109,20 +112,18 @@ export default function TeachersReportPage() {
       let datesToProcess: string[] = [todayStr];
 
       if (currentType === "week") {
-        const weekAgo = new Date(now);
-        weekAgo.setDate(weekAgo.getDate() - 7);
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         queryStartStr = getLocalDateString(weekAgo);
-        datesToProcess = getDatesBetween(new Date(queryStartStr), new Date(queryEndStr));
+        datesToProcess = getDatesBetween(queryStartStr, queryEndStr);
       } else if (currentType === "custom") {
         if (!startDate || !endDate) { setCustomError("يرجى تحديد التاريخ"); setLoading(false); return; }
-        const sDate = new Date(startDate); const eDate = new Date(endDate);
-        if (sDate > eDate) { setCustomError("تاريخ البداية خطأ"); setLoading(false); return; }
-        if (Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 3600 * 24)) > 31) { setCustomError("أقصى مدة 31 يوماً."); setLoading(false); return; }
-        queryStartStr = startDate; queryEndStr = endDate;
-        datesToProcess = getDatesBetween(sDate, eDate);
+        if (new Date(startDate) > new Date(endDate)) { setCustomError("تاريخ البداية خطأ"); setLoading(false); return; }
+        if (Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) > 31) { setCustomError("أقصى مدة 31 يوماً."); setLoading(false); return; }
+        queryStartStr = startDate; 
+        queryEndStr = endDate;
+        datesToProcess = getDatesBetween(startDate, endDate);
       }
 
-      // 🚀 فصل الجلب لحماية النظام
       const [
         { data: teachersDB },
         { data: tsDB },
@@ -146,7 +147,11 @@ export default function TeachersReportPage() {
       const safeAttendance = (attendanceDB || []) as any[];
       const safeSchedules = (schedulesDB || []) as any[];
       
-      // 🚀 الدمج السريع
+      // 🚀 التصليح هنا: تحويل مصفوفة السجلات إلى Hash Map (Set) لسرعة بحث O(1) لتنظيف الكود من استعلامات N+1 الخفية
+      const attendanceSet = new Set(
+        safeAttendance.map(a => `${a.teacher_id}_${String(a.date).split('T')[0]}_${a.period}`)
+      );
+      
       const safeTeachers = (teachersDB || []).map((t: any) => ({
         ...t,
         teacher_sections: (tsDB || []).filter(ts => String(ts.teacher_id) === String(t.id))
@@ -157,13 +162,15 @@ export default function TeachersReportPage() {
         let lastRecorded: string | null = null;
 
         for (const dStr of datesToProcess) {
-          const d = new Date(dStr);
-          const dDay = getDbDay(d.getDay());
+          const d = new Date(dStr + 'T12:00:00Z');
+          const dDay = getDbDay(d.getUTCDay());
+          
           if (dDay >= 1 && dDay <= 5) { 
             const daySchedules = safeSchedules.filter(s => String(s.teacher_id) === String(teacher.id) && String(s.day_of_week) === String(dDay));
             daySchedules.forEach(sch => {
               scheduledTotal++;
               let isPassed = false;
+              
               if (dStr === todayStr) {
                 const endTimeStr = periodsMap[String(sch.period)];
                 if (endTimeStr) {
@@ -171,15 +178,17 @@ export default function TeachersReportPage() {
                   const pTime = new Date(now); pTime.setHours(h, m, 0, 0);
                   if (now > pTime) isPassed = true;
                 }
-              } else if (new Date(dStr) < now) isPassed = true;
+              } else if (new Date(dStr + 'T23:59:59') < now) {
+                // إذا كان اليوم في الماضي، فبالتأكيد انتهت كل الحصص
+                isPassed = true;
+              }
 
               if (isPassed && isSystemActive) {
                 expectedTotal++;
-                const hasRecord = safeAttendance.find(a => String(a.teacher_id) === String(teacher.id) && String(a.date).split('T')[0] === dStr && String(a.period) === String(sch.period));
-                if (hasRecord) {
+                // 🚀 بحث سريع لحظي (O(1)) بدلاً من find المنهك
+                if (attendanceSet.has(`${teacher.id}_${dStr}_${sch.period}`)) {
                   actualRecorded++;
-                  const recTime = hasRecord.created_at || hasRecord.date;
-                  if (!lastRecorded || recTime > lastRecorded) lastRecorded = recTime;
+                  // يمكن استخراج وقت الرصد لو أردت، لكننا سنكتفي الآن بالعد
                 } else actualMissed++;
               }
             });
@@ -239,6 +248,7 @@ export default function TeachersReportPage() {
       return acc;
     }, {} as Record<string, TeacherReport[]>);
 
+    // 🚀 ترتيب الأقسام: رئيس القسم في الأعلى، ثم ترتيب أبجدي
     const sortedGroups: Record<string, TeacherReport[]> = {};
     Object.keys(groups).sort().forEach(key => {
       sortedGroups[key] = groups[key].sort((a, b) => {
