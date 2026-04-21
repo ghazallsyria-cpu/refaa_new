@@ -11,9 +11,9 @@ import { supabase } from "@/lib/supabase";
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
-// 🚀 محرك استخراج الاسم المحصن ضد الانهيار
+// محرك استخراج الاسم النظيف
 const getTeacherName = (t: any) => {
-  const u = t.users || t['users!teachers_id_fkey'];
+  const u = t.users;
   if (!u) return "معلم غير محدد";
   return Array.isArray(u) ? u[0]?.full_name || "معلم غير محدد" : u.full_name || "معلم غير محدد";
 };
