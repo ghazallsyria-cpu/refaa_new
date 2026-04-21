@@ -1,4 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -10,7 +11,6 @@ import {
   Plus, Heart, Send, Crown, Trash2, Youtube, Linkedin, Sparkles, Loader2, ShieldAlert
 } from 'lucide-react';
 import { useProfileSystem } from '@/hooks/useProfileSystem';
-import { getParentDepartment } from '@/hooks/useHierarchySystem'; 
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
@@ -51,6 +51,7 @@ export default function TeacherProfilePage() {
   const { loading, fetchTeacherProfile, updateTeacherProfileSettings } = useProfileSystem();
 
   const [data, setData]               = useState<any>(null);
+  const [departmentName, setDepartmentName] = useState<string>('عام'); // إضافة حالة لاسم القسم
   const [isEditing, setIsEditing]     = useState(false);
   const [isSaving, setIsSaving]       = useState(false);
   const [profileSettings, setProfileSettings] = useState({
@@ -80,6 +81,12 @@ export default function TeacherProfilePage() {
     const loadAll = async () => {
       const res = await fetchTeacherProfile(teacherId);
       setData(res);
+
+      // جلب اسم القسم الفعلي
+      if (res?.department_id) {
+        const { data: deptData } = await supabase.from('academic_departments').select('name').eq('id', res.department_id).single();
+        if (deptData) setDepartmentName(deptData.name);
+      }
 
       if (res?.profile_settings) {
         setProfileSettings({
@@ -165,7 +172,6 @@ export default function TeacherProfilePage() {
 
   const isHOD        = data.department_heads?.length > 0;
   const customTitles = data.custom_titles || [];
-  const parentDept   = getParentDepartment(data.specialization);
   const activeTheme  = THEMES[profileSettings.theme] || THEMES['royal'];
   const canEdit      = user?.id === data.id || user?.role === 'admin' || user?.role === 'management';
   const isTeacher    = user?.id === teacherId;
@@ -220,7 +226,8 @@ export default function TeacherProfilePage() {
                     <Crown className="w-4 h-4" /> رئيس قسم {data.department_heads[0]?.subject?.name}
                   </span>
                 )}
-                <span className="px-4 py-2 bg-[#131836] text-slate-300 font-black text-xs sm:text-sm rounded-xl border border-white/5 shadow-inner">قسم {parentDept}</span>
+                {/* الاعتماد على اسم القسم الجديد هنا */}
+                <span className="px-4 py-2 bg-[#131836] text-slate-300 font-black text-xs sm:text-sm rounded-xl border border-white/5 shadow-inner">قسم {departmentName}</span>
                 <span className={`px-4 py-2 font-black text-xs sm:text-sm rounded-xl border bg-[#02040a] shadow-inner ${activeTheme.text} ${activeTheme.border}`}>{data.specialization || 'عام'}</span>
                 {customTitles.map((t: string, i: number) => (
                   <span key={i} className="px-4 py-2 bg-white/10 text-white font-black text-xs sm:text-sm rounded-xl shadow-inner border border-white/5">{t}</span>
