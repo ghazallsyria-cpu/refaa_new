@@ -15,7 +15,7 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 🚀 استعلام نظيف ومباشر لجلب البيانات بدون قيود معقدة تسبب الانهيار
+      // 1. جلب المعلمين باستخدام نفس الكود الناجح والمضمون
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
@@ -23,14 +23,23 @@ export function useTeachersSystem() {
           specialization, 
           department_id,
           users(full_name, avatar_url),
-          academic_departments(id, name, head_id),
-          teacher_sections(section_id, sections(classes(name)))
+          academic_departments(id, name, head_id)
         `);
 
-      if (teachersError) {
-        console.error("Supabase Error:", teachersError);
-        throw teachersError;
-      }
+      if (teachersError) throw teachersError;
+
+      // 2. جلب الفصول والمراحل بشكل منفصل لمنع أي انهيار في قاعدة البيانات (Bulletproof)
+      const { data: tsData } = await supabase
+        .from("teacher_sections")
+        .select("teacher_id, sections(classes(name))");
+
+      // 3. دمج المراحل مع المعلمين بذكاء وسرعة
+      const teachersWithSections = (teachersData || []).map(t => {
+        return {
+          ...t,
+          teacher_sections: (tsData || []).filter(ts => String(ts.teacher_id) === String(t.id))
+        };
+      });
 
       const { data: allSchedules } = await supabase.from("schedules").select("teacher_id, section_id, period").eq("day_of_week", dbDay);
       const { data: allAttendance } = await supabase.from("attendance_sessions").select("teacher_id, section_id, period_number, date").eq("date", todayStr);
@@ -38,7 +47,7 @@ export function useTeachersSystem() {
       const { data: allExams } = await supabase.from("exams").select("teacher_id").gte("created_at", weekAgoStr);
 
       return {
-        teachersData: teachersData || [],
+        teachersData: teachersWithSections,
         allSchedules: allSchedules || [],
         allAttendance: allAttendance || [],
         allAssignments: allAssignments || [],
