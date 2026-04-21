@@ -146,7 +146,8 @@ export default function TeachersPage() {
   const departmentMembers = filteredTeachers.filter((t: any) => !(t.academic_departments?.head_id === t.id || (t.department_heads && t.department_heads.length > 0)));
   const unassignedTeachersCount = (teachers || []).filter((t: any) => !t.department_id).length;
 
-  const groupedMembers = departmentMembers.reduce((acc, teacher: any) => {
+  // 🚀 تصحيح: إضافة التعريف الصريح لنوع acc هنا لمنع خطأ TypeScript
+  const groupedMembers = departmentMembers.reduce((acc: Record<string, any[]>, teacher: any) => {
     const spec = teacher.specialization || 'عام';
     if (!acc[spec]) acc[spec] = [];
     acc[spec].push(teacher);
