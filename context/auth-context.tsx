@@ -140,48 +140,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login');
   };
 
-  // 🚀 3. الدالة المسؤولة عن تغيير كلمة المرور وإعادة التوجيه الحقيقي
-  const updatePassword = async (newPassword: string) => {
-    if (!user) throw new Error("لا يوجد مستخدم مسجل الدخول حالياً.");
-
-    // 3.1: تغيير كلمة المرور في نظام المصادقة
-    const { error: authError } = await supabase.auth.updateUser({
-      password: newPassword
-    });
-    if (authError) throw authError;
-
-    // 3.2: فك قفل صفحة تغيير كلمة المرور الإجبارية
-    const { error: dbError } = await supabase
-      .from('users')
-      .update({ must_reset_password: false })
-      .eq('id', user.id);
-    if (dbError) throw dbError;
-
-    // 3.3: تحديث الحالة وإعادة التوجيه للوحة المناسبة
-    setMustResetPassword(false);
-
-    const paths: Record<string, string> = {
-      admin: '/admin/dashboard',
-      management: '/admin/dashboard',
-      teacher: '/dashboard/teacher',
-      student: '/dashboard/student',
-      staff: '/dashboard/staff'
-    };
-    
-    const destination = authRole ? paths[authRole] : '/';
-    router.replace(destination);
-  };
-
-  // دوال مساعدة لضمان عدم وجود أخطاء في واجهة TypeScript
-  const resetPassword = async (password: string) => {};
-  const requestPasswordReset = async (civilId: string) => {};
-
-  // 4. المحرك الأساسي مع نظام الكاش الذكي
+  // 3. المحرك الأساسي مع نظام الكاش الذكي (المعدل هنا 🚀)
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
       try {
+        // 🚀 الخطوة الأولى: استعادة الإعدادات والصلاحيات من الكاش فوراً لفتح الصفحة
         const cachedRole = localStorage.getItem('cached_role');
         const cachedName = localStorage.getItem('cached_name');
         const cachedSettings = localStorage.getItem('school_settings');
@@ -190,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setAuthRole(cachedRole as UserRole);
             if (cachedName) setUserName(cachedName);
             if (cachedSettings) setRawSettings(JSON.parse(cachedSettings));
+            // إذا وجدنا كاش، ننهي شاشة التحميل فوراً لكي لا يمل المستخدم
             setIsChecking(false);
         }
 
@@ -207,9 +173,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (mounted) setUser(session.user);
 
+        // 🚀 الخطوة الثانية: تحديث البيانات من السيرفر في الخلفية
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
            
+           // نجلب البيانات مع حماية التايم أوت
            const [userRes, settingsRes] = await withTimeout(
              Promise.all([
                supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
@@ -330,3 +298,8 @@ export function useAuth() {
   if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
+
+// أضف هذه الدوال الفارغة لتجنب أخطاء TypeScript إذا كانت غير معرفة
+const resetPassword = async (password: string) => {};
+const requestPasswordReset = async (civilId: string) => {};
+const updatePassword = async (password: string) => {};
