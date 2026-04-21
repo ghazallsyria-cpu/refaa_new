@@ -130,7 +130,7 @@ export default function TeachersReportPage() {
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('teachers').select('id, specialization, national_id, department_id, users(full_name), academic_departments(id, name, head_id)').limit(2000),
+        supabase.from('teachers').select('id, specialization, national_id, department_id, users(full_name), academic_departments(id, name), department_heads(id)').limit(2000),
         supabase.from('teacher_sections').select('teacher_id, sections(classes(name))').limit(10000),
         supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000),
         supabase.from('class_periods').select('period_number, end_time').limit(100),
@@ -197,13 +197,14 @@ export default function TeachersReportPage() {
         }
 
         const deptObj = Array.isArray(teacher.academic_departments) ? teacher.academic_departments[0] : teacher.academic_departments;
+        const isHOD = teacher.department_heads && teacher.department_heads.length > 0;
 
         return {
           id: teacher.id,
           name: getTeacherName(teacher),
           specialization: teacher.specialization || "عام",
           department_name: deptObj?.name || "عام",
-          isHOD: deptObj ? deptObj.head_id === teacher.id : false,
+          isHOD: isHOD,
           stage: getTeacherStage(teacher),
           recorded: actualRecorded, missed: actualMissed, expected: expectedTotal, scheduled: scheduledTotal, percent, lastRecorded, status,
           selected: true,
