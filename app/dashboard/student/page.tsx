@@ -8,7 +8,7 @@ import {
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
   AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
-  Siren, Info // 🚀 أيقونات جديدة للإنذار
+  Siren, Info, MessageSquare, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -20,7 +20,7 @@ import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Image from 'next/image';
 
-// 🚀 مسارات نسبية لتفادي أخطاء البناء
+// 🚀 مسارات نسبية
 import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
 import { useDashboardSystem } from '../../../hooks/useDashboardSystem';
 import { supabase } from '../../../lib/supabase';
@@ -84,7 +84,6 @@ export default function StudentDashboard() {
         try {
             const studentId = data.student?.id;
             if (studentId) {
-                // 🚀 Parallel Fetching 
                 const [
                   { data: badgesData },
                   { data: dbGrades },
@@ -111,7 +110,7 @@ export default function StudentDashboard() {
 
                 if (!absErr && absentCount !== null) {
                   setAbsentPeriods(absentCount);
-                  setFullDaysAbsent(Math.floor(absentCount / 5)); // 5 حصص = 1 يوم
+                  setFullDaysAbsent(Math.floor(absentCount / 5)); 
                   
                   if (totalCount && totalCount > 0) {
                     const calculatedRate = Math.round(((totalCount - absentCount) / totalCount) * 100);
@@ -178,7 +177,6 @@ export default function StudentDashboard() {
     } catch (e) { return fallback; }
   };
 
-  // 🚀 شاشات الحماية والتحميل بالثيم الملكي
   if (isChecking) {
     return (
       <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo">
@@ -222,7 +220,6 @@ export default function StudentDashboard() {
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
   const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
 
-  // 🚀 تحديد مستوى الإنذار الذكي للطالب بناءً على عدد الحصص
   let warningLevel = 0;
   let warningTitle = "";
   let warningMessage = "";
@@ -263,7 +260,6 @@ export default function StudentDashboard() {
     WarningIcon = AlertTriangle;
   }
 
-  // حساب النسبة المئوية للوصول للفصل (الحد الأقصى 100)
   const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
 
   return (
@@ -343,6 +339,34 @@ export default function StudentDashboard() {
           )}
         </div>
 
+        {/* 🚀 البانر السينمائي (مجلس الصف - للطالب) */}
+        {studentData?.section_id && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(99,102,241,0.15)] border border-indigo-500/30 backdrop-blur-xl bg-[#0f1423]">
+            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-indigo-600/20 to-transparent pointer-events-none z-0"></div>
+            <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none z-0"></div>
+            
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
+              <div className="flex flex-col md:flex-row items-center gap-4 sm:gap-6">
+                <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-indigo-500/20 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-indigo-500/40 shadow-inner shrink-0 relative">
+                  <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400 drop-shadow-lg" />
+                  <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#0f1423] shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
+                </div>
+                <div>
+                  <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-[#02040a]/80 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-indigo-500/30 text-indigo-400 shadow-inner">
+                    <Sparkles className="w-3.5 h-3.5" /> مجلس الصف الموحد
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-1 text-white drop-shadow-md">النقاشات المدرسية الحية</h2>
+                  <p className="text-slate-300 text-xs sm:text-sm font-bold opacity-90 max-w-lg mx-auto md:mx-0">انضم لغرفة نقاش صفك للتواصل مع جميع معلميك وزملائك في مكان واحد، واستقبال إعلانات الفصل الهامة.</p>
+                </div>
+              </div>
+              <Link href={`/messages?sectionId=${studentData.section_id}`} className="group relative inline-flex items-center justify-center px-8 py-4 bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-black rounded-2xl sm:rounded-[1.5rem] shadow-[0_0_30px_rgba(79,70,229,0.3)] hover:shadow-[0_0_40px_rgba(79,70,229,0.5)] transition-all hover:scale-105 active:scale-95 border border-indigo-400/50 w-full md:w-auto overflow-hidden shrink-0 z-10">
+                <span className="relative z-10 flex items-center gap-2">دخول المجلس الآن <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" /></span>
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out z-0"></div>
+              </Link>
+            </div>
+          </motion.div>
+        )}
+
         {/* 🚀 بطاقة إنذار الغياب الذكية (Smart Warning Banner) */}
         <AnimatePresence>
           {warningLevel > 0 && (
@@ -354,7 +378,6 @@ export default function StudentDashboard() {
             >
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 
-                {/* الأيقونة والنص */}
                 <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto">
                   <div className={`p-4 rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
                     <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor}`} />
@@ -369,13 +392,11 @@ export default function StudentDashboard() {
                   </div>
                 </div>
 
-                {/* عداد الخطر */}
                 <div className="w-full md:w-auto min-w-[200px] shrink-0 bg-[#02040a]/60 p-5 rounded-2xl border border-white/10 shadow-inner backdrop-blur-md">
                   <div className="flex justify-between items-end mb-3">
                     <span className="text-xs font-bold uppercase opacity-80 text-white">حصص الغياب</span>
                     <span className="text-3xl font-black text-white drop-shadow-md">{absentPeriods} <span className="text-sm opacity-50 font-bold">/ 100</span></span>
                   </div>
-                  {/* شريط التقدم نحو الفصل */}
                   <div className="h-2.5 w-full bg-[#02040a] rounded-full overflow-hidden border border-white/5 shadow-inner">
                     <motion.div 
                       initial={{ width: 0 }}
@@ -392,7 +413,6 @@ export default function StudentDashboard() {
 
               </div>
 
-              {/* تأثيرات بصرية في الخلفية */}
               <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
               {warningLevel >= 3 && (
                 <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-rose-500/20 blur-3xl animate-pulse pointer-events-none"></div>
