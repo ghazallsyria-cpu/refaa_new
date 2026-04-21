@@ -13,10 +13,26 @@ export function useMessagesSystem() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 🚀 1. جلب الرسائل الذكي (المعدل لدعم الغرف الجماعية الموحدة)
   const fetchMessages = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
-      const { data, error: fetchError } = await supabase
+      // أ. استخراج الغرف (الفصول) التي ينتمي إليها المستخدم ليرى رسائلها
+      let userSectionIds: string[] = [];
+      
+      if (currentRole === 'student') {
+        const { data } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
+        if (data?.section_id) userSectionIds.push(data.section_id);
+      } else if (currentRole === 'teacher') {
+        const { data } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
+        if (data) userSectionIds = data.map(d => d.section_id);
+      } else if (currentRole === 'parent') {
+        const { data } = await supabase.from('students').select('section_id').eq('parent_id', user.id);
+        if (data) userSectionIds = data.map(d => d.section_id).filter(Boolean);
+      }
+
+      // ب. بناء الاستعلام
+      let query = supabase
         .from('messages')
         .select(`
           *,
@@ -24,24 +40,37 @@ export function useMessagesSystem() {
           receiver:receiver_id(full_name, avatar_url, role),
           section:section_id(name, classes(name))
         `)
-        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(2000); // حماية للمتصفح من الاختناق
+
+      // ج. تطبيق الصلاحيات (دستور الرفعة)
+      if (['admin', 'management', 'staff'].includes(currentRole)) {
+        // الإدارة ترى رسائلها الخاصة + جميع رسائل الغرف المدرسية للرقابة
+        query = query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id},section_id.not.is.null`);
+      } else {
+        // المعلم والطلاب والأولياء يرون رسائلهم الخاصة + غرفهم فقط
+        if (userSectionIds.length > 0) {
+          query = query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id},section_id.in.(${userSectionIds.join(',')})`);
+        } else {
+          query = query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+        }
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
       setMessages((data as unknown) as Message[] || []);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load messages';
       console.error("Error fetching messages:", err);
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to load messages');
     }
-  }, [user]);
+  }, [user, currentRole]);
 
-  // 🚀 خوارزمية جلب المستخدمين (الفلترة الأمنية حسب الرتبة)
+  // 🚀 2. جدار الحماية لجلب جهات الاتصال (محدّث)
   const fetchUsers = useCallback(async (): Promise<void> => {
     if (!user) return;
     try {
       if (currentRole === 'student') {
-        // 🛡️ الطالب: يرى معلميه والإدارة فقط
         const { data: s1 } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
         if (s1?.section_id) {
           const { data: teacherSectionsData } = await supabase.from('teacher_sections').select('teacher_id').eq('section_id', s1.section_id);
@@ -57,7 +86,6 @@ export function useMessagesSystem() {
         }
       } 
       else if (currentRole === 'parent') {
-        // 🛡️ ولي الأمر (جدار الرفعة الناري): يرى فقط (معلمي أبنائه + الإدارة)
         const { data: childrenData } = await supabase.from('students').select('section_id').eq('parent_id', user.id);
         const childSectionIds = childrenData?.map(c => c.section_id).filter(Boolean) || [];
 
@@ -74,12 +102,10 @@ export function useMessagesSystem() {
         const { data, error } = await query;
         if (error) throw error;
         
-        // تصفية إضافية لإزالة أي طالب أو ولي أمر تسلل بالخطأ
         const safeUsers = (data || []).filter(u => u.role !== 'student' && u.role !== 'parent');
         setUsers((safeUsers as unknown) as User[] || []);
       } 
       else {
-        // 🛡️ الإدارة والمعلمون: يرون الجميع (الفرز يتم في الواجهة)
         const { data, error } = await supabase.from('users').select('id, full_name, role, avatar_url').order('full_name');
         if (error) throw error;
         setUsers((data as unknown) as User[] || []);
@@ -148,6 +174,8 @@ export function useMessagesSystem() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Failed to send message');
+      
+      // التحديث يتم تلقائياً عبر الـ Realtime، لكن نطلبه هنا كإجراء احترازي
       await fetchMessages();
     } catch (err) { throw err; }
   }, [user, fetchMessages]);
@@ -160,6 +188,7 @@ export function useMessagesSystem() {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'حدث خطأ');
+    
     await fetchMessages();
   }, [user, fetchMessages]);
 
