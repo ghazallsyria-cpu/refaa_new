@@ -54,7 +54,13 @@ const getDatesBetween = (startDate: Date, endDate: Date) => {
   return dates;
 };
 
-// 🚀 محرك استنتاج المرحلة للتقارير
+// 🚀 محرك استخراج الاسم المحصن
+const getTeacherName = (t: any) => {
+  const u = t.users || t['users!teachers_id_fkey'];
+  if (!u) return "معلم غير محدد";
+  return Array.isArray(u) ? u[0]?.full_name || "معلم غير محدد" : u.full_name || "معلم غير محدد";
+};
+
 const getTeacherStage = (teacher: any) => {
   if (!teacher.teacher_sections || teacher.teacher_sections.length === 0) return 'unassigned';
   let hasMiddle = false;
@@ -117,14 +123,14 @@ export default function TeachersReportPage() {
         datesToProcess = getDatesBetween(sDate, eDate);
       }
 
-      // 🚀 سحب البيانات مباشرة بقوة السيرفر
+      // 🚀 إضافة مفتاح العلاقة الصريح لجلب الأسماء وتفادي الانهيار
       const [
         { data: teachersDB },
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('teachers').select('id, specialization, national_id, department_id, users(full_name), academic_departments(id, name, head_id), teacher_sections(section_id, sections(classes(name)))').limit(1000),
+        supabase.from('teachers').select('id, specialization, national_id, department_id, users!teachers_id_fkey(full_name), academic_departments(id, name, head_id), teacher_sections(section_id, sections(classes(name)))').limit(1000),
         supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000),
         supabase.from('class_periods').select('period_number, end_time').limit(100),
         currentType === "day" 
@@ -184,14 +190,11 @@ export default function TeachersReportPage() {
           else if (percent < 95) status = "جيد";
         }
 
-        const teacherName = teacher.users ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name) : "غير محدد";
-        
-        // 🚀 تحديد القسم بدقة
         const deptObj = Array.isArray(teacher.academic_departments) ? teacher.academic_departments[0] : teacher.academic_departments;
 
         return {
           id: teacher.id,
-          name: teacherName,
+          name: getTeacherName(teacher),
           specialization: teacher.specialization || "عام",
           department_name: deptObj?.name || "عام",
           isHOD: deptObj ? deptObj.head_id === teacher.id : false,
@@ -216,7 +219,7 @@ export default function TeachersReportPage() {
 
   const filteredAndStagedTeachers = useMemo(() => {
     return localTeachers.filter(t => {
-      const matchSearch = t.name.includes(search) || t.specialization.includes(search);
+      const matchSearch = (t.name || "").toLowerCase().includes(search.toLowerCase()) || (t.specialization || "").toLowerCase().includes(search.toLowerCase());
       const matchStage = stageFilter === 'all' || t.stage === stageFilter || t.stage === 'both';
       return matchSearch && matchStage;
     });
@@ -435,7 +438,7 @@ export default function TeachersReportPage() {
         </div>
       </div>
 
-      {/* 🖨️ التقرير المطبوع الأنيق */}
+      {/* 🖨️ التقرير المطبوع الأنيق (للإدارة العليا) */}
       <div className="hidden print:block w-full bg-white text-black p-8 font-cairo" dir="rtl">
         <div className="text-center mb-8 border-b-[3px] border-slate-900 pb-6 relative">
           <div className="absolute top-0 right-0 text-right">
