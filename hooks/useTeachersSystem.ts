@@ -15,14 +15,14 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 🚀 التحسين: جلب القسم والمرحلة بشكل إجباري وقاطع
+      // 🚀 استعادة مفتاح العلاقة الصريح لجلب الأسماء
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
           id, 
           specialization, 
           department_id,
-          users(full_name),
+          users!teachers_id_fkey(full_name, avatar_url),
           academic_departments(id, name, head_id),
           teacher_sections(section_id, sections(classes(name)))
         `);
