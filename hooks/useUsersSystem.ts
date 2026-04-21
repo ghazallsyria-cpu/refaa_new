@@ -130,7 +130,7 @@ export function useUsersSystem() {
     setSubjects(data || []);
   }, []);
 
-  // 🚀 استعادة الـ Authorization header الضروري لحماية الـ API
+  // 🚀 دوال الإضافة المحصنة والموثقة
   const addStudent = useCallback(async (studentData: any) => {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { 
