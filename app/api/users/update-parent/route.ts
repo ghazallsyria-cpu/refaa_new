@@ -10,7 +10,6 @@ export async function POST(req: Request) {
   try {
     const { parentId, updateData, newEmail } = await req.json();
 
-    // 1. تحديث بيانات المستخدم
     const { error: userError } = await adminSupabase
       .from('users')
       .update({
@@ -22,25 +21,34 @@ export async function POST(req: Request) {
 
     if (userError) throw userError;
 
-    // 2. تحديث بيانات ولي الأمر (مع إضافة address)
     const { error: parentError } = await adminSupabase
       .from('parents')
       .update({
         national_id: updateData.national_id,
         job_title: updateData.job_title,
-        address: updateData.address, // تمت إضافته ليتوافق مع الفورم
-        workplace: updateData.workplace
+        workplace: updateData.workplace,
+        address: updateData.address // 🚀 تمت إضافته ليتوافق مع حقول المنصة
       })
       .eq('id', parentId);
 
     if (parentError) throw parentError;
 
-    // 3. 🚀 ربط وفك ارتباط الأبناء بصلاحيات الآدمن المطلقة (تجاوز حماية الـ Staff)
+    // 🚀 فك وإعادة ربط الأبناء من السيرفر بصلاحيات مطلقة
     if (updateData.student_ids !== undefined) {
-      await adminSupabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
+      const { error: unlinkError } = await adminSupabase
+        .from('students')
+        .update({ parent_id: null })
+        .eq('parent_id', parentId);
       
+      if (unlinkError) throw unlinkError;
+
       if (updateData.student_ids.length > 0) {
-        await adminSupabase.from('students').update({ parent_id: parentId }).in('id', updateData.student_ids);
+        const { error: linkError } = await adminSupabase
+          .from('students')
+          .update({ parent_id: parentId })
+          .in('id', updateData.student_ids);
+        
+        if (linkError) throw linkError;
       }
     }
 
