@@ -130,7 +130,6 @@ export function useUsersSystem() {
     setSubjects(data || []);
   }, []);
 
-  // 🚀 دوال الإضافة المحصنة والموثقة
   const addStudent = useCallback(async (studentData: any) => {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { 
@@ -165,7 +164,8 @@ export function useUsersSystem() {
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || 'فشل إضافة ولي الأمر');
     
-    if (parentData.student_ids && result.user) {
+    // 🚀 الحل السحري: يجب التأكد أن المصفوفة ليست فارغة قبل إرسالها لـ Supabase
+    if (parentData.student_ids && parentData.student_ids.length > 0 && result.user) {
       await supabase.from('students').update({ parent_id: result.user.id }).in('id', parentData.student_ids);
     }
     return { success: true, password: result.password || '123456' };
@@ -213,9 +213,13 @@ export function useUsersSystem() {
   const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
     const { student_ids, ...pureData } = updateData;
     const res = await fetch('/api/users/update-parent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId, updateData: pureData }) });
+    
     if (student_ids) {
       await supabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
-      if (student_ids.length > 0) await supabase.from('students').update({ parent_id: parentId }).in('id', student_ids);
+      // 🚀 نفس الحل هنا لتجنب انهيار التعديل
+      if (student_ids.length > 0) {
+        await supabase.from('students').update({ parent_id: parentId }).in('id', student_ids);
+      }
     }
     return res.ok;
   }, []);
