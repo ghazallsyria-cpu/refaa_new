@@ -131,7 +131,6 @@ export function useUsersSystem() {
     return true;
   };
 
-  // 🚀 إضافة دوال أولياء الأمور المفقودة
   const addParent = useCallback(async (parentData: any) => {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) });
@@ -164,12 +163,50 @@ export function useUsersSystem() {
     return await res.json();
   }, []);
 
+  // ============================================================================
+  // 🚀 دوال تتبع المسار (Track Selection) المضافة حديثاً
+  // ============================================================================
+
+  const fetchStudentProfile = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*, users!students_id_fkey(full_name, email, phone, avatar_url), sections(name, classes(name, level))')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    } catch (err) {
+      console.error('Error fetching student profile:', err);
+      return null;
+    }
+  }, []);
+
+  const selectTrack = useCallback(async (studentId: string, track: 'scientific' | 'literary') => {
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ 
+          next_year_track: track, 
+          track_selection_date: new Date().toISOString() 
+        })
+        .eq('id', studentId);
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('Error updating track:', err);
+      throw err;
+    }
+  }, []);
+
   return {
     students, teachers, parents, sections, subjects, departments, loading, error,
     fetchStudents, fetchTeachers, fetchParents, fetchSections, fetchSubjects, fetchDepartments,
     fetchStudentsPaginated, fetchTeachersPaginated,
     addStudent, updateStudent, addTeacher, updateTeacher, 
-    addParent, updateParent, // 👈 تم إرجاعهما الآن لتعمل صفحة أولياء الأمور
-    deleteUser, resetPassword
+    addParent, updateParent, deleteUser, resetPassword,
+    fetchStudentProfile, selectTrack // 👈 تم إرجاع الدوال بنجاح هنا
   };
 }
