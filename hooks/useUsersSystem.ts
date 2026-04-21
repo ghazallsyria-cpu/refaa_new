@@ -1,12 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Student, Teacher, Parent, Section, Subject } from '@/types';
 
-// دالة مساعدة لاستخراج الاسم
+// 🚀 دالة محسنة ومحصنة لاستخراج الاسم بغض النظر عن طريقة إرجاع Supabase للبيانات
 const extractName = (item: any): string => {
-  if (!item || !item.users) return '';
+  if (!item) return 'غير معروف';
+  if (item.full_name) return item.full_name; // إذا كان الاسم في الكائن نفسه
+  if (!item.users) return 'غير معروف';
+  
   const userObj = Array.isArray(item.users) ? item.users[0] : item.users;
-  return userObj?.full_name || '';
+  return userObj?.full_name || 'غير معروف';
 };
 
 export function useUsersSystem() {
@@ -33,7 +37,8 @@ export function useUsersSystem() {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
       
-      const fields = 'id, national_id, next_year_track, section_id, users!students_id_fkey(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))';
+      // 🚀 تبسيط الاستعلام ليقرأ العلاقة الافتراضية
+      const fields = 'id, national_id, next_year_track, section_id, users(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users(full_name))';
       
       let query = supabase.from('students').select(fields, { count: 'exact' });
       
@@ -47,10 +52,9 @@ export function useUsersSystem() {
       let finalData: any[] = data || [];
       
       if (searchTerm && isNaN(Number(searchTerm))) {
-        // 🚀 الحل الجذري: استخدام نفس الـ fields بالضبط كما في الاستعلام الأول
         const { data: sData } = await supabase
           .from('students')
-          .select(`id, national_id, next_year_track, section_id, users!students_id_fkey!inner(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))`)
+          .select('id, national_id, next_year_track, section_id, users!inner(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users(full_name))')
           .ilike('users.full_name', `%${searchTerm}%`)
           .limit(50);
         finalData = sData || [];
@@ -65,13 +69,28 @@ export function useUsersSystem() {
     try {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
-      let query = supabase.from('teachers').select('id, specialization, national_id, department_id, users!teachers_id_fkey(full_name, email, phone, avatar_url), academic_departments(id, name, head_id), department_heads(id, subject_id, stage_name)', { count: 'exact' });
+      
+      // 🚀 تبسيط الاستعلام لتفادي أخطاء المفاتيح الأجنبية المعقدة
+      let query = supabase.from('teachers').select('id, specialization, national_id, department_id, custom_titles, zoom_link, users(full_name, email, phone, avatar_url), academic_departments(id, name, head_id), department_heads(id, subject_id, stage_name)', { count: 'exact' });
       
       if (departmentId !== 'all') query = query.eq('department_id', departmentId);
       if (searchTerm && !isNaN(Number(searchTerm))) query = query.like('national_id', `%${searchTerm}%`);
       
-      const { data, count, error: err } = await query.range(from, to).order('created_at', { ascending: false });
+      let { data, count, error: err } = await query.range(from, to).order('created_at', { ascending: false });
       if (err) throw err;
+
+      // 🚀 إذا كان البحث بالاسم
+      if (searchTerm && isNaN(Number(searchTerm))) {
+        const { data: searchData, count: searchCount } = await supabase
+          .from('teachers')
+          .select('id, specialization, national_id, department_id, custom_titles, zoom_link, users!inner(full_name, email, phone, avatar_url), academic_departments(id, name, head_id), department_heads(id, subject_id, stage_name)', { count: 'exact' })
+          .ilike('users.full_name', `%${searchTerm}%`)
+          .range(from, to)
+          .order('created_at', { ascending: false });
+          
+          data = searchData;
+          count = searchCount;
+      }
       
       const processed = (data || []).map((t: any) => ({ ...t, isHOD: t.academic_departments?.head_id === t.id || (t.department_heads && t.department_heads.length > 0) }));
       return { data: processed, totalCount: count || 0 };
@@ -82,7 +101,7 @@ export function useUsersSystem() {
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('students').select('*, users!students_id_fkey(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))').limit(1000);
+      const { data, error: err } = await supabase.from('students').select('*, users(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users(full_name))').limit(1000);
       if (err) throw err;
       setStudents((data || []).sort((a: any, b: any) => extractName(a).localeCompare(extractName(b), 'ar')));
     } finally { setLoading(false); }
@@ -91,7 +110,7 @@ export function useUsersSystem() {
   const fetchTeachers = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('teachers').select('*, users!teachers_id_fkey(full_name, email, phone, avatar_url), department_heads(id, subject_id, subjects(name)), academic_departments(id, name)').limit(1000);
+      const { data, error: err } = await supabase.from('teachers').select('*, users(full_name, email, phone, avatar_url), department_heads(id, subject_id, subjects(name)), academic_departments(id, name)').limit(1000);
       if (err) throw err;
       setTeachers((data || []).sort((a: any, b: any) => extractName(a).localeCompare(extractName(b), 'ar')));
     } finally { setLoading(false); }
@@ -100,7 +119,7 @@ export function useUsersSystem() {
   const fetchParents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('parents').select('id, national_id, job_title, workplace, address, users!fk_parents_users(full_name, email, phone, avatar_url), students(id, users!students_id_fkey(full_name))').limit(5000);
+      const { data, error: err } = await supabase.from('parents').select('id, national_id, job_title, workplace, address, users(full_name, email, phone, avatar_url), students(id, users(full_name))').limit(5000);
       if (err) throw err;
       setParents(data || []);
     } finally { setLoading(false); }
@@ -129,7 +148,7 @@ export function useUsersSystem() {
 
   const addTeacher = useCallback(async (teacherData: any) => {
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...teacherData, email: teacherData.email || `${teacherData.national_id}@alrefaa.edu`, password: '123456', role: 'teacher' }) });
+    const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...teacherData, email: teacherData.email || `${teacherData.national_id}@alrefaa.edu`, password: '123456', role: 'teacher', department_id: teacherData.department_id }) });
     return res.json();
   }, []);
 
@@ -180,7 +199,7 @@ export function useUsersSystem() {
 
   const fetchStudentProfile = useCallback(async (userId: string) => {
     try {
-      const { data, error: err } = await supabase.from('students').select('*, users!students_id_fkey(full_name, email, phone, avatar_url), sections(name, classes(name, level))').eq('id', userId).maybeSingle();
+      const { data, error: err } = await supabase.from('students').select('*, users(full_name, email, phone, avatar_url), sections(name, classes(name, level))').eq('id', userId).maybeSingle();
       if (err) throw err;
       return data;
     } catch (err) { console.error(err); return null; }
