@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Student, Teacher, Parent, Section, Subject } from '@/types';
 
 // دالة مساعدة لاستخراج الاسم
 const extractName = (item: any): string => {
@@ -33,7 +32,10 @@ export function useUsersSystem() {
     try {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
-      let query = supabase.from('students').select('id, national_id, next_year_track, section_id, users!students_id_fkey(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))', { count: 'exact' });
+      
+      const fields = 'id, national_id, next_year_track, section_id, users!students_id_fkey(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))';
+      
+      let query = supabase.from('students').select(fields, { count: 'exact' });
       
       if (sectionId !== 'all') query = query.eq('section_id', sectionId);
       if (track !== 'all') query = (track === 'none') ? query.is('next_year_track', null) : query.eq('next_year_track', track);
@@ -42,9 +44,15 @@ export function useUsersSystem() {
       const { data, count, error: err } = await query.range(from, to).order('created_at', { ascending: false });
       if (err) throw err;
       
-      let finalData = data || [];
+      let finalData: any[] = data || [];
+      
       if (searchTerm && isNaN(Number(searchTerm))) {
-        const { data: sData } = await supabase.from('students').select('id, national_id, users!students_id_fkey!inner(full_name, email), sections(name, classes(name))').ilike('users.full_name', `%${searchTerm}%`).limit(50);
+        // 🚀 الحل الجذري: استخدام نفس الـ fields بالضبط كما في الاستعلام الأول
+        const { data: sData } = await supabase
+          .from('students')
+          .select(`id, national_id, next_year_track, section_id, users!students_id_fkey!inner(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users!fk_parents_users(full_name))`)
+          .ilike('users.full_name', `%${searchTerm}%`)
+          .limit(50);
         finalData = sData || [];
       }
       return { data: finalData, totalCount: count || finalData.length };
@@ -92,7 +100,7 @@ export function useUsersSystem() {
   const fetchParents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('parents').select('id, national_id, users!fk_parents_users(full_name, email, phone, avatar_url), students(id, users!students_id_fkey(full_name))').limit(5000);
+      const { data, error: err } = await supabase.from('parents').select('id, national_id, job_title, workplace, address, users!fk_parents_users(full_name, email, phone, avatar_url), students(id, users!students_id_fkey(full_name))').limit(5000);
       if (err) throw err;
       setParents(data || []);
     } finally { setLoading(false); }
@@ -138,7 +146,6 @@ export function useUsersSystem() {
     return true;
   };
 
-  // 🚀 تصحيح: إضافة إرجاع password لإسكات TypeScript في صفحة الأولياء
   const addParent = useCallback(async (parentData: any): Promise<{ success: boolean; password?: string }> => {
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) });
@@ -146,7 +153,7 @@ export function useUsersSystem() {
     if (parentData.student_ids && result.user) {
       await supabase.from('students').update({ parent_id: result.user.id }).in('id', parentData.student_ids);
     }
-    return { success: true, password: result.password || '123456' }; // 👈 الحل هنا
+    return { success: true, password: result.password || '123456' };
   }, []);
 
   const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
