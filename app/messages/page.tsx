@@ -62,7 +62,6 @@ export default function MessagesPage() {
   const [activeThread, setActiveThread] = useState<any | null>(null);
   const [threadMessages, setThreadMessages] = useState<any[]>([]);
   
-  // 🚀 دمج المحرر الذكي هنا
   const [replyContent, setReplyContent] = useState('');
   
   const [isReplying, setIsReplying] = useState(false);
@@ -198,7 +197,6 @@ export default function MessagesPage() {
 
   const handleSendReply = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    // التحقق من أن المحتوى ليس فارغاً (بما في ذلك التاجات الفارغة)
     const strippedContent = replyContent.replace(/<[^>]*>?/gm, '').trim();
     if (!strippedContent || !activeThread || !currentUser) return;
     
@@ -226,10 +224,16 @@ export default function MessagesPage() {
     } catch (error: any) { alert('حدث خطأ أثناء الحذف'); }
   };
 
+  // 🚀 فلترة صارمة إضافية في واجهة الاستخدام (حتى لو أخطأ السيرفر لن يظهروا)
   const getFilteredRecipients = () => {
     if (!recipientType) return [];
-    if (recipientType === 'teacher') return users.filter(u => u.role === 'teacher' || u.role === 'admin' || u.role === 'management');
-    if (recipientType === 'student') return role === 'teacher' ? filteredStudents : users.filter(u => u.role === 'student');
+    if (recipientType === 'teacher') {
+      return users.filter(u => u.role === 'teacher' || u.role === 'admin' || u.role === 'management');
+    }
+    if (recipientType === 'student') {
+      if (role === 'parent') return []; // منع قاطع لولي الأمر من رؤية الطلاب
+      return role === 'teacher' ? filteredStudents : users.filter(u => u.role === 'student');
+    }
     return [];
   };
 
@@ -295,18 +299,25 @@ export default function MessagesPage() {
   return (
     <div className="flex flex-col h-[calc(100dvh-6rem)] lg:h-[calc(100dvh-8rem)] max-w-[1600px] mx-auto pb-4 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
       <div className="absolute top-[-10%] right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 Header */}
       <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 lg:mb-6 px-4 lg:px-8 relative z-10 pt-4">
         <div>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight drop-shadow-md">صندوق الرسائل</h1>
           <p className="text-slate-400 mt-1 sm:mt-2 font-bold text-xs sm:text-sm">التواصل السريع، الآمن، واللحظي ⚡</p>
         </div>
         <button 
-          onClick={() => setShowNewMessage(true)}
+          onClick={() => {
+            // 🚀 الـ Parent يتم توجيهه للخطوة الثانية مباشرة (المعلمين/الإدارة) لأنه لا يملك خيار مراسلة طلاب
+            if (role === 'parent') {
+              setRecipientType('teacher');
+              setStep(2);
+            } else {
+              setStep(1);
+            }
+            setShowNewMessage(true);
+          }}
           className="inline-flex w-full sm:w-auto items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:from-indigo-500 hover:to-blue-500 transition-all active:scale-95 border border-indigo-400/50 shrink-0"
         >
           <Plus className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
@@ -314,10 +325,8 @@ export default function MessagesPage() {
         </button>
       </div>
 
-      {/* 🚀 Dual-Pane Architecture (Royal Glass Theme) */}
       <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-1 min-h-0 mx-4 lg:mx-8 relative z-10 bg-[#0f1423]/60">
         
-        {/* Left Pane (Conversations List) */}
         <div className={cn("w-full lg:w-[350px] xl:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -355,7 +364,6 @@ export default function MessagesPage() {
                   const displayName = isGroup ? `${classes?.name || ''} - ${msg.section?.name || ''}` : (otherUser?.full_name || 'مستخدم');
                   const isActive = activeThread?.convId === msg.convId;
                   
-                  // Extract raw text from HTML content for the preview
                   const rawPreview = (msg.subject || msg.content || '').replace(/<[^>]*>?/gm, '').substring(0, 40) + '...';
 
                   return (
@@ -386,7 +394,6 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* Right Pane (Active Chat Thread) */}
         <div className={`flex-1 flex flex-col bg-transparent relative ${!activeThread ? 'hidden lg:flex items-center justify-center' : 'flex min-h-0'}`}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
@@ -398,7 +405,6 @@ export default function MessagesPage() {
              </div>
            ) : (
              <>
-               {/* Chat Header */}
                <div className="h-16 sm:h-20 border-b border-white/5 bg-[#0f1423]/90 backdrop-blur-2xl px-4 lg:px-6 flex items-center justify-between z-20 shrink-0">
                  <div className="flex items-center gap-3 lg:gap-4 min-w-0 pr-1">
                    <button onClick={() => setActiveThread(null)} className="lg:hidden p-2 bg-[#02040a] border border-white/5 shadow-inner rounded-xl text-slate-400 hover:text-indigo-400 active:scale-95 transition-all shrink-0">
@@ -428,7 +434,6 @@ export default function MessagesPage() {
                  </button>
                </div>
 
-               {/* Chat Messages */}
                <div className="flex-1 min-h-0 overflow-y-auto p-4 lg:p-6 space-y-4 sm:space-y-6 bg-transparent custom-scrollbar">
                   {threadMessages.map((msg, idx) => {
                     const isMe = msg.sender_id === currentUser?.id;
@@ -440,7 +445,6 @@ export default function MessagesPage() {
                     
                     return (
                       <div key={msg.id} className="flex flex-col">
-                        {/* 📅 الفاصل الزمني */}
                         {showDateDivider && (
                           <div className="flex justify-center my-4 sm:my-6">
                             <span className="bg-[#02040a]/80 border border-white/5 text-slate-400 text-[9px] sm:text-[10px] font-black px-3 py-1 sm:py-1.5 rounded-full shadow-inner tracking-widest">
@@ -451,12 +455,10 @@ export default function MessagesPage() {
 
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-2 sm:gap-3 lg:gap-4 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                           
-                          {/* Avatar Column */}
                           <div className="shrink-0 w-8 sm:w-10 flex flex-col items-center">
                             {showAvatar && !isMe && <RenderAvatar user={msg.sender} size="h-8 w-8 sm:h-10 sm:w-10" />}
                           </div>
 
-                          {/* Bubble Column */}
                           <div className={`flex flex-col max-w-[85%] lg:max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
                             {showAvatar && !isMe && <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 mb-1 ml-2 drop-shadow-sm">{msg.sender?.full_name}</span>}
                             
@@ -465,7 +467,6 @@ export default function MessagesPage() {
                                 ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-[1.5rem] rounded-tr-sm border-indigo-400/30' 
                                 : 'bg-[#0f1423] text-slate-200 border-white/5 rounded-[1.5rem] rounded-tl-sm'}`}
                             >
-                              {/* 🚀 Render HTML securely for rich text messages */}
                               <div className="prose prose-invert max-w-none text-xs sm:text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
                               
                               <div className={`text-[8px] sm:text-[9px] mt-2 flex items-center gap-1.5 ${isMe ? 'text-indigo-200 justify-end' : 'text-slate-500 justify-start'}`}>
@@ -488,7 +489,6 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* Chat Input (Using ForumEditor Compactly) */}
                <div className="bg-[#0f1423]/90 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-safe-bottom">
                  <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-2 sm:p-3 lg:p-4 transition-all">
                     <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] sm:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all p-1">
@@ -514,7 +514,6 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 New Message Modal (Royal Dark Theme) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -531,14 +530,16 @@ export default function MessagesPage() {
                   </div>
                   <div>
                     <h3 className="text-xl lg:text-2xl font-black text-white drop-shadow-sm">إنشاء رسالة جديدة</h3>
-                    <p className="text-[10px] lg:text-xs text-indigo-400 font-bold uppercase tracking-widest mt-1">الخطوة {step} من {recipientType === 'student' && role === 'teacher' ? '3' : '2'}</p>
+                    <p className="text-[10px] lg:text-xs text-indigo-400 font-bold uppercase tracking-widest mt-1">
+                      {role === 'parent' ? 'خطوة 1 من 1' : `الخطوة ${step} من ${recipientType === 'student' && role === 'teacher' ? '3' : '2'}`}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => { setShowNewMessage(false); setStep(1); }} className="p-2 text-slate-400 hover:text-rose-400 bg-[#0f1423] border border-white/5 rounded-xl transition-colors shadow-inner active:scale-90"><X className="h-5 w-5 lg:h-6 lg:w-6" /></button>
               </div>
 
               <div className="p-6 lg:p-8 overflow-y-auto flex-1 custom-scrollbar relative z-10">
-                {step === 1 && (
+                {step === 1 && role !== 'parent' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
                     <button onClick={() => { setRecipientType('teacher'); setStep(2); }} className="flex flex-col items-center justify-center p-8 lg:p-10 rounded-[1.5rem] lg:rounded-[2rem] border border-white/5 shadow-inner hover:border-indigo-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
                       <div className="h-16 w-16 lg:h-20 lg:w-20 rounded-[1rem] lg:rounded-[1.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 lg:mb-6 group-hover:scale-110 transition-transform shadow-inner"><User className="h-8 w-8 lg:h-10 lg:w-10 drop-shadow-md" /></div>
@@ -592,7 +593,9 @@ export default function MessagesPage() {
 
                 {((step === 2 && (recipientType === 'teacher' || (recipientType === 'student' && role !== 'teacher'))) || step === 4) && (
                   <form id="new-message-form" onSubmit={handleSendMessage} className="space-y-5 lg:space-y-6">
-                    <button type="button" onClick={() => setStep(recipientType === 'student' && role === 'teacher' ? 3 : 1)} className="text-indigo-400 font-black text-sm flex items-center gap-1.5 hover:text-indigo-300 transition-colors w-fit mb-2"><ArrowRight className="h-4 w-4" /> العودة للاختيار</button>
+                    {role !== 'parent' && (
+                       <button type="button" onClick={() => setStep(recipientType === 'student' && role === 'teacher' ? 3 : 1)} className="text-indigo-400 font-black text-sm flex items-center gap-1.5 hover:text-indigo-300 transition-colors w-fit mb-2"><ArrowRight className="h-4 w-4" /> العودة للاختيار</button>
+                    )}
                     
                     {!isGroupMessage && (
                       <div className="space-y-2 lg:space-y-3 bg-[#02040a]/40 p-4 sm:p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
