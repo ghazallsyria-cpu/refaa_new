@@ -1,17 +1,31 @@
 /* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion } from "framer-motion";
-import {
-  CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, 
-  ShieldAlert, BarChart2, RefreshCw, Zap, School, Folder, Crown
-} from "lucide-react";
+import { CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw, Zap, School, Folder, Crown } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase"; 
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
+
+// 🚀 محرك استنتاج المرحلة الدراسية للرادار
+const getTeacherStage = (teacher: any) => {
+  if (!teacher.teacher_sections || teacher.teacher_sections.length === 0) return 'unassigned';
+  let hasMiddle = false;
+  let hasHigh = false;
+  teacher.teacher_sections.forEach((ts: any) => {
+    const className = ts.sections?.classes?.name || '';
+    if (className.includes('سادس') || className.includes('سابع') || className.includes('ثامن') || className.includes('تاسع')) hasMiddle = true;
+    if (className.includes('عاشر') || className.includes('حادي') || className.includes('ثاني')) hasHigh = true;
+  });
+  if (hasMiddle && hasHigh) return 'both';
+  if (hasMiddle) return 'middle';
+  if (hasHigh) return 'high';
+  return 'unassigned';
+};
 
 const StatCard = ({ label, count, color, icon: Icon }: any) => (
   <div className="bg-white/90 backdrop-blur-xl p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center gap-2 sm:gap-3 hover:shadow-md transition-all group">
@@ -76,6 +90,7 @@ export default function TeachersMonitorPage() {
         const schs = rawData.allSchedules.filter((s:any) => s.teacher_id === t.id);
         const atts = rawData.allAttendance.filter((a:any) => a.teacher_id === t.id);
         let exp = 0, rec = 0, mis = 0;
+        
         schs.forEach((sch:any) => {
           const end = pMap[sch.period];
           if (end) {
@@ -84,19 +99,23 @@ export default function TeachersMonitorPage() {
             if (schoolTime > pEnd) { exp++; if (atts.some((a:any) => a.section_id === sch.section_id && a.period_number === sch.period)) rec++; else mis++; }
           }
         });
+        
         const pct = exp > 0 ? Math.round((rec / exp) * 100) : 100;
         const status = mis > 0 ? "حرج" : pct < 90 ? "تحذير" : pct < 100 ? "جيد" : "ممتاز";
         
+        // 🚀 استخراج القسم بشكل صحيح
+        const deptObj = Array.isArray(t.academic_departments) ? t.academic_departments[0] : t.academic_departments;
+
         return { 
           id: t.id, 
           name: (Array.isArray(t.users) ? t.users[0]?.full_name : t.users?.full_name) || "معلم", 
-          specialization: t.specialization, 
-          department: t.academic_departments?.name || "عام", 
-          isHOD: t.academic_departments?.id === t.id, 
+          specialization: t.specialization || "عام", 
+          department: deptObj?.name || "عام", 
+          isHOD: deptObj?.head_id === t.id, 
           recorded: rec, expected: exp, missed: mis, percent: pct, status, 
           assignmentsCount: rawData.allAssignments.filter((a:any) => a.teacher_id === t.id).length, 
           examsCount: rawData.allExams.filter((e:any) => e.teacher_id === t.id).length, 
-          stage: 'all' // Simplified for performance
+          stage: getTeacherStage(t) // 🚀 تطبيق الفلتر
         };
       });
       setLocalTeachers(processed);
@@ -106,7 +125,14 @@ export default function TeachersMonitorPage() {
   useEffect(() => { refreshData(); }, [refreshData]);
 
   const groupedData = useMemo(() => {
-    return localTeachers.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) && (stageFilter === 'all' || t.stage === stageFilter)).reduce((acc: any, t: any) => { if (!acc[t.department]) acc[t.department] = []; acc[t.department].push(t); return acc; }, {});
+    // 🚀 تطبيق فلتر المرحلة بشكل سليم
+    return localTeachers
+      .filter(t => t.name.toLowerCase().includes(search.toLowerCase()) && (stageFilter === 'all' || t.stage === stageFilter || t.stage === 'both'))
+      .reduce((acc: any, t: any) => { 
+        if (!acc[t.department]) acc[t.department] = []; 
+        acc[t.department].push(t); 
+        return acc; 
+      }, {});
   }, [localTeachers, search, stageFilter]);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><RefreshCw className="animate-spin text-indigo-600 w-10 h-10" /></div>;
