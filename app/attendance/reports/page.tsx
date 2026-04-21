@@ -1,4 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -25,29 +26,19 @@ export default function AttendanceReportsPage() {
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
   
-  // 🚀 تحديد التبويب الافتراضي: المدير يرى الإحصائيات، المعلم يرى تقارير الطلاب مباشرة
   const [activeTab, setActiveTab] = useState<'daily_snapshot' | 'analytics'>(isAdmin ? 'daily_snapshot' : 'analytics');
   
-  // ==========================================
-  // حالة (State) الخاصة بالإحصائية الإدارية
-  // ==========================================
   const [snapshotDate, setSnapshotDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [dailyStats, setDailyStats] = useState<any[]>([]);
 
-  // ==========================================
-  // حالة (State) الخاصة بسجل تقارير الطلاب (المعلم + المدير)
-  // ==========================================
   const [records, setRecords] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [selectedSection, setSelectedSection] = useState<string>('all');
-  const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('month'); // الافتراضي شهر لتخفيف الضغط
+  const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('month'); 
   const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
 
-  // ==========================================
-  // 1. جلب بيانات اللقطة الإحصائية اليومية (للمدير فقط)
-  // ==========================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin) return;
     setLoading(true); setDbError(null);
@@ -58,7 +49,7 @@ export default function AttendanceReportsPage() {
           id, date, period, lesson_title, total_students, present_count, absent_count, late_count, excused_count,
           sections (name, classes(name)),
           subjects (name),
-          users (full_name)
+          users!daily_attendance_stats_teacher_id_fkey (full_name, teachers(academic_departments(name)))
         `)
         .eq('date', snapshotDate)
         .order('period', { ascending: true });
@@ -72,10 +63,6 @@ export default function AttendanceReportsPage() {
     }
   }, [user, isAdmin, snapshotDate]);
 
-
-// ==========================================
-  // 2. جلب تقارير الطلاب (للمعلم والمدير) مبرمجة لتخفيف الضغط
-  // ==========================================
   const fetchAnalyticsData = useCallback(async () => {
     if (!user || (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher')) return;
 
@@ -87,7 +74,6 @@ export default function AttendanceReportsPage() {
         if (teacherData) currentTeacherId = teacherData.id;
       }
 
-      // جلب الفصول المتاحة
       let availableSections = [];
       if (authRole === 'teacher') {
         const dashData = await fetchTeacherDashboardData();
@@ -107,7 +93,6 @@ export default function AttendanceReportsPage() {
         setRecords([]); setLoading(false); return;
       }
 
-      // 🚀 التحسين الخارق: إضافة !students_id_fkey لمنع تعارض قاعدة البيانات وإنهاء الخطأ 500 للأبد!
       let query = supabase
         .from('attendance_records')
         .select(`
@@ -125,20 +110,14 @@ export default function AttendanceReportsPage() {
       }
 
       const today = new Date();
-      if (dateRange === 'today') {
-        query = query.eq('date', format(today, 'yyyy-MM-dd'));
-      } else if (dateRange === 'week') {
-        query = query.gte('date', format(startOfWeek(today, { weekStartsOn: 0 }), 'yyyy-MM-dd')).lte('date', format(endOfWeek(today, { weekStartsOn: 0 }), 'yyyy-MM-dd'));
-      } else if (dateRange === 'month') {
-        query = query.gte('date', format(startOfMonth(today), 'yyyy-MM-dd')).lte('date', format(endOfMonth(today), 'yyyy-MM-dd'));
-      } else if (dateRange === 'custom') {
-        query = query.gte('date', customStartDate).lte('date', customEndDate);
-      }
+      if (dateRange === 'today') query = query.eq('date', format(today, 'yyyy-MM-dd'));
+      else if (dateRange === 'week') query = query.gte('date', format(startOfWeek(today, { weekStartsOn: 0 }), 'yyyy-MM-dd')).lte('date', format(endOfWeek(today, { weekStartsOn: 0 }), 'yyyy-MM-dd'));
+      else if (dateRange === 'month') query = query.gte('date', format(startOfMonth(today), 'yyyy-MM-dd')).lte('date', format(endOfMonth(today), 'yyyy-MM-dd'));
+      else if (dateRange === 'custom') query = query.gte('date', customStartDate).lte('date', customEndDate);
 
       const { data: attendanceData, error } = await query;
       if (error) throw error;
 
-      // فلترة أمان للمعلم
       let finalData = attendanceData || [];
       if (authRole === 'teacher' && selectedSection === 'all') {
         const sectionIds = validSections.map(s => String(s.id));
@@ -155,18 +134,13 @@ export default function AttendanceReportsPage() {
     }
   }, [user, authRole, fetchTeacherDashboardData, selectedSection, dateRange, customStartDate, customEndDate]);
 
-
-  // 🚀 مراقب التبويبات لتشغيل دوال الجلب المناسبة
   useEffect(() => {
     if (isChecking) return;
     if (activeTab === 'daily_snapshot' && isAdmin) fetchDailySnapshot();
     else if (activeTab === 'analytics') fetchAnalyticsData();
   }, [activeTab, fetchDailySnapshot, fetchAnalyticsData, isChecking, isAdmin]);
 
-
-  // ==========================================
-  // محرك فرز الإحصائية الإدارية 
-  // ==========================================
+  // 🚀 المحرك المعماري لفرز الإحصائيات مع الاعتماد على جدول الأقسام
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = {
       'المرحلة المتوسطة': {},
@@ -174,26 +148,23 @@ export default function AttendanceReportsPage() {
     };
 
     dailyStats.forEach(stat => {
-      const classData: any = Array.isArray(stat.sections?.classes) ? stat.sections?.classes[0] : stat.sections?.classes;
+      const secObj: any = Array.isArray(stat.sections) ? stat.sections[0] : stat.sections;
+      const classData: any = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
       const className = classData?.name || '';
-      const fullClassName = `${className} - ${stat.sections?.name || ''}`;
+      const fullClassName = `${className} - ${secObj?.name || ''}`;
       
       const stage = /(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(className) ? 'المرحلة المتوسطة' : 'المرحلة الثانوية';
       
       const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
       const subjName = subjData?.name || 'مادة غير محددة';
       
-      let dept = 'أقسام أخرى';
-      if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) dept = 'قسم العلوم';
-      else if (/(رياضيات)/.test(subjName)) dept = 'قسم الرياضيات';
-      else if (/(عربي|عربية)/.test(subjName)) dept = 'قسم اللغة العربية';
-      else if (/(إنجليزي|انجليزي)/.test(subjName)) dept = 'قسم اللغة الإنجليزية';
-      else if (/(إسلامية|قرآن|تجويد)/.test(subjName)) dept = 'قسم التربية الإسلامية';
-      else if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) dept = 'قسم الاجتماعيات';
-      else if (/(حاسوب|معلوماتية)/.test(subjName)) dept = 'قسم الحاسوب';
-
       const teacherData: any = Array.isArray(stat.users) ? stat.users[0] : stat.users;
+      const teacherProfile: any = Array.isArray(teacherData?.teachers) ? teacherData.teachers[0] : teacherData?.teachers;
+      const academicDept: any = Array.isArray(teacherProfile?.academic_departments) ? teacherProfile.academic_departments[0] : teacherProfile?.academic_departments;
       
+      // 🚀 القراءة الصريحة للقسم من القاعدة بدلاً من التخمين
+      let dept = academicDept?.name || 'أقسام أخرى';
+
       if (!groups[stage][dept]) groups[stage][dept] = [];
       groups[stage][dept].push({
         teacher: teacherData?.full_name || 'غير محدد',
@@ -210,9 +181,6 @@ export default function AttendanceReportsPage() {
     return groups;
   }, [dailyStats]);
 
-  // ==========================================
-  // محرك تجميع تقارير الطلاب والمعادلة (5 حصص = 1 يوم)
-  // ==========================================
   const reportData = useMemo(() => {
     const studentMap = new Map<string, any>();
     
@@ -256,9 +224,6 @@ export default function AttendanceReportsPage() {
     return `تقرير الغياب التحليلي (${secName}) - ${dateText}`;
   };
 
-  // ==========================================
-  // دوال الطباعة والتصدير
-  // ==========================================
   const printDepartmentReport = (stage: string, department: string, deptRecords: any[]) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return alert('الرجاء السماح بالنوافذ المنبثقة');
@@ -298,7 +263,7 @@ export default function AttendanceReportsPage() {
         <body>
           <div class="header">
             <h3>مدرسة الرفعة النموذجية ( ${department} )</h3>
-            <h4>إحصائية غياب الطلبة خلال حصص ${department} التعليم عن بعد ${formattedDate.replace('،', '')}</h4>
+            <h4>إحصائية غياب الطلبة خلال حصص ${department} - ${formattedDate.replace('،', '')}</h4>
           </div>
           <table>
             <thead>
@@ -316,8 +281,8 @@ export default function AttendanceReportsPage() {
             <tbody>${rows}</tbody>
           </table>
           <div class="signatures">
-            <div>رئيس القسم<br/><p>أ / رائد عبد الستار</p></div>
-            <div>مدير المدرسة<br/><p>أ / صالح المطيري</p></div>
+            <div>رئيس القسم<br/><p>.........................</p></div>
+            <div>مدير المدرسة<br/><p>أ. صالح المطيري</p></div>
           </div>
           <script>window.onload = () => { setTimeout(() => window.print(), 500); }</script>
         </body>
@@ -410,7 +375,6 @@ export default function AttendanceReportsPage() {
     printWindow.document.close();
   };
 
-  // شاشة حماية الوصول
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#090b14]">
@@ -429,13 +393,11 @@ export default function AttendanceReportsPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo" dir="rtl">
       
-      {/* الخلفية المضيئة والمظهر الزجاجي */}
       <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
         
-        {/* Top Navigation */}
         <div className="flex justify-between items-center">
           <Link href="/attendance" className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 font-bold bg-[#131836]/60 backdrop-blur-xl px-5 py-2.5 rounded-2xl border border-white/10 transition-all w-fit group text-sm sm:text-base shadow-lg">
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة للرصد
@@ -445,7 +407,6 @@ export default function AttendanceReportsPage() {
           </button>
         </div>
 
-        {/* Hero Section */}
         <div className="relative overflow-hidden rounded-[2.5rem] bg-[#131836]/60 backdrop-blur-2xl border border-white/10 p-8 sm:p-12 text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
             <div className="space-y-4">
@@ -460,7 +421,6 @@ export default function AttendanceReportsPage() {
               </p>
             </div>
             
-            {/* التبويبات تظهر للمدير فقط */}
             {isAdmin && (
               <div className="flex flex-col gap-3 shrink-0 w-full lg:w-auto bg-[#090b14]/50 p-2 rounded-[2rem] border border-white/5">
                 <button onClick={() => setActiveTab('daily_snapshot')} className={`flex items-center justify-center gap-2 px-6 py-4 rounded-[1.5rem] text-sm sm:text-base font-black transition-all ${activeTab === 'daily_snapshot' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
@@ -481,9 +441,6 @@ export default function AttendanceReportsPage() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* التبويب الأول: الإحصائية اليومية للإدارة (للمدير فقط) */}
-        {/* ========================================================= */}
         {isAdmin && activeTab === 'daily_snapshot' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
@@ -519,7 +476,7 @@ export default function AttendanceReportsPage() {
                         <div key={dept} className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
                           <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#090b14]/30">
                             <h3 className="text-xl font-black text-emerald-400 flex items-center gap-3">
-                              <Layers className="w-6 h-6" /> {dept}
+                              <Layers className="w-6 h-6" /> قسم {dept}
                             </h3>
                             <button onClick={() => printDepartmentReport(stage, dept, recordsList)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black transition-all border border-white/10 active:scale-95">
                               <Printer className="w-4 h-4" /> طباعة الإحصائية
@@ -565,13 +522,9 @@ export default function AttendanceReportsPage() {
           </motion.div>
         )}
 
-        {/* ========================================================= */}
-        {/* التبويب الثاني: سجل تقارير الطلاب (للمعلم والمدير) */}
-        {/* ========================================================= */}
         {activeTab === 'analytics' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
-            {/* شريط الفلترة الذكي */}
             <div className="bg-[#131836]/60 backdrop-blur-2xl p-5 sm:p-6 rounded-[2.5rem] shadow-xl border border-white/10 sticky top-4 z-30">
               <div className="flex items-center gap-2 sm:gap-3 mb-4">
                 <Filter className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
@@ -618,7 +571,6 @@ export default function AttendanceReportsPage() {
               <div className="py-20 flex justify-center"><Loader2 className="w-12 h-12 text-emerald-500 animate-spin drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" /></div>
             ) : (
               <>
-                {/* 🚀 رادار الإنذارات */}
                 <AnimatePresence>
                   {atRiskStudents.length > 0 && (
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-rose-500/10 p-5 sm:p-8 rounded-[2.5rem] border border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.15)] backdrop-blur-xl">
@@ -658,7 +610,6 @@ export default function AttendanceReportsPage() {
                   )}
                 </AnimatePresence>
 
-                {/* 🚀 الجدول الرئيسي */}
                 <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden">
                   <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-[#090b14]/30">
                     <div className="flex items-center gap-4">
