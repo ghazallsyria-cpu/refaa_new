@@ -96,7 +96,7 @@ export function useUsersSystem() {
   const fetchStudents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('students').select('*, users(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users(full_name))').limit(1000);
+      const { data, error: err } = await supabase.from('students').select('*, users(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users(full_name))').limit(10000);
       if (err) throw err;
       setStudents((data || []).sort((a: any, b: any) => extractName(a).localeCompare(extractName(b), 'ar')));
     } finally { setLoading(false); }
