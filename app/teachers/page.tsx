@@ -109,7 +109,7 @@ export default function TeachersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false); // 👈 المسمى الموحد
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
 
@@ -206,7 +206,7 @@ export default function TeachersPage() {
     try { 
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
       showNotification('success', `تم التغيير بنجاح، كلمة المرور الجديدة: ${result.newPassword || resetPasswordForm.newPassword}`); 
-      setShowPasswordModal(false); // 👈 المسمى الموحد هنا
+      setShowPasswordModal(false);
       setResetPasswordForm({ userId: '', newPassword: '' });
     } catch (e: any) { showNotification('error', e.message); } 
   };
@@ -447,6 +447,13 @@ export default function TeachersPage() {
                   </div>
 
                   <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">التخصص הדقيق</label><input type="text" value={editForm.specialization} onChange={e => setEditForm({...editForm, specialization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+
+                  {/* 👇 الحقل الجديد لرابط زووم في شاشة التعديل */}
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="text-xs font-black text-slate-400 mr-2">رابط زووم (Zoom Link)</label>
+                    <input type="url" value={editForm.zoom_link} onChange={e => setEditForm({...editForm, zoom_link: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" placeholder="https://zoom.us/j/..." />
+                  </div>
+
                 </div>
 
                 <div className="bg-amber-50/50 p-6 rounded-3xl border border-amber-100 space-y-5">
