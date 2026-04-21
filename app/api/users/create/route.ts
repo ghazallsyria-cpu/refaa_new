@@ -1,165 +1,60 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { CreateUserRequestSchema } from '@/lib/validations';
-import { validateRequest, handleApiError } from '@/lib/api-utils';
 
-export async function POST(request: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
+export async function POST(req: Request) {
   try {
-    // 🚀 نقرأ الطلب الأصلي قبل فلترته لكي لا نفقد كلمة المرور المرسلة
-    const clonedReq = request.clone();
-    const rawBody = await clonedReq.json();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     
-    const validatedData = await validateRequest(request, CreateUserRequestSchema);
-    const { 
-      email, 
-      full_name, 
-      national_id, 
-      phone, 
-      role, 
-      specialization, 
-      section_id, 
-      address, 
-      job_title, 
-      zoom_link 
-    } = validatedData;
-
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authCheckError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (authCheckError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { data: userData } = await supabaseAdmin.from('users').select('role').eq('id', user.id).single();
-    if (userData?.role !== 'admin' && userData?.role !== 'management'&& userData?.role !== 'staff') {
-      return NextResponse.json({ error: 'Forbidden: Only admins can create users' }, { status: 403 });
-    }
-      // منع الكادر الإداري من ترقية مستخدمين لمدراء
-    if (userData?.role === 'staff' && (role === 'admin' || role === 'management' || role === 'staff')) {
-      return NextResponse.json({ error: 'Forbidden: Staff can only create students or parents' }, { status: 403 });
-    }
-    
-    // 🚀 الحل الجذري: نعتمد كلمة المرور المرسلة، أو نفرض 123456 كافتراضي 
-    const generatedPassword = rawBody.password || validatedData.password || '123456';
-    const generatedEmail = email || `${national_id}@alrefaa.edu`;
-
-    // Check if national_id already exists in specific tables
-    if (role === 'teacher') {
-      const { data: existingTeacher } = await supabaseAdmin
-        .from('teachers')
-        .select('id')
-        .eq('national_id', national_id)
-        .maybeSingle();
-
-      if (existingTeacher) {
-        return NextResponse.json({ error: 'الرقم المدني مسجل مسبقاً لمعلم آخر' }, { status: 400 });
-      }
-    }
-
-    if (role === 'student') {
-      const { data: existingStudent } = await supabaseAdmin
-        .from('students')
-        .select('id')
-        .eq('national_id', national_id)
-        .maybeSingle();
-
-      if (existingStudent) {
-        return NextResponse.json({ error: 'الرقم المدني مسجل مسبقاً لطالب آخر' }, { status: 400 });
-      }
-    }
-
-    // 1. Create user in auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: generatedEmail,
-      password: generatedPassword,
-      email_confirm: true,
-      user_metadata: {
-        full_name,
-        role,
-      }
+    // إنشاء عميل بصلاحيات الآدمن المطلقة متجاوزاً الـ RLS
+    const adminSupabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 400 });
-    }
-    if (!authData.user) throw new Error('Failed to create user');
+    const body = await req.json();
+    const { email, password, role, full_name, national_id, phone, department_id, specialization } = body;
 
+    // 1. إنشاء الحساب في نظام المصادقة (Auth)
+    const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true
+    });
+
+    if (authError) throw authError;
     const userId = authData.user.id;
 
-    // 2. Insert/Update into users table
-    const { error: userError } = await supabaseAdmin
-      .from('users')
-      .upsert({
-        id: userId,
-        full_name,
-        email: generatedEmail,
-        phone,
-        role,
-        must_reset_password: true,
-      }, { onConflict: 'id' });
+    // 2. إدراج البيانات في جدول المستخدمين الأساسي
+    const { error: userError } = await adminSupabase.from('users').insert({
+      id: userId,
+      email,
+      full_name,
+      national_id,
+      phone,
+      role,
+      must_reset_password: true // إجبار المستخدم على تغيير كلمة المرور عند أول دخول
+    });
 
-    if (userError) {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: `خطأ في قاعدة البيانات: ${userError.message}` }, { status: 500 });
-    }
+    if (userError) throw userError;
 
-    // 3. Insert into specific role table
+    // 3. توزيع المستخدم على جدوله الخاص حسب الصلاحية
     if (role === 'student') {
-      const { error: studentError } = await supabaseAdmin
-        .from('students')
-        .insert({
-          id: userId,
-          national_id,
-          section_id: section_id || null,
-        });
-      if (studentError) {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
-        throw studentError;
-      }
+      await adminSupabase.from('students').insert({ id: userId, national_id });
     } else if (role === 'teacher') {
-      const { error: teacherError } = await supabaseAdmin
-        .from('teachers')
-        .insert({
-          id: userId,
-          national_id,
-          specialization,
-          zoom_link,
-        });
-      if (teacherError) {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
-        throw teacherError;
-      }
+      await adminSupabase.from('teachers').insert({ 
+        id: userId, 
+        national_id, 
+        department_id: department_id || null, 
+        specialization: specialization || null 
+      });
     } else if (role === 'parent') {
-      const { error: parentError } = await supabaseAdmin
-        .from('parents')
-        .insert({
-          id: userId,
-          national_id,
-          address,
-          job_title,
-        });
-      if (parentError) {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
-        throw parentError;
-      }
+      await adminSupabase.from('parents').insert({ id: userId, national_id });
     }
 
-    return NextResponse.json({ user: authData.user, password: generatedPassword, message: 'User created successfully' });
-  } catch (error: unknown) {
-    return handleApiError(error, 'Create User');
+    return NextResponse.json({ success: true, user: authData.user, password });
+
+  } catch (error: any) {
+    console.error('Create User Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
