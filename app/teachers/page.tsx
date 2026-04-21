@@ -337,9 +337,9 @@ export default function TeachersPage() {
           <div className="flex w-full lg:w-auto gap-2 flex-1 max-w-2xl">
             <div className="relative flex-1 group">
               <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
-              <input type="text" className="w-full rounded-xl border-0 py-3.5 pr-12 text-right bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold transition-all" placeholder="بحث بالاسم أو الرقم المدني..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input type="text" className="w-full rounded-xl border-0 py-3.5 pr-12 text-right bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 transition-all" placeholder="بحث بالاسم أو الرقم المدني..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
-            <select value={selectedDepartment || 'all'} onChange={(e) => setSelectedDepartment(e.target.value === 'all' ? null : e.target.value)} className="w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-700 outline-none cursor-pointer">
+            <select value={selectedDepartment || 'all'} onChange={(e) => setSelectedDepartment(e.target.value === 'all' ? null : e.target.value)} className="w-48 bg-slate-50 border-0 rounded-xl py-3.5 px-4 font-bold text-slate-900 outline-none cursor-pointer">
               <option value="all">جميع الأقسام</option>
               <option value="unassigned" className="text-rose-600 font-black">معلمون بلا قسم ⚠️</option>
               {departments?.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -432,33 +432,32 @@ export default function TeachersPage() {
               <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-6"><h3 className="text-2xl font-black text-slate-900">تعديل الملف ونقل المعلم</h3><button onClick={() => setShowEditModal(false)}><X size={24} className="text-slate-300 hover:text-rose-500"/></button></div>
               <form className="space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الاسم</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
-                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
+                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الاسم</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
+                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
                   
-                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
-                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
+                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
+                  <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
                   
                   <div className="sm:col-span-2 space-y-1.5">
                     <label className="text-xs font-black text-indigo-600 mr-2">القسم الأكاديمي الحالي <span className="text-rose-500">*</span></label>
-                    <select value={editForm.department_id || ''} onChange={e => setEditForm({...editForm, department_id: e.target.value})} className="w-full px-4 py-3 bg-indigo-50/50 border border-indigo-100 rounded-xl font-black text-indigo-900 outline-none cursor-pointer">
+                    <select value={editForm.department_id || ''} onChange={e => setEditForm({...editForm, department_id: e.target.value})} className="w-full px-4 py-3 bg-indigo-50/50 text-indigo-900 border border-indigo-100 rounded-xl font-black outline-none cursor-pointer">
                       <option value="">-- يرجى اختيار قسم ليظهر المعلم في النظام --</option>
                       {departments?.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
 
-                  <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">التخصص הדقيق</label><input type="text" value={editForm.specialization} onChange={e => setEditForm({...editForm, specialization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+                  <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">التخصص الدقيق</label><input type="text" value={editForm.specialization} onChange={e => setEditForm({...editForm, specialization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
 
-                  {/* 👇 الحقل الجديد لرابط زووم في شاشة التعديل */}
                   <div className="sm:col-span-2 space-y-1.5">
                     <label className="text-xs font-black text-slate-400 mr-2">رابط زووم (Zoom Link)</label>
-                    <input type="url" value={editForm.zoom_link} onChange={e => setEditForm({...editForm, zoom_link: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" placeholder="https://zoom.us/j/..." />
+                    <input type="url" value={editForm.zoom_link || ''} onChange={e => setEditForm({...editForm, zoom_link: e.target.value})} className="w-full px-4 py-3 bg-slate-50 text-slate-900 placeholder:text-slate-400 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr" placeholder="https://zoom.us/j/..." />
                   </div>
 
                 </div>
 
                 <div className="bg-amber-50/50 p-6 rounded-3xl border border-amber-100 space-y-5">
                   <div className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-amber-100"><input type="checkbox" id="isHOD" checked={editForm.isHOD} onChange={e => setEditForm({...editForm, isHOD: e.target.checked})} className="w-5 h-5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"/><label htmlFor="isHOD" className="text-sm font-black text-slate-800 cursor-pointer select-none">ترقية لـ رئيس قسم</label></div>
-                  {editForm.isHOD && <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-2"><select value={editForm.hod_subject_id} onChange={e => setEditForm({...editForm, hod_subject_id: e.target.value})} className="w-full px-4 py-3 bg-white rounded-xl font-bold outline-none border border-amber-100"><option value="">-- مادة الإشراف --</option>{subjects?.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
+                  {editForm.isHOD && <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-2"><select value={editForm.hod_subject_id} onChange={e => setEditForm({...editForm, hod_subject_id: e.target.value})} className="w-full px-4 py-3 bg-white text-slate-900 rounded-xl font-bold outline-none border border-amber-100"><option value="">-- مادة الإشراف --</option>{subjects?.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
                 </div>
               </form>
             </div>
@@ -485,18 +484,18 @@ export default function TeachersPage() {
                    </div>
                    <form className="space-y-6">
                       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                        <input type="text" placeholder="الاسم الرباعي *" value={addForm.full_name} onChange={(e) => setAddForm({...addForm, full_name: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
-                        <input type="text" placeholder="الرقم المدني *" value={addForm.national_id} onChange={(e) => setAddForm({...addForm, national_id: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
+                        <input type="text" placeholder="الاسم الرباعي *" value={addForm.full_name} onChange={(e) => setAddForm({...addForm, full_name: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
+                        <input type="text" placeholder="الرقم المدني *" value={addForm.national_id} onChange={(e) => setAddForm({...addForm, national_id: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                         
-                        <input type="text" placeholder="رقم الهاتف" value={addForm.phone} onChange={(e) => setAddForm({...addForm, phone: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
-                        <input type="email" placeholder="البريد الإلكتروني" value={addForm.email} onChange={(e) => setAddForm({...addForm, email: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
-                        <input type="url" placeholder="رابط زووم (Zoom Link)" value={addForm.zoom_link} onChange={(e) => setAddForm({...addForm, zoom_link: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-indigo-50/50 ring-1 ring-indigo-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+                        <input type="text" placeholder="رقم الهاتف" value={addForm.phone} onChange={(e) => setAddForm({...addForm, phone: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+                        <input type="email" placeholder="البريد الإلكتروني" value={addForm.email} onChange={(e) => setAddForm({...addForm, email: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+                        <input type="url" placeholder="رابط زووم (Zoom Link)" value={addForm.zoom_link} onChange={(e) => setAddForm({...addForm, zoom_link: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-indigo-50/50 text-indigo-900 placeholder:text-indigo-400 ring-1 ring-indigo-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
 
-                        <select value={addForm.department_id} onChange={(e) => setAddForm({...addForm, department_id: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none cursor-pointer">
+                        <select value={addForm.department_id} onChange={(e) => setAddForm({...addForm, department_id: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 text-slate-900 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none cursor-pointer">
                            <option value="">-- اختر القسم الأكاديمي المعتمد --</option>
                            {departments?.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
-                        <input type="text" placeholder="التخصص الدقيق (اختياري)" value={addForm.specialization} onChange={(e) => setAddForm({...addForm, specialization: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
+                        <input type="text" placeholder="التخصص الدقيق (اختياري)" value={addForm.specialization} onChange={(e) => setAddForm({...addForm, specialization: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 text-slate-900 placeholder:text-slate-400 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                       </div>
                    </form>
                 </div>
@@ -578,7 +577,7 @@ export default function TeachersPage() {
               placeholder="اكتب كلمة المرور الجديدة..." 
               value={resetPasswordForm.newPassword} 
               onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} 
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-bold focus:ring-2 focus:ring-sky-500 outline-none mb-6 text-center shadow-inner text-lg" 
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-bold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-sky-500 outline-none mb-6 text-center shadow-inner text-lg" 
               dir="ltr"
             />
             <div className="flex gap-3">
@@ -589,7 +588,7 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60"><div className="bg-white p-8 rounded-3xl text-center"><h3 className="text-xl font-black mb-4">تأكيد الحذف</h3><div className="flex gap-4"><button onClick={confirmDelete} className="bg-rose-600 text-white px-8 py-2 rounded-xl font-black flex-1">حذف نهائي</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-500 px-8 py-2 rounded-xl font-black flex-1">تراجع</button></div></div></div>}
+      {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60"><div className="bg-white p-8 rounded-3xl text-center"><h3 className="text-xl font-black mb-4 text-slate-900">تأكيد الحذف</h3><div className="flex gap-4"><button onClick={confirmDelete} className="bg-rose-600 text-white px-8 py-2 rounded-xl font-black flex-1">حذف نهائي</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-500 px-8 py-2 rounded-xl font-black flex-1">تراجع</button></div></div></div>}
       
       {teacherForBadge && <GrantBadgeModal isOpen={isBadgeModalOpen} onClose={() => { setIsBadgeModalOpen(false); setTeacherForBadge(null); }} recipientId={teacherForBadge.id} recipientName={teacherForBadge.name} granterId={user?.id || 'admin'} />}
     </div>
