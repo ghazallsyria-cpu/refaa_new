@@ -15,7 +15,6 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 1. جلب المعلمين باستخدام نفس الكود الناجح والمضمون مع التصحيح لمعرفة رئيس القسم
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
@@ -29,12 +28,10 @@ export function useTeachersSystem() {
 
       if (teachersError) throw teachersError;
 
-      // 2. جلب الفصول والمراحل بشكل منفصل لمنع أي انهيار في قاعدة البيانات (Bulletproof)
       const { data: tsData } = await supabase
         .from("teacher_sections")
         .select("teacher_id, sections(classes(name))");
 
-      // 3. دمج المراحل مع المعلمين بذكاء وسرعة
       const teachersWithSections = (teachersData || []).map(t => {
         return {
           ...t,
@@ -43,7 +40,10 @@ export function useTeachersSystem() {
       });
 
       const { data: allSchedules } = await supabase.from("schedules").select("teacher_id, section_id, period").eq("day_of_week", dbDay);
-      const { data: allAttendance } = await supabase.from("attendance_sessions").select("teacher_id, section_id, period_number, date").eq("date", todayStr);
+      
+      // 🚀 التصليح هنا: جلب البيانات من جدول attendance_records وبحقل period ليتطابق مع رصد المعلمين الحقيقي
+      const { data: allAttendance } = await supabase.from("attendance_records").select("teacher_id, section_id, period, date").eq("date", todayStr);
+      
       const { data: allAssignments } = await supabase.from("assignments").select("teacher_id").gte("created_at", weekAgoStr);
       const { data: allExams } = await supabase.from("exams").select("teacher_id").gte("created_at", weekAgoStr);
 
