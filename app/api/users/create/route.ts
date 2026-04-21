@@ -12,45 +12,52 @@ export async function POST(req: Request) {
     });
 
     const body = await req.json();
-    const { email, password, role, full_name, national_id, phone, department_id, specialization, student_ids } = body;
+    const { email, password, role, full_name, national_id, phone, department_id, specialization, student_ids, job_title, address } = body;
 
-    // 1. إنشاء الحساب في نظام المصادقة (Auth)
+    // 1. إنشاء الحساب في نظام المصادقة (Auth) وتمرير البيانات الوصفية
     const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true
+      email_confirm: true,
+      user_metadata: { full_name, national_id, role }
     });
 
     if (authError) throw authError;
     const userId = authData.user.id;
 
-    // 2. إدراج البيانات في جدول المستخدمين الأساسي
-    const { error: userError } = await adminSupabase.from('users').insert({
+    // 2. إدراج البيانات في جدول المستخدمين (نستخدم upsert لتفادي تعارض أي Triggers)
+    const { error: userError } = await adminSupabase.from('users').upsert({
       id: userId,
       email,
       full_name,
       national_id,
-      phone,
+      phone: phone || null,
       role,
-      must_reset_password: true // إجبار المستخدم على تغيير كلمة المرور عند أول دخول
+      must_reset_password: true
     });
 
     if (userError) throw userError;
 
-    // 3. توزيع المستخدم وربط الأبناء بصلاحيات مطلقة
+    // 3. التوزيع والربط
     if (role === 'student') {
-      await adminSupabase.from('students').insert({ id: userId, national_id });
+      await adminSupabase.from('students').upsert({ id: userId, national_id });
     } else if (role === 'teacher') {
-      await adminSupabase.from('teachers').insert({ 
+      await adminSupabase.from('teachers').upsert({ 
         id: userId, 
         national_id, 
         department_id: department_id || null, 
         specialization: specialization || null 
       });
     } else if (role === 'parent') {
-      await adminSupabase.from('parents').insert({ id: userId, national_id });
+      // 🚀 إدخال ولي الأمر بأمان تام
+      await adminSupabase.from('parents').upsert({ 
+        id: userId, 
+        national_id,
+        job_title: job_title || null,
+        address: address || null
+      });
       
-      // 🚀 الربط القوي للأبناء من السيرفر مباشرة لتجاوز حماية الـ Staff
+      // 🚀 الربط التلقائي للأبناء
       if (student_ids && Array.isArray(student_ids) && student_ids.length > 0) {
         await adminSupabase.from('students').update({ parent_id: userId }).in('id', student_ids);
       }
@@ -60,6 +67,10 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error('Create User Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    let msg = error.message;
+    if (msg.includes("Database error saving new user")) {
+       msg = "قاعدة البيانات ترفض الإضافة: الرقم المدني أو البريد مسجل مسبقاً في النظام.";
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
