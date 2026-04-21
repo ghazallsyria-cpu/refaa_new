@@ -27,15 +27,10 @@ export const clearDashboardCache = () => {
 export function useDashboardSystem() {
   const { user } = useAuth();
 
-  // ==========================================
-  // 1. ADMIN DASHBOARD FUNCTIONS
-  // ==========================================
   const fetchAdminDashboardStats = useCallback(async (forceRefresh = false) => {
     return withCache('admin_stats', async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
-        
-        // 🚀 تم استبدال daily_attendance_summary بـ attendance_records
         const [ { count: studentsCount }, { count: teachersCount }, { count: sectionsCount }, attendanceRes ] = await Promise.all([
           supabase.from('students').select('id', { count: 'exact', head: true }),
           supabase.from('teachers').select('id', { count: 'exact', head: true }),
@@ -44,7 +39,6 @@ export function useDashboardSystem() {
         ]);
 
         const totalAttendanceCount = attendanceRes.data?.length || 0;
-        // 🚀 استخدام status بدلاً من daily_status
         const presentAttendanceCount = attendanceRes.data?.filter(a => a.status === 'present').length || 0;
         
         return {
@@ -92,10 +86,6 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, []);
 
-
-  // ==========================================
-  // 2. STUDENT & PARENT FUNCTIONS
-  // ==========================================
   const fetchStudentDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user) return null;
     return withCache(`student_dashboard_${user.id}`, async () => {
@@ -112,7 +102,6 @@ export function useDashboardSystem() {
         const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
         const examIds = examSections?.map(e => e.exam_id) || [];
 
-        // 🚀 تم استبدال daily_attendance_summary بـ attendance_records
         const [ { data: assignments }, { data: exams }, { data: attendance }, { data: grades }, { data: todaysSchedule }, { data: periods } ] = await Promise.all([
           assignmentIds.length > 0 ? supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
           examIds.length > 0 ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
@@ -123,7 +112,6 @@ export function useDashboardSystem() {
         ]);
 
         const totalDays = attendance?.length || 0;
-        // 🚀 استخدام status بدلاً من daily_status
         const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
         
         return { student, assignments: assignments || [], exams: exams || [], attendanceRate: totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100, grades: grades || [], todaysSchedule: todaysSchedule || [], periods: periods || [] };
@@ -157,14 +145,15 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user]);
 
+  // 🚀 دوال ولي الأمر المطورة
   const fetchParentDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user) return null;
-    return withCache(`parent_dashboard_${user.id}`, async () => {
+    return withCache(`parent_dashboard_main_${user.id}`, async () => {
       try {
         const { data: parentProfile } = await supabase.from('parents').select('id').eq('id', user.id).single();
         if (!parentProfile) return null;
         const [ { data: children }, { data: notifications } ] = await Promise.all([
-          supabase.from('students').select('*, users!students_id_fkey(full_name), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(1000),
+          supabase.from('students').select('*, users!students_id_fkey(full_name, avatar_url), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(100),
           supabase.from('notifications').select('*').eq('type', 'announcement').order('created_at', { ascending: false }).limit(5)
         ]);
         return { children: children || [], notifications: notifications || [] };
@@ -172,10 +161,40 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user]);
 
+  const fetchParentChildDetails = useCallback(async (childId: string, sectionId: string | null) => {
+    try {
+      const todayDbDay = new Date().getDay() + 1; // الأحد = 1
 
-  // ==========================================
-  // 3. TEACHER FUNCTIONS
-  // ==========================================
+      const [ 
+        { data: attendance }, 
+        { data: badges }, 
+        { data: periods }, 
+        { data: schedule }, 
+        { data: exams }, 
+        { data: assignments } 
+      ] = await Promise.all([
+        supabase.from('attendance_records').select('*, subjects(name)').eq('student_id', childId).order('date', { ascending: false }),
+        supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', childId).order('granted_at', { ascending: false }),
+        supabase.from('class_periods').select('*').order('period_number', { ascending: true }),
+        sectionId ? supabase.from('schedules').select('*, subjects(id, name), teachers(id, users!teachers_id_fkey(full_name, avatar_url))').eq('section_id', sectionId).eq('day_of_week', todayDbDay).order('period', { ascending: true }) : Promise.resolve({ data: [] }),
+        supabase.from('exam_attempts').select('id, score, status, completed_at, exams(title, total_marks, max_score, subjects(id, name))').eq('student_id', childId),
+        supabase.from('assignment_submissions').select('id, grade, status, submitted_at, feedback, assignments(title, total_marks, subjects(id, name))').eq('student_id', childId)
+      ]);
+
+      return {
+        attendance: attendance || [],
+        badges: badges || [],
+        periods: periods || [],
+        schedule: schedule || [],
+        exams: exams || [],
+        assignments: assignments || []
+      };
+    } catch (error) {
+      console.error("Error fetching child details:", error);
+      throw error;
+    }
+  }, []);
+
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
@@ -268,5 +287,5 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, [user]);
 
-  return { fetchAdminDashboardStats, fetchAdminRecentActivities, fetchStudentDashboardData, fetchStudentSchedule, fetchParentDashboardData, fetchTeacherDashboardData, fetchTeacherSchedule, updateStudentTrack, fetchTrackSelectionStats, clearDashboardCache };
+  return { fetchAdminDashboardStats, fetchAdminRecentActivities, fetchStudentDashboardData, fetchStudentSchedule, fetchParentDashboardData, fetchParentChildDetails, fetchTeacherDashboardData, fetchTeacherSchedule, updateStudentTrack, fetchTrackSelectionStats, clearDashboardCache };
 }
