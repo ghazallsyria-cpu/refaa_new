@@ -109,7 +109,7 @@ export default function TeachersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false); // 👈 المسمى الموحد
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
 
@@ -146,7 +146,6 @@ export default function TeachersPage() {
   const departmentMembers = filteredTeachers.filter((t: any) => !(t.academic_departments?.head_id === t.id || (t.department_heads && t.department_heads.length > 0)));
   const unassignedTeachersCount = (teachers || []).filter((t: any) => !t.department_id).length;
 
-  // 🚀 تصحيح: إضافة التعريف الصريح لنوع acc هنا لمنع خطأ TypeScript
   const groupedMembers = departmentMembers.reduce((acc: Record<string, any[]>, teacher: any) => {
     const spec = teacher.specialization || 'عام';
     if (!acc[spec]) acc[spec] = [];
@@ -207,7 +206,7 @@ export default function TeachersPage() {
     try { 
       const result = await resetPassword(resetPasswordForm.userId, resetPasswordForm.newPassword); 
       showNotification('success', `تم التغيير بنجاح، كلمة المرور الجديدة: ${result.newPassword || resetPasswordForm.newPassword}`); 
-      setShowPasswordModal(false); 
+      setShowPasswordModal(false); // 👈 المسمى الموحد هنا
       setResetPasswordForm({ userId: '', newPassword: '' });
     } catch (e: any) { showNotification('error', e.message); } 
   };
@@ -558,7 +557,7 @@ export default function TeachersPage() {
       )}
 
       {/* نافذة تغيير كلمة المرور */}
-      {showPasswordResetModal && (
+      {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl border border-slate-100">
             <div className="mx-auto w-16 h-16 bg-sky-50 text-sky-600 flex items-center justify-center rounded-2xl mb-4">
@@ -577,7 +576,7 @@ export default function TeachersPage() {
             />
             <div className="flex gap-3">
               <button onClick={handleResetPasswordSubmit} className="flex-1 bg-sky-600 text-white font-black py-3.5 rounded-xl hover:bg-sky-700 shadow-md shadow-sky-200 transition-all active:scale-95">حفظ التغيير</button>
-              <button onClick={() => { setShowPasswordResetModal(false); setResetPasswordForm({ userId: '', newPassword: '' }); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-3.5 rounded-xl hover:bg-slate-200 transition-all">إلغاء</button>
+              <button onClick={() => { setShowPasswordModal(false); setResetPasswordForm({ userId: '', newPassword: '' }); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-3.5 rounded-xl hover:bg-slate-200 transition-all">إلغاء</button>
             </div>
           </motion.div>
         </div>
