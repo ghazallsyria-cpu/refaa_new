@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useRouter } from 'next/navigation';
 import { Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion'; // تأكد من استخدام framer-motion
+import { motion } from 'framer-motion';
+import { supabase } from '@/lib/supabase'; // 🚀 استدعاء Supabase مباشرة
 
 export default function ResetPasswordPage() {
-  const { user, isChecking, resetPassword } = useAuth();
+  const { user, isChecking } = useAuth(); // 🚀 أزلنا resetPassword القديمة لنستخدم دالتنا المباشرة
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,13 +40,34 @@ export default function ResetPasswordPage() {
     }
 
     try {
-      await resetPassword(password);
+      // 🚀 1. تحديث كلمة المرور فعلياً في نظام المصادقة الأساسي
+      const { error: authError } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (authError) throw authError;
+
+      // 🚀 2. إزالة قفل "يجب التغيير" من قاعدة البيانات لكي لا يعود المتصفح لطرده
+      if (user?.id) {
+        const { error: dbError } = await supabase
+          .from('users')
+          .update({ must_reset_password: false })
+          .eq('id', user.id);
+          
+        if (dbError) {
+          console.error("Database Error:", dbError);
+          throw new Error("فشل في تحديث حالة الحساب في قاعدة البيانات");
+        }
+      }
+
       setSuccess(true);
       setTimeout(() => {
-        // 🚀 الحل السحري: استخدام Hard Redirect لمسح الكاش القديم وتحديث حالة المصادقة
+        // 🚀 التوجيه الإجباري لمسح الكاش وبدء جلسة جديدة نظيفة
         window.location.href = '/'; 
       }, 2000);
+      
     } catch (err: any) {
+      console.error('Reset Error:', err);
       setError(err.message || 'حدث خطأ أثناء تغيير كلمة المرور');
     } finally {
       setLoading(false);
