@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     });
 
     const body = await req.json();
-    const { email, password, role, full_name, national_id, phone, department_id, specialization } = body;
+    const { email, password, role, full_name, national_id, phone, department_id, specialization, student_ids } = body;
 
     // 1. إنشاء الحساب في نظام المصادقة (Auth)
     const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 
     if (userError) throw userError;
 
-    // 3. توزيع المستخدم على جدوله الخاص حسب الصلاحية
+    // 3. توزيع المستخدم وربط الأبناء بصلاحيات مطلقة
     if (role === 'student') {
       await adminSupabase.from('students').insert({ id: userId, national_id });
     } else if (role === 'teacher') {
@@ -49,6 +49,11 @@ export async function POST(req: Request) {
       });
     } else if (role === 'parent') {
       await adminSupabase.from('parents').insert({ id: userId, national_id });
+      
+      // 🚀 الربط القوي للأبناء من السيرفر مباشرة لتجاوز حماية الـ Staff
+      if (student_ids && Array.isArray(student_ids) && student_ids.length > 0) {
+        await adminSupabase.from('students').update({ parent_id: userId }).in('id', student_ids);
+      }
     }
 
     return NextResponse.json({ success: true, user: authData.user, password });
