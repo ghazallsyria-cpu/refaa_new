@@ -7,7 +7,7 @@ export interface Announcement {
   id: string;
   title: string;
   content: string;
-  target_role: string | null;
+  target_role: string | null; // 'all', 'teacher', 'student', 'parent'
   created_at: string;
   author_id?: string;
   image_url?: string;
@@ -35,13 +35,17 @@ export function useAnnouncementsSystem() {
         `)
         .order('created_at', { ascending: false });
 
+      // 🛡️ تطبيق جدار الرفعة الناري للإعلانات
       if (authRole !== 'admin' && authRole !== 'management') {
         if (authRole) {
-          query = query.or(`target_role.eq.${authRole},target_role.is.null`);
+          // الطالب يرى ما هو موجه له (student) أو ما هو موجه للجميع (all)
+          query = query.in('target_role', [authRole, 'all']);
         } else {
-          query = query.is('target_role', null);
+          // كإجراء أمني إضافي للزوار غير المعروفين
+          query = query.eq('target_role', 'all');
         }
       }
+      // الإدارة ترى جميع الإعلانات بلا استثناء
 
       const { data, error: fetchError } = await query;
 
@@ -55,7 +59,7 @@ export function useAnnouncementsSystem() {
       setAnnouncements(normalizedData);
       return normalizedData;
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع في جلب الإعلانات';
       console.error('Error fetching announcements:', err);
       setError(errorMessage);
       return [];
@@ -71,12 +75,16 @@ export function useAnnouncementsSystem() {
       const response = await fetch('/api/announcements/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(announcement),
+        body: JSON.stringify({
+          ...announcement,
+          // إذا لم يحدد الإداري فئة، نعتبرها للجميع افتراضياً
+          target_role: announcement.target_role || 'all' 
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to save announcement');
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء الحفظ';
       console.error('Error saving announcement:', err);
       setError(errorMessage);
       throw err;
@@ -99,7 +107,7 @@ export function useAnnouncementsSystem() {
         await deleteFromCloudinary(imageUrl);
       }
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ غير متوقع';
+      const errorMessage = err instanceof Error ? err.message : 'حدث خطأ أثناء الحذف';
       console.error('Error deleting announcement:', err);
       setError(errorMessage);
       throw err;
