@@ -3,11 +3,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useUsersSystem } from "@/hooks/useUsersSystem";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  CheckCircle2, FileText, Download, Calendar, Clock, Search, ShieldCheck, Zap, Filter, School, Crown, Folder, RefreshCw
-} from "lucide-react";
+import { CheckCircle2, FileText, Download, Calendar, Clock, Search, ShieldCheck, Zap, Filter, School, Crown, Folder, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -16,7 +13,7 @@ interface TeacherReport {
   id: string;
   name: string;
   specialization: string;
-  department_name: string; // 👈 الاسم الصريح للقسم
+  department_name: string;
   isHOD: boolean;
   stage: 'middle' | 'high' | 'both' | 'unassigned';
   recorded: number;
@@ -57,7 +54,7 @@ const getDatesBetween = (startDate: Date, endDate: Date) => {
   return dates;
 };
 
-// 🧠 محرك استنتاج المرحلة الدراسية
+// 🚀 محرك استنتاج المرحلة للتقارير
 const getTeacherStage = (teacher: any) => {
   if (!teacher.teacher_sections || teacher.teacher_sections.length === 0) return 'unassigned';
   let hasMiddle = false;
@@ -74,7 +71,6 @@ const getTeacherStage = (teacher: any) => {
 };
 
 export default function TeachersReportPage() {
-  const { teachers: allTeachers, fetchTeachers, loading: usersLoading } = useUsersSystem();
   const [localTeachers, setLocalTeachers] = useState<TeacherReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -90,17 +86,14 @@ export default function TeachersReportPage() {
   const todayName = useMemo(() => DAY_MAP[schoolTime.getDay()], [schoolTime]);
 
   useEffect(() => {
-    fetchTeachers(); 
     setEndDate(todayStr);
     const weekAgo = new Date(schoolTime);
     weekAgo.setDate(weekAgo.getDate() - 7);
     setStartDate(getLocalDateString(weekAgo));
-  }, []);
+  }, [todayStr, schoolTime]);
 
   const fetchData = useCallback(async (overrideType?: "day" | "week" | "custom") => {
     const currentType = overrideType || reportType;
-    if (!todayStr || allTeachers.length === 0) return;
-    
     setLoading(true);
     setCustomError(null);
 
@@ -124,18 +117,19 @@ export default function TeachersReportPage() {
         datesToProcess = getDatesBetween(sDate, eDate);
       }
 
+      // 🚀 سحب البيانات مباشرة بقوة السيرفر
       const [
+        { data: teachersDB },
         { data: schedulesDB },
         { data: dbPeriods },
-        { data: attendanceDB },
-        { data: departmentsDB } // 🚀 جلب الأقسام
+        { data: attendanceDB }
       ] = await Promise.all([
+        supabase.from('teachers').select('id, specialization, national_id, department_id, users(full_name), academic_departments(id, name, head_id), teacher_sections(section_id, sections(classes(name)))').limit(1000),
         supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000),
         supabase.from('class_periods').select('period_number, end_time').limit(100),
         currentType === "day" 
           ? supabase.from('attendance_records').select('section_id, date, period, created_at, teacher_id').eq('date', todayStr).limit(10000)
-          : supabase.from('attendance_records').select('section_id, date, period, created_at, teacher_id').gte('date', queryStartStr).lte('date', queryEndStr).limit(50000),
-        supabase.from('academic_departments').select('id, name, head_id')
+          : supabase.from('attendance_records').select('section_id, date, period, created_at, teacher_id').gte('date', queryStartStr).lte('date', queryEndStr).limit(50000)
       ]);
 
       const periodsMap: Record<string, string> = {};
@@ -144,9 +138,9 @@ export default function TeachersReportPage() {
       const isSystemActive = now >= SYSTEM_START_DATE;
       const safeAttendance = (attendanceDB || []) as any[];
       const safeSchedules = (schedulesDB || []) as any[];
-      const safeDepartments = (departmentsDB || []) as any[];
+      const safeTeachers = (teachersDB || []) as any[];
 
-      const results: TeacherReport[] = allTeachers.map((teacher: any) => {
+      const results: TeacherReport[] = safeTeachers.map((teacher: any) => {
         let expectedTotal = 0; let scheduledTotal = 0; let actualRecorded = 0; let actualMissed = 0;
         let lastRecorded: string | null = null;
 
@@ -169,7 +163,6 @@ export default function TeachersReportPage() {
 
               if (isPassed && isSystemActive) {
                 expectedTotal++;
-                // 🚀 تحسين البحث لضمان الدقة
                 const hasRecord = safeAttendance.find(a => String(a.teacher_id) === String(teacher.id) && String(a.date).split('T')[0] === dStr && String(a.period) === String(sch.period));
                 if (hasRecord) {
                   actualRecorded++;
@@ -191,17 +184,17 @@ export default function TeachersReportPage() {
           else if (percent < 95) status = "جيد";
         }
 
-        const teacherName = teacher.users ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name) : teacher.full_name || "غير محدد";
+        const teacherName = teacher.users ? (Array.isArray(teacher.users) ? teacher.users[0]?.full_name : teacher.users.full_name) : "غير محدد";
         
-        // 🚀 استنتاج القسم من القاعدة الجديدة
-        const dept = safeDepartments.find(d => String(d.id) === String(teacher.department_id));
+        // 🚀 تحديد القسم بدقة
+        const deptObj = Array.isArray(teacher.academic_departments) ? teacher.academic_departments[0] : teacher.academic_departments;
 
         return {
           id: teacher.id,
           name: teacherName,
           specialization: teacher.specialization || "عام",
-          department_name: dept ? dept.name : "عام",
-          isHOD: dept ? dept.head_id === teacher.id : false,
+          department_name: deptObj?.name || "عام",
+          isHOD: deptObj ? deptObj.head_id === teacher.id : false,
           stage: getTeacherStage(teacher),
           recorded: actualRecorded, missed: actualMissed, expected: expectedTotal, scheduled: scheduledTotal, percent, lastRecorded, status,
           selected: true,
@@ -211,9 +204,9 @@ export default function TeachersReportPage() {
       setLocalTeachers(results);
     } catch (e) { console.error(e); setCustomError("حدث خطأ أثناء التجميع."); } 
     finally { setLoading(false); }
-  }, [reportType, todayStr, allTeachers, startDate, endDate]);
+  }, [reportType, todayStr, startDate, endDate]);
 
-  useEffect(() => { if (todayStr && allTeachers.length > 0 && reportType !== "custom") fetchData(); }, [todayStr, allTeachers, reportType]);
+  useEffect(() => { if (todayStr && reportType !== "custom") fetchData(); }, [todayStr, reportType, fetchData]);
 
   const handleTypeChange = (type: "day" | "week" | "custom") => { setReportType(type); if (type !== "custom") fetchData(type); };
   const handleApplyCustomRange = () => { fetchData("custom"); };
@@ -256,8 +249,6 @@ export default function TeachersReportPage() {
     if (status === "تحذير") return "bg-amber-50 text-amber-700 border-amber-100 shadow-amber-100";
     return "bg-rose-50 text-rose-700 border-rose-100 shadow-rose-100";
   };
-
-  const isDataLoading = loading || usersLoading;
 
   return (
     <>
@@ -373,7 +364,7 @@ export default function TeachersReportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {isDataLoading ? (
+                {loading ? (
                   <tr><td colSpan={5} className="py-24 text-center"><div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" /><p className="text-slate-400 font-bold">جاري الهيكلة والتحليل...</p></td></tr>
                 ) : Object.keys(groupedTeachers).length === 0 ? (
                   <tr><td colSpan={5} className="py-24 text-center"><p className="text-slate-400 font-bold">لا توجد نتائج مطابقة لهذه المرحلة/البحث</p></td></tr>
@@ -444,7 +435,7 @@ export default function TeachersReportPage() {
         </div>
       </div>
 
-      {/* 🖨️ التقرير المطبوع الأنيق (للإدارة العليا) */}
+      {/* 🖨️ التقرير المطبوع الأنيق */}
       <div className="hidden print:block w-full bg-white text-black p-8 font-cairo" dir="rtl">
         <div className="text-center mb-8 border-b-[3px] border-slate-900 pb-6 relative">
           <div className="absolute top-0 right-0 text-right">
