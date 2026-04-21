@@ -10,43 +10,38 @@ export async function POST(req: Request) {
   try {
     const { parentId, updateData, newEmail } = await req.json();
 
+    // 1. تحديث بيانات المستخدم
     const { error: userError } = await adminSupabase
       .from('users')
       .update({
         full_name: updateData.full_name,
-        email: newEmail,
+        email: newEmail || updateData.email,
         phone: updateData.phone
       })
       .eq('id', parentId);
 
     if (userError) throw userError;
 
+    // 2. تحديث بيانات ولي الأمر (مع إضافة address)
     const { error: parentError } = await adminSupabase
       .from('parents')
       .update({
         national_id: updateData.national_id,
         job_title: updateData.job_title,
+        address: updateData.address, // تمت إضافته ليتوافق مع الفورم
         workplace: updateData.workplace
       })
       .eq('id', parentId);
 
     if (parentError) throw parentError;
 
-    // Handle student links
-    const { error: unlinkError } = await adminSupabase
-      .from('students')
-      .update({ parent_id: null })
-      .eq('parent_id', parentId);
-    
-    if (unlinkError) throw unlinkError;
-
-    if (updateData.student_ids && updateData.student_ids.length > 0) {
-      const { error: linkError } = await adminSupabase
-        .from('students')
-        .update({ parent_id: parentId })
-        .in('id', updateData.student_ids);
+    // 3. 🚀 ربط وفك ارتباط الأبناء بصلاحيات الآدمن المطلقة (تجاوز حماية الـ Staff)
+    if (updateData.student_ids !== undefined) {
+      await adminSupabase.from('students').update({ parent_id: null }).eq('parent_id', parentId);
       
-      if (linkError) throw linkError;
+      if (updateData.student_ids.length > 0) {
+        await adminSupabase.from('students').update({ parent_id: parentId }).in('id', updateData.student_ids);
+      }
     }
 
     return NextResponse.json({ success: true });
