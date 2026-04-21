@@ -19,7 +19,7 @@ export default function AdminAbsenceWarningsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
-  const [selectedStage, setSelectedStage] = useState<string>('all'); // 🚀 حالة الفلترة الجديدة
+  const [selectedStage, setSelectedStage] = useState<string>('all');
 
   useEffect(() => {
     if (authRole === 'admin' || authRole === 'management') {
@@ -29,7 +29,6 @@ export default function AdminAbsenceWarningsPage() {
 
   const sectionsList = useMemo(() => {
     const list = warningsData.map(s => ({ id: s.sectionId, name: s.className, stage: s.stage }));
-    // فلترة القائمة المنسدلة للفصول بناءً على المرحلة المختارة
     const filteredList = selectedStage === 'all' ? list : list.filter(l => l.stage === selectedStage);
     return Array.from(new Map(filteredList.map(item => [item.id, item])).values());
   }, [warningsData, selectedStage]);
@@ -39,7 +38,7 @@ export default function AdminAbsenceWarningsPage() {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSection = selectedSection === 'all' || s.sectionId === selectedSection;
       const matchesLevel = selectedLevel === 'all' || s.warningLevel === selectedLevel;
-      const matchesStage = selectedStage === 'all' || s.stage === selectedStage; // فلترة المرحلة
+      const matchesStage = selectedStage === 'all' || s.stage === selectedStage;
       return matchesSearch && matchesSection && matchesLevel && matchesStage;
     });
   }, [searchTerm, selectedSection, selectedLevel, selectedStage, warningsData]);
@@ -79,31 +78,51 @@ export default function AdminAbsenceWarningsPage() {
         @media print {
           .no-print { display: none !important; }
           body, html { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin: 0; padding: 0; }
+          
           .print-area { display: block !important; width: 100% !important; direction: rtl; font-family: 'Cairo', sans-serif; background: white; }
-          .student-letter-page { page-break-after: always; break-after: page; min-height: 100vh; padding: 40px; box-sizing: border-box; }
+          
+          .student-letter-page { page-break-after: always; break-after: page; min-height: 100vh; padding: 40px; box-sizing: border-box; position: relative; }
           .student-letter-page:last-child { page-break-after: auto; break-after: auto; }
-          .letter-header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 20px; margin-bottom: 40px; }
-          .letter-header h1 { font-size: 32px; font-weight: 900; margin: 0; color: #000; }
-          .letter-header h2 { font-size: 20px; font-weight: bold; margin: 10px 0 0 0; color: #333; }
+          
+          /* تنسيق رأس الصفحة مع الشعار */
+          .letter-header-container { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #000; padding-bottom: 20px; margin-bottom: 40px; }
+          .letter-header-text { text-align: right; }
+          .letter-header-text h1 { font-size: 32px; font-weight: 900; margin: 0; color: #000; }
+          .letter-header-text h2 { font-size: 20px; font-weight: bold; margin: 10px 0 0 0; color: #333; }
+          .letter-logo { width: 120px; height: auto; object-fit: contain; }
+          
           .letter-title { text-align: center; font-size: 26px; font-weight: 900; text-decoration: underline; margin-bottom: 40px; color: #000; }
           .letter-body { font-size: 18px; line-height: 2; text-align: justify; margin-bottom: 40px; color: #000; }
           .highlight-box { text-align: center; border: 2px dashed #000; padding: 20px; margin: 30px 0; font-size: 22px; font-weight: bold; background-color: #f8fafc; color: #000; }
+          
+          /* تنسيق التواقيع والختم */
           .signatures { display: flex; justify-content: space-between; margin-top: 80px; text-align: center; font-weight: bold; font-size: 18px; color: #000; }
+          .signature-block { position: relative; width: 250px; }
+          .manager-stamp { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 150px; opacity: 0.85; mix-blend-mode: multiply; z-index: -1; }
+          
           @page { size: A4; margin: 0; }
         }
       `}} />
 
+      {/* 🖨️ منطقة الطباعة (إشعار رسمي لكل طالب في صفحة مستقلة) */}
       <div className="print-area hidden print:block text-black">
           {filteredStudents.map((s) => (
               <div key={s.id} className="student-letter-page">
-                  <div className="letter-header">
-                      <h1>مدرسة الرفعة النموذجية</h1>
-                      <h2>إدارة شؤون الطلاب والمواظبة</h2>
-                      <p style={{fontSize: '14px', marginTop: '10px'}}>التاريخ: {format(new Date(), 'yyyy/MM/dd', { locale: arSA })}</p>
+                  
+                  {/* رأس الصفحة مع الشعار */}
+                  <div className="letter-header-container">
+                      <div className="letter-header-text">
+                          <h1>مدرسة الرفعة النموذجية</h1>
+                          <h2>إدارة شؤون الطلاب والمواظبة</h2>
+                          <p style={{fontSize: '14px', marginTop: '10px'}}>التاريخ: {format(new Date(), 'yyyy/MM/dd', { locale: arSA })}</p>
+                      </div>
+                      <img src="/refaa-logo.png" alt="شعار المدرسة" className="letter-logo" />
                   </div>
+
                   <div className="letter-title">
                       {s.warningLevel === 'dismissal' ? 'إشعار نهائي بالفصل بسبب الغياب' : `إشعار رسمي: ${s.warningLabel}`}
                   </div>
+                  
                   <div className="letter-body">
                       <p><strong>المكرم ولي أمر الطالب/ة:</strong> <span style={{fontSize: '22px', borderBottom: '1px solid #000', paddingBottom: '2px'}}>{s.name}</span> المحترم،</p>
                       <p>السلام عليكم ورحمة الله وبركاته، وبعد...</p>
@@ -124,14 +143,25 @@ export default function AdminAbsenceWarningsPage() {
                       )}
                       <p>شاكرين لكم حسن تعاونكم الدائم لما فيه مصلحة أبنائكم.</p>
                   </div>
+                  
+                  {/* التواقيع مع الختم */}
                   <div className="signatures">
-                      <div><p>توقيع ولي الأمر</p><p style={{marginTop: '50px', color: '#ccc'}}>.........................</p></div>
-                      <div><p>مدير المدرسة المساعد</p><p style={{marginTop: '50px', color: '#ccc'}}>.........................</p></div>
+                      <div className="signature-block">
+                          <p>توقيع ولي الأمر (للعلم)</p>
+                          <p style={{marginTop: '60px', color: '#000'}}>....................................</p>
+                      </div>
+                      <div className="signature-block">
+                          <p>مدير المدرسة</p>
+                          <img src="/director-stamp.png" alt="ختم المدير" className="manager-stamp" />
+                          <p style={{marginTop: '60px', color: '#000'}}>....................................</p>
+                      </div>
                   </div>
+
               </div>
           ))}
       </div>
 
+      {/* واجهة المستخدم التفاعلية */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto px-4 py-8 font-cairo space-y-6 pb-20 no-print" dir="rtl">
         
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -155,13 +185,11 @@ export default function AdminAbsenceWarningsPage() {
 
         {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-            {/* بحث بالاسم */}
             <div className="md:col-span-2 relative">
                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                 <input type="text" placeholder="ابحث باسم الطالب..." className="w-full pr-12 pl-4 py-4 bg-white rounded-2xl border border-slate-200 focus:border-rose-500 outline-none font-bold shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             
-            {/* 🚀 فلتر المرحلة (متوسط/ثانوي) - المطلب الأساسي */}
             <div className="md:col-span-1 flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
                 <div className="p-2 bg-indigo-50 rounded-xl text-indigo-500"><School className="w-5 h-5" /></div>
                 <select className="flex-1 bg-transparent border-none outline-none font-black text-slate-700 cursor-pointer text-xs" value={selectedStage} onChange={(e) => { setSelectedStage(e.target.value); setSelectedSection('all'); }}>
