@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Search, Edit, Trash2, X, Key, UserPlus, Download, Filter, MapPin, Briefcase, Phone, Mail, Check, Users, UsersRound, ShieldAlert } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
 
 export default function ParentsPage() {
@@ -40,7 +40,6 @@ export default function ParentsPage() {
     fetchStudents();
   }, [fetchParents, fetchStudents]);
 
-  // 🚀 إحصائيات رادار الإدارة
   const stats = useMemo(() => {
     const totalParents = parents.length;
     const activeParents = parents.filter(p => p.students && p.students.length > 0).length;
@@ -74,7 +73,6 @@ export default function ParentsPage() {
       address: parent.address || '',
       job_title: parent.job_title || ''
     });
-    // 🚀 جلب IDs الطلاب المرتبطين حالياً لتعيينهم في نافذة التعديل
     setSelectedStudents(parent.students?.map((s: any) => s.id) || []);
     setShowEditModal(true);
   };
@@ -145,7 +143,6 @@ export default function ParentsPage() {
         </div>
       </div>
 
-      {/* 🚀 البطاقات الإحصائية (رادار الإدارة) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow">
           <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center"><Users className="w-7 h-7"/></div>
@@ -164,7 +161,7 @@ export default function ParentsPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row lg:items-center gap-6">
         <div className="relative flex-1 group">
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-5"><Search className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" /></div>
-          <input type="text" className="block w-full rounded-2xl border-0 py-4 pr-12 pl-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all font-bold" placeholder="البحث بالاسم، الرقم المدني، أو البريد..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <input type="text" className="block w-full rounded-2xl border-0 py-4 pr-12 pl-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-inset focus:ring-indigo-500 sm:text-sm transition-all font-bold placeholder:text-slate-400" placeholder="البحث بالاسم، الرقم المدني، أو البريد..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
       </motion.div>
 
@@ -240,7 +237,7 @@ export default function ParentsPage() {
         </div>
       </motion.div>
 
-      {/* 🚀 النوافذ المنبثقة للإضافة والتعديل */}
+      {/* 🚀 النوافذ المنبثقة للإضافة والتعديل - تم تلوين المدخلات */}
       <AnimatePresence>
         {(showAddModal || showEditModal) && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -256,31 +253,30 @@ export default function ParentsPage() {
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                       <div className="space-y-2">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الاسم الرباعي</label>
-                        <input type="text" value={showAddModal ? addForm.full_name : editForm.full_name} onChange={(e) => showAddModal ? setAddForm({...addForm, full_name: e.target.value}) : setEditForm({...editForm, full_name: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل الاسم الكامل..." />
+                        <input type="text" value={showAddModal ? addForm.full_name : editForm.full_name} onChange={(e) => showAddModal ? setAddForm({...addForm, full_name: e.target.value}) : setEditForm({...editForm, full_name: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل الاسم الكامل..." />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الرقم المدني</label>
-                        <input type="text" value={showAddModal ? addForm.national_id : editForm.national_id} onChange={(e) => showAddModal ? setAddForm({...addForm, national_id: e.target.value}) : setEditForm({...editForm, national_id: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل الرقم المدني..." />
+                        <input type="text" value={showAddModal ? addForm.national_id : editForm.national_id} onChange={(e) => showAddModal ? setAddForm({...addForm, national_id: e.target.value}) : setEditForm({...editForm, national_id: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل الرقم المدني..." />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">البريد الإلكتروني</label>
-                        <input type="email" value={showAddModal ? addForm.email : editForm.email} onChange={(e) => showAddModal ? setAddForm({...addForm, email: e.target.value}) : setEditForm({...editForm, email: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" placeholder="example@domain.com" />
+                        <input type="email" value={showAddModal ? addForm.email : editForm.email} onChange={(e) => showAddModal ? setAddForm({...addForm, email: e.target.value}) : setEditForm({...editForm, email: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" placeholder="example@domain.com" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">رقم الهاتف</label>
-                        <input type="text" value={showAddModal ? addForm.phone : editForm.phone} onChange={(e) => showAddModal ? setAddForm({...addForm, phone: e.target.value}) : setEditForm({...editForm, phone: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" placeholder="أدخل رقم الهاتف..." />
+                        <input type="text" value={showAddModal ? addForm.phone : editForm.phone} onChange={(e) => showAddModal ? setAddForm({...addForm, phone: e.target.value}) : setEditForm({...editForm, phone: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" placeholder="أدخل رقم الهاتف..." />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الوظيفة</label>
-                        <input type="text" value={showAddModal ? addForm.job_title : editForm.job_title} onChange={(e) => showAddModal ? setAddForm({...addForm, job_title: e.target.value}) : setEditForm({...editForm, job_title: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل المسمى الوظيفي..." />
+                        <input type="text" value={showAddModal ? addForm.job_title : editForm.job_title} onChange={(e) => showAddModal ? setAddForm({...addForm, job_title: e.target.value}) : setEditForm({...editForm, job_title: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل المسمى الوظيفي..." />
                       </div>
                       <div className="space-y-2">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">العنوان</label>
-                        <input type="text" value={showAddModal ? addForm.address : editForm.address} onChange={(e) => showAddModal ? setAddForm({...addForm, address: e.target.value}) : setEditForm({...editForm, address: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل عنوان السكن..." />
+                        <input type="text" value={showAddModal ? addForm.address : editForm.address} onChange={(e) => showAddModal ? setAddForm({...addForm, address: e.target.value}) : setEditForm({...editForm, address: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل عنوان السكن..." />
                       </div>
                     </div>
 
-                    {/* 🚀 قسم ربط الأبناء (الذكي) */}
                     <div className="space-y-4 pt-6 border-t border-slate-100">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">ربط الأبناء (الطلاب)</label>
@@ -288,7 +284,7 @@ export default function ParentsPage() {
                       </div>
                       <div className="relative group">
                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4"><Search className="h-4 w-4 text-slate-400" /></div>
-                        <input type="text" className="block w-full rounded-2xl border-0 py-3 pr-10 pl-4 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 sm:text-sm font-bold outline-none" placeholder="البحث عن طالب بالاسم لربطه بهذا الحساب..." value={studentSearchTerm} onChange={(e) => setStudentSearchTerm(e.target.value)} />
+                        <input type="text" className="block w-full rounded-2xl border-0 py-3 pr-10 pl-4 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 sm:text-sm font-bold outline-none" placeholder="البحث عن طالب بالاسم لربطه بهذا الحساب..." value={studentSearchTerm} onChange={(e) => setStudentSearchTerm(e.target.value)} />
                       </div>
                       <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-100 bg-slate-50/50 p-2 space-y-1 custom-scrollbar">
                         {students.filter(s => s.users?.full_name?.toLowerCase().includes(studentSearchTerm.toLowerCase())).map(student => (
@@ -302,11 +298,11 @@ export default function ParentsPage() {
                     </div>
                   </form>
                 </div>
-                <div className="bg-slate-50 px-8 py-6 sm:flex sm:flex-row-reverse gap-3">
-                  <button type="button" className="inline-flex w-full justify-center rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg hover:bg-indigo-700 sm:w-auto" onClick={showAddModal ? handleAddSubmit : handleEditSubmit}>
+                <div className="bg-slate-50 px-8 py-6 sm:flex sm:flex-row-reverse gap-3 border-t border-slate-100">
+                  <button type="button" className="inline-flex w-full justify-center rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg hover:bg-indigo-700 sm:w-auto transition-all" onClick={showAddModal ? handleAddSubmit : handleEditSubmit}>
                     {showAddModal ? 'إضافة ولي الأمر' : 'حفظ التعديلات وارتباط الأبناء'}
                   </button>
-                  <button type="button" className="mt-3 inline-flex w-full justify-center rounded-2xl bg-white px-8 py-4 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 sm:mt-0 sm:w-auto" onClick={() => { setShowAddModal(false); setShowEditModal(false); setSelectedStudents([]); setStudentSearchTerm(''); }}>
+                  <button type="button" className="mt-3 inline-flex w-full justify-center rounded-2xl bg-white px-8 py-4 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 sm:mt-0 sm:w-auto transition-all" onClick={() => { setShowAddModal(false); setShowEditModal(false); setSelectedStudents([]); setStudentSearchTerm(''); }}>
                     إلغاء
                   </button>
                 </div>
@@ -324,8 +320,8 @@ export default function ParentsPage() {
                 <h3 className="text-2xl font-black mb-2 text-slate-900">تأكيد الحذف</h3>
                 <p className="text-slate-500 font-bold mb-6 text-sm leading-relaxed">هل أنت متأكد من حذف حساب ولي الأمر هذا؟ هذا سيؤدي إلى فك ارتباط أبنائه في النظام تلقائياً.</p>
                 <div className="flex gap-4">
-                   <button onClick={confirmDelete} className="bg-rose-600 text-white px-6 py-3 rounded-xl font-black flex-1 shadow-lg shadow-rose-200">حذف نهائي</button>
-                   <button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-black flex-1 border border-slate-200">تراجع</button>
+                   <button onClick={confirmDelete} className="bg-rose-600 text-white px-6 py-3 rounded-xl font-black flex-1 shadow-lg shadow-rose-200 transition-all">حذف نهائي</button>
+                   <button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-black flex-1 border border-slate-200 transition-all">تراجع</button>
                 </div>
              </motion.div>
           </div>
