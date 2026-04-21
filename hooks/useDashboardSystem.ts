@@ -34,14 +34,19 @@ export function useDashboardSystem() {
     return withCache('admin_stats', async () => {
       try {
         const today = new Date().toISOString().split('T')[0];
+        
+        // 🚀 تم استبدال daily_attendance_summary بـ attendance_records
         const [ { count: studentsCount }, { count: teachersCount }, { count: sectionsCount }, attendanceRes ] = await Promise.all([
           supabase.from('students').select('id', { count: 'exact', head: true }),
           supabase.from('teachers').select('id', { count: 'exact', head: true }),
           supabase.from('sections').select('id', { count: 'exact', head: true }),
-          supabase.from('daily_attendance_summary').select('daily_status').eq('date', today)
+          supabase.from('attendance_records').select('status').eq('date', today)
         ]);
+
         const totalAttendanceCount = attendanceRes.data?.length || 0;
-        const presentAttendanceCount = attendanceRes.data?.filter(a => a.daily_status === 'present').length || 0;
+        // 🚀 استخدام status بدلاً من daily_status
+        const presentAttendanceCount = attendanceRes.data?.filter(a => a.status === 'present').length || 0;
+        
         return {
           studentsCount: studentsCount || 0, teachersCount: teachersCount || 0, sectionsCount: sectionsCount || 0,
           attendanceRate: totalAttendanceCount > 0 ? Math.round((presentAttendanceCount / totalAttendanceCount) * 100) : 0
@@ -107,17 +112,20 @@ export function useDashboardSystem() {
         const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
         const examIds = examSections?.map(e => e.exam_id) || [];
 
+        // 🚀 تم استبدال daily_attendance_summary بـ attendance_records
         const [ { data: assignments }, { data: exams }, { data: attendance }, { data: grades }, { data: todaysSchedule }, { data: periods } ] = await Promise.all([
           assignmentIds.length > 0 ? supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
           examIds.length > 0 ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
-          supabase.from('daily_attendance_summary').select('daily_status').eq('student_id', student.id).limit(5000),
+          supabase.from('attendance_records').select('status').eq('student_id', student.id).limit(5000),
           supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', student.id).order('completed_at', { ascending: false }).limit(5),
           sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link, users!teachers_id_fkey(full_name))').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
 
         const totalDays = attendance?.length || 0;
-        const presentDays = attendance?.filter(a => a.daily_status === 'present').length || 0;
+        // 🚀 استخدام status بدلاً من daily_status
+        const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
+        
         return { student, assignments: assignments || [], exams: exams || [], attendanceRate: totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100, grades: grades || [], todaysSchedule: todaysSchedule || [], periods: periods || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
@@ -166,11 +174,10 @@ export function useDashboardSystem() {
 
 
   // ==========================================
-  // 3. TEACHER FUNCTIONS (The Perfected Version)
+  // 3. TEACHER FUNCTIONS
   // ==========================================
-// غير forceRefresh = true إلى forceRefresh = false
-const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
-  if (!user) return null;
+  const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
+    if (!user) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
         const { data: teacher, error: teacherErr } = await supabase.from('teachers').select('*, users!teachers_id_fkey(*)').eq('id', user.id).maybeSingle();
@@ -232,7 +239,6 @@ const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
 
         return { 
           teacher, sections, schedule: schedule || [], periods: periods || [], messages: messages || [], assignmentStats,
-          // 🚀 تم إصلاح خطأ TypeScript هنا بالتعامل مع المصفوفات بأمان
           recentExams: (recentExams || []).map((e: any) => ({
             ...e, 
             subject_name: (Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name) || 'مادة'
