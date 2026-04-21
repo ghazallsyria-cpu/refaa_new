@@ -9,19 +9,17 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { format, startOfWeek, addDays } from 'date-fns';
-import { arSA } from 'date-fns/locale';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 
-// دالة تحويل الأيام لتتناسب مع قاعدة بياناتك (الأحد = 1)
 const getDbDay = () => {
-  const jsDay = new Date().getDay(); // 0 = الأحد
+  const jsDay = new Date().getDay(); 
   if (jsDay >= 0 && jsDay <= 4) return jsDay + 1; 
-  return 1; // الافتراضي يوم الأحد في عطلة الجمعة والسبت
+  return 1; 
 };
 
 export default function TeacherAttendanceMatrix() {
-  const { userRole } = useAuth();
+  const { userRole } = useAuth() as any;
   
   const [matrixData, setMatrixData] = useState<any[]>([]);
   const [periodsList, setPeriodsList] = useState<any[]>([]);
@@ -43,15 +41,7 @@ export default function TeacherAttendanceMatrix() {
       
       setDisplayDate(format(targetDateObj, 'yyyy/MM/dd')); 
       
-      const [
-        schRes, 
-        perRes, 
-        secRes, 
-        clsRes, 
-        usrRes, 
-        attRes
-      ] = await Promise.all([
-        // 🚀 التحسين 1: جلب حصص اليوم المختار فقط لتخفيف الضغط على السيرفر
+      const [schRes, perRes, secRes, clsRes, usrRes, attRes] = await Promise.all([
         supabase.from('schedules').select('*').eq('day_of_week', selectedDay),
         supabase.from('class_periods').select('*').order('period_number'), 
         supabase.from('sections').select('id, name, class_id'), 
@@ -73,23 +63,17 @@ export default function TeacherAttendanceMatrix() {
       const users = usrRes.data || [];
       const attendance = attRes.data || [];
 
-      // 🚀 التحسين 2: الفهرسة (Hash Maps / Sets) 
-      // لتحويل سرعة البحث داخل المصفوفات من بطيئة جداً O(N) إلى سرعة لحظية O(1) ومنع تجمد المتصفح
       const sectionsMap = new Map(sections.map(s => [s.id, s]));
       const classesMap = new Map(classes.map(c => [c.id, c]));
       const usersMap = new Map(users.map(u => [u.id, u]));
       const periodsMap = new Map(periods.map(p => [Number(p.period_number), p]));
       
-      // فهرسة الحضور في Set للتحقق السريع
       const attendanceSet = new Set(attendance.map(a => `${a.teacher_id}_${a.period_number}`));
-
-      // ترتيب الحصص حسب الرقم المعتمد في القاعدة
       const sortedPeriods = [...periods].sort((a: any, b: any) => Number(a.period_number) - Number(b.period_number));
       setPeriodsList(sortedPeriods);
 
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      
       const isToday = targetDateStr === format(now, 'yyyy-MM-dd');
       const isPastDay = targetDateObj < new Date(new Date().setHours(0,0,0,0));
 
@@ -100,13 +84,9 @@ export default function TeacherAttendanceMatrix() {
 
       todaysSchedule.forEach(sch => {
         if (!teacherMap.has(sch.teacher_id)) {
-          // استخدام الخريطة السريعة للبحث عن اسم المعلم
           const userRecord = usersMap.get(sch.teacher_id);
-          
           let finalName = `معلم (${sch.teacher_id.substring(0, 4)})`;
-          if (userRecord && userRecord.full_name && userRecord.full_name.trim() !== '') {
-             finalName = userRecord.full_name;
-          }
+          if (userRecord && userRecord.full_name) finalName = userRecord.full_name;
 
           teacherMap.set(sch.teacher_id, {
             teacher_id: sch.teacher_id,
@@ -116,13 +96,10 @@ export default function TeacherAttendanceMatrix() {
         }
 
         const row = teacherMap.get(sch.teacher_id);
-        
-        // استخدام الخرائط السريعة لجلب الصف والشعبة
         const section = sectionsMap.get(sch.section_id);
         const cls = section ? classesMap.get(section.class_id) : null;
-        const classNameToDisplay = cls && section ? `${cls.name} - ${section.name}` : 'صف غير محدد';
+        const classNameToDisplay = cls && section ? `${cls.name} - ${section.name}` : 'غير محدد';
         
-        // 🚀 تحقق لحظي وفوري من الحضور باستخدام Set بدلاً من الدوران الكامل
         const hasAttended = attendanceSet.has(`${sch.teacher_id}_${sch.period}`);
         const periodInfo = periodsMap.get(Number(sch.period));
 
@@ -135,10 +112,7 @@ export default function TeacherAttendanceMatrix() {
           const [endH, endM] = periodInfo.end_time.split(':').map(Number);
           const periodEndMinutes = endH * 60 + endM;
 
-          if (isPastDay) {
-            status = 'absent';
-            absencesCount++;
-          } else if (isToday && currentMinutes > periodEndMinutes) {
+          if (isPastDay || (isToday && currentMinutes > periodEndMinutes)) {
             status = 'absent';
             absencesCount++;
           }
@@ -147,22 +121,17 @@ export default function TeacherAttendanceMatrix() {
           absencesCount++;
         }
 
-        row.periodsData[sch.period] = {
-          status,
-          displayData: classNameToDisplay 
-        };
+        row.periodsData[sch.period] = { status, displayData: classNameToDisplay };
       });
 
-      const matrix = Array.from(teacherMap.values()).map(row => {
+      const matrix = Array.from(teacherMap.values()).map((row: any) => {
         sortedPeriods.forEach(p => {
-          if (!row.periodsData[p.period_number]) {
-            row.periodsData[p.period_number] = { status: 'free' };
-          }
+          if (!row.periodsData[p.period_number]) row.periodsData[p.period_number] = { status: 'free' };
         });
         return row;
       });
 
-      matrix.sort((a, b) => a.teacher_name.localeCompare(b.teacher_name, 'ar'));
+      matrix.sort((a: any, b: any) => a.teacher_name.localeCompare(b.teacher_name, 'ar'));
       setMatrixData(matrix);
       setStats({ totalAbsences: absencesCount, totalPresents: presentsCount });
 
@@ -176,14 +145,8 @@ export default function TeacherAttendanceMatrix() {
   useEffect(() => {
     if (userRole === 'admin' || userRole === 'management') {
       fetchMatrixData();
-      const interval = setInterval(fetchMatrixData, 300000);
-      return () => clearInterval(interval);
     }
   }, [userRole, fetchMatrixData]);
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   const exportToExcel = () => {
     if (matrixData.length === 0) return alert('لا توجد بيانات للتصدير');
@@ -234,7 +197,7 @@ export default function TeacherAttendanceMatrix() {
           </Link>
         </div>
 
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 to-indigo-900 p-8 sm:p-12 text-white shadow-2xl border border-slate-700 no-print">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 to-indigo-900 p-8 sm:p-12 text-white shadow-2xl border border-slate-700 no-print text-right">
           <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div>
@@ -250,7 +213,7 @@ export default function TeacherAttendanceMatrix() {
               <button onClick={exportToExcel} className="flex items-center justify-center gap-2 bg-white text-indigo-900 px-6 py-3 rounded-xl font-black hover:bg-indigo-50 transition-colors shadow-lg active:scale-95">
                 <Database className="w-5 h-5" /> تصدير Excel
               </button>
-              <button onClick={handlePrint} className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 rounded-xl font-black hover:bg-emerald-600 transition-colors shadow-lg active:scale-95">
+              <button onClick={() => window.print()} className="flex items-center justify-center gap-2 bg-emerald-500 text-white px-6 py-3 rounded-xl font-black hover:bg-emerald-600 transition-colors shadow-lg active:scale-95">
                 <Printer className="w-5 h-5" /> طباعة / PDF
               </button>
               <button onClick={fetchMatrixData} className="p-3 bg-indigo-500/50 hover:bg-indigo-500/80 text-white rounded-xl transition-all border border-indigo-400/50" title="تحديث البيانات الآن">
@@ -269,7 +232,7 @@ export default function TeacherAttendanceMatrix() {
         </div>
 
         <div id="printable-matrix" className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="p-6 md:p-8 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-right">
             <div>
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
                 <Calendar className="w-8 h-8 text-indigo-600" />
@@ -296,13 +259,11 @@ export default function TeacherAttendanceMatrix() {
               <div className="py-16 px-8 bg-rose-50 border-2 border-rose-200 rounded-3xl mx-auto max-w-2xl text-center no-print">
                 <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-rose-100 text-rose-500"><Database className="w-10 h-10" /></div>
                 <h3 className="font-black text-xl text-rose-700 mb-2">جدول الأوقات غير متاح!</h3>
-                <p className="font-bold text-slate-600 text-sm mb-6">يرجى التأكد من وجود بيانات في جدول <code>class_periods</code> وفتح صلاحية القراءة RLS.</p>
               </div>
             ) : matrixData.length === 0 ? (
               <div className="py-20 text-center flex flex-col items-center gap-4">
                 <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 border border-amber-100"><Clock className="w-8 h-8" /></div>
                 <h3 className="font-black text-lg text-slate-800">لا توجد حصص مجدولة لهذا اليوم</h3>
-                <p className="text-slate-500 text-sm font-bold">يرجى مراجعة جدول الحصص الأسبوعي.</p>
               </div>
             ) : (
               <table className="w-full text-sm text-right border-collapse">
