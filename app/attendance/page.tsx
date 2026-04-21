@@ -15,8 +15,8 @@ import { useAttendanceSystem, AttendanceStatus } from '@/hooks/useAttendanceSyst
 import { useAuth } from '@/context/auth-context';
 import TeacherCheckInButton from '@/components/TeacherCheckInButton';
 import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
  
-// 🚀 الألوان الملكية والتباين العالي الجديد للخيارات
 const ATTENDANCE_OPTIONS = [
   { status: 'present', icon: CheckCircle2, label: 'حاضر', mobileLabel: 'حاضر', activeClasses: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]', inactiveClasses: 'bg-[#02040a]/60 border-white/5 text-slate-500 hover:border-white/20 hover:bg-[#0f1423]' },
   { status: 'absent', icon: XCircle, label: 'غائب', mobileLabel: 'غائب', activeClasses: 'bg-rose-500/20 border-rose-500/50 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.3)]', inactiveClasses: 'bg-[#02040a]/60 border-white/5 text-slate-500 hover:border-white/20 hover:bg-[#0f1423]' },
@@ -31,9 +31,6 @@ export default function AttendancePage() {
  
   const { sections, daySchedule, loading: systemLoading, fetchDaySchedule, fetchSections, fetchStudentsAndAttendance, saveAttendance } = useAttendanceSystem();
  
-  // =====================================
-  // 1. حالات المعلم
-  // =====================================
   const [selectedSection, setSelectedSection] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [date, setDate] = useState<string>('');
@@ -51,9 +48,6 @@ export default function AttendancePage() {
     return `attendance_draft_${user.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
   }, [user?.id, selectedSection, selectedSubject, date, period, currentRole]);
  
-  // =====================================
-  // 2. حالات الإدارة 
-  // =====================================
   const [snapshotDate, setSnapshotDate] = useState<string>('');
   const [dailyStats, setDailyStats] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -62,9 +56,6 @@ export default function AttendancePage() {
   const [customDeptNames, setCustomDeptNames] = useState<Record<string, string>>({});
   const [excludedRecords, setExcludedRecords] = useState<Set<string>>(new Set());
  
-  // =====================================
-  // 3. حالات الطالب
-  // =====================================
   const [studentStats, setStudentStats] = useState<any>({ present: 0, absent: 0, late: 0, excused: 0, fullDaysAbsent: 0 });
   const [subjectStats, setSubjectStats] = useState<any[]>([]);
   const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
@@ -78,9 +69,6 @@ export default function AttendancePage() {
     setSnapshotDate(today);
   }, []);
  
-  // ==========================================================
-  // 🚀 دوال الإدارة
-  // ==========================================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!user || !isAdmin || !snapshotDate) return;
     setAdminLoading(true);
@@ -91,7 +79,7 @@ export default function AttendancePage() {
           id, date, period, lesson_title, total_students, present_count, absent_count, late_count, excused_count,
           sections (name, classes(name)),
           subjects (name),
-          users (full_name)
+          users!daily_attendance_stats_teacher_id_fkey (full_name, teachers(academic_departments(name)))
         `)
         .eq('date', snapshotDate)
         .order('period', { ascending: true });
@@ -102,17 +90,11 @@ export default function AttendancePage() {
       
       const newCustomDeptNames: Record<string, string> = {};
       data?.forEach((stat: any) => {
-        const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
-        const subjName = subjData?.name || 'مادة غير محددة';
-        let dept = 'أقسام أخرى';
-        if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) dept = 'قسم العلوم';
-        else if (/(رياضيات)/.test(subjName)) dept = 'قسم الرياضيات';
-        else if (/(عربي|عربية)/.test(subjName)) dept = 'قسم اللغة العربية';
-        else if (/(إنجليزي|انجليزي)/.test(subjName)) dept = 'قسم اللغة الإنجليزية';
-        else if (/(إسلامية|قرآن|تجويد)/.test(subjName)) dept = 'قسم التربية الإسلامية';
-        else if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) dept = 'قسم الاجتماعيات';
-        else if (/(حاسوب|معلوماتية)/.test(subjName)) dept = 'قسم الحاسوب';
-        
+        const teacherData: any = Array.isArray(stat.users) ? stat.users[0] : stat.users;
+        const teacherProfile: any = Array.isArray(teacherData?.teachers) ? teacherData.teachers[0] : teacherData?.teachers;
+        const academicDept: any = Array.isArray(teacherProfile?.academic_departments) ? teacherProfile.academic_departments[0] : teacherProfile?.academic_departments;
+        const dept = academicDept?.name || 'أقسام أخرى';
+
         const secObj: any = Array.isArray(stat.sections) ? stat.sections[0] : stat.sections;
         const classData: any = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
         const className = classData?.name || '';
@@ -146,16 +128,11 @@ export default function AttendancePage() {
       const subjData: any = Array.isArray(stat.subjects) ? stat.subjects[0] : stat.subjects;
       const subjName = subjData?.name || 'مادة غير محددة';
       
-      let dept = 'أقسام أخرى';
-      if (/(علوم|فيزياء|كيمياء|أحياء|جيولوجيا)/.test(subjName)) dept = 'قسم العلوم';
-      else if (/(رياضيات)/.test(subjName)) dept = 'قسم الرياضيات';
-      else if (/(عربي|عربية)/.test(subjName)) dept = 'قسم اللغة العربية';
-      else if (/(إنجليزي|انجليزي)/.test(subjName)) dept = 'قسم اللغة الإنجليزية';
-      else if (/(إسلامية|قرآن|تجويد)/.test(subjName)) dept = 'قسم التربية الإسلامية';
-      else if (/(اجتماعيات|تاريخ|جغرافيا|فلسفة|نفس)/.test(subjName)) dept = 'قسم الاجتماعيات';
-      else if (/(حاسوب|معلوماتية)/.test(subjName)) dept = 'قسم الحاسوب';
       const teacherData: any = Array.isArray(stat.users) ? stat.users[0] : stat.users;
-      
+      const teacherProfile: any = Array.isArray(teacherData?.teachers) ? teacherData.teachers[0] : teacherData?.teachers;
+      const academicDept: any = Array.isArray(teacherProfile?.academic_departments) ? teacherProfile.academic_departments[0] : teacherProfile?.academic_departments;
+      const dept = academicDept?.name || 'أقسام أخرى';
+
       if (!groups[stage][dept]) groups[stage][dept] = [];
       groups[stage][dept].push({ 
         id: stat.id, 
@@ -226,9 +203,6 @@ export default function AttendancePage() {
     printWindow.document.write(html); printWindow.document.close();
   };
  
-  // ==========================================================
-  // 🚀 دوال المعلم
-  // ==========================================================
   useEffect(() => {
     if (date && currentRole === 'teacher') {
       fetchDaySchedule(date).then((schedule) => {
@@ -325,9 +299,6 @@ export default function AttendancePage() {
     } finally { setSaving(false); }
   };
  
-  // ==========================================================
-  // 🚀 دوال الطالب
-  // ==========================================================
   const fetchStudentDataDirectly = useCallback(async () => {
     if (currentRole !== 'student' || !user) return;
     setIsStudentLoading(true); setStudentDbError(null);
@@ -374,7 +345,6 @@ export default function AttendancePage() {
  
   useEffect(() => { if (Object.keys(groupedAttendanceRecords).length > 0 && !activeSubjectTab) setActiveSubjectTab(Object.keys(groupedAttendanceRecords)[0]); }, [groupedAttendanceRecords, activeSubjectTab]);
  
-  // 🚀 شاشات الحماية (الملكية)
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
@@ -389,9 +359,6 @@ export default function AttendancePage() {
     );
   }
  
-  // ==========================================================
-  // 🚀 واجهة الإدارة 
-  // ==========================================================
   if (isAdmin) {
     return (
       <div className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
@@ -552,10 +519,7 @@ export default function AttendancePage() {
       </div>
     );
   }
-
-  // ==========================================================
-  // 🚀 واجهة الطالب (Student Royal Dashboard)
-  // ==========================================================
+ 
   if (currentRole === 'student') {
     if (isStudentLoading) {
       return <div className="py-20 flex justify-center items-center min-h-screen"><Loader2 className="w-12 h-12 text-emerald-500 animate-spin" /></div>;
@@ -638,9 +602,6 @@ export default function AttendancePage() {
     );
   }
  
-  // ==========================================================
-  // 🚀 واجهة المعلم (Mobile-First Royal Grid)
-  // ==========================================================
   if (currentRole === 'teacher') {
     let presentCount = 0, absentCount = 0, lateCount = 0, excusedCount = 0;
     students.forEach(s => {
@@ -666,7 +627,6 @@ export default function AttendancePage() {
             )}
           </AnimatePresence>
 
-          {/* 🚀 الهيدر الفخم للمعلم */}
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem]">
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-widest mb-3 shadow-inner">
@@ -686,7 +646,6 @@ export default function AttendancePage() {
             </div>
           </div>
 
-          {/* 🚀 أدوات الرصد */}
           <div className="glass-panel p-5 sm:p-6 lg:p-8 rounded-[2rem] sm:rounded-[2.5rem]">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               <div className="space-y-2 flex flex-col w-full">
@@ -733,7 +692,6 @@ export default function AttendancePage() {
             )}
           </div>
 
-          {/* 🚀 إحصائيات الرصد */}
           {students.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
               <div className="glass-panel p-4 sm:p-5 rounded-[1.5rem] flex flex-col justify-center items-center text-center">
@@ -759,7 +717,6 @@ export default function AttendancePage() {
             </div>
           )}
 
-          {/* 🚀 قائمة الطلاب المتجاوبة (Mobile First Royal List) */}
           {students.length > 0 && (
             <div className="glass-panel rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden">
               <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 bg-[#02040a]/40">
@@ -778,7 +735,6 @@ export default function AttendancePage() {
                   {students.map((student: any) => (
                     <div key={student.id} className="p-3 sm:p-4 bg-[#02040a]/40 sm:bg-transparent rounded-2xl sm:rounded-none border border-white/5 sm:border-transparent hover:bg-white/[0.02] transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
                       
-                      {/* 🚀 معلومات الطالب */}
                       <div className="flex items-center gap-3 sm:gap-4 min-w-0 lg:w-1/3 shrink-0 px-1 sm:px-0">
                         <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-[#0f1423] border border-white/10 text-slate-400 flex items-center justify-center font-black text-base sm:text-lg shrink-0 shadow-inner group-hover:text-amber-400 transition-colors">
                           {student.users?.full_name?.charAt(0)}
@@ -786,7 +742,6 @@ export default function AttendancePage() {
                         <span className="font-black text-white text-sm sm:text-base truncate drop-shadow-sm">{student.users?.full_name}</span>
                       </div>
 
-                      {/* 🚀 خيارات الحضور (متجاوبة تماماً للجوال) */}
                       <div className="grid grid-cols-4 lg:flex lg:flex-1 gap-1.5 sm:gap-2 lg:justify-end">
                         {ATTENDANCE_OPTIONS.map((opt) => (
                           <label key={opt.status} className="cursor-pointer block lg:w-32">
@@ -810,7 +765,6 @@ export default function AttendancePage() {
     );
   }
 
-  // 🚀 في حال حاول شخص غريب (غير مصرح له) الدخول للصفحة
   return (
     <div className="flex flex-col items-center justify-center min-h-screen font-cairo bg-[#02040a]">
       <ShieldAlert className="w-16 h-16 text-rose-500 mb-4" />
