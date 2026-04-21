@@ -105,7 +105,7 @@ export function useUsersSystem() {
   const fetchTeachers = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('teachers').select('*, users(full_name, email, phone, avatar_url), department_heads(id, subject_id, subjects(name)), academic_departments(id, name)').limit(1000);
+      const { data, error: err } = await supabase.from('teachers').select('*, users(full_name, email, phone, avatar_url), department_heads(id, subject_id, subjects(name)), academic_departments(id, name)').limit(2000);
       if (err) throw err;
       setTeachers((data || []).sort((a: any, b: any) => extractName(a).localeCompare(extractName(b), 'ar')));
     } finally { setLoading(false); }
@@ -114,9 +114,12 @@ export function useUsersSystem() {
   const fetchParents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.from('parents').select('id, national_id, job_title, workplace, address, users(full_name, email, phone, avatar_url), students(id, users(full_name))').limit(5000);
+      // 🚀 تم تغيير الاستعلام ليكون آمناً (select '*') لتجنب انهيار الصفحة
+      const { data, error: err } = await supabase.from('parents').select('*, users(full_name, email, phone, avatar_url), students(id, users(full_name))').limit(5000);
       if (err) throw err;
       setParents(data || []);
+    } catch(err) {
+      console.error("Error fetching parents:", err);
     } finally { setLoading(false); }
   }, []);
 
@@ -159,15 +162,15 @@ export function useUsersSystem() {
     const res = await fetch('/api/users/create', { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, 
-      // 🚀 نرسل student_ids ضمن الـ body ليقوم السيرفر بالربط
       body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) 
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || 'فشل إضافة ولي الأمر');
     
-    // ❌ أزلنا كود الربط من المتصفح، السيرفر تكفل بالأمر
+    fetchParents();
+    fetchStudents();
     return { success: true, password: result.password || '123456' };
-  }, []);
+  }, [fetchParents, fetchStudents]);
 
   const updateStudent = useCallback(async (id: string, oldId: string, updateData: any) => {
     const res = await fetch('/api/users/update-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId: id, updateData }) });
@@ -209,7 +212,6 @@ export function useUsersSystem() {
   }, [fetchTeachers]);
 
   const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
-    // 🚀 نرسل الطلب للـ API وهو سيتكفل بالتعديل وفك/ربط الأبناء بصلاحيات الآدمن
     const res = await fetch('/api/users/update-parent', { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' }, 
@@ -218,9 +220,11 @@ export function useUsersSystem() {
     
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || 'فشل تحديث البيانات');
-    
+
+    fetchParents();
+    fetchStudents();
     return true;
-  }, []);
+  }, [fetchParents, fetchStudents]);
 
   const deleteUser = useCallback(async (id: string) => {
     const { data: { session } } = await supabase.auth.getSession();
