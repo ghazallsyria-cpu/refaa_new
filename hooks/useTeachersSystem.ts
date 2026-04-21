@@ -15,19 +15,22 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 🚀 استعادة مفتاح العلاقة الصريح لجلب الأسماء
+      // 🚀 استعلام نظيف ومباشر لجلب البيانات بدون قيود معقدة تسبب الانهيار
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
           id, 
           specialization, 
           department_id,
-          users!teachers_id_fkey(full_name, avatar_url),
+          users(full_name, avatar_url),
           academic_departments(id, name, head_id),
           teacher_sections(section_id, sections(classes(name)))
         `);
 
-      if (teachersError) throw teachersError;
+      if (teachersError) {
+        console.error("Supabase Error:", teachersError);
+        throw teachersError;
+      }
 
       const { data: allSchedules } = await supabase.from("schedules").select("teacher_id, section_id, period").eq("day_of_week", dbDay);
       const { data: allAttendance } = await supabase.from("attendance_sessions").select("teacher_id, section_id, period_number, date").eq("date", todayStr);
