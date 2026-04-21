@@ -7,7 +7,8 @@ import {
   FileText, GraduationCap, LayoutDashboard, 
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
-  AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users
+  AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
+  Siren, Info // 🚀 أيقونات جديدة للإنذار
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -221,6 +222,50 @@ export default function StudentDashboard() {
   const avgScore = unlockedGrades.length > 0 ? Math.round(unlockedGrades.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0) / unlockedGrades.length) : 0;
   const avatarUrl = studentData?.users?.avatar_url || studentData?.avatar_url;
 
+  // 🚀 تحديد مستوى الإنذار الذكي للطالب بناءً على عدد الحصص
+  let warningLevel = 0;
+  let warningTitle = "";
+  let warningMessage = "";
+  let warningColors = "";
+  let warningIconColor = "";
+  let WarningIcon = Info;
+  let warningPulse = false;
+
+  if (absentPeriods >= 100) {
+    warningLevel = 4;
+    warningTitle = "إشعار فصل نهائي";
+    warningMessage = "لقد تجاوزت 100 حصة غياب. تم رفع ملفك للإدارة لاتخاذ إجراءات الفصل.";
+    warningColors = "from-slate-900 via-rose-950 to-slate-900 border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(225,29,72,0.4)]";
+    warningIconColor = "text-rose-500";
+    WarningIcon = Siren;
+    warningPulse = true;
+  } else if (absentPeriods >= 75) {
+    warningLevel = 3;
+    warningTitle = "إنذار ثالث (خطر الفصل)";
+    warningMessage = "غيابك وصل لمرحلة حرجة جداً. أي غياب إضافي سيعرضك للفصل النهائي من المدرسة.";
+    warningColors = "from-rose-500/20 to-red-600/20 border-rose-500/60 text-rose-500 shadow-[0_0_20px_rgba(225,29,72,0.2)]";
+    warningIconColor = "text-rose-500";
+    WarningIcon = ShieldAlert;
+    warningPulse = true;
+  } else if (absentPeriods >= 50) {
+    warningLevel = 2;
+    warningTitle = "إنذار ثاني للغياب";
+    warningMessage = "استمرارك في الغياب يعرض مستقبلك الدراسي للخطر. يرجى مراجعة إدارة شؤون الطلاب فوراً.";
+    warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500";
+    warningIconColor = "text-orange-500";
+    WarningIcon = AlertTriangle;
+  } else if (absentPeriods >= 25) {
+    warningLevel = 1;
+    warningTitle = "إنذار أول للغياب";
+    warningMessage = "لقد تجاوزت الحد المسموح للغياب. نأمل منك الالتزام بالحضور لتجنب الإنذار الثاني.";
+    warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500";
+    warningIconColor = "text-amber-500";
+    WarningIcon = AlertTriangle;
+  }
+
+  // حساب النسبة المئوية للوصول للفصل (الحد الأقصى 100)
+  const dangerPercentage = Math.min((absentPeriods / 100) * 100, 100);
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-h-screen relative bg-transparent text-slate-100 pb-32 overflow-x-hidden font-cairo pt-6" dir="rtl">
       
@@ -298,38 +343,60 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* 🚀 إنذار الغياب المتقدم (Danger Zone - Royal Red) */}
+        {/* 🚀 بطاقة إنذار الغياب الذكية (Smart Warning Banner) */}
         <AnimatePresence>
-          {fullDaysAbsent > 0 && (
-            <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-rose-950/30 p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(225,29,72,0.15)] border border-rose-500/30 backdrop-blur-xl">
-              <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-rose-500/20 blur-3xl animate-pulse pointer-events-none"></div>
-              
-              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6 text-center lg:text-right">
-                <div className="flex flex-col lg:flex-row items-center gap-4 sm:gap-6 w-full lg:w-auto">
-                  <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-rose-500/20 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-rose-500/40 shadow-inner shrink-0">
-                    <AlertTriangle className="w-8 h-8 sm:w-10 sm:h-10 text-rose-400 animate-bounce" />
+          {warningLevel > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20, height: 0 }} 
+              animate={{ opacity: 1, y: 0, height: 'auto' }} 
+              exit={{ opacity: 0, height: 0 }}
+              className={`relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] border-2 backdrop-blur-xl p-6 sm:p-8 shadow-lg bg-gradient-to-r ${warningColors}`}
+            >
+              <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                
+                {/* الأيقونة والنص */}
+                <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto">
+                  <div className={`p-4 rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
+                    <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor}`} />
                   </div>
                   <div>
-                    <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-[#02040a]/80 text-rose-400 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-rose-500/30">
-                      <ShieldAlert className="w-3.5 h-3.5" /> إنذار إداري مسجل
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-2 text-white leading-tight drop-shadow-md">تنبيه: تجاوزت الحد المسموح للغياب!</h2>
-                    <p className="text-slate-300 text-xs sm:text-sm font-bold leading-relaxed max-w-xl mt-1 mx-auto lg:mx-0">حسب لائحة السلوك والمواظبة، تم احتساب وتجميع الحصص التي تغيبت عنها لتعادل <span className="bg-rose-500/30 border border-rose-500/50 px-2 py-0.5 rounded text-rose-400 mx-1 font-black shadow-inner">{fullDaysAbsent} أيام</span> فعلية. يرجى الالتزام بالدوام.</p>
+                    <h3 className="text-xl sm:text-2xl font-black mb-2 tracking-tight flex items-center gap-2 drop-shadow-md text-white">
+                      {warningTitle}
+                    </h3>
+                    <p className="text-sm sm:text-base font-bold opacity-90 leading-relaxed max-w-2xl text-white/80">
+                      {warningMessage}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-3 sm:gap-4 bg-[#02040a]/60 p-4 sm:p-5 rounded-2xl backdrop-blur-md border border-white/5 shrink-0 w-full lg:w-auto shadow-inner">
-                  <div className="text-center">
-                    <span className="block text-2xl sm:text-4xl font-black text-white drop-shadow-sm">{absentPeriods}</span>
-                    <span className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1 block">حصص غياب</span>
+                {/* عداد الخطر */}
+                <div className="w-full md:w-auto min-w-[200px] shrink-0 bg-[#02040a]/60 p-5 rounded-2xl border border-white/10 shadow-inner backdrop-blur-md">
+                  <div className="flex justify-between items-end mb-3">
+                    <span className="text-xs font-bold uppercase opacity-80 text-white">حصص الغياب</span>
+                    <span className="text-3xl font-black text-white drop-shadow-md">{absentPeriods} <span className="text-sm opacity-50 font-bold">/ 100</span></span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-black text-slate-600">÷ 5 =</div>
-                  <div className="text-center bg-rose-500/20 p-3 sm:p-4 rounded-xl border border-rose-500/30 shadow-inner min-w-[80px]">
-                    <span className="block text-2xl sm:text-4xl font-black text-rose-400 drop-shadow-md">{fullDaysAbsent}</span>
-                    <span className="text-[9px] sm:text-[10px] text-rose-300 font-bold uppercase tracking-widest mt-1 block">أيام مسجلة</span>
+                  {/* شريط التقدم نحو الفصل */}
+                  <div className="h-2.5 w-full bg-[#02040a] rounded-full overflow-hidden border border-white/5 shadow-inner">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${dangerPercentage}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut" }}
+                      className={`h-full rounded-full shadow-[0_0_10px_currentColor] ${warningLevel >= 3 ? 'bg-rose-500 text-rose-500' : warningLevel === 2 ? 'bg-orange-500 text-orange-500' : 'bg-amber-500 text-amber-500'}`}
+                    />
+                  </div>
+                  <div className="mt-3 flex justify-between text-[10px] font-black text-white/50 uppercase tracking-widest">
+                    <span>آمن</span>
+                    <span className={warningLevel >= 3 ? 'text-rose-400 animate-pulse' : ''}>فصل نهائي</span>
                   </div>
                 </div>
+
               </div>
+
+              {/* تأثيرات بصرية في الخلفية */}
+              <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 pointer-events-none"></div>
+              {warningLevel >= 3 && (
+                <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-rose-500/20 blur-3xl animate-pulse pointer-events-none"></div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
