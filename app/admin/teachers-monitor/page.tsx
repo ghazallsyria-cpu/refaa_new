@@ -110,13 +110,14 @@ export default function TeachersMonitorPage() {
         const status = mis > 0 ? "حرج" : pct < 90 ? "تحذير" : pct < 100 ? "جيد" : "ممتاز";
         
         const deptObj = Array.isArray(t.academic_departments) ? t.academic_departments[0] : t.academic_departments;
+        const isHOD = t.department_heads && t.department_heads.length > 0;
 
         return { 
           id: t.id, 
           name: getTeacherName(t), 
           specialization: t.specialization || "عام", 
           department: deptObj?.name || "عام", 
-          isHOD: deptObj?.head_id === t.id, 
+          isHOD: isHOD, 
           recorded: rec, expected: exp, missed: mis, percent: pct, status, 
           assignmentsCount: rawData.allAssignments.filter((a:any) => a.teacher_id === t.id).length, 
           examsCount: rawData.allExams.filter((e:any) => e.teacher_id === t.id).length, 
