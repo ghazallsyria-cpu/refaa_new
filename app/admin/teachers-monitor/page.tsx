@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useTeachersSystem } from "@/hooks/useTeachersSystem";
 import { motion } from "framer-motion";
-import { CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw, Zap, School, Folder, Crown } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Users, Calendar, Clock, Search, Send, ShieldAlert, BarChart2, RefreshCw, Zap, School, Folder, Crown, Printer } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase"; 
 import { format } from 'date-fns';
@@ -87,16 +87,16 @@ export default function TeachersMonitorPage() {
   const refreshData = useCallback(async () => {
     setLoading(true);
     try {
-      const weekAgo = new Date(schoolTime); weekAgo.setDate(weekAgo.getDate() - 7);
-      const currentDbDay = schoolTime.getDay() === 0 ? 1 : schoolTime.getDay() + 1;
+      const weekAgo = new Date(schoolTime.getTime() - 7 * 24 * 60 * 60 * 1000); 
+      const currentDbDay = schoolTime.getUTCDay() === 0 ? 1 : schoolTime.getUTCDay() + 1;
       const rawData = await fetchTeachersMonitorData(todayStr, currentDbDay, weekAgo.toISOString());
       
       const { data: periods } = await supabase.from('class_periods').select('*');
       const pMap: any = {}; periods?.forEach(p => pMap[p.period_number] = p.end_time);
 
       const processed = rawData.teachersData.map((t: any) => {
-        const schs = rawData.allSchedules.filter((s:any) => s.teacher_id === t.id);
-        const atts = rawData.allAttendance.filter((a:any) => a.teacher_id === t.id);
+        const schs = rawData.allSchedules.filter((s:any) => String(s.teacher_id) === String(t.id));
+        const atts = rawData.allAttendance.filter((a:any) => String(a.teacher_id) === String(t.id));
         let exp = 0, rec = 0, mis = 0;
         
         schs.forEach((sch:any) => {
@@ -106,8 +106,7 @@ export default function TeachersMonitorPage() {
             const pEnd = new Date(schoolTime); pEnd.setHours(h, m, 0, 0);
             if (schoolTime > pEnd) { 
               exp++; 
-              // 🚀 التصليح هنا: التحقق من a.period بدلاً من a.period_number 
-              if (atts.some((a:any) => a.section_id === sch.section_id && String(a.period) === String(sch.period))) rec++; 
+              if (atts.some((a:any) => String(a.section_id) === String(sch.section_id) && String(a.period) === String(sch.period))) rec++; 
               else mis++; 
             }
           }
@@ -126,8 +125,8 @@ export default function TeachersMonitorPage() {
           department: deptObj?.name || "عام", 
           isHOD: isHOD, 
           recorded: rec, expected: exp, missed: mis, percent: pct, status, 
-          assignmentsCount: rawData.allAssignments.filter((a:any) => a.teacher_id === t.id).length, 
-          examsCount: rawData.allExams.filter((e:any) => e.teacher_id === t.id).length, 
+          assignmentsCount: rawData.allAssignments.filter((a:any) => String(a.teacher_id) === String(t.id)).length, 
+          examsCount: rawData.allExams.filter((e:any) => String(e.teacher_id) === String(t.id)).length, 
           stage: getTeacherStage(t) 
         };
       });
@@ -146,7 +145,6 @@ export default function TeachersMonitorPage() {
         return acc; 
       }, {});
 
-    // 🚀 ترتيب الأقسام: رئيس القسم في الأعلى، ثم ترتيب أبجدي لبقية المعلمين
     const sortedGroups: any = {};
     Object.keys(groups).sort().forEach(key => {
       sortedGroups[key] = groups[key].sort((a: any, b: any) => {
@@ -159,47 +157,164 @@ export default function TeachersMonitorPage() {
     return sortedGroups;
   }, [localTeachers, search, stageFilter]);
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const getStatusColorPrint = (status: string) => {
+    if (status === "ممتاز") return "status-excel";
+    if (status === "جيد") return "status-good";
+    if (status === "تحذير") return "status-warn";
+    return "status-crit";
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center"><RefreshCw className="animate-spin text-indigo-600 w-10 h-10" /></div>;
 
   return (
-    <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 font-cairo" dir="rtl">
-      <div className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 p-8 sm:p-12 text-white shadow-2xl">
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8 text-right">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold backdrop-blur-sm"><Zap className="w-4 h-4 text-yellow-400" /> البث الحي</div>
-            <h1 className="text-3xl sm:text-5xl font-black">رادار المعلمين</h1>
-            <p className="text-indigo-100 font-bold opacity-80 flex items-center gap-2"><Calendar className="w-5 h-5" /> {format(schoolTime, 'eeee، d MMMM yyyy', { locale: arSA })}</p>
+    <>
+      <style jsx global>{`
+        @media print {
+          @page { size: portrait; margin: 1.5cm 1cm; }
+          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; font-family: 'Cairo', sans-serif !important; }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .print-table { width: 100% !important; border-collapse: collapse !important; margin-bottom: 20px; }
+          .print-table th, .print-table td { border: 1px solid #cbd5e1 !important; padding: 10px !important; text-align: center !important; font-size: 13px !important; }
+          .print-table th { background-color: #f8fafc !important; font-weight: 900 !important; color: #0f172a !important; border-bottom: 2px solid #94a3b8 !important; }
+          .dept-header { background-color: #e2e8f0 !important; color: #1e293b !important; font-weight: 900 !important; font-size: 15px !important; text-align: right !important; padding-right: 15px !important; }
+          .hod-row { background-color: #fefce8 !important; font-weight: bold !important; }
+          .status-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: bold; border: 1px solid; font-size: 11px !important; }
+          .status-excel { background: #dcfce7 !important; color: #15803d !important; border-color: #bbf7d0 !important; }
+          .status-good { background: #dbeafe !important; color: #1d4ed8 !important; border-color: #bfdbfe !important; }
+          .status-warn { background: #fef3c7 !important; color: #b45309 !important; border-color: #fde68a !important; }
+          .status-crit { background: #ffe4e6 !important; color: #be123c !important; border-color: #fecdd3 !important; }
+        }
+      `}</style>
+
+      {/* واجهة العرض الرئيسية */}
+      <div className="space-y-8 pb-24 max-w-7xl mx-auto px-4 font-cairo print:hidden" dir="rtl">
+        <div className="relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-slate-900 via-indigo-900 to-violet-900 p-8 sm:p-12 text-white shadow-2xl">
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8 text-right">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold backdrop-blur-sm"><Zap className="w-4 h-4 text-yellow-400" /> البث الحي</div>
+              <h1 className="text-3xl sm:text-5xl font-black">رادار المعلمين</h1>
+              <p className="text-indigo-100 font-bold opacity-80 flex items-center gap-2"><Calendar className="w-5 h-5" /> {format(schoolTime, 'eeee، d MMMM yyyy', { locale: arSA })}</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {/* 🚀 زر الطباعة والتصدير لملف PDF المضاف هنا */}
+              <button onClick={handlePrint} className="bg-white text-slate-800 px-6 py-3 rounded-2xl font-black shadow-lg hover:bg-slate-50 flex items-center gap-2 transition-all active:scale-95 border border-slate-200">
+                <Printer className="w-5 h-5 text-indigo-600" /> تقرير PDF
+              </button>
+              <Link href="/admin/teachers-report" className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-2xl font-black shadow-lg hover:bg-white/20 flex items-center gap-2 backdrop-blur-sm transition-all"><BarChart2 className="w-5 h-5" /> التقارير</Link>
+              <button onClick={refreshData} className="bg-indigo-500 text-white p-3 rounded-2xl hover:bg-indigo-400 shadow-lg transition-all active:scale-95"><RefreshCw className={`w-6 h-6 ${loading ? 'animate-spin' : ''}`} /></button>
+            </div>
           </div>
-          <div className="flex gap-3"><Link href="/admin/teachers-report" className="bg-white text-indigo-600 px-6 py-3 rounded-2xl font-black shadow-lg hover:bg-indigo-50 flex items-center gap-2"><BarChart2 className="w-5 h-5" /> التقارير</Link><button onClick={refreshData} className="bg-indigo-500 text-white p-3 rounded-2xl hover:bg-indigo-400 shadow-lg"><RefreshCw className={`w-6 h-6 ${loading ? 'animate-spin' : ''}`} /></button></div>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard label="ممتاز" count={localTeachers.filter(t => t.status === "ممتاز").length} color="emerald" icon={CheckCircle2} />
+          <StatCard label="جيد" count={localTeachers.filter(t => t.status === "جيد").length} color="blue" icon={Users} />
+          <StatCard label="تحذير" count={localTeachers.filter(t => t.status === "تحذير").length} color="amber" icon={AlertTriangle} />
+          <StatCard label="حرج" count={localTeachers.filter(t => t.status === "حرج").length} color="rose" icon={ShieldAlert} />
+        </div>
+        
+        <div className="bg-white/80 backdrop-blur-xl p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-col md:flex-row gap-6 justify-between items-center text-right">
+          <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto">
+            {['all', 'middle', 'high'].map((s) => <button key={s} onClick={() => setStageFilter(s as any)} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-xs font-black transition-all ${stageFilter === s ? 'bg-white shadow-md text-indigo-600' : 'text-slate-500'}`}>{s === 'all' ? 'الكل' : s === 'middle' ? 'متوسط' : 'ثانوي'}</button>)}
+          </div>
+          <div className="relative w-full md:w-80 group"><Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" /><input type="text" placeholder="بحث باسم المعلم..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-2xl bg-slate-50 border border-slate-200 py-3.5 pr-12 pl-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+        </div>
+        
+        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-right">
+              <thead className="bg-slate-50/50"><tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest"><th className="py-5 pr-8 pl-4">المعلم</th><th className="px-4 py-5 text-center">الرصد</th><th className="px-4 py-5 text-center hidden sm:table-cell">الواجبات</th><th className="px-4 py-5 text-center">الحالة</th><th className="py-5 pl-8 pr-4 text-center">إجراء</th></tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {Object.entries(groupedData).map(([dept, teachers]: any) => (
+                  <React.Fragment key={dept}>
+                    <tr className="bg-slate-100/30 border-y border-slate-200/50"><td colSpan={5} className="py-3 px-8 text-sm font-black text-indigo-900 flex items-center gap-2 text-right"><Folder className="w-4 h-4" /> قسم {dept}</td></tr>
+                    {teachers.map((t: any) => <MonitorRow key={t.id} teacher={t} onSendWarning={async (id:string) => { setSendingWarning(id); await sendTeacherWarning(id); setSendingWarning(null); alert("تم التنبيه ✅"); }} isSending={sendingWarning === t.id} />)}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="ممتاز" count={localTeachers.filter(t => t.status === "ممتاز").length} color="emerald" icon={CheckCircle2} />
-        <StatCard label="جيد" count={localTeachers.filter(t => t.status === "جيد").length} color="blue" icon={Users} />
-        <StatCard label="تحذير" count={localTeachers.filter(t => t.status === "تحذير").length} color="amber" icon={AlertTriangle} />
-        <StatCard label="حرج" count={localTeachers.filter(t => t.status === "حرج").length} color="rose" icon={ShieldAlert} />
-      </div>
-      <div className="bg-white/80 backdrop-blur-xl p-6 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-col md:flex-row gap-6 justify-between items-center text-right">
-        <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto">
-          {['all', 'middle', 'high'].map((s) => <button key={s} onClick={() => setStageFilter(s as any)} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-xs font-black transition-all ${stageFilter === s ? 'bg-white shadow-md text-indigo-600' : 'text-slate-500'}`}>{s === 'all' ? 'الكل' : s === 'middle' ? 'متوسط' : 'ثانوي'}</button>)}
+
+      {/* 🖨️ واجهة التقرير المطبوع (تظهر فقط عند تصدير الـ PDF) */}
+      <div className="hidden print:block w-full bg-white text-black p-8 font-cairo" dir="rtl">
+        <div className="text-center mb-8 border-b-[3px] border-slate-900 pb-6 relative">
+          <div className="absolute top-0 right-0 text-right">
+            <p className="text-[10px] font-bold text-slate-500">تاريخ الإصدار: {format(schoolTime, 'yyyy/MM/dd', { locale: arSA })}</p>
+            <p className="text-[10px] font-bold text-slate-500 mt-1">توقيت الإصدار: {format(schoolTime, 'hh:mm a', { locale: arSA })}</p>
+          </div>
+          <h1 className="text-3xl font-black mb-2 tracking-tight text-slate-900">مدرسة الرفعة النموذجية</h1>
+          <h2 className="text-xl font-bold text-slate-700 mt-2">تقرير المتابعة الحية للمعلمين (الرادار)</h2>
+          <p className="text-sm font-black text-indigo-700 mt-4 bg-indigo-50 inline-block px-4 py-1.5 rounded-lg border border-indigo-200">
+            المرحلة: {stageFilter === 'all' ? 'جميع المراحل' : stageFilter === 'middle' ? 'المرحلة المتوسطة' : 'المرحلة الثانوية'} | 
+            اليوم: {format(schoolTime, 'eeee', { locale: arSA })}
+          </p>
         </div>
-        <div className="relative w-full md:w-80 group"><Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" /><input type="text" placeholder="بحث باسم المعلم..." value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-2xl bg-slate-50 border border-slate-200 py-3.5 pr-12 pl-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
-      </div>
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100 text-right">
-            <thead className="bg-slate-50/50"><tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest"><th className="py-5 pr-8 pl-4">المعلم</th><th className="px-4 py-5 text-center">الرصد</th><th className="px-4 py-5 text-center hidden sm:table-cell">الواجبات</th><th className="px-4 py-5 text-center">الحالة</th><th className="py-5 pl-8 pr-4 text-center">إجراء</th></tr></thead>
-            <tbody className="divide-y divide-slate-50">
-              {Object.entries(groupedData).map(([dept, teachers]: any) => (
-                <React.Fragment key={dept}>
-                  <tr className="bg-slate-100/30 border-y border-slate-200/50"><td colSpan={5} className="py-3 px-8 text-sm font-black text-indigo-900 flex items-center gap-2 text-right"><Folder className="w-4 h-4" /> قسم {dept}</td></tr>
-                  {teachers.map((t: any) => <MonitorRow key={t.id} teacher={t} onSendWarning={async (id:string) => { setSendingWarning(id); await sendTeacherWarning(id); setSendingWarning(null); alert("تم التنبيه ✅"); }} isSending={sendingWarning === t.id} />)}
+
+        <table className="print-table w-full">
+          <thead>
+            <tr>
+              <th className="w-12">م</th>
+              <th className="w-48 text-right">المعلم / المنصب</th>
+              <th className="w-24 text-right">التخصص الدقيق</th>
+              <th className="w-24">مطالب به/رصد</th>
+              <th className="w-24">مؤشر الإنجاز</th>
+              <th className="w-24">التقييم الفني</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(groupedData).map(([dept, teachers]: any) => {
+              // 🚀 الفلترة هنا: لا تطبع أي معلم لم تكن لديه حصص (expected === 0)
+              const activeTeachers = teachers.filter((t: any) => t.expected > 0);
+              
+              // إذا كان القسم فارغاً بعد فلترة المعلمين بدون حصص، لا تطبع القسم
+              if (activeTeachers.length === 0) return null;
+
+              return (
+                <React.Fragment key={`print-${dept}`}>
+                  <tr>
+                    <td colSpan={6} className="dept-header">قسم {dept}</td>
+                  </tr>
+                  {activeTeachers.map((t: any, i: number) => {
+                    const statusClass = getStatusColorPrint(t.status);
+                    return (
+                      <tr key={t.id} className={t.isHOD ? "hod-row" : ""}>
+                        <td className="font-black text-slate-500">{i + 1}</td>
+                        <td className="font-black text-right">
+                          {t.name} {t.isHOD && <span className="text-[9px] bg-amber-200 text-amber-800 px-1 rounded mr-2">رئيس قسم</span>}
+                        </td>
+                        <td className="text-xs font-bold text-slate-600 text-right">{t.specialization}</td>
+                        <td className="font-black text-indigo-700" dir="ltr">{t.recorded} / {t.expected}</td>
+                        <td className="font-black" dir="ltr">{t.percent}%</td>
+                        <td><span className={`status-badge ${statusClass}`}>{t.status}</span></td>
+                      </tr>
+                    );
+                  })}
                 </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div className="print-signatures w-full px-12 mt-16">
+          <div className="flex justify-between items-end w-full pt-10">
+            <div className="text-center">
+              <p className="font-bold text-slate-800 mb-10">توقيع الإشراف الإداري</p>
+              <div className="border-t-2 border-slate-400 w-48 mx-auto"></div>
+            </div>
+            <div className="text-center">
+              <p className="font-bold text-slate-800 mb-10">توقيع مدير المدرسة</p>
+              <div className="border-t-2 border-slate-400 w-48 mx-auto"></div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
