@@ -130,11 +130,12 @@ export function useUsersSystem() {
     setSubjects(data || []);
   }, []);
 
-  // 🚀 إصلاح دوال الإضافة (إزالة Authorization header غير الضروري والذي يسبب مشاكل)
+  // 🚀 استعادة الـ Authorization header الضروري لحماية الـ API
   const addStudent = useCallback(async (studentData: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { 
       method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, 
       body: JSON.stringify({ ...studentData, email: studentData.email || `${studentData.national_id}@alrefaa.edu`, password: '123456', role: 'student' }) 
     });
     const data = await res.json();
@@ -143,9 +144,10 @@ export function useUsersSystem() {
   }, []);
 
   const addTeacher = useCallback(async (teacherData: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { 
       method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, 
       body: JSON.stringify({ ...teacherData, email: teacherData.email || `${teacherData.national_id}@alrefaa.edu`, password: '123456', role: 'teacher', department_id: teacherData.department_id }) 
     });
     const data = await res.json();
@@ -154,9 +156,10 @@ export function useUsersSystem() {
   }, []);
 
   const addParent = useCallback(async (parentData: any): Promise<{ success: boolean; password?: string }> => {
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/create', { 
       method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, 
       body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) 
     });
     const result = await res.json();
@@ -218,15 +221,20 @@ export function useUsersSystem() {
   }, []);
 
   const deleteUser = useCallback(async (id: string) => {
-    const res = await fetch(`/api/users/delete?id=${id}`, { method: 'DELETE' });
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`/api/users/delete?id=${id}`, { 
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${session?.access_token}` }
+    });
     if (!res.ok) throw new Error('فشل الحذف');
     return true;
   }, []);
 
   const resetPassword = useCallback(async (userId: string, newPassword?: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/api/users/reset-password', { 
       method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, 
       body: JSON.stringify({ userId, newPassword: newPassword || '' }) 
     });
     const data = await res.json();
