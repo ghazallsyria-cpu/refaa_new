@@ -130,10 +130,42 @@ export function useUsersSystem() {
     setSubjects(data || []);
   }, []);
 
+  // 🚀 إصلاح دوال الإضافة (إزالة Authorization header غير الضروري والذي يسبب مشاكل)
   const addStudent = useCallback(async (studentData: any) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...studentData, email: studentData.email || `${studentData.national_id}@alrefaa.edu`, password: '123456', role: 'student' }) });
-    return res.json();
+    const res = await fetch('/api/users/create', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ ...studentData, email: studentData.email || `${studentData.national_id}@alrefaa.edu`, password: '123456', role: 'student' }) 
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'فشل إضافة الطالب');
+    return data;
+  }, []);
+
+  const addTeacher = useCallback(async (teacherData: any) => {
+    const res = await fetch('/api/users/create', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ ...teacherData, email: teacherData.email || `${teacherData.national_id}@alrefaa.edu`, password: '123456', role: 'teacher', department_id: teacherData.department_id }) 
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'فشل إضافة المعلم');
+    return data;
+  }, []);
+
+  const addParent = useCallback(async (parentData: any): Promise<{ success: boolean; password?: string }> => {
+    const res = await fetch('/api/users/create', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) 
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'فشل إضافة ولي الأمر');
+    
+    if (parentData.student_ids && result.user) {
+      await supabase.from('students').update({ parent_id: result.user.id }).in('id', parentData.student_ids);
+    }
+    return { success: true, password: result.password || '123456' };
   }, []);
 
   const updateStudent = useCallback(async (id: string, oldId: string, updateData: any) => {
@@ -141,19 +173,11 @@ export function useUsersSystem() {
     return res.ok;
   }, []);
 
-  const addTeacher = useCallback(async (teacherData: any) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...teacherData, email: teacherData.email || `${teacherData.national_id}@alrefaa.edu`, password: '123456', role: 'teacher', department_id: teacherData.department_id }) });
-    return res.json();
-  }, []);
-
-  // 🚀 الدالة التي أصلحناها لتخاطب الواجهة الخلفية وتتجاوز الحماية
   const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, payload: any, hodData?: any) => {
     try {
       const nationalIdChanged = payload.national_id !== (oldNationalId || '');
       let newEmail = payload.email;
 
-      // 1. إذا تم تغيير الرقم المدني، نحدّث الإيميل في نظام المصادقة أولاً
       if (nationalIdChanged) {
         const { data: { session } } = await supabase.auth.getSession();
         const response = await fetch('/api/users/update-national-id', {
@@ -166,7 +190,6 @@ export function useUsersSystem() {
         newEmail = result.newEmail;
       }
 
-      // 2. تحديث باقي البيانات من خلال الـ API (تجاوز الـ RLS)
       const response = await fetch('/api/users/update-teacher', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -184,16 +207,6 @@ export function useUsersSystem() {
     }
   }, [fetchTeachers]);
 
-  const addParent = useCallback(async (parentData: any): Promise<{ success: boolean; password?: string }> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/users/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ ...parentData, email: parentData.email || `${parentData.national_id}@alrefaa.edu`, password: '123456', role: 'parent' }) });
-    const result = await res.json();
-    if (parentData.student_ids && result.user) {
-      await supabase.from('students').update({ parent_id: result.user.id }).in('id', parentData.student_ids);
-    }
-    return { success: true, password: result.password || '123456' };
-  }, []);
-
   const updateParent = useCallback(async (parentId: string, oldNationalId: string, updateData: any) => {
     const { student_ids, ...pureData } = updateData;
     const res = await fetch('/api/users/update-parent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parentId, updateData: pureData }) });
@@ -205,15 +218,20 @@ export function useUsersSystem() {
   }, []);
 
   const deleteUser = useCallback(async (id: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    await fetch(`/api/users/delete?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${session?.access_token}` } });
+    const res = await fetch(`/api/users/delete?id=${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('فشل الحذف');
     return true;
   }, []);
 
   const resetPassword = useCallback(async (userId: string, newPassword?: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/users/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify({ userId, newPassword: newPassword || '' }) });
-    return await res.json();
+    const res = await fetch('/api/users/reset-password', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ userId, newPassword: newPassword || '' }) 
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'فشل إعادة تعيين كلمة المرور');
+    return data;
   }, []);
 
   const fetchStudentProfile = useCallback(async (userId: string) => {
