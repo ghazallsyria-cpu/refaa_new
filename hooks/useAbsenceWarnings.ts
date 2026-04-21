@@ -7,6 +7,7 @@ export interface StudentWarning {
   sectionId: string;
   className: string;
   absenceCount: number;
+  stage: 'middle' | 'high' | 'unassigned'; // 🚀 الحقل الجديد
   warningLevel: 'warning_1' | 'warning_2' | 'warning_3' | 'dismissal';
   warningLabel: string;
 }
@@ -18,7 +19,6 @@ export function useAbsenceWarnings() {
   const fetchWarnings = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 الجلب المتوازي: نجلب الطلاب وسجلات الغياب في نفس اللحظة (بدون تفاصيل الحصص لتخفيف العبء)
       const [
         { data: studentsRaw, error: studentsErr },
         { data: absencesRaw, error: absencesErr }
@@ -30,7 +30,6 @@ export function useAbsenceWarnings() {
       if (studentsErr) throw studentsErr;
       if (absencesErr) throw absencesErr;
 
-      // 🚀 خريطة البحث السريعة O(N): نعد غيابات كل طالب في أجزاء من الثانية
       const absenceMap: Record<string, number> = {};
       (absencesRaw || []).forEach(record => {
         const sid = record.student_id;
@@ -44,12 +43,10 @@ export function useAbsenceWarnings() {
       (studentsRaw || []).forEach((student: any) => {
         const count = absenceMap[student.id] || 0;
 
-        // 🚀 نستخرج فقط المتضررين (من وصلوا لـ 25 حصة غياب فأكثر)
         if (count >= 25) {
           let level: StudentWarning['warningLevel'] = 'warning_1';
           let label = 'إنذار أول';
 
-          // المنطق التصاعدي: 25 (أول)، 50 (ثاني)، 75 (ثالث)، 100+ (فصل)
           if (count >= 100) { level = 'dismissal'; label = 'إشعار فصل'; }
           else if (count >= 75) { level = 'warning_3'; label = 'إنذار ثالث'; }
           else if (count >= 50) { level = 'warning_2'; label = 'إنذار ثاني'; }
@@ -57,6 +54,13 @@ export function useAbsenceWarnings() {
           const secObj = Array.isArray(student.sections) ? student.sections[0] : student.sections;
           const classObj = Array.isArray(secObj?.classes) ? secObj?.classes[0] : secObj?.classes;
           const className = `${classObj?.name || ''} - ${secObj?.name || ''}`;
+          
+          // 🚀 منطق تحديد المرحلة بذكاء (دستور الرفعة)
+          let stage: 'middle' | 'high' | 'unassigned' = 'unassigned';
+          const cName = className.toLowerCase();
+          if (/(سادس|سابع|ثامن|تاسع|6|7|8|9)/.test(cName)) stage = 'middle';
+          else if (/(عاشر|حادي|ثاني|10|11|12)/.test(cName)) stage = 'high';
+
           const userObj = Array.isArray(student.users) ? student.users[0] : student.users;
 
           processed.push({
@@ -65,13 +69,13 @@ export function useAbsenceWarnings() {
             sectionId: secObj?.id || '',
             className: className,
             absenceCount: count,
+            stage: stage, // تمرير المرحلة
             warningLevel: level,
             warningLabel: label
           });
         }
       });
 
-      // ترتيب الطلاب: الأكثر غياباً في الأعلى
       processed.sort((a, b) => b.absenceCount - a.absenceCount);
       setWarningsData(processed);
 
