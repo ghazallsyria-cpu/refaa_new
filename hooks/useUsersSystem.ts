@@ -1,12 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Student, Teacher, Parent, Section, Subject } from '@/types';
 
-// 🚀 دالة محسنة ومحصنة لاستخراج الاسم بغض النظر عن طريقة إرجاع Supabase للبيانات
 const extractName = (item: any): string => {
   if (!item) return 'غير معروف';
-  if (item.full_name) return item.full_name; // إذا كان الاسم في الكائن نفسه
+  if (item.full_name) return item.full_name; 
   if (!item.users) return 'غير معروف';
   
   const userObj = Array.isArray(item.users) ? item.users[0] : item.users;
@@ -37,7 +35,6 @@ export function useUsersSystem() {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
       
-      // 🚀 تبسيط الاستعلام ليقرأ العلاقة الافتراضية
       const fields = 'id, national_id, next_year_track, section_id, users(full_name, email, phone, avatar_url), sections(id, name, classes(id, name, level)), parents(users(full_name))';
       
       let query = supabase.from('students').select(fields, { count: 'exact' });
@@ -70,7 +67,6 @@ export function useUsersSystem() {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
       
-      // 🚀 تبسيط الاستعلام لتفادي أخطاء المفاتيح الأجنبية المعقدة
       let query = supabase.from('teachers').select('id, specialization, national_id, department_id, custom_titles, zoom_link, users(full_name, email, phone, avatar_url), academic_departments(id, name, head_id), department_heads(id, subject_id, stage_name)', { count: 'exact' });
       
       if (departmentId !== 'all') query = query.eq('department_id', departmentId);
@@ -79,7 +75,6 @@ export function useUsersSystem() {
       let { data, count, error: err } = await query.range(from, to).order('created_at', { ascending: false });
       if (err) throw err;
 
-      // 🚀 إذا كان البحث بالاسم
       if (searchTerm && isNaN(Number(searchTerm))) {
         const { data: searchData, count: searchCount } = await supabase
           .from('teachers')
@@ -152,18 +147,42 @@ export function useUsersSystem() {
     return res.json();
   }, []);
 
-  const updateTeacher = async (id: string, oldId: string, payload: any, hodData?: any) => {
-    await supabase.from('users').update({ full_name: payload.full_name, email: payload.email, phone: payload.phone }).eq('id', id);
-    await supabase.from('teachers').update({ specialization: payload.specialization, zoom_link: payload.zoom_link, custom_titles: payload.custom_titles, department_id: payload.department_id }).eq('id', id);
-    if (hodData) {
-      await supabase.from('department_heads').delete().eq('teacher_id', id);
-      if (hodData.isHead) {
-        await supabase.from('department_heads').insert({ teacher_id: id, subject_id: hodData.subject_id, stage_name: hodData.stage_name });
-        await supabase.from('academic_departments').update({ head_id: id }).eq('id', payload.department_id);
+  // 🚀 الدالة التي أصلحناها لتخاطب الواجهة الخلفية وتتجاوز الحماية
+  const updateTeacher = useCallback(async (teacherId: string, oldNationalId: string, payload: any, hodData?: any) => {
+    try {
+      const nationalIdChanged = payload.national_id !== (oldNationalId || '');
+      let newEmail = payload.email;
+
+      // 1. إذا تم تغيير الرقم المدني، نحدّث الإيميل في نظام المصادقة أولاً
+      if (nationalIdChanged) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch('/api/users/update-national-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ userId: teacherId, newNationalId: payload.national_id }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'فشل تحديث الرقم المدني');
+        newEmail = result.newEmail;
       }
+
+      // 2. تحديث باقي البيانات من خلال الـ API (تجاوز الـ RLS)
+      const response = await fetch('/api/users/update-teacher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teacherId, updateData: payload, newEmail, hodData }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'فشل التحديث من السيرفر');
+
+      await fetchTeachers();
+      return true;
+    } catch (err: unknown) {
+      console.error('Error updating teacher:', err);
+      throw err;
     }
-    return true;
-  };
+  }, [fetchTeachers]);
 
   const addParent = useCallback(async (parentData: any): Promise<{ success: boolean; password?: string }> => {
     const { data: { session } } = await supabase.auth.getSession();
