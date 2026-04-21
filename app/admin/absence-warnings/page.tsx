@@ -19,7 +19,6 @@ export default function AdminAbsenceWarningsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
-  const [printMode, setPrintMode] = useState<boolean>(false);
 
   useEffect(() => {
     if (authRole === 'admin' || authRole === 'management') {
@@ -41,12 +40,9 @@ export default function AdminAbsenceWarningsPage() {
     });
   }, [searchTerm, selectedSection, selectedLevel, warningsData]);
 
+  // 🚀 تم تبسيط دالة الطباعة لتنطلق فوراً
   const handlePrint = () => {
-    setPrintMode(true);
-    setTimeout(() => {
-        window.print();
-        setPrintMode(false);
-    }, 500); 
+    window.print();
   };
 
   const getLevelColor = (level: string) => {
@@ -97,70 +93,69 @@ export default function AdminAbsenceWarningsPage() {
           }
 
           .letter-header { text-align: center; border-bottom: 3px solid #000; padding-bottom: 20px; margin-bottom: 40px; }
-          .letter-header h1 { font-size: 32px; font-weight: 900; margin: 0; }
+          .letter-header h1 { font-size: 32px; font-weight: 900; margin: 0; color: #000; }
           .letter-header h2 { font-size: 20px; font-weight: bold; margin: 10px 0 0 0; color: #333; }
           
-          .letter-title { text-align: center; font-size: 26px; font-weight: 900; text-decoration: underline; margin-bottom: 40px; }
-          .letter-body { font-size: 18px; line-height: 2; text-align: justify; margin-bottom: 40px; }
-          .highlight-box { text-align: center; border: 2px dashed #000; padding: 20px; margin: 30px 0; font-size: 22px; font-weight: bold; background-color: #f8fafc; }
+          .letter-title { text-align: center; font-size: 26px; font-weight: 900; text-decoration: underline; margin-bottom: 40px; color: #000; }
+          .letter-body { font-size: 18px; line-height: 2; text-align: justify; margin-bottom: 40px; color: #000; }
+          .highlight-box { text-align: center; border: 2px dashed #000; padding: 20px; margin: 30px 0; font-size: 22px; font-weight: bold; background-color: #f8fafc; color: #000; }
           
-          .signatures { display: flex; justify-content: space-between; margin-top: 80px; text-align: center; font-weight: bold; font-size: 18px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 80px; text-align: center; font-weight: bold; font-size: 18px; color: #000; }
           @page { size: A4; margin: 0; }
         }
       `}} />
 
       {/* 🖨️ منطقة الطباعة (إشعار رسمي لكل طالب في صفحة مستقلة) */}
-      {printMode && (
-        <div className="print-area hidden print:block">
-            {filteredStudents.map((s, idx) => (
-                <div key={s.id} className="student-letter-page">
-                    <div className="letter-header">
-                        <h1>مدرسة الرفعة النموذجية</h1>
-                        <h2>إدارة شؤون الطلاب والمواظبة</h2>
-                        <p style={{fontSize: '14px', marginTop: '10px'}}>التاريخ: {format(new Date(), 'yyyy/MM/dd', { locale: arSA })}</p>
-                    </div>
+      {/* 🚀 تم إزالة شرط الـ State وجعل الواجهة مخفية دائماً وتظهر فقط عند الطباعة */}
+      <div className="print-area hidden print:block text-black">
+          {filteredStudents.map((s) => (
+              <div key={s.id} className="student-letter-page">
+                  <div className="letter-header">
+                      <h1>مدرسة الرفعة النموذجية</h1>
+                      <h2>إدارة شؤون الطلاب والمواظبة</h2>
+                      <p style={{fontSize: '14px', marginTop: '10px'}}>التاريخ: {format(new Date(), 'yyyy/MM/dd', { locale: arSA })}</p>
+                  </div>
 
-                    <div className="letter-title">
-                        {s.warningLevel === 'dismissal' ? 'إشعار نهائي بالفصل بسبب الغياب' : `إشعار رسمي: ${s.warningLabel}`}
-                    </div>
+                  <div className="letter-title">
+                      {s.warningLevel === 'dismissal' ? 'إشعار نهائي بالفصل بسبب الغياب' : `إشعار رسمي: ${s.warningLabel}`}
+                  </div>
 
-                    <div className="letter-body">
-                        <p><strong>المكرم ولي أمر الطالب/ة:</strong> <span style={{fontSize: '22px', borderBottom: '1px solid #000', paddingBottom: '2px'}}>{s.name}</span> المحترم،</p>
-                        <p>السلام عليكم ورحمة الله وبركاته، وبعد...</p>
-                        <p>
-                            انطلاقاً من حرص إدارة المدرسة على مصلحة أبنائنا الطلاب، وتطبيقاً للائحة السلوك والمواظبة،
-                            نفيدكم بأن ابنكم/ابنتكم المقيد في الصف (<span style={{fontWeight:'bold'}}>{s.className}</span>) 
-                            قد تجاوز الحد المسموح به للغياب المتكرر.
-                        </p>
-                        
-                        <div className="highlight-box">
-                            مجموع حصص الغياب المسجلة في النظام: <span style={{fontSize: '28px', color: '#e11d48', padding: '0 10px'}}>{s.absenceCount} حصة</span>
-                            <br/>
-                            <span style={{fontSize: '16px', color: '#666', marginTop: '10px', display: 'block'}}>(كل 5 حصص تعادل يوم غياب كامل)</span>
-                        </div>
+                  <div className="letter-body">
+                      <p><strong>المكرم ولي أمر الطالب/ة:</strong> <span style={{fontSize: '22px', borderBottom: '1px solid #000', paddingBottom: '2px'}}>{s.name}</span> المحترم،</p>
+                      <p>السلام عليكم ورحمة الله وبركاته، وبعد...</p>
+                      <p>
+                          انطلاقاً من حرص إدارة المدرسة على مصلحة أبنائنا الطلاب، وتطبيقاً للائحة السلوك والمواظبة،
+                          نفيدكم بأن ابنكم/ابنتكم المقيد في الصف (<span style={{fontWeight:'bold'}}>{s.className}</span>) 
+                          قد تجاوز الحد المسموح به للغياب المتكرر.
+                      </p>
+                      
+                      <div className="highlight-box">
+                          مجموع حصص الغياب المسجلة في النظام: <span style={{fontSize: '28px', color: '#e11d48', padding: '0 10px'}}>{s.absenceCount} حصة</span>
+                          <br/>
+                          <span style={{fontSize: '16px', color: '#666', marginTop: '10px', display: 'block'}}>(كل 5 حصص تعادل يوم غياب كامل)</span>
+                      </div>
 
-                        {s.warningLevel === 'dismissal' ? (
-                            <p style={{fontWeight: 'bold'}}>وعليه، وبناءً على تجاوز الطالب لـ 100 حصة غياب، تقرر رفع ملفه للإدارة لاتخاذ إجراءات الفصل النهائي.</p>
-                        ) : (
-                            <p>لذا، نأمل منكم التكرم بمراجعة إدارة شؤون الطلاب في المدرسة فور استلامكم هذا الإشعار لبحث أسباب الغياب، وتوقيع التعهد اللازم لتلافي تصعيد الإجراءات التي قد تصل إلى الفصل.</p>
-                        )}
-                        <p>شاكرين لكم حسن تعاونكم الدائم لما فيه مصلحة أبنائكم.</p>
-                    </div>
+                      {s.warningLevel === 'dismissal' ? (
+                          <p style={{fontWeight: 'bold'}}>وعليه، وبناءً على تجاوز الطالب لـ 100 حصة غياب، تقرر رفع ملفه للإدارة لاتخاذ إجراءات الفصل النهائي.</p>
+                      ) : (
+                          <p>لذا، نأمل منكم التكرم بمراجعة إدارة شؤون الطلاب في المدرسة فور استلامكم هذا الإشعار لبحث أسباب الغياب، وتوقيع التعهد اللازم لتلافي تصعيد الإجراءات التي قد تصل إلى الفصل.</p>
+                      )}
+                      <p>شاكرين لكم حسن تعاونكم الدائم لما فيه مصلحة أبنائكم.</p>
+                  </div>
 
-                    <div className="signatures">
-                        <div>
-                            <p>توقيع ولي الأمر (للعلم والاستلام)</p>
-                            <p style={{marginTop: '50px', color: '#ccc'}}>..................................................</p>
-                        </div>
-                        <div>
-                            <p>مدير المدرسة المساعد لشؤون الطلاب</p>
-                            <p style={{marginTop: '50px', color: '#ccc'}}>..................................................</p>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-      )}
+                  <div className="signatures">
+                      <div>
+                          <p>توقيع ولي الأمر (للعلم والاستلام)</p>
+                          <p style={{marginTop: '50px', color: '#ccc'}}>..................................................</p>
+                      </div>
+                      <div>
+                          <p>مدير المدرسة المساعد لشؤون الطلاب</p>
+                          <p style={{marginTop: '50px', color: '#ccc'}}>..................................................</p>
+                      </div>
+                  </div>
+              </div>
+          ))}
+      </div>
 
       {/* واجهة المستخدم التفاعلية */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-7xl mx-auto px-4 py-8 font-cairo space-y-6 pb-20 no-print" dir="rtl">
