@@ -15,7 +15,7 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 1. جلب المعلمين باستخدام نفس الكود الناجح والمضمون
+      // 1. جلب المعلمين باستخدام نفس الكود الناجح والمضمون مع التصحيح لمعرفة رئيس القسم
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
@@ -23,7 +23,8 @@ export function useTeachersSystem() {
           specialization, 
           department_id,
           users(full_name, avatar_url),
-          academic_departments(id, name, head_id)
+          academic_departments(id, name),
+          department_heads(id)
         `);
 
       if (teachersError) throw teachersError;
