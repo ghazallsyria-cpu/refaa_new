@@ -11,7 +11,13 @@ import { supabase } from "@/lib/supabase";
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
-// 🚀 محرك استنتاج المرحلة الدراسية للرادار
+// 🚀 محرك استخراج الاسم المحصن ضد الانهيار
+const getTeacherName = (t: any) => {
+  const u = t.users || t['users!teachers_id_fkey'];
+  if (!u) return "معلم غير محدد";
+  return Array.isArray(u) ? u[0]?.full_name || "معلم غير محدد" : u.full_name || "معلم غير محدد";
+};
+
 const getTeacherStage = (teacher: any) => {
   if (!teacher.teacher_sections || teacher.teacher_sections.length === 0) return 'unassigned';
   let hasMiddle = false;
@@ -103,19 +109,18 @@ export default function TeachersMonitorPage() {
         const pct = exp > 0 ? Math.round((rec / exp) * 100) : 100;
         const status = mis > 0 ? "حرج" : pct < 90 ? "تحذير" : pct < 100 ? "جيد" : "ممتاز";
         
-        // 🚀 استخراج القسم بشكل صحيح
         const deptObj = Array.isArray(t.academic_departments) ? t.academic_departments[0] : t.academic_departments;
 
         return { 
           id: t.id, 
-          name: (Array.isArray(t.users) ? t.users[0]?.full_name : t.users?.full_name) || "معلم", 
+          name: getTeacherName(t), 
           specialization: t.specialization || "عام", 
           department: deptObj?.name || "عام", 
           isHOD: deptObj?.head_id === t.id, 
           recorded: rec, expected: exp, missed: mis, percent: pct, status, 
           assignmentsCount: rawData.allAssignments.filter((a:any) => a.teacher_id === t.id).length, 
           examsCount: rawData.allExams.filter((e:any) => e.teacher_id === t.id).length, 
-          stage: getTeacherStage(t) // 🚀 تطبيق الفلتر
+          stage: getTeacherStage(t) 
         };
       });
       setLocalTeachers(processed);
@@ -125,9 +130,8 @@ export default function TeachersMonitorPage() {
   useEffect(() => { refreshData(); }, [refreshData]);
 
   const groupedData = useMemo(() => {
-    // 🚀 تطبيق فلتر المرحلة بشكل سليم
     return localTeachers
-      .filter(t => t.name.toLowerCase().includes(search.toLowerCase()) && (stageFilter === 'all' || t.stage === stageFilter || t.stage === 'both'))
+      .filter(t => (t.name || "").toLowerCase().includes(search.toLowerCase()) && (stageFilter === 'all' || t.stage === stageFilter || t.stage === 'both'))
       .reduce((acc: any, t: any) => { 
         if (!acc[t.department]) acc[t.department] = []; 
         acc[t.department].push(t); 
