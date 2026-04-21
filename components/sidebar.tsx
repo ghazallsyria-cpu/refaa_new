@@ -13,7 +13,7 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator 
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network
 } from 'lucide-react';
 
 const navigation = [
@@ -21,11 +21,11 @@ const navigation = [
   { name: 'ملف الإدارة', href: '/admin/profile', icon: Crown }, 
   { name: 'ملفي الشخصي (CV)', href: '/teachers/profile', icon: UserCircle }, 
   { name: 'الفريق الإداري', href: '/admin/staff', icon: UserCog },
+  { name: 'الهيكل الأكاديمي', href: '/hierarchy', icon: Network }, // 🚀 تمت إضافة الهيكل هنا
   { name: 'الطلاب', href: '/students', icon: Users },
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
   { name: 'تقرير المعلمين', href: '/admin/teachers-report', icon: FileText },
-  // 🚀 تم التعديل هنا: توجيه المدير إلى الأرشيف الشامل
   { name: 'تقييم المعلمين', href: '/admin/evaluations', icon: Activity },
   { name: 'الرادار الرقمي', href: '/admin/live-monitor', icon: Activity },
   { name: 'رصد الغياب الآلي', href: '/admin/teacher-attendance', icon: ShieldAlert },
@@ -75,17 +75,16 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
-    
-    // 🚀 السماح للإدارة برؤية التقييمات
     if (item.name === 'تقييم المعلمين') return (authRole === 'admin' || authRole === 'management');
     
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    if (authRole === 'teacher') return ['لوحة التحكم', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
+    // 🚀 تحديث الصلاحيات لرؤية الهيكل الأكاديمي
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
     
-    if (authRole === 'student') return ['لوحة التحكم', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
+    if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
     
-    if (authRole === 'parent') return ['لوحة التحكم', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
+    if (authRole === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     
     return false;
   });
