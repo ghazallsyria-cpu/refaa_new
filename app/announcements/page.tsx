@@ -11,7 +11,7 @@ import Image from 'next/image';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import ImageUpload from '@/components/ImageUpload';
 
-// 🚀 ألوان الفئات الملكية (الذهب، الزمرد، الياقوت، النيلي)
+// 🚀 ألوان الفئات الملكية
 const AUDIENCE_OPTIONS = [
   { value: 'all', label: 'الجميع', color: 'indigo', icon: Users },
   { value: 'teacher', label: 'المعلمين', color: 'emerald', icon: Users },
@@ -62,8 +62,8 @@ export default function AnnouncementsPage() {
 
   const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentAnnouncement.title || !currentAnnouncement.content || !currentAnnouncement.target_role) {
-      showNotification('error', 'يرجى تعبئة جميع الحقول المطلوبة');
+    if (!currentAnnouncement.title || !currentAnnouncement.content) {
+      showNotification('error', 'يرجى تعبئة العنوان والمحتوى للإعلان');
       return;
     }
 
@@ -115,9 +115,10 @@ export default function AnnouncementsPage() {
     setIsModalOpen(true);
   };
 
+  // 🚀 فلترة آمنة ومريحة للمستخدم (Front-end Filtering)
   const filteredAnnouncements = announcements.filter(a => {
-    const matchesSearch = a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          a.content?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (a.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+                          (a.content?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesAudience = audienceFilter === 'all_types' || a.target_role === audienceFilter;
     return matchesSearch && matchesAudience;
   });
@@ -126,7 +127,6 @@ export default function AnnouncementsPage() {
     return AUDIENCE_OPTIONS.find(opt => opt.value === value)?.label || 'الجميع';
   };
 
-  // 🚀 الثيم الملكي للفئات
   const getAudienceTheme = (value: string) => {
     switch (value) {
       case 'all': return { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/30' };
@@ -139,7 +139,6 @@ export default function AnnouncementsPage() {
 
   if (!isMounted) return null;
 
-  // 🚀 شاشات الحماية والتحميل الملكية
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo text-slate-100">
@@ -157,13 +156,11 @@ export default function AnnouncementsPage() {
   return (
     <div className="min-h-screen bg-transparent text-slate-100 pb-24 relative overflow-hidden font-cairo pt-6" dir="rtl">
       
-      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
       <div className="fixed top-[-10%] right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-purple-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-12 relative z-10">
         
-        {/* نظام الإشعارات العائم (Toast) */}
         <AnimatePresence>
           {notification && (
             <motion.div 
@@ -187,7 +184,6 @@ export default function AnnouncementsPage() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 الترويسة الرئيسية الفخمة */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -216,7 +212,7 @@ export default function AnnouncementsPage() {
           )}
         </motion.div>
 
-        {/* 🚀 فلاتر البحث المتقدمة الزجاجية */}
+        {/* 🚀 فلاتر البحث المتقدمة */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -235,27 +231,30 @@ export default function AnnouncementsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="relative md:w-72 lg:w-80 group">
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 sm:pr-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors z-10">
-              <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
+          
+          {/* السماح للإدارة فقط بفرز الإعلانات حسب الفئة */}
+          { (authRole === 'admin' || authRole === 'management') && (
+            <div className="relative md:w-72 lg:w-80 group">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 sm:pr-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors z-10">
+                <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
+              </div>
+              <select
+                className="block w-full rounded-xl sm:rounded-2xl border border-white/5 py-3.5 sm:py-4 pr-10 sm:pr-12 pl-10 text-white bg-[#02040a]/60 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/50 text-sm sm:text-base transition-all font-bold appearance-none outline-none shadow-inner cursor-pointer [&>option]:bg-[#0f1423]"
+                value={audienceFilter}
+                onChange={(e) => setAudienceFilter(e.target.value)}
+              >
+                <option value="all_types">جميع الإعلانات والتعاميم</option>
+                {AUDIENCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 left-0 flex items-center pl-4 sm:pl-5 text-slate-500 pointer-events-none">
+                <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 -rotate-90" />
+              </div>
             </div>
-            <select
-              className="block w-full rounded-xl sm:rounded-2xl border border-white/5 py-3.5 sm:py-4 pr-10 sm:pr-12 pl-10 text-white bg-[#02040a]/60 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/50 text-sm sm:text-base transition-all font-bold appearance-none outline-none shadow-inner cursor-pointer [&>option]:bg-[#0f1423]"
-              value={audienceFilter}
-              onChange={(e) => setAudienceFilter(e.target.value)}
-            >
-              <option value="all_types">جميع الفئات المستهدفة</option>
-              {AUDIENCE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 left-0 flex items-center pl-4 sm:pl-5 text-slate-500 pointer-events-none">
-              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 -rotate-90" />
-            </div>
-          </div>
+          )}
         </motion.div>
 
-        {/* 🚀 عرض المحتوى (الإعلانات) */}
         {loading ? (
           <div className="flex flex-col justify-center items-center py-20 sm:py-32 gap-5 relative z-10">
             <Loader2 className="animate-spin h-14 w-14 sm:h-16 sm:w-16 text-indigo-500 drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]" />
@@ -270,9 +269,9 @@ export default function AnnouncementsPage() {
             <div className="h-20 w-20 sm:h-24 sm:w-24 bg-[#0f1423]/50 rounded-full flex items-center justify-center mx-auto mb-5 sm:mb-6 border border-white/5 shadow-inner">
               <Megaphone className="h-10 w-10 sm:h-12 sm:w-12 text-slate-500 drop-shadow-md" />
             </div>
-            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight mb-2 sm:mb-3 drop-shadow-sm">لا توجد نتائج مطابقة</h3>
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight mb-2 sm:mb-3 drop-shadow-sm">لا توجد إعلانات مطابقة</h3>
             <p className="text-slate-400 text-xs sm:text-sm lg:text-base font-bold max-w-md mx-auto leading-relaxed">
-              لم نعثر على أي إعلانات تطابق بحثك الحالي، يمكنك تعديل خيارات البحث.
+              لم نعثر على أي إعلانات تطابق بحثك الحالي في النظام.
             </p>
           </motion.div>
         ) : (
@@ -298,6 +297,7 @@ export default function AnnouncementsPage() {
                           <span>{getAudienceLabel(announcement.target_role || 'all')}</span>
                         </div>
                         
+                        {/* 🛡️ إخفاء أزرار التعديل والحذف إلا للإدارة */}
                         { (authRole === 'admin' || authRole === 'management') && (
                           <div className="flex gap-1.5 sm:gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300">
                             <button onClick={() => openEditModal(announcement)} className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/20 rounded-lg sm:rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95" title="تعديل">
@@ -342,7 +342,7 @@ export default function AnnouncementsPage() {
           </div>
         )}
 
-        {/* 🚀 المودال الخاص بالتفاصيل (Details Modal - Royal Theme) */}
+        {/* 🚀 المودال الخاص بالتفاصيل */}
         <Dialog.Root open={!!selectedAnnouncement} onOpenChange={(open) => !open && setSelectedAnnouncement(null)}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -376,17 +376,19 @@ export default function AnnouncementsPage() {
                   </div>
 
                   {selectedAnnouncement.image_url && (
-<div className="relative w-full rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden mb-8 sm:mb-10 bg-[#02040a]/80 border border-white/5 shadow-inner flex items-center justify-center p-2 relative z-10">                      <Image 
+                    <div className="relative w-full min-h-[300px] rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden mb-8 sm:mb-10 bg-[#02040a]/80 border border-white/5 shadow-inner flex items-center justify-center p-2 relative z-10">
+                      <Image 
                         src={selectedAnnouncement.image_url} 
                         alt={selectedAnnouncement.title} 
                         fill
-                        className="object-contain md:object-cover hover:scale-105 transition-transform duration-700"
+                        className="object-contain hover:scale-105 transition-transform duration-700"
                         referrerPolicy="no-referrer"
                       />
                     </div>
                   )}
 
-                  <div className="prose prose-invert prose-lg sm:prose-xl max-w-none text-slate-300 whitespace-pre-wrap leading-relaxed sm:leading-loose font-bold bg-[#02040a]/40 p-6 sm:p-8 md:p-10 rounded-[1.5rem] sm:rounded-[2.5rem] border border-white/5 shadow-inner relative z-10">
+                  {/* 🚀 الحفاظ على الفواصل (Line Breaks) في العرض */}
+                  <div className="text-slate-300 whitespace-pre-wrap leading-relaxed sm:leading-loose font-bold bg-[#02040a]/40 p-6 sm:p-8 md:p-10 rounded-[1.5rem] sm:rounded-[2.5rem] border border-white/5 shadow-inner relative z-10 text-sm sm:text-lg">
                     {selectedAnnouncement.content}
                   </div>
 
@@ -403,7 +405,8 @@ export default function AnnouncementsPage() {
           </Dialog.Portal>
         </Dialog.Root>
 
-        {/* 🚀 المودال الخاص بالحذف (Delete Confirmation Modal) */}
+        {/* 🚀 المودال الخاص بالحذف */}
+        {/* ... (نفس الكود للـ Delete Modal) ... */}
         <Dialog.Root open={!!announcementToDelete} onOpenChange={(open) => !open && setAnnouncementToDelete(null)}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-[100] animate-in fade-in duration-300" />
@@ -438,7 +441,7 @@ export default function AnnouncementsPage() {
           </Dialog.Portal>
         </Dialog.Root>
 
-        {/* 🚀 المودال الخاص بالإضافة والتعديل (Add/Edit Modal) */}
+        {/* 🚀 المودال الخاص بالإضافة والتعديل */}
         <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-[100] animate-in fade-in duration-300" />
@@ -486,7 +489,7 @@ export default function AnnouncementsPage() {
                       <select 
                         required
                         className="block w-full rounded-xl sm:rounded-2xl border-0 py-3.5 sm:py-4 px-4 sm:px-5 pl-10 sm:pl-14 text-white bg-[#02040a]/60 focus:bg-[#02040a] ring-1 ring-inset ring-white/5 focus:ring-2 focus:ring-indigo-500/50 text-sm sm:text-base transition-all font-bold appearance-none cursor-pointer shadow-inner outline-none [&>option]:bg-[#0f1423]"
-                        value={currentAnnouncement.target_role || ''}
+                        value={currentAnnouncement.target_role || 'all'} // افتراضياً للجميع
                         onChange={(e) => setCurrentAnnouncement({...currentAnnouncement, target_role: e.target.value})}
                       >
                         {AUDIENCE_OPTIONS.map(opt => (
