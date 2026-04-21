@@ -6,6 +6,9 @@ export interface TeacherMonitorData {
     id: string;
     specialization: string;
     users: { full_name: string } | { full_name: string }[];
+    academic_departments: { id: string; name: string; head_id: string | null } | null;
+    teacher_sections: { section_id: string; sections: { classes: { name: string } } }[];
+    department_id: string | null;
   }[];
   allSchedules: {
     teacher_id: string;
@@ -30,7 +33,10 @@ export interface TeacherReportResult {
   teacher: {
     id: string;
     specialization: string;
+    department_id: string | null;
     users: { full_name: string } | { full_name: string }[];
+    academic_departments: { id: string; name: string; head_id: string | null } | null;
+    teacher_sections: { section_id: string; sections: { classes: { name: string } } }[];
   };
   scheduleData: {
     section_id: string;
@@ -50,14 +56,20 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 1. Fetch all teachers
+      // 🚀 التحسين 1: جلب القسم، واسم القسم، والمراحل من الجداول المرتبطة
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
-        .select("id, specialization, users(full_name)");
+        .select(`
+          id, 
+          specialization, 
+          department_id,
+          users(full_name),
+          academic_departments(id, name, head_id),
+          teacher_sections(section_id, sections(classes(name)))
+        `);
 
       if (teachersError) throw teachersError;
 
-      // 2. Fetch all schedules for today
       const { data: allSchedules, error: schedulesError } = await supabase
         .from("schedules")
         .select("teacher_id, section_id, period")
@@ -65,7 +77,6 @@ export function useTeachersSystem() {
 
       if (schedulesError) throw schedulesError;
 
-      // 3. Fetch all attendance for today
       const { data: allAttendance, error: attendanceError } = await supabase
         .from("attendance_sessions")
         .select("teacher_id, section_id, period_number, date")
@@ -73,7 +84,6 @@ export function useTeachersSystem() {
 
       if (attendanceError) throw attendanceError;
 
-      // 4. Fetch assignments count for the week
       const { data: allAssignments, error: assignmentsError } = await supabase
         .from("assignments")
         .select("teacher_id")
@@ -81,7 +91,6 @@ export function useTeachersSystem() {
 
       if (assignmentsError) throw assignmentsError;
 
-      // 5. Fetch exams count for the week
       const { data: allExams, error: examsError } = await supabase
         .from("exams")
         .select("teacher_id")
@@ -90,7 +99,7 @@ export function useTeachersSystem() {
       if (examsError) throw examsError;
 
       return {
-        teachersData: teachersData || [],
+        teachersData: teachersData as any || [],
         allSchedules: allSchedules || [],
         allAttendance: allAttendance || [],
         allAssignments: allAssignments || [],
@@ -110,9 +119,17 @@ export function useTeachersSystem() {
       const fromDate = reportType === "day" ? todayStr : weekAgoStr;
       const daysFilter = reportType === "day" ? [dbDay] : [1, 2, 3, 4, 5];
 
+      // 🚀 التحسين 2: جلب القسم والمراحل في التقارير المجمعة
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
-        .select("id, specialization, users(full_name)");
+        .select(`
+          id, 
+          specialization, 
+          department_id,
+          users(full_name),
+          academic_departments(id, name, head_id),
+          teacher_sections(section_id, sections(classes(name)))
+        `);
 
       if (teachersError) throw teachersError;
 
