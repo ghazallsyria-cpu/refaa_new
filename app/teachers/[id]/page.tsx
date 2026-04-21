@@ -51,7 +51,7 @@ export default function TeacherProfilePage() {
   const { loading, fetchTeacherProfile, updateTeacherProfileSettings } = useProfileSystem();
 
   const [data, setData]               = useState<any>(null);
-  const [departmentName, setDepartmentName] = useState<string>('عام'); // إضافة حالة لاسم القسم
+  const [departmentName, setDepartmentName] = useState<string>('عام'); // 🚀 حالة لحفظ اسم القسم الأصلي من القاعدة
   const [isEditing, setIsEditing]     = useState(false);
   const [isSaving, setIsSaving]       = useState(false);
   const [profileSettings, setProfileSettings] = useState({
@@ -82,7 +82,7 @@ export default function TeacherProfilePage() {
       const res = await fetchTeacherProfile(teacherId);
       setData(res);
 
-      // جلب اسم القسم الفعلي
+      // 🚀 جلب اسم القسم مباشرة من الجدول الحقيقي (بدون دوال التخمين)
       if (res?.department_id) {
         const { data: deptData } = await supabase.from('academic_departments').select('name').eq('id', res.department_id).single();
         if (deptData) setDepartmentName(deptData.name);
@@ -146,7 +146,6 @@ export default function TeacherProfilePage() {
     setProfileSettings({ ...profileSettings, achievements: arr });
   };
 
-  // 🚀 شاشات الحماية والتحميل بالثيم الملكي
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
@@ -179,13 +178,11 @@ export default function TeacherProfilePage() {
   return (
     <div className="min-h-screen bg-[#090b14] pb-32 font-cairo text-slate-200 relative overflow-x-hidden pt-6" dir="rtl">
       
-      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
       <div className="fixed top-1/4 left-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 right-[-10%] w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
 
-        {/* ─── شريط الأزرار ─── */}
         <div className="flex justify-between items-center">
           <button onClick={() => router.back()}
             className="flex items-center gap-2 text-slate-400 hover:text-white font-black transition-colors glass-panel px-5 py-2.5 rounded-2xl shadow-inner border border-white/5 hover:border-indigo-500/30 active:scale-95">
@@ -199,7 +196,6 @@ export default function TeacherProfilePage() {
           )}
         </div>
 
-        {/* ─── هيدر الملف (المجلة) ─── */}
         <motion.div layout className={`relative rounded-[2.5rem] sm:rounded-[3.5rem] p-1 sm:p-1.5 shadow-2xl overflow-hidden bg-gradient-to-r ${activeTheme.bg} ${activeTheme.glow}`}>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay" />
           <div className="absolute -top-32 -left-32 w-80 h-80 bg-white/10 rounded-full blur-[100px]" />
@@ -223,10 +219,10 @@ export default function TeacherProfilePage() {
               <div className="flex flex-wrap justify-center md:justify-start gap-2 sm:gap-3 pt-4">
                 {isHOD && (
                   <span className="px-4 py-2 bg-amber-500/10 text-amber-400 font-black text-xs sm:text-sm rounded-xl border border-amber-500/30 flex items-center gap-1.5 shadow-inner">
-                    <Crown className="w-4 h-4" /> رئيس قسم {data.department_heads[0]?.subject?.name}
+                    <Crown className="w-4 h-4" /> رئيس قسم {data.department_heads[0]?.subjects?.name || ''}
                   </span>
                 )}
-                {/* الاعتماد على اسم القسم الجديد هنا */}
+                {/* 🚀 هنا تم الاعتماد على اسم القسم الحقيقي المجلوب من القاعدة */}
                 <span className="px-4 py-2 bg-[#131836] text-slate-300 font-black text-xs sm:text-sm rounded-xl border border-white/5 shadow-inner">قسم {departmentName}</span>
                 <span className={`px-4 py-2 font-black text-xs sm:text-sm rounded-xl border bg-[#02040a] shadow-inner ${activeTheme.text} ${activeTheme.border}`}>{data.specialization || 'عام'}</span>
                 {customTitles.map((t: string, i: number) => (
@@ -237,7 +233,6 @@ export default function TeacherProfilePage() {
           </div>
         </motion.div>
 
-        {/* ─── نافذة التعديل (Dark Glass Panel) ─── */}
         <AnimatePresence>
           {isEditing && (
             <motion.div initial={{ opacity: 0, height: 0, y: -20 }} animate={{ opacity: 1, height: 'auto', y: 0 }} exit={{ opacity: 0, height: 0, y: -20 }}
@@ -309,7 +304,6 @@ export default function TeacherProfilePage() {
           )}
         </AnimatePresence>
 
-        {/* ─── المحتوى الإبداعي (المجلة) ─── */}
         {(profileSettings.bio || profileSettings.achievements.filter(a => a).length > 0 || profileSettings.youtube || profileSettings.linkedin) && !isEditing && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 mb-8">
             {profileSettings.bio && (
@@ -349,7 +343,6 @@ export default function TeacherProfilePage() {
           </div>
         )}
 
-        {/* ─── الإحصائيات الأكاديمية ─── */}
         <div className="glass-panel p-8 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.3)] bg-[#02040a]/40 relative overflow-hidden">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
           <h3 className="text-lg sm:text-xl font-black text-white mb-8 flex items-center justify-center sm:justify-start gap-3 drop-shadow-sm relative z-10"><Briefcase className="w-6 h-6 text-indigo-400" /> الإنتاجية الأكاديمية</h3>
@@ -367,15 +360,10 @@ export default function TeacherProfilePage() {
           </div>
         </div>
 
-        {/* ════════════════════════════════════════
-            ❤️  حائط الذكريات والوداد
-        ════════════════════════════════════════ */}
         <div className="mt-16 sm:mt-20 rounded-[3rem] sm:rounded-[4rem] overflow-hidden border border-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] relative" style={{ background: '#0a0d16' }}>
-          
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay pointer-events-none" />
           <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 rounded-full blur-[100px] pointer-events-none" />
 
-          {/* الهيدر */}
           <div className="text-center pt-16 sm:pt-20 pb-10 sm:pb-12 px-6 sm:px-8 relative z-10">
             <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-[2rem] mb-6 border border-rose-500/30 shadow-inner" style={{ background: 'rgba(244,63,94,0.1)' }}>
               <Heart className="w-10 h-10 sm:w-12 sm:h-12 text-rose-400 animate-pulse drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]" fill="currentColor" />
@@ -386,7 +374,6 @@ export default function TeacherProfilePage() {
             </p>
           </div>
 
-          {/* صندوق الكتابة */}
           {user && !isTeacher && (
             <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-12 sm:pb-16 relative z-10">
               <div className="rounded-[2rem] p-5 sm:p-8 border border-white/10 shadow-2xl" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)' }}>
@@ -411,7 +398,6 @@ export default function TeacherProfilePage() {
             </div>
           )}
 
-          {/* ─── البطاقات (الورقية التي تبرز بجمال على الخلفية الداكنة) ─── */}
           <div className="px-4 sm:px-8 pb-16 sm:pb-24 relative z-10 max-w-7xl mx-auto">
             {memories.length === 0 ? (
               <div className="text-center py-20 text-slate-500 font-bold bg-[#02040a]/40 rounded-[2.5rem] border border-white/5 border-dashed max-w-2xl mx-auto shadow-inner">
@@ -436,33 +422,13 @@ export default function TeacherProfilePage() {
                         transition={{ type: 'spring', stiffness: 300, damping: 22 }}
                         className="relative inline-block w-full break-inside-avoid"
                         style={{
-                          background: style.bg,
-                          borderRadius: '8px',
-                          padding: '28px 24px 20px',
+                          background: style.bg, borderRadius: '8px', padding: '28px 24px 20px',
                           boxShadow: '0 20px 40px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.4) inset',
-                          cursor: 'default',
-                          transformOrigin: 'top center',
+                          cursor: 'default', transformOrigin: 'top center',
                         }}
                       >
-                        {/* شريط لاصق أو دبوس */}
-                        {style.tape && (
-                          <div style={{
-                            position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
-                            width: 50, height: 24, background: style.tape,
-                            borderRadius: 3, opacity: 0.85,
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.4)',
-                          }} />
-                        )}
-                        {usePin && (
-                          <div style={{
-                            position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
-                            width: 18, height: 18, borderRadius: '50%',
-                            background: style.pin,
-                            boxShadow: '0 4px 8px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.3) inset',
-                          }} />
-                        )}
-
-                        {/* زر الحذف (للمعلم فقط) */}
+                        {style.tape && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', width: 50, height: 24, background: style.tape, borderRadius: 3, opacity: 0.85, boxShadow: '0 2px 5px rgba(0,0,0,0.4)' }} />}
+                        {usePin && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', width: 18, height: 18, borderRadius: '50%', background: style.pin, boxShadow: '0 4px 8px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.3) inset' }} />}
                         {isTeacher && (
                           <button
                             onClick={() => handleDeleteMemory(memory.id)}
@@ -473,41 +439,19 @@ export default function TeacherProfilePage() {
                             onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.08)')}
                             title="حذف الذكرى"
                           >
-                            {deletingId === memory.id
-                              ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin text-white" />
-                              : <Trash2 size={14} color={deletingId === memory.id ? 'white' : 'rgba(0,0,0,0.5)'} />
-                            }
+                            {deletingId === memory.id ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin text-white" /> : <Trash2 size={14} color={deletingId === memory.id ? 'white' : 'rgba(0,0,0,0.5)'} />}
                           </button>
                         )}
-
-                        {/* علامة الاقتباس */}
                         <div style={{ fontSize: 48, lineHeight: 0.8, marginBottom: 8, color: style.quote, opacity: 0.3, fontFamily: 'Georgia, serif' }}>"</div>
-
-                        {/* المحتوى */}
-                        <p style={{ fontSize: 14, lineHeight: 1.8, fontWeight: 700, color: style.text, marginBottom: 20, whiteSpace: 'pre-wrap' }}>
-                          {memory.content}
-                        </p>
-
-                        {/* الكاتب */}
+                        <p style={{ fontSize: 14, lineHeight: 1.8, fontWeight: 700, color: style.text, marginBottom: 20, whiteSpace: 'pre-wrap' }}>{memory.content}</p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: `1px dashed ${style.text}40`, paddingTop: 14 }}>
-                          <div style={{
-                            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                            background: style.avatarBg, color: style.avatarText,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 14, fontWeight: 900, overflow: 'hidden',
-                            boxShadow: `0 0 0 2px ${style.bg}, 0 0 0 3px ${style.text}20`
-                          }}>
-                            {memory.author?.avatar_url
-                              ? <img src={memory.author.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                              : memory.author?.full_name?.charAt(0)
-                            }
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: style.avatarBg, color: style.avatarText, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, overflow: 'hidden', boxShadow: `0 0 0 2px ${style.bg}, 0 0 0 3px ${style.text}20` }}>
+                            {memory.author?.avatar_url ? <img src={memory.author.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : memory.author?.full_name?.charAt(0)}
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 900, color: style.meta, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{memory.author?.full_name}</div>
                             <div style={{ fontSize: 10, color: style.meta, opacity: 0.8, marginTop: 2, fontWeight: 700 }}>
-                              {memory.author?.role === 'teacher' ? 'زميل المهنة' : memory.author?.role === 'student' ? 'طالب' : 'إدارة'}
-                              {' · '}
-                              {format(new Date(memory.created_at), 'd MMM yyyy', { locale: arSA })}
+                              {memory.author?.role === 'teacher' ? 'زميل المهنة' : memory.author?.role === 'student' ? 'طالب' : 'إدارة'} {' · '} {format(new Date(memory.created_at), 'd MMM yyyy', { locale: arSA })}
                             </div>
                           </div>
                         </div>
