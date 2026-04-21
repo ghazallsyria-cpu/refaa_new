@@ -98,7 +98,8 @@ export default function AdminAbsenceWarningsPage() {
           /* تنسيق التواقيع والختم */
           .signatures { display: flex; justify-content: space-between; margin-top: 80px; text-align: center; font-weight: bold; font-size: 18px; color: #000; }
           .signature-block { position: relative; width: 250px; }
-          .manager-stamp { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 150px; opacity: 0.85; mix-blend-mode: multiply; z-index: -1; }
+.manager-stamp { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 150px; opacity: 0.7; pointer-events: none; z-index: 1; }
+
           
           @page { size: A4; margin: 0; }
         }
