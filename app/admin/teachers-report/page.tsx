@@ -54,9 +54,9 @@ const getDatesBetween = (startDate: Date, endDate: Date) => {
   return dates;
 };
 
-// 🚀 محرك استخراج الاسم المحصن
+// 🚀 محرك استخراج الاسم النظيف
 const getTeacherName = (t: any) => {
-  const u = t.users || t['users!teachers_id_fkey'];
+  const u = t.users;
   if (!u) return "معلم غير محدد";
   return Array.isArray(u) ? u[0]?.full_name || "معلم غير محدد" : u.full_name || "معلم غير محدد";
 };
@@ -123,14 +123,14 @@ export default function TeachersReportPage() {
         datesToProcess = getDatesBetween(sDate, eDate);
       }
 
-      // 🚀 إضافة مفتاح العلاقة الصريح لجلب الأسماء وتفادي الانهيار
+      // 🚀 استعلام نظيف يجلب البيانات بدقة
       const [
         { data: teachersDB },
         { data: schedulesDB },
         { data: dbPeriods },
         { data: attendanceDB }
       ] = await Promise.all([
-        supabase.from('teachers').select('id, specialization, national_id, department_id, users!teachers_id_fkey(full_name), academic_departments(id, name, head_id), teacher_sections(section_id, sections(classes(name)))').limit(1000),
+        supabase.from('teachers').select('id, specialization, national_id, department_id, users(full_name), academic_departments(id, name, head_id), teacher_sections(section_id, sections(classes(name)))').limit(2000),
         supabase.from('schedules').select('teacher_id, section_id, day_of_week, period').limit(10000),
         supabase.from('class_periods').select('period_number, end_time').limit(100),
         currentType === "day" 
