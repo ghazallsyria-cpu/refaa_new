@@ -11,7 +11,6 @@ import { supabase } from "@/lib/supabase";
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
-// محرك استخراج الاسم النظيف
 const getTeacherName = (t: any) => {
   const u = t.users;
   if (!u) return "معلم غير محدد";
@@ -45,15 +44,18 @@ const MonitorRow = ({ teacher, onSendWarning, isSending }: any) => {
   const statusColor = teacher.status === "ممتاز" ? "bg-emerald-50 text-emerald-700 border-emerald-100" : teacher.status === "جيد" ? "bg-blue-50 text-blue-700 border-blue-100" : teacher.status === "تحذير" ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse";
 
   return (
-    <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`group transition-all hover:bg-slate-50/50 ${teacher.status === "حرج" ? "bg-rose-50/5" : ""} ${teacher.isHOD ? "bg-amber-50/5" : ""}`}>
+    <motion.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`group transition-all hover:bg-slate-50/50 ${teacher.status === "حرج" ? "bg-rose-50/5" : ""} ${teacher.isHOD ? "bg-amber-50/10" : ""}`}>
       <td className="whitespace-nowrap py-3 sm:py-4 pr-6 sm:pr-8 pl-4 text-right">
         <div className="flex items-center gap-3 sm:gap-4">
-          <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl border flex items-center justify-center font-black text-base shadow-sm shrink-0 ${teacher.isHOD ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+          <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl border flex items-center justify-center font-black text-base shadow-sm shrink-0 ${teacher.isHOD ? 'bg-amber-100 text-amber-600 border-amber-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
             {teacher.isHOD ? <Crown className="w-5 h-5" /> : (teacher.name?.charAt(0) || 'م')}
           </div>
           <div className="flex flex-col min-w-0">
             <span className="font-black text-slate-900 text-xs sm:text-sm group-hover:text-indigo-600 transition-colors truncate">{teacher.name}</span>
-            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold truncate mt-0.5">{teacher.specialization}</div>
+            <div className="text-[9px] sm:text-[10px] text-slate-500 font-bold truncate mt-0.5">
+              {teacher.isHOD && <span className="text-amber-600 ml-1">رئيس القسم |</span>}
+              {teacher.specialization}
+            </div>
           </div>
         </div>
       </td>
@@ -102,7 +104,12 @@ export default function TeachersMonitorPage() {
           if (end) {
             const [h, m] = end.split(':').map(Number);
             const pEnd = new Date(schoolTime); pEnd.setHours(h, m, 0, 0);
-            if (schoolTime > pEnd) { exp++; if (atts.some((a:any) => a.section_id === sch.section_id && a.period_number === sch.period)) rec++; else mis++; }
+            if (schoolTime > pEnd) { 
+              exp++; 
+              // 🚀 التصليح هنا: التحقق من a.period بدلاً من a.period_number 
+              if (atts.some((a:any) => a.section_id === sch.section_id && String(a.period) === String(sch.period))) rec++; 
+              else mis++; 
+            }
           }
         });
         
@@ -131,13 +138,25 @@ export default function TeachersMonitorPage() {
   useEffect(() => { refreshData(); }, [refreshData]);
 
   const groupedData = useMemo(() => {
-    return localTeachers
+    const groups = localTeachers
       .filter(t => (t.name || "").toLowerCase().includes(search.toLowerCase()) && (stageFilter === 'all' || t.stage === stageFilter || t.stage === 'both'))
       .reduce((acc: any, t: any) => { 
         if (!acc[t.department]) acc[t.department] = []; 
         acc[t.department].push(t); 
         return acc; 
       }, {});
+
+    // 🚀 ترتيب الأقسام: رئيس القسم في الأعلى، ثم ترتيب أبجدي لبقية المعلمين
+    const sortedGroups: any = {};
+    Object.keys(groups).sort().forEach(key => {
+      sortedGroups[key] = groups[key].sort((a: any, b: any) => {
+        if (a.isHOD && !b.isHOD) return -1;
+        if (!a.isHOD && b.isHOD) return 1;
+        return a.name.localeCompare(b.name, 'ar');
+      });
+    });
+
+    return sortedGroups;
   }, [localTeachers, search, stageFilter]);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><RefreshCw className="animate-spin text-indigo-600 w-10 h-10" /></div>;
