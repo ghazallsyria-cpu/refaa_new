@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, X, Key, UserPlus, Download, Filter, MapPin, Briefcase, Phone, Mail, Check, Users, UsersRound, ShieldAlert } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Key, UserPlus, Download, Filter, MapPin, Briefcase, Phone, Mail, Check, Users, UsersRound, ShieldAlert, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUsersSystem } from '@/hooks/useUsersSystem';
 
@@ -22,7 +22,11 @@ export default function ParentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingParent, setEditingParent] = useState<any>(null);
+  
+  // 🚀 حالات التحميل الجديدة لجعل الواجهة متجاوبة بالكامل
+  const [submitting, setSubmitting] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
+  
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   
@@ -53,13 +57,17 @@ export default function ParentsPage() {
         showNotification('error', 'يرجى تعبئة الحقول الإلزامية (الاسم والرقم المدني)');
         return;
       }
+      setSubmitting(true); // 🚀 تفعيل أيقونة التحميل
       const result = await addParent({ ...addForm, student_ids: selectedStudents });
       showNotification('success', `تم إضافة ولي الأمر بنجاح (كلمة المرور: ${result.password})`);
       setShowAddModal(false);
       setAddForm({ full_name: '', national_id: '', email: '', phone: '', address: '', job_title: '' });
       setSelectedStudents([]);
+      fetchParents(); // 🚀 تحديث الجدول فوراً لرؤية النتيجة
     } catch (error: any) {
       showNotification('error', error.message || 'حدث خطأ أثناء إضافة ولي الأمر');
+    } finally {
+      setSubmitting(false); // 🚀 إيقاف أيقونة التحميل
     }
   };
 
@@ -79,12 +87,16 @@ export default function ParentsPage() {
 
   const handleEditSubmit = async () => {
     try {
+      setSubmitting(true); // 🚀 تفعيل أيقونة التحميل
       await updateParent(editingParent.id, editingParent.national_id, { ...editForm, student_ids: selectedStudents });
       showNotification('success', 'تم تحديث بيانات ولي الأمر وارتباطاته بنجاح');
       setShowEditModal(false);
       setSelectedStudents([]);
+      fetchParents(); // 🚀 تحديث الجدول
     } catch (error: any) {
       showNotification('error', error.message || 'حدث خطأ أثناء تحديث البيانات');
+    } finally {
+      setSubmitting(false); // 🚀 إيقاف أيقونة التحميل
     }
   };
 
@@ -99,6 +111,7 @@ export default function ParentsPage() {
       showNotification('success', 'تم حذف ولي الأمر بنجاح');
       setShowDeleteModal(false);
       setParentToDelete(null);
+      fetchParents(); // 🚀 تحديث الجدول
     } catch (error: any) { showNotification('error', error.message || 'حدث خطأ أثناء حذف ولي الأمر'); }
   };
 
@@ -237,7 +250,6 @@ export default function ParentsPage() {
         </div>
       </motion.div>
 
-      {/* 🚀 النوافذ المنبثقة للإضافة والتعديل - تم تلوين المدخلات */}
       <AnimatePresence>
         {(showAddModal || showEditModal) && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -252,11 +264,11 @@ export default function ParentsPage() {
                   <form className="space-y-6">
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الاسم الرباعي</label>
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الاسم الرباعي <span className="text-rose-500">*</span></label>
                         <input type="text" value={showAddModal ? addForm.full_name : editForm.full_name} onChange={(e) => showAddModal ? setAddForm({...addForm, full_name: e.target.value}) : setEditForm({...editForm, full_name: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل الاسم الكامل..." />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الرقم المدني</label>
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest mr-1">الرقم المدني <span className="text-rose-500">*</span></label>
                         <input type="text" value={showAddModal ? addForm.national_id : editForm.national_id} onChange={(e) => showAddModal ? setAddForm({...addForm, national_id: e.target.value}) : setEditForm({...editForm, national_id: e.target.value})} className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 placeholder:text-slate-400 bg-slate-50 ring-1 ring-inset ring-slate-100 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" placeholder="أدخل الرقم المدني..." />
                       </div>
                       <div className="space-y-2">
@@ -298,14 +310,28 @@ export default function ParentsPage() {
                     </div>
                   </form>
                 </div>
+                
+                {/* 🚀 زر الإضافة مع مؤشر التحميل */}
                 <div className="bg-slate-50 px-8 py-6 sm:flex sm:flex-row-reverse gap-3 border-t border-slate-100">
-                  <button type="button" className="inline-flex w-full justify-center rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg hover:bg-indigo-700 sm:w-auto transition-all" onClick={showAddModal ? handleAddSubmit : handleEditSubmit}>
+                  <button 
+                    type="button" 
+                    disabled={submitting}
+                    className="inline-flex w-full justify-center items-center gap-2 rounded-2xl bg-indigo-600 px-8 py-4 text-sm font-black text-white shadow-lg hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed sm:w-auto transition-all" 
+                    onClick={showAddModal ? handleAddSubmit : handleEditSubmit}
+                  >
+                    {submitting && <Loader2 className="w-5 h-5 animate-spin" />}
                     {showAddModal ? 'إضافة ولي الأمر' : 'حفظ التعديلات وارتباط الأبناء'}
                   </button>
-                  <button type="button" className="mt-3 inline-flex w-full justify-center rounded-2xl bg-white px-8 py-4 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 sm:mt-0 sm:w-auto transition-all" onClick={() => { setShowAddModal(false); setShowEditModal(false); setSelectedStudents([]); setStudentSearchTerm(''); }}>
+                  <button 
+                    type="button" 
+                    disabled={submitting}
+                    className="mt-3 inline-flex w-full justify-center rounded-2xl bg-white px-8 py-4 text-sm font-black text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-all" 
+                    onClick={() => { setShowAddModal(false); setShowEditModal(false); setSelectedStudents([]); setStudentSearchTerm(''); }}
+                  >
                     إلغاء
                   </button>
                 </div>
+
               </motion.div>
             </div>
           </div>
