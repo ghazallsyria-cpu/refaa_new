@@ -16,9 +16,6 @@ import { useAuth } from '@/context/auth-context';
 import GrantBadgeModal from '@/components/GrantBadgeModal';
 import { supabase } from '@/lib/supabase';
 
-// ============================================================================
-// 🧠 محرك استنتاج المرحلة الدراسية
-// ============================================================================
 const getTeacherStageInfo = (teacher: any) => {
   if (!teacher.teacher_sections || teacher.teacher_sections.length === 0) {
     return { type: 'unassigned', label: 'غير معين', color: 'slate', icon: AlertCircle };
@@ -36,13 +33,9 @@ const getTeacherStageInfo = (teacher: any) => {
   return { type: 'unknown', label: 'غير محدد', color: 'slate', icon: Users };
 };
 
-// ============================================================================
-// 🧩 مكون سطر المعلم المعزول (Table Row)
-// ============================================================================
 const TeacherTableRow = ({ teacher, onGrantBadge, onResetPassword, onEdit, onDelete, onAssign, departments }: any) => {
   const userData = Array.isArray(teacher.users) ? teacher.users[0] : teacher.users;
   const isHOD = teacher.academic_departments?.head_id === teacher.id || (teacher.department_heads && teacher.department_heads.length > 0);
-  // قراءة اسم القسم من الجدول الحقيقي
   const deptObj = departments?.find((d:any) => d.id === teacher.department_id);
   const departmentName = deptObj ? deptObj.name : 'بلا قسم (يتطلب تعيين)';
 
@@ -99,11 +92,9 @@ export default function TeachersPage() {
   
   const isLoading = usersLoading || assignmentsLoading;
 
-  // 🚀 حالات العمليات
   const [submitting, setSubmitting] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
-  // حالات العرض والتحكم
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
@@ -115,7 +106,6 @@ export default function TeachersPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // المودالز
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -123,7 +113,6 @@ export default function TeachersPage() {
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [isBadgeModalOpen, setIsBadgeModalOpen] = useState(false);
 
-  // البيانات المؤقتة للنماذج
   const [editingTeacher, setEditingTeacher] = useState<any>(null);
   const [teacherToDelete, setTeacherToDelete] = useState<string | null>(null);
   const [teacherForBadge, setTeacherForBadge] = useState<any>(null);
@@ -135,7 +124,6 @@ export default function TeachersPage() {
   const [teacherSections, setTeacherSections] = useState<any[]>([]);
   const [bulkAssignData, setBulkAssignData] = useState<{ section_ids: string[], subject_ids: string[] }>({ section_ids: [], subject_ids: [] });
 
-  // جلب البيانات الأولية
   useEffect(() => {
     if (fetchDepartments) fetchDepartments();
     fetchTeachers();
@@ -143,26 +131,17 @@ export default function TeachersPage() {
     fetchSubjects();
   }, [fetchDepartments, fetchTeachers, fetchSections, fetchSubjects]);
 
-  // 🚀 الفلترة الذكية الجديدة (تدعم كشف المعلمين بلا قسم)
   const filteredTeachers = useMemo(() => {
     return (teachers || []).filter((teacher: any) => {
       const stageInfo = getTeacherStageInfo(teacher);
       const parentDept = teacher.department_id;
       const matchStage = stageFilter === 'all' || stageInfo.type === stageFilter;
-      
-      // التعديل السحري لكشف المختفين
-      const matchDept = selectedDepartment === 'unassigned' 
-          ? !parentDept // جلب من ليس له قسم
-          : selectedDepartment 
-              ? parentDept === selectedDepartment 
-              : true;
-
+      const matchDept = selectedDepartment === 'unassigned' ? !parentDept : selectedDepartment ? parentDept === selectedDepartment : true;
       const matchSearch = teacher.users?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || teacher.national_id?.includes(searchQuery);
       return matchStage && matchDept && matchSearch;
     });
   }, [teachers, stageFilter, selectedDepartment, searchQuery]);
 
-  // تقسيم أعضاء القسم الواحد للشبكة (Grid View)
   const departmentHeads = filteredTeachers.filter((t: any) => t.academic_departments?.head_id === t.id || (t.department_heads && t.department_heads.length > 0));
   const departmentMembers = filteredTeachers.filter((t: any) => !(t.academic_departments?.head_id === t.id || (t.department_heads && t.department_heads.length > 0)));
   const unassignedTeachersCount = (teachers || []).filter((t: any) => !t.department_id).length;
@@ -174,7 +153,6 @@ export default function TeachersPage() {
     return acc;
   }, {} as Record<string, any[]>);
 
-  // ================= الدوال التنفيذية =================
   const handleAddSubmit = async () => { 
     if (!addForm.full_name || !addForm.national_id || !addForm.department_id) return showNotification('error', 'يرجى تعبئة الحقول الإلزامية واختيار القسم'); 
     setSubmitting(true);
@@ -268,7 +246,9 @@ export default function TeachersPage() {
     } catch (e) { showNotification('error', 'فشل التعيين'); }
   };
 
-  // ================= UI Components =================
+  const toggleBulkSection = (id: string) => { setBulkAssignData(prev => ({ ...prev, section_ids: prev.section_ids.includes(id) ? prev.section_ids.filter(sid => sid !== id) : [...prev.section_ids, id] })); };
+  const toggleBulkSubject = (id: string) => { setBulkAssignData(prev => ({ ...prev, subject_ids: prev.subject_ids.includes(id) ? prev.subject_ids.filter(sid => sid !== id) : [...prev.subject_ids, id] })); };
+
   const TeacherCard = ({ teacher, isHOD = false }: any) => {
     const stageInfo = getTeacherStageInfo(teacher);
     const userData = Array.isArray(teacher.users) ? teacher.users[0] : teacher.users;
@@ -296,9 +276,9 @@ export default function TeachersPage() {
         </div>
         <div className="flex gap-2 mt-5 pt-4 border-t border-slate-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
            <button type="button" onClick={() => handleOpenEditModal(teacher)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black hover:bg-indigo-600 hover:text-white transition-all">تعديل ونقل</button>
-           <button type="button" onClick={() => handleResetPasswordClick(teacher)} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all"><Key size={14}/></button>
+           <button type="button" onClick={() => { setResetPasswordForm({ userId: teacher.id, newPassword: '' }); setShowPasswordModal(true); }} className="p-2 bg-sky-50 text-sky-600 rounded-xl hover:bg-sky-600 hover:text-white transition-all"><Key size={14}/></button>
            <button type="button" onClick={() => handleAssignmentClick(teacher)} className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all"><BookOpen size={14}/></button>
-           <button type="button" onClick={() => handleGrantBadgeClick(teacher)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all"><Award size={14}/></button>
+           <button type="button" onClick={() => { setTeacherForBadge({ id: teacher.id, name: userData?.full_name || 'معلم غير معروف' }); setIsBadgeModalOpen(true); }} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all"><Award size={14}/></button>
            <button type="button" onClick={() => { setTeacherToDelete(teacher.id); setShowDeleteModal(true); }} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"><Trash2 size={14}/></button>
         </div>
       </motion.div>
@@ -307,7 +287,6 @@ export default function TeachersPage() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 font-cairo pb-20" dir="rtl">
-      
       <AnimatePresence>
         {notification && (
           <motion.div initial={{ opacity: 0, y: -20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: -20, x: '-50%' }} className={`fixed top-8 left-1/2 z-50 px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border backdrop-blur-xl ${notification.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-red-500/90 text-white'}`}>
@@ -318,8 +297,6 @@ export default function TeachersPage() {
       </AnimatePresence>
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
-        
-        {/* الهيدر الرئيسي */}
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight text-right">
@@ -329,15 +306,14 @@ export default function TeachersPage() {
           </div>
           <div className="flex gap-3">
             <button onClick={() => { fetchTeachers(); if(fetchDepartments) fetchDepartments(); }} className="px-5 py-4 bg-white text-indigo-600 rounded-[1.5rem] font-black shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2">
-               <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''}/> تحديث البيانات
+               <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''}/> تحديث
             </button>
             <button onClick={() => setShowAddModal(true)} className="px-8 py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
-              <Plus size={20}/> إضافة معلم جديد
+              <Plus size={20}/> إضافة معلم
             </button>
           </div>
         </div>
 
-        {/* الإحصائيات مع تنبيه المعلمين بلا قسم */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4 text-right">
             <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600"><Users size={24}/></div>
@@ -347,15 +323,12 @@ export default function TeachersPage() {
             <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600"><Folder size={24}/></div>
             <div><p className="text-2xl font-black text-slate-900">{departments?.length || 0}</p><p className="text-[10px] font-bold text-slate-400 uppercase">أقسام معتمدة</p></div>
           </div>
-          
-          {/* 🚀 بطاقة المعلمين بلا قسم (انذار) */}
           <div onClick={() => { setViewMode('table'); setSelectedDepartment('unassigned'); }} className="bg-rose-50 p-6 rounded-[2rem] border border-rose-200 shadow-sm flex items-center gap-4 text-right cursor-pointer hover:bg-rose-100 transition-all group">
             <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-rose-600 shadow-sm group-hover:scale-110 transition-transform"><UserMinus size={24}/></div>
-            <div><p className="text-2xl font-black text-rose-700">{unassignedTeachersCount}</p><p className="text-[10px] font-bold text-rose-500 uppercase">بلا قسم (اضغط للعرض)</p></div>
+            <div><p className="text-2xl font-black text-rose-700">{unassignedTeachersCount}</p><p className="text-[10px] font-bold text-rose-500 uppercase">بلا قسم (اضغط)</p></div>
           </div>
         </div>
 
-        {/* أدوات البحث والفلترة */}
         <div className="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col lg:flex-row items-center justify-between gap-4">
           <div className="flex bg-slate-50 p-1.5 rounded-xl border border-slate-100 w-full lg:w-auto">
             <button onClick={() => setViewMode('table')} className={`flex-1 flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-black transition-all ${viewMode === 'table' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><List size={16}/> القائمة</button>
@@ -374,7 +347,6 @@ export default function TeachersPage() {
           </div>
         </div>
 
-        {/* عرض المحتوى (جدول أو شبكة) */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-200 overflow-hidden">
           {viewMode === 'table' ? (
             <div className="overflow-x-auto min-h-[400px]">
@@ -412,7 +384,6 @@ export default function TeachersPage() {
             </div>
           ) : (
             <div className="p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* 🚀 إضافة كرت المعلمين بلا قسم في الشبكة */}
               {unassignedTeachersCount > 0 && !selectedDepartment && (
                  <motion.div whileHover={{ y: -5 }} onClick={() => { setViewMode('table'); setSelectedDepartment('unassigned'); }} className="bg-rose-50 p-8 rounded-[2.5rem] cursor-pointer border-2 border-rose-200 hover:border-rose-400 hover:shadow-md text-center group transition-all">
                     <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center text-rose-600 mx-auto mb-4 shadow-sm group-hover:bg-rose-600 group-hover:text-white transition-colors animate-pulse"><UserMinus size={28}/></div>
@@ -420,7 +391,6 @@ export default function TeachersPage() {
                     <p className="text-xs font-bold text-rose-500 mt-2">يتطلب توزيعهم ({unassignedTeachersCount})</p>
                  </motion.div>
               )}
-
               {!selectedDepartment ? (
                 departments?.map((dept: any) => (
                   <motion.div key={dept.id} whileHover={{ y: -5 }} onClick={() => setSelectedDepartment(dept.id)} className="bg-slate-50 p-8 rounded-[2.5rem] cursor-pointer border-2 border-slate-50 hover:border-indigo-100 hover:shadow-md text-center group transition-all">
@@ -454,8 +424,6 @@ export default function TeachersPage() {
         </div>
       </div>
 
-      {/* النوافذ المنبثقة بقيت كما هي دون تغيير (Add, Edit, Assign, Delete, Password) */}
-      
       {/* نافذة التعديل */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto" dir="rtl">
@@ -466,11 +434,8 @@ export default function TeachersPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الاسم</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">الرقم المدني</label><input type="text" value={editForm.national_id} onChange={e => setEditForm({...editForm, national_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none"/></div>
-                  
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">رقم الهاتف</label><input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
                   <div className="space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">البريد الإلكتروني</label><input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-left" dir="ltr"/></div>
-                  
-                  {/* 🚀 حقل اختيار القسم الإجباري */}
                   <div className="sm:col-span-2 space-y-1.5">
                     <label className="text-xs font-black text-indigo-600 mr-2">القسم الأكاديمي الحالي <span className="text-rose-500">*</span></label>
                     <select value={editForm.department_id || ''} onChange={e => setEditForm({...editForm, department_id: e.target.value})} className="w-full px-4 py-3 bg-indigo-50/50 border border-indigo-100 rounded-xl font-black text-indigo-900 outline-none cursor-pointer">
@@ -478,10 +443,8 @@ export default function TeachersPage() {
                       {departments?.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
-
                   <div className="sm:col-span-2 space-y-1.5"><label className="text-xs font-black text-slate-400 mr-2">التخصص הדقيق</label><input type="text" value={editForm.specialization} onChange={e => setEditForm({...editForm, specialization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
                 </div>
-
                 <div className="bg-amber-50/50 p-6 rounded-3xl border border-amber-100 space-y-5">
                   <div className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-amber-100"><input type="checkbox" id="isHOD" checked={editForm.isHOD} onChange={e => setEditForm({...editForm, isHOD: e.target.checked})} className="w-5 h-5 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"/><label htmlFor="isHOD" className="text-sm font-black text-slate-800 cursor-pointer select-none">ترقية لـ رئيس قسم</label></div>
                   {editForm.isHOD && <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-2"><select value={editForm.hod_subject_id} onChange={e => setEditForm({...editForm, hod_subject_id: e.target.value})} className="w-full px-4 py-3 bg-white rounded-xl font-bold outline-none border border-amber-100"><option value="">-- مادة الإشراف --</option>{subjects?.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
@@ -513,10 +476,13 @@ export default function TeachersPage() {
                       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                         <input type="text" placeholder="الاسم الرباعي *" value={addForm.full_name} onChange={(e) => setAddForm({...addForm, full_name: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                         <input type="text" placeholder="الرقم المدني *" value={addForm.national_id} onChange={(e) => setAddForm({...addForm, national_id: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
+                        <input type="text" placeholder="رقم الهاتف" value={addForm.phone} onChange={(e) => setAddForm({...addForm, phone: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
+                        <input type="email" placeholder="البريد الإلكتروني" value={addForm.email} onChange={(e) => setAddForm({...addForm, email: e.target.value})} className="w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none text-left" dir="ltr" />
                         <select value={addForm.department_id} onChange={(e) => setAddForm({...addForm, department_id: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-indigo-50/50 border border-indigo-100 text-indigo-900 focus:ring-2 focus:ring-indigo-500 font-black outline-none cursor-pointer shadow-inner">
                            <option value="">-- اختر القسم الأكاديمي المعتمد --</option>
                            {departments?.map((d:any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
+                        <input type="text" placeholder="التخصص الدقيق (اختياري)" value={addForm.specialization} onChange={(e) => setAddForm({...addForm, specialization: e.target.value})} className="sm:col-span-2 w-full rounded-2xl border-0 py-3.5 px-4 bg-slate-50 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 font-bold outline-none" />
                       </div>
                    </form>
                 </div>
@@ -528,10 +494,81 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* نوافذ أخرى... */}
-      {showAssignmentModal && ( ... )} {/* تركته كما هو لأن الكود السابق سليم */}
-      {showPasswordResetModal && ( ... )}
-      {showDeleteModal && ( ... )}
+      {/* نافذة التعيين السريع */}
+      {showAssignmentModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAssignmentModal(false)}></div>
+            <div className="relative transform overflow-hidden rounded-[2.5rem] bg-white text-right shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-4xl border border-slate-100">
+              <div className="bg-white px-6 sm:px-10 pb-8 pt-8 sm:pt-10">
+                <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+                  <h3 className="text-xl font-black text-slate-900">تعيين الفصول: {selectedTeacherForAssign?.users?.full_name}</h3>
+                  <button onClick={() => setShowAssignmentModal(false)}><X className="h-6 w-6 text-slate-400" /></button>
+                </div>
+                
+                <div className="space-y-8 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="bg-amber-50 rounded-[2rem] p-6 border border-amber-100">
+                    <h4 className="text-sm font-black text-amber-900 mb-4">التعيين المتعدد السريع</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div>
+                        <label className="text-xs font-black text-amber-800 mb-2 block">حدد المواد</label>
+                        <div className="flex flex-wrap gap-2">
+                          {subjects.map((s:any) => <button key={s.id} onClick={() => toggleBulkSubject(s.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${bulkAssignData.subject_ids.includes(s.id) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}>{s.name}</button>)}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-black text-amber-800 mb-2 block">حدد الفصول</label>
+                        <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto custom-scrollbar">
+                          {sections.map((s:any) => <button key={s.id} onClick={() => toggleBulkSection(s.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${bulkAssignData.section_ids.includes(s.id) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200'}`}>{s.classes?.name} - {s.name}</button>)}
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={handleBulkAssign} className="w-full py-3 bg-amber-500 text-white rounded-xl font-black shadow-md hover:bg-amber-600 transition-all">تنفيذ التعيين المتعدد</button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {sections.map((sec:any) => (
+                      <div key={sec.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <h4 className="font-black text-slate-800 text-sm mb-3">{sec.classes?.name} - {sec.name}</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {subjects.map((sub:any) => {
+                            const isAssigned = teacherSections.some(ts => ts.section_id === sec.id && ts.subject_id === sub.id);
+                            return <button key={sub.id} onClick={() => toggleAssignment(sec.id, sub.id)} className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${isAssigned ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'}`}>{sub.name}</button>
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-slate-50/80 px-6 py-6 border-t border-slate-100 flex justify-end">
+                <button onClick={() => setShowAssignmentModal(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-xl font-black">إغلاق النافذة</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تغيير كلمة المرور */}
+      {showPasswordResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white w-full max-w-md rounded-[2rem] p-8 text-center shadow-2xl border border-slate-100">
+            <div className="mx-auto w-16 h-16 bg-sky-50 text-sky-600 flex items-center justify-center rounded-2xl mb-4">
+              <Key size={32} />
+            </div>
+            <h3 className="text-xl font-black mb-2 text-slate-900">تغيير كلمة المرور</h3>
+            <p className="text-xs text-slate-500 font-bold mb-6">اكتب كلمة المرور الجديدة في الأسفل. (يجب أن تتكون من 6 أحرف أو أرقام على الأقل).</p>
+            <input type="text" placeholder="اكتب كلمة المرور الجديدة..." value={resetPasswordForm.newPassword} onChange={e => setResetPasswordForm({...resetPasswordForm, newPassword: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 font-bold focus:ring-2 focus:ring-sky-500 outline-none mb-6 text-center shadow-inner text-lg" dir="ltr"/>
+            <div className="flex gap-3">
+              <button onClick={handleResetPasswordSubmit} className="flex-1 bg-sky-600 text-white font-black py-3.5 rounded-xl hover:bg-sky-700 shadow-md shadow-sky-200 transition-all active:scale-95">حفظ التغيير</button>
+              <button onClick={() => { setShowPasswordResetModal(false); setResetPasswordForm({ userId: '', newPassword: '' }); }} className="flex-1 bg-slate-100 text-slate-600 font-black py-3.5 rounded-xl hover:bg-slate-200 transition-all">إلغاء</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showDeleteModal && <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60"><div className="bg-white p-8 rounded-3xl text-center"><h3 className="text-xl font-black mb-4">تأكيد الحذف</h3><div className="flex gap-4"><button onClick={confirmDelete} className="bg-rose-600 text-white px-8 py-2 rounded-xl font-black flex-1">حذف نهائي</button><button onClick={() => setShowDeleteModal(false)} className="bg-slate-100 text-slate-500 px-8 py-2 rounded-xl font-black flex-1">تراجع</button></div></div></div>}
+      
       {teacherForBadge && <GrantBadgeModal isOpen={isBadgeModalOpen} onClose={() => { setIsBadgeModalOpen(false); setTeacherForBadge(null); }} recipientId={teacherForBadge.id} recipientName={teacherForBadge.name} granterId={user?.id || 'admin'} />}
     </div>
   );
