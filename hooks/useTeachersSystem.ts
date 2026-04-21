@@ -6,9 +6,7 @@ export interface TeacherMonitorData {
     id: string;
     specialization: string;
     users: { full_name: string } | { full_name: string }[];
-    academic_departments: { id: string; name: string; head_id: string | null } | null;
-    teacher_sections: { section_id: string; sections: { classes: { name: string } } }[];
-    department_id: string | null;
+    academic_departments: { id: string; name: string; head_id: string | null } | { id: string; name: string; head_id: string | null }[] | null;
   }[];
   allSchedules: {
     teacher_id: string;
@@ -33,10 +31,8 @@ export interface TeacherReportResult {
   teacher: {
     id: string;
     specialization: string;
-    department_id: string | null;
     users: { full_name: string } | { full_name: string }[];
-    academic_departments: { id: string; name: string; head_id: string | null } | null;
-    teacher_sections: { section_id: string; sections: { classes: { name: string } } }[];
+    academic_departments: { id: string; name: string; head_id: string | null } | { id: string; name: string; head_id: string | null }[] | null;
   };
   scheduleData: {
     section_id: string;
@@ -56,16 +52,14 @@ export function useTeachersSystem() {
   const fetchTeachersMonitorData = useCallback(async (todayStr: string, dbDay: number, weekAgoStr: string): Promise<TeacherMonitorData> => {
     setLoading(true);
     try {
-      // 🚀 التحسين 1: جلب القسم، واسم القسم، والمراحل من الجداول المرتبطة
+      // 🚀 التحسين: جلب اسم القسم الصحيح بصيغة تقبل أن تكون Object أو Array
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
           id, 
           specialization, 
-          department_id,
           users(full_name),
-          academic_departments(id, name, head_id),
-          teacher_sections(section_id, sections(classes(name)))
+          academic_departments(id, name, head_id)
         `);
 
       if (teachersError) throw teachersError;
@@ -119,16 +113,14 @@ export function useTeachersSystem() {
       const fromDate = reportType === "day" ? todayStr : weekAgoStr;
       const daysFilter = reportType === "day" ? [dbDay] : [1, 2, 3, 4, 5];
 
-      // 🚀 التحسين 2: جلب القسم والمراحل في التقارير المجمعة
+      // 🚀 التحسين: جلب القسم
       const { data: teachersData, error: teachersError } = await supabase
         .from("teachers")
         .select(`
           id, 
           specialization, 
-          department_id,
           users(full_name),
-          academic_departments(id, name, head_id),
-          teacher_sections(section_id, sections(classes(name)))
+          academic_departments(id, name, head_id)
         `);
 
       if (teachersError) throw teachersError;
