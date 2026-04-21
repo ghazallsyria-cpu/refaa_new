@@ -7,7 +7,7 @@ import {
   Clock, FileText, Plus, Search, 
   TrendingUp, BarChart2, UserCheck, MessageSquare,
   Bell, ChevronLeft, MoreVertical, Edit, Trash2, AlertCircle, Camera, Play, Star, ChevronRight,
-  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2
+  AlertTriangle, ShieldAlert, HeartHandshake, Award, ArrowUpRight, Loader2, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -117,7 +117,6 @@ export default function TeacherDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      // 🚀 تم إزالة setLoading(true) من هنا ووضعها في الـ useEffect لكي لا تصفر الشاشة في كل مرة
       const data = await fetchTeacherDashboardData();
       
       if (data) {
@@ -234,7 +233,6 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     if (!isChecking && (authRole === 'teacher' || authRole === 'admin' || authRole === 'management')) {
-      // 🚀 استدعاء التحميل لأول مرة فقط
       if (!teacherData) setLoading(true);
       fetchData();
     }
@@ -249,11 +247,6 @@ export default function TeacherDashboard() {
     return messages.filter(m => !m.is_read).length;
   }, [messages]);
 
-  // =======================================================
-  // 🚀 التعديل السحري: الاعتماد على وجود البيانات لمنع الوميض
-  // =======================================================
-
-  // لا نعرض شاشة "التحقق" إذا كان المستخدم مسجلاً وموجوداً بالفعل في الذاكرة
   if (isChecking && !user) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent">
@@ -280,7 +273,6 @@ export default function TeacherDashboard() {
     );
   }
 
-  // لا نعرض شاشة التحميل إذا كانت بيانات المعلم محملة مسبقاً! (تحديث صامت)
   if (loading && !teacherData) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent relative z-10">
@@ -423,6 +415,40 @@ export default function TeacherDashboard() {
             </div>
           )}
         </motion.div>
+
+        {/* 🚀 البانر السينمائي (مجالس الفصول - للمعلم) */}
+        {sections.length > 0 && (
+          <motion.div variants={itemVariants} className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(245,158,11,0.1)] border border-amber-500/30 backdrop-blur-xl bg-[#0f1423]">
+            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-amber-600/10 to-transparent pointer-events-none z-0"></div>
+            <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-amber-500/10 blur-[80px] pointer-events-none z-0"></div>
+            
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6 text-center lg:text-right">
+              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 w-full lg:w-auto">
+                <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-amber-500/10 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-amber-500/30 shadow-inner shrink-0 relative group">
+                  <MessageSquare className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 drop-shadow-lg group-hover:scale-110 transition-transform" />
+                  <div className="absolute -top-2 -right-2 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#0f1423] shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse"></div>
+                </div>
+                <div>
+                  <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full bg-[#02040a]/80 backdrop-blur-sm text-[10px] sm:text-xs font-black uppercase tracking-widest mb-2 border border-amber-500/30 text-amber-400 shadow-inner">
+                    <Sparkles className="w-3.5 h-3.5" /> مجالس الفصول التفاعلية
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight mb-1 text-white drop-shadow-md">غرف النقاش الموحدة</h2>
+                  <p className="text-slate-300 text-xs sm:text-sm font-bold opacity-90 max-w-xl mx-auto lg:mx-0">بصفتك معلماً، يمكنك الدخول لغرفة أي صف تدرسه. قم بتوجيه الطلاب، تثبيت الإعلانات، والتفاعل مع طاقم التدريس في مكان واحد.</p>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 overflow-x-auto w-full lg:w-auto max-w-full custom-scrollbar pb-2 snap-x">
+                {sections.map((sec) => (
+                  <Link key={sec.id} href={`/messages?sectionId=${sec.id}`} className="snap-center group relative inline-flex flex-col items-center justify-center p-3 sm:p-4 bg-[#02040a]/60 hover:bg-[#0a0d16] text-white rounded-2xl shadow-inner border border-white/5 hover:border-amber-500/50 transition-all hover:-translate-y-1 shrink-0 min-w-[100px] z-10">
+                    <Users className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 group-hover:text-amber-400 mb-2 transition-colors drop-shadow-sm" />
+                    <span className="text-xs sm:text-sm font-black whitespace-nowrap">{sec.classes?.name}</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 mt-0.5">{sec.name}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* 🚀 نظام الإنذار المبكر للمعلم (The Danger Zone) */}
         <AnimatePresence>
