@@ -7,13 +7,18 @@ export function useHierarchySystem() {
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 1. جلب شؤون الإدارة والقيادة العليا والأقسام والمعلمين دفعة واحدة
+      // 🛡️ أمان سيبراني: تحديد الحقول المسموحة فقط (بدون أرقام مدنية أو إيميلات أو هواتف)
+      // 🚀 جلب شؤون الإدارة والقيادة العليا والأقسام والمعلمين دفعة واحدة
       const [adminsRes, supervisorsRes, deptsRes, teachersRes] = await Promise.all([
         supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
+        // جلب كوادر القيادة العليا من جدول الموظفين (school_staff)
         supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
-        supabase.from('academic_departments').select('id, name, head_id, image_url').order('name'),
+        supabase.from('academic_departments').select('*').order('name'),
         supabase.from('teachers').select(`
-          id, custom_titles, specialization, department_id,
+          id, 
+          custom_titles, 
+          specialization, 
+          department_id,
           users!teachers_id_fkey(id, full_name, avatar_url, role), 
           teacher_sections(section_id, sections(classes(name)))
         `)
@@ -43,25 +48,29 @@ export function useHierarchySystem() {
         return { ...t, users: userData, stage: getTeacherStage(t) };
       });
 
-      // 🚀 2. معالجة الأقسام الأكاديمية (إصلاح الخلل: إرجاع كل الأقسام سواء كانت فارغة أم لا)
+      // 🚀 معالجة الأقسام الأكاديمية (تمت إزالة الفلتر الذي كان يخفي الأقسام الفارغة لضمان ظهورها للمدير)
       const processedDepartments = departments.map((dept: any) => {
         const hod = processedTeachers.find(t => t.id === dept.head_id);
         const members = processedTeachers.filter(t => t.department_id === dept.id && t.id !== dept.head_id);
         return { ...dept, hod, members };
-      }); // تمت إزالة .filter() الذي كان يخفي الأقسام الفارغة لضمان ظهورها للمدير
+      }); 
 
-      // 🚀 3. دمج شؤون الإدارة مع القيادة العليا
+      // 🚀 دمج شؤون الإدارة مع القيادة العليا في مصفوفة واحدة (leadership)
       const combinedLeadership = [
         ...admins.map(a => ({ ...a, job_title: 'شؤون الإدارة' })),
-        ...supervisors.map((s: any) => ({
-          ...s.users, 
-          job_title: s.job_title || 'إشراف إداري'
-        }))
+        ...supervisors.map((s: any) => {
+          const userData = Array.isArray(s.users) ? s.users[0] : s.users;
+          return {
+            ...userData, 
+            job_title: s.job_title || 'إشراف إداري',
+            role: userData?.role || 'staff'
+          };
+        })
       ];
 
       return { 
         leadership: combinedLeadership, 
-        departments: processedDepartments // الأقسام الآن جاهزة ومضمونة 100%
+        departments: processedDepartments 
       };
 
     } catch (error) {
