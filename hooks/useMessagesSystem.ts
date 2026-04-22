@@ -13,7 +13,7 @@ export function useMessagesSystem() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]); // 🚀 مجالس الفصول الثابتة
   const [loading, setLoading] = useState(true);
 
-  // 1. جلب المجالس الثابتة (تظهر حتى لو كانت فارغة من الرسائل)
+// 🚀 1. جلب المجالس الثابتة (تظهر حتى لو كانت فارغة من الرسائل)
   const fetchChatRooms = useCallback(async () => {
     if (!user) return;
     try {
@@ -21,8 +21,10 @@ export function useMessagesSystem() {
       if (currentRole === 'student') {
         const { data } = await supabase.from('students').select('section_id, sections(name, classes(name))').eq('id', user.id).maybeSingle();
         if (data?.sections && data.section_id) {
-           const classObj = Array.isArray(data.sections.classes) ? data.sections.classes[0] : data.sections.classes;
-           rooms = [{ id: data.section_id, name: data.sections.name, className: classObj?.name || '', type: 'group' }];
+           // 🛡️ تجاوز تدقيق TypeScript الصارم هنا باستخدام as any
+           const secData = data.sections as any;
+           const classObj = Array.isArray(secData.classes) ? secData.classes[0] : secData.classes;
+           rooms = [{ id: data.section_id, name: secData.name, className: classObj?.name || '', type: 'group' }];
         }
       } 
       else if (currentRole === 'teacher') {
@@ -31,8 +33,10 @@ export function useMessagesSystem() {
           const uniqueRooms = new Map();
           data.forEach((d: any) => {
             if (d.sections && d.section_id && !uniqueRooms.has(d.section_id)) {
-              const classObj = Array.isArray(d.sections.classes) ? d.sections.classes[0] : d.sections.classes;
-              uniqueRooms.set(d.section_id, { id: d.section_id, name: d.sections.name, className: classObj?.name || '', type: 'group' });
+              // 🛡️ تجاوز تدقيق TypeScript الصارم هنا
+              const secData = d.sections as any;
+              const classObj = Array.isArray(secData.classes) ? secData.classes[0] : secData.classes;
+              uniqueRooms.set(d.section_id, { id: d.section_id, name: secData.name, className: classObj?.name || '', type: 'group' });
             }
           });
           rooms = Array.from(uniqueRooms.values());
