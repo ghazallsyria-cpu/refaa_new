@@ -75,9 +75,9 @@ export default function MessagesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fetchedRef = useRef(false);
   
-  // 🚀 [Anti-Freeze Patch]: ذاكرة لمنع حلقة "القراءة" المفرغة
+  // 🛡️ [Anti-Freeze Patch]
+  const fetchedRef = useRef(false);
   const markingReadRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -159,13 +159,13 @@ export default function MessagesPage() {
       }));
       setThreadMessages(cleanThread);
 
-      // 🚀 [Anti-Freeze Patch]: منع إرسال الطلب إذا كان قيد الإرسال مسبقاً
+      // 🛡️ [Anti-Freeze Patch]: فلترة الرسائل التي لم يتم إرسال طلب القراءة لها مسبقاً
       const unreadIds = cleanThread
         .filter(m => !m.is_read && m.sender_id !== currentUser?.id && !markingReadRef.current.has(m.id))
         .map(m => m.id);
 
       if (unreadIds.length > 0) {
-        unreadIds.forEach(id => markingReadRef.current.add(id)); // تخزين الـ ID لمنع تكرار الطلب
+        unreadIds.forEach(id => markingReadRef.current.add(id));
         markAsRead(unreadIds);
       }
       
@@ -261,6 +261,7 @@ export default function MessagesPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
+      {/* 🚀 إخفاء هذا الجزء بالكامل في الجوال إذا كانت هناك محادثة مفتوحة، وإلا سيأخذ مساحة من الشاشة */}
       <div className={cn("shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4", activeThread ? "hidden lg:flex mb-4" : "flex mb-4")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
@@ -275,6 +276,7 @@ export default function MessagesPage() {
 
       <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
+        {/* 🚀 القائمة الجانبية (تختفي في الجوال عند فتح محادثة) */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -295,6 +297,7 @@ export default function MessagesPage() {
                           <h4 className={`text-sm font-black truncate drop-shadow-sm ${activeThread?.id === room.id ? 'text-indigo-400' : 'text-white'}`}>مجلس: {room.className}</h4>
                           <p className="text-xs truncate text-slate-400 font-bold mt-1">شعبة {room.name}</p>
                         </div>
+                        {/* 🚀 بادج الرسائل غير المقروءة للمجالس */}
                         {groupUnreadCounts[room.id] > 0 && activeThread?.id !== room.id && (
                           <div className="shrink-0 bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full shadow-[0_0_15px_rgba(225,29,72,0.5)] animate-pulse border border-rose-400/50">
                             {groupUnreadCounts[room.id] > 99 ? '+99' : groupUnreadCounts[room.id]} جديد
@@ -320,11 +323,13 @@ export default function MessagesPage() {
                         <button key={msg.convId} onClick={() => setActiveThread(msg)} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${isActive ? 'bg-emerald-600/20 text-white border-emerald-500/30 shadow-inner' : msg.unreadCount > 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
                           <div className="relative shrink-0">
                             <RenderAvatar user={otherUser} size="h-12 w-12" />
+                            {/* الدائرة النابضة الصغيرة في حالة وجود رسائل */}
                             {msg.unreadCount > 0 && !isActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0f1423] rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <h4 className={`text-sm font-black truncate pr-2 ${isActive ? 'text-emerald-400' : 'text-white'}`}>{otherUser?.full_name}</h4>
+                              {/* 🚀 بادج عدد الرسائل الجديدة للخاص */}
                               {msg.unreadCount > 0 && !isActive && (
                                 <div className="shrink-0 bg-emerald-500 text-[#02040a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-pulse border border-emerald-400">
                                   {msg.unreadCount > 99 ? '+99' : msg.unreadCount}
@@ -342,6 +347,7 @@ export default function MessagesPage() {
            </div>
         </div>
 
+        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) - تظهر بكامل الشاشة في الجوال عند التفعيل */}
         <div className={cn("flex-col transition-all duration-300 z-50 lg:z-auto", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex absolute inset-0 bg-[#090b14] lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden")}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
@@ -356,6 +362,7 @@ export default function MessagesPage() {
                {/* Header للمحادثة */}
                <div className="h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between z-20 shrink-0 pt-[env(safe-area-inset-top)]">
                  <div className="flex items-center gap-2 lg:gap-4 min-w-0 pr-1">
+                   {/* 🚀 زر العودة للجوال */}
                    <button onClick={() => setActiveThread(null)} className="lg:hidden p-2.5 mr-[-5px] text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-all shrink-0 active:scale-95 flex items-center justify-center">
                      <ArrowRight className="h-6 w-6" />
                    </button>
@@ -381,7 +388,7 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Area */}
+               {/* Messages Area - Scrolling Container */}
                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
@@ -435,7 +442,7 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* Input Form */}
+               {/* Input Form - Sticky Bottom */}
                <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-[env(safe-area-inset-bottom)]">
                  <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
                     <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] lg:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden p-1">
@@ -451,7 +458,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة */}
+      {/* 🚀 Modal: إنشاء رسالة (مع إضافة نظام الإذاعة العامة) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-6">
