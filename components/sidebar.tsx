@@ -13,7 +13,7 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse
 } from 'lucide-react';
 
 const navigation = [
@@ -32,6 +32,7 @@ const navigation = [
   { name: 'إنذارات الغياب', href: '/admin/absence-warnings', icon: AlertTriangle },
   { name: 'تعيينات المعلمين', href: '/admin/teacher-assignments', icon: BookOpen },
   { name: 'الحضور والغياب', href: '/attendance', icon: CalendarCheck },
+  { name: 'مراجعة الأعذار', href: '/admin/excuses', icon: HeartPulse },
   { name: 'قرارات الخصم', href: '/admin/absence-deductions', icon: Scale },
   { name: 'أولياء الأمور', href: '/parents', icon: Users },
   { name: 'الفصول', href: '/classes', icon: School },
