@@ -7,10 +7,9 @@ export function useHierarchySystem() {
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 1. جلب شؤون الإدارة (Management) والقيادة العليا من الكوادر (Supervisors)
+      // 🚀 1. جلب شؤون الإدارة والقيادة العليا والأقسام والمعلمين دفعة واحدة
       const [adminsRes, supervisorsRes, deptsRes, teachersRes] = await Promise.all([
         supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
-        // جلب كوادر القيادة العليا من جدول الموظفين
         supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
         supabase.from('academic_departments').select('id, name, head_id, image_url').order('name'),
         supabase.from('teachers').select(`
@@ -44,14 +43,14 @@ export function useHierarchySystem() {
         return { ...t, users: userData, stage: getTeacherStage(t) };
       });
 
-      // معالجة الأقسام الأكاديمية
+      // 🚀 2. معالجة الأقسام الأكاديمية (إصلاح الخلل: إرجاع كل الأقسام سواء كانت فارغة أم لا)
       const processedDepartments = departments.map((dept: any) => {
         const hod = processedTeachers.find(t => t.id === dept.head_id);
         const members = processedTeachers.filter(t => t.department_id === dept.id && t.id !== dept.head_id);
         return { ...dept, hod, members };
-      }).filter(dept => dept.hod || dept.members.length > 0); 
+      }); // تمت إزالة .filter() الذي كان يخفي الأقسام الفارغة لضمان ظهورها للمدير
 
-      // 🚀 2. دمج شؤون الإدارة مع القيادة العليا في مصفوفة واحدة للعرض
+      // 🚀 3. دمج شؤون الإدارة مع القيادة العليا
       const combinedLeadership = [
         ...admins.map(a => ({ ...a, job_title: 'شؤون الإدارة' })),
         ...supervisors.map((s: any) => ({
@@ -62,7 +61,7 @@ export function useHierarchySystem() {
 
       return { 
         leadership: combinedLeadership, 
-        departments: processedDepartments 
+        departments: processedDepartments // الأقسام الآن جاهزة ومضمونة 100%
       };
 
     } catch (error) {
