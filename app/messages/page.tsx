@@ -58,7 +58,6 @@ export default function MessagesPage() {
   } = useMessagesSystem();
 
   const [privateConversations, setPrivateConversations] = useState<any[]>([]);
-  // 🚀 حالة جديدة لتتبع عدد الرسائل غير المقروءة في المجالس (الجروبات)
   const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
   
   const [activeThread, setActiveThread] = useState<any | null>(null);
@@ -77,6 +76,9 @@ export default function MessagesPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
+  
+  // 🚀 [Anti-Freeze Patch]: ذاكرة لمنع حلقة "القراءة" المفرغة
+  const markingReadRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!currentUser || isChecking || fetchedRef.current) return;
@@ -97,7 +99,6 @@ export default function MessagesPage() {
       return; 
     }
 
-    // 🚀 1. حساب الرسائل غير المقروءة للمجالس (الجروبات)
     const gCounts: Record<string, number> = {};
     messages.filter(m => m.section_id).forEach(msg => {
       if (!msg.is_read && msg.sender_id !== currentUser?.id) {
@@ -106,7 +107,6 @@ export default function MessagesPage() {
     });
     setGroupUnreadCounts(gCounts);
 
-    // 🚀 2. فرز المحادثات الخاصة وحساب الرسائل غير المقروءة بداخلها
     const privateMsgs = messages.filter(m => !m.section_id);
     const convos = privateMsgs.reduce((acc: any, msg: any) => {
       const ids = [msg.sender_id, msg.receiver_id].sort();
@@ -120,7 +120,7 @@ export default function MessagesPage() {
       if (!acc[convId]) {
         acc[convId] = { ...cleanMsg, allIds: [msg.id], convId, type: 'private', unreadCount: isUnread ? 1 : 0 };
       } else {
-        if (isUnread) acc[convId].unreadCount += 1; // زيادة العداد
+        if (isUnread) acc[convId].unreadCount += 1;
         
         if (new Date(msg.created_at) > new Date(acc[convId].created_at)) {
           acc[convId] = { ...cleanMsg, allIds: [...acc[convId].allIds, msg.id], convId, type: 'private', unreadCount: acc[convId].unreadCount };
@@ -159,10 +159,16 @@ export default function MessagesPage() {
       }));
       setThreadMessages(cleanThread);
 
-      const unreadIds = cleanThread.filter(m => !m.is_read && m.sender_id !== currentUser?.id).map(m => m.id);
-      if (unreadIds.length > 0) markAsRead(unreadIds);
+      // 🚀 [Anti-Freeze Patch]: منع إرسال الطلب إذا كان قيد الإرسال مسبقاً
+      const unreadIds = cleanThread
+        .filter(m => !m.is_read && m.sender_id !== currentUser?.id && !markingReadRef.current.has(m.id))
+        .map(m => m.id);
+
+      if (unreadIds.length > 0) {
+        unreadIds.forEach(id => markingReadRef.current.add(id)); // تخزين الـ ID لمنع تكرار الطلب
+        markAsRead(unreadIds);
+      }
       
-      // التمرير التلقائي للأسفل بسلاسة
       setTimeout(() => {
         if (messagesEndRef.current) {
           messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -255,7 +261,7 @@ export default function MessagesPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 px-4 lg:px-8 relative z-10 pt-4">
+      <div className={cn("shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4", activeThread ? "hidden lg:flex mb-4" : "flex mb-4")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
           <p className="text-slate-400 mt-1 sm:mt-2 font-bold text-xs sm:text-sm">مجالس الفصول والمراسلات الخاصة ⚡</p>
@@ -267,9 +273,8 @@ export default function MessagesPage() {
         )}
       </div>
 
-      <div className="glass-panel rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60">
+      <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
-        {/* 🚀 القائمة الجانبية */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -290,7 +295,6 @@ export default function MessagesPage() {
                           <h4 className={`text-sm font-black truncate drop-shadow-sm ${activeThread?.id === room.id ? 'text-indigo-400' : 'text-white'}`}>مجلس: {room.className}</h4>
                           <p className="text-xs truncate text-slate-400 font-bold mt-1">شعبة {room.name}</p>
                         </div>
-                        {/* 🚀 بادج الرسائل غير المقروءة للمجالس */}
                         {groupUnreadCounts[room.id] > 0 && activeThread?.id !== room.id && (
                           <div className="shrink-0 bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full shadow-[0_0_15px_rgba(225,29,72,0.5)] animate-pulse border border-rose-400/50">
                             {groupUnreadCounts[room.id] > 99 ? '+99' : groupUnreadCounts[room.id]} جديد
@@ -316,13 +320,11 @@ export default function MessagesPage() {
                         <button key={msg.convId} onClick={() => setActiveThread(msg)} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${isActive ? 'bg-emerald-600/20 text-white border-emerald-500/30 shadow-inner' : msg.unreadCount > 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
                           <div className="relative shrink-0">
                             <RenderAvatar user={otherUser} size="h-12 w-12" />
-                            {/* الدائرة النابضة الصغيرة في حالة وجود رسائل */}
                             {msg.unreadCount > 0 && !isActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0f1423] rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <h4 className={`text-sm font-black truncate pr-2 ${isActive ? 'text-emerald-400' : 'text-white'}`}>{otherUser?.full_name}</h4>
-                              {/* 🚀 بادج عدد الرسائل الجديدة للخاص */}
                               {msg.unreadCount > 0 && !isActive && (
                                 <div className="shrink-0 bg-emerald-500 text-[#02040a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-pulse border border-emerald-400">
                                   {msg.unreadCount > 99 ? '+99' : msg.unreadCount}
@@ -340,8 +342,7 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) */}
-        <div className={`flex-col bg-[#090b14] lg:bg-transparent z-[70] lg:z-auto transition-all duration-300 ${!activeThread ? 'hidden lg:flex lg:flex-1 items-center justify-center' : 'flex fixed inset-0 lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden'}`}>
+        <div className={cn("flex-col transition-all duration-300 z-50 lg:z-auto", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex absolute inset-0 bg-[#090b14] lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden")}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
                <div className="h-32 w-32 bg-[#02040a]/60 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
@@ -353,10 +354,10 @@ export default function MessagesPage() {
            ) : (
              <>
                {/* Header للمحادثة */}
-               <div className="h-16 lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-4 lg:px-6 flex items-center justify-between z-20 shrink-0 pt-[env(safe-area-inset-top)]">
-                 <div className="flex items-center gap-3 lg:gap-4 min-w-0 pr-1">
-                   <button onClick={() => setActiveThread(null)} className="lg:hidden p-2 bg-[#02040a] border border-white/5 shadow-inner rounded-xl text-slate-400 hover:text-indigo-400 active:scale-95 transition-all shrink-0">
-                     <ArrowRight className="h-5 w-5" />
+               <div className="h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between z-20 shrink-0 pt-[env(safe-area-inset-top)]">
+                 <div className="flex items-center gap-2 lg:gap-4 min-w-0 pr-1">
+                   <button onClick={() => setActiveThread(null)} className="lg:hidden p-2.5 mr-[-5px] text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-all shrink-0 active:scale-95 flex items-center justify-center">
+                     <ArrowRight className="h-6 w-6" />
                    </button>
                    
                    {activeThread.type === 'group' ? (
@@ -374,13 +375,13 @@ export default function MessagesPage() {
                    )}
                  </div>
                  {activeThread.type !== 'group' && (
-                   <button onClick={() => handleDeleteMessage(activeThread.allIds)} className="p-2 lg:p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-inner shrink-0 active:scale-95">
+                   <button onClick={() => handleDeleteMessage(activeThread.allIds)} className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-inner shrink-0 active:scale-95">
                      <Trash2 className="h-4 w-4 lg:h-5 lg:w-5" />
                    </button>
                  )}
                </div>
 
-               {/* Messages Area - Scrolling Container */}
+               {/* Messages Area */}
                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
@@ -407,20 +408,20 @@ export default function MessagesPage() {
                            )}
 
                           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-3 lg:gap-4 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className="shrink-0 w-8 lg:w-10 flex flex-col items-center">
+                            <div className="shrink-0 w-8 lg:w-10 flex flex-col items-center hidden sm:flex">
                               {showAvatar && !isMe && <RenderAvatar user={msg.sender} size="h-8 w-8 lg:h-10 lg:w-10" />}
                             </div>
-                            <div className={`flex flex-col max-w-[85%] lg:max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
+                            <div className={`flex flex-col max-w-[90%] sm:max-w-[85%] lg:max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
                               {showAvatar && !isMe && <span className="text-[9px] lg:text-[10px] font-bold text-slate-500 mb-1 ml-2 drop-shadow-sm">{msg.sender?.full_name} ({msg.sender?.role === 'teacher' ? 'معلم' : msg.sender?.role === 'admin' ? 'إدارة' : 'طالب'})</span>}
                               
-                              <div className={`p-3 lg:p-4 shadow-inner border relative text-xs lg:text-sm font-bold leading-relaxed lg:leading-loose
+                              <div className={`p-3 lg:p-4 shadow-inner border relative text-sm lg:text-sm font-bold leading-relaxed lg:leading-loose
                                 ${isMe 
                                   ? `bg-gradient-to-br from-${themeColor}-600 to-${themeColor === 'indigo' ? 'violet' : 'teal'}-600 text-white rounded-[1.25rem] lg:rounded-[1.5rem] rounded-tr-sm border-${themeColor}-400/30` 
                                   : 'bg-[#0f1423] text-slate-200 border-white/5 rounded-[1.25rem] lg:rounded-[1.5rem] rounded-tl-sm'}`}
                               >
-                                <div className="prose prose-invert max-w-none text-xs lg:text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                                <div className="prose prose-invert max-w-none text-xs sm:text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
                                 
-                                <div className={`text-[8px] lg:text-[9px] mt-2 flex items-center gap-1 lg:gap-1.5 ${isMe ? `text-${themeColor}-200 justify-end` : 'text-slate-500 justify-start'}`}>
+                                <div className={`text-[9px] lg:text-[9px] mt-2 flex items-center gap-1 lg:gap-1.5 ${isMe ? `text-${themeColor}-200 justify-end` : 'text-slate-500 justify-start'}`}>
                                   <span>{new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
                                   {isMe && (msg.is_read ? <CheckCheck className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-sky-300" /> : <Check className={`w-3 h-3 lg:w-3.5 lg:h-3.5 text-${themeColor}-300/50`} />)}
                                 </div>
@@ -434,7 +435,7 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* Input Form - Sticky Bottom */}
+               {/* Input Form */}
                <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-[env(safe-area-inset-bottom)]">
                  <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
                     <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] lg:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden p-1">
@@ -450,7 +451,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة (مع إضافة نظام الإذاعة العامة) */}
+      {/* 🚀 Modal: إنشاء رسالة */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-6">
