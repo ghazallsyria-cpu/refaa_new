@@ -7,11 +7,12 @@ export function useHierarchySystem() {
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 1. جلب البيانات دفعة واحدة
+      // 🚀 1. جلب شؤون الإدارة والقيادة العليا والأقسام والمعلمين دفعة واحدة
       const [adminsRes, supervisorsRes, deptsRes, teachersRes] = await Promise.all([
         supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
         supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
-        supabase.from('academic_departments').select('*').order('name'),
+        // 🛡️ استعادة head_id تماماً كما كان في كودك الأصلي
+        supabase.from('academic_departments').select('id, name, head_id, image_url').order('name'),
         supabase.from('teachers').select(`
           id, custom_titles, specialization, department_id,
           users!teachers_id_fkey(id, full_name, avatar_url, role), 
@@ -43,17 +44,10 @@ export function useHierarchySystem() {
         return { ...t, users: userData, stage: getTeacherStage(t) };
       });
 
-      // 🚀 2. معالجة الأقسام الأكاديمية (الآن تبحث عن رئيس القسم من خلال الألقاب)
+      // 🚀 2. معالجة الأقسام الأكاديمية (الاعتماد على head_id الخاص بك)
       const processedDepartments = departments.map((dept: any) => {
-        // جلب جميع المعلمين التابعين لهذا القسم
-        const deptTeachers = processedTeachers.filter(t => t.department_id === dept.id);
-        
-        // تحديد رئيس القسم (من لديه لقب "رئيس قسم" في custom_titles)
-        const hod = deptTeachers.find(t => t.custom_titles && t.custom_titles.includes('رئيس قسم'));
-        
-        // باقي المعلمين هم أعضاء القسم
-        const members = deptTeachers.filter(t => t.id !== hod?.id);
-        
+        const hod = processedTeachers.find(t => t.id === dept.head_id);
+        const members = processedTeachers.filter(t => t.department_id === dept.id && t.id !== dept.head_id);
         return { ...dept, hod, members };
       });
 
