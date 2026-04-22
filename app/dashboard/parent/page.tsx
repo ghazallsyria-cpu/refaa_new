@@ -19,6 +19,7 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
+import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 
 // ==========================================
 // 🎨 مكونات الرسوم البيانية الملكية
@@ -244,7 +245,6 @@ export default function ParentDashboard() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      // استخدام الـ Upload Preset الخاص بكلاودينري (تأكد من إضافته في .env)
       formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
       
       const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
@@ -270,7 +270,7 @@ export default function ParentDashboard() {
       alert('يرجى إرفاق التقرير الطبي أو الإثبات.'); return;
     }
     if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) {
-      alert('يرجى تحديد الحصص التي غاب عنها الطالب.'); return;
+      alert('يرجى تحديد الحصص التي غاب عنها ابنك.'); return;
     }
 
     setIsSubmittingExcuse(true);
@@ -309,7 +309,6 @@ export default function ParentDashboard() {
       return { ...prev, target_periods: [...prev.target_periods, periodNum].sort((a,b) => a - b) };
     });
   };
-
 
   if (isChecking || loading) {
     return (
@@ -369,9 +368,9 @@ export default function ParentDashboard() {
               {children.map(child => (
                 <button 
                   key={child.id} onClick={() => setActiveChildId(child.id)}
-                  className={cn("snap-center flex items-center gap-4 px-6 py-4 rounded-3xl transition-all border shrink-0 min-w-[200px] group", activeChildId === child.id ? "bg-gradient-to-br from-indigo-600 to-blue-700 border-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.4)]" : "bg-[#0f1423]/60 border-white/5 hover:bg-[#1a233a] text-slate-300")}
+                  className={cn("snap-center flex items-center gap-4 px-6 py-4 rounded-3xl transition-all border shrink-0 min-w-[200px] group", activeChildId === child.id ? "bg-gradient-to-br from-indigo-600 to-blue-700 border-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.4)]" : "bg-[#0f1423]/60 border-white/5 hover:bg-[#1a233a] hover:border-indigo-500/30 text-slate-300")}
                 >
-                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-colors shadow-inner", activeChildId === child.id ? "bg-white/20 text-white" : "bg-[#05070e] text-indigo-400")}>
+                  <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-colors shadow-inner", activeChildId === child.id ? "bg-white/20 text-white" : "bg-[#05070e] text-indigo-400 group-hover:bg-indigo-500/20")}>
                     {child.users?.avatar_url ? <img src={child.users.avatar_url} className="w-full h-full rounded-2xl object-cover" alt="child"/> : child.users?.full_name?.charAt(0)}
                   </div>
                   <div className="text-right">
@@ -391,13 +390,18 @@ export default function ParentDashboard() {
               
               {/* 🚨 إنذار الغياب المتقدم */}
               {stats.absentCount >= 5 && (
-                <div className="bg-rose-950/40 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(225,29,72,0.2)] border border-rose-500/30 flex items-center gap-5 relative overflow-hidden">
+                <div className="bg-rose-950/40 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(225,29,72,0.2)] border border-rose-500/30 flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-48 h-48 bg-rose-500/20 blur-3xl rounded-full pointer-events-none"></div>
-                  <div className="w-16 h-16 bg-rose-500/20 rounded-[1.5rem] flex items-center justify-center shrink-0 border border-rose-500/40 animate-pulse shadow-inner relative z-10"><AlertTriangle className="w-8 h-8 text-rose-400" /></div>
-                  <div className="relative z-10">
-                    <h3 className="font-black text-xl mb-1 text-rose-300">تجاوز الحد المسموح للغياب!</h3>
-                    <p className="text-sm font-bold text-rose-100/70">سجل الطالب <span className="text-white font-black">{stats.absentCount} غيابات</span>، يرجى تقديم العذر الطبي أو مراجعة إدارة شؤون الطلبة.</p>
+                  <div className="flex items-center gap-5 relative z-10 w-full md:w-auto">
+                    <div className="w-16 h-16 bg-rose-500/20 rounded-[1.5rem] flex items-center justify-center shrink-0 border border-rose-500/40 animate-pulse shadow-inner"><AlertTriangle className="w-8 h-8 text-rose-400" /></div>
+                    <div>
+                      <h3 className="font-black text-xl mb-1 text-rose-300">تجاوز الحد المسموح للغياب!</h3>
+                      <p className="text-sm font-bold text-rose-100/70">سجل ابنك <span className="text-white font-black">{stats.absentCount} غيابات</span>، يرجى تقديم العذر الطبي أو مراجعة إدارة شؤون الطلبة بأسرع وقت.</p>
+                    </div>
                   </div>
+                  <button onClick={() => setIsExcuseModalOpen(true)} className="w-full md:w-auto mt-4 md:mt-0 px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black text-sm transition-all shadow-[0_0_15px_rgba(225,29,72,0.4)] flex items-center justify-center gap-2 active:scale-95 shrink-0 relative z-10">
+                    <Stethoscope className="w-4 h-4" /> تقديم عذر طبي عاجل
+                  </button>
                 </div>
               )}
 
@@ -434,7 +438,7 @@ export default function ParentDashboard() {
                       <div className="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20"><BookOpen className="text-blue-400 w-6 h-6"/></div>
                       <div>
                         <h2 className="text-2xl font-black text-white drop-shadow-md">التحليل الأكاديمي الدقيق</h2>
-                        <p className="text-sm font-bold text-slate-400 mt-1">مستوى إتقان الطالب موزعاً على المواد والمعلمين.</p>
+                        <p className="text-sm font-bold text-slate-400 mt-1">مستوى إتقان الابن موزعاً على المواد والمعلمين.</p>
                       </div>
                     </div>
 
@@ -520,6 +524,9 @@ export default function ParentDashboard() {
                 {/* 🧭 العمود الأيسر (الدوام والأعذار والتواصل) */}
                 <div className="lg:col-span-4 space-y-8">
                   
+                  {/* 📢 رادار الإعلانات المضاف حديثاً لولي الأمر */}
+                  <AnnouncementsWidget authRole="parent" />
+
                   {/* ⏱️ الرادار الزمني (الجدول) */}
                   <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] pointer-events-none"></div>
@@ -557,18 +564,27 @@ export default function ParentDashboard() {
                   </div>
 
                   {/* 🩺 سجل الغياب والأعذار الطبية */}
-                  <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col">
+                  <div className="bg-[#0a0d16]/80 backdrop-blur-xl rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col">
                     <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-                    <div className="flex items-center justify-between mb-6 relative z-10">
-                      <h3 className="text-xl font-black text-white flex items-center gap-3 drop-shadow-sm"><Stethoscope className="w-6 h-6 text-amber-500" /> سجل الغياب والأعذار</h3>
+                    
+                    <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4 relative z-10">
+                      <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+                        <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
+                          <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
+                        </div> 
+                        سجل الأعذار 
+                      </h2>
+                      <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md shrink-0 active:scale-95 whitespace-nowrap">
+                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
+                      </button>
                     </div>
 
-                    <div className="space-y-3 mb-6 relative z-10 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                    <div className="p-6 space-y-3 relative z-10 max-h-[300px] overflow-y-auto custom-scrollbar">
                       {excuses.length === 0 ? (
-                        <div className="text-center py-8 text-slate-500 font-bold text-sm">لم يتم تقديم أي أعذار مسبقة.</div>
+                        <div className="text-center py-8 text-slate-500 font-bold text-sm">لم تقم بتقديم أي أعذار طبية مسبقة.</div>
                       ) : (
                         excuses.map(exc => (
-                          <div key={exc.id} className="bg-[#05070e] p-4 rounded-2xl border border-white/5 flex flex-col gap-2">
+                          <div key={exc.id} className="bg-[#05070e] p-4 rounded-2xl border border-white/5 flex flex-col gap-2 shadow-inner">
                             <div className="flex justify-between items-center">
                               <span className="text-white font-black text-sm">{safeFormat(exc.excuse_date, 'dd MMMM yyyy')}</span>
                               <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${
@@ -586,10 +602,6 @@ export default function ParentDashboard() {
                         ))
                       )}
                     </div>
-
-                    <button onClick={() => setIsExcuseModalOpen(true)} className="w-full mt-auto relative z-10 group flex items-center justify-center gap-2 p-4 bg-gradient-to-r from-amber-500/10 to-orange-500/10 hover:from-amber-500 hover:to-orange-500 rounded-2xl transition-all border border-amber-500/20 hover:border-amber-500 shadow-inner active:scale-95 text-amber-500 hover:text-slate-900 font-black text-sm">
-                      <Plus className="w-4 h-4" /> تقديم عذر طبي جديد
-                    </button>
                   </div>
 
                   {/* 🎧 جسر التواصل السريع */}
@@ -663,7 +675,7 @@ export default function ParentDashboard() {
                     {excuseForm.duration_type === 'partial_day' && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                         <div className="space-y-2 pt-2">
-                          <label className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-amber-400" /> حدد الحصص التي غاب عنها الطالب</label>
+                          <label className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-amber-400" /> حدد الحصص التي غاب عنها ابنك</label>
                           <div className="flex flex-wrap gap-2">
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
                               <button 
