@@ -22,9 +22,6 @@ import * as Dialog from '@radix-ui/react-dialog';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
 import Link from 'next/link';
 
-// ==========================================
-// 🎨 مكونات الرسوم البيانية الملكية
-// ==========================================
 const CircularProgress = ({ value, colorClass, strokeClass }: { value: number, colorClass: string, strokeClass: string }) => {
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
@@ -48,10 +45,6 @@ const CircularProgress = ({ value, colorClass, strokeClass }: { value: number, c
   );
 };
 
-// ==========================================
-// 🧩 التبويبات المستقلة (Sub-Pages)
-// ==========================================
-
 const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) => (
   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
     {absentCount >= 5 && (
@@ -61,7 +54,7 @@ const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) 
           <div className="w-16 h-16 bg-rose-500/20 rounded-[1.5rem] flex items-center justify-center shrink-0 border border-rose-500/40 animate-pulse shadow-inner"><AlertTriangle className="w-8 h-8 text-rose-400" /></div>
           <div>
             <h3 className="font-black text-xl mb-1 text-rose-300">تجاوز الحد المسموح للغياب!</h3>
-            <p className="text-sm font-bold text-rose-100/70">سجل ابنك <span className="text-white font-black">{absentCount} غيابات</span>، يرجى تقديم العذر الطبي أو مراجعة إدارة شؤون الطلبة بأسرع وقت.</p>
+            <p className="text-sm font-bold text-rose-100/70">سجل ابنك <span className="text-white font-black">{absentCount} غيابات</span>، يرجى تقديم العذر الطبي أو مراجعة الإدارة.</p>
           </div>
         </div>
         <button onClick={() => setIsExcuseModalOpen(true)} className="w-full md:w-auto mt-4 md:mt-0 px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black text-sm transition-all shadow-[0_0_15px_rgba(225,29,72,0.4)] flex items-center justify-center gap-2 active:scale-95 shrink-0 relative z-10">
@@ -300,15 +293,17 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
 
         <div className="bg-[#0a0d16]/80 backdrop-blur-xl rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col h-fit">
           <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-          <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4 relative z-10">
-            <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+          
+          {/* 🚀 الحل الجذري لمشكلة تمدد الزر في الجوال */}
+          <div className="p-5 border-b border-white/5 flex flex-row items-center justify-between bg-[#02040a]/40 relative z-10 w-full">
+            <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-3">
               <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
-                <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
+                <Stethoscope className="w-5 h-5 text-amber-400 drop-shadow-md" />
               </div> 
-              الأعذار المُقدمة
+              سجل الأعذار 
             </h2>
-            <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md shrink-0 active:scale-95 whitespace-nowrap">
-              <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
+            <button onClick={() => setIsExcuseModalOpen(true)} className="shrink-0 w-max px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-xl text-slate-900 font-black text-xs flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 shadow-md">
+              <Plus className="w-4 h-4" /> عذر جديد
             </button>
           </div>
 
@@ -338,7 +333,6 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
         </div>
       </div>
 
-      {/* 🔴 سجل الغياب التفصيلي (الشفافية المطلقة) */}
       <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-rose-500/20 relative overflow-hidden shadow-2xl h-full flex flex-col">
         <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-[60px] pointer-events-none"></div>
         <div className="flex items-center gap-4 mb-8 relative z-10">
@@ -387,9 +381,6 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
   );
 };
 
-// ==========================================
-// 🚀 المكون الرئيسي للصفحة (Parent Dashboard SPA)
-// ==========================================
 export default function ParentDashboard() {
   const { user, authRole, isChecking } = useAuth() as any;
   const { fetchParentDashboardData, fetchParentChildDetails } = useDashboardSystem();
@@ -421,9 +412,9 @@ export default function ParentDashboard() {
   const [childLoading, setChildLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   
-  // 🛡️ Anti-Freeze Patch: عزل دوال الـ Fetch باستخدام useRef لمنع الحلقة المفرغة
-  const systemRef = useRef({ fetchParentDashboardData, fetchParentChildDetails });
-  useEffect(() => { systemRef.current = { fetchParentDashboardData, fetchParentChildDetails }; }, [fetchParentDashboardData, fetchParentChildDetails]);
+  // 🛡️ [Anti-Freeze Patch]: تأمين النظام ضد التحديث اللانهائي واستهلاك قاعدة البيانات
+  const initialFetchDone = useRef(false);
+  const lastFetchedChildId = useRef<string | null>(null);
 
   useEffect(() => {
     setCurrentTime(new Date());
@@ -432,26 +423,30 @@ export default function ParentDashboard() {
   }, []);
 
   const loadInitialData = useCallback(async () => {
-    if (!user || authRole !== 'parent') return;
     try {
       setLoading(true);
       const { data: pData } = await supabase.from('parents').select('*, users(full_name, email, avatar_url)').eq('id', user.id).maybeSingle();
       setParentData(pData);
 
-      const dashboardData = await systemRef.current.fetchParentDashboardData(false);
+      const dashboardData = await fetchParentDashboardData(false);
       if (dashboardData && dashboardData.children.length > 0) {
         setChildren(dashboardData.children);
         setActiveChildId(dashboardData.children[0].id);
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [user, authRole]);
+  }, [user, fetchParentDashboardData]);
 
-  useEffect(() => { if (!isChecking) loadInitialData(); }, [loadInitialData, isChecking]);
+  // 🛡️ التنفيذ لمرة واحدة فقط باستخدام القفل الحديدي
+  useEffect(() => { 
+    if (isChecking || !user || authRole !== 'parent' || initialFetchDone.current) return;
+    initialFetchDone.current = true;
+    loadInitialData(); 
+  }, [isChecking, user, authRole, loadInitialData]);
 
   const loadActiveChild = useCallback(async (childId: string, sectionId: string | null) => {
     try {
       setChildLoading(true);
-      const data = await systemRef.current.fetchParentChildDetails(childId, sectionId);
+      const data = await fetchParentChildDetails(childId, sectionId);
       
       setAttendance(data.attendance);
       setBadges(data.badges);
@@ -516,10 +511,12 @@ export default function ParentDashboard() {
       });
 
     } catch (e) { console.error(e); } finally { setChildLoading(false); }
-  }, []);
+  }, [fetchParentChildDetails]);
 
+  // 🛡️ التنفيذ فقط عند تغير الابن الفعلي
   useEffect(() => { 
-    if (activeChildId) {
+    if (activeChildId && activeChildId !== lastFetchedChildId.current) {
+      lastFetchedChildId.current = activeChildId;
       const child = children.find(c => c.id === activeChildId);
       loadActiveChild(activeChildId, child?.section_id || null); 
     }
@@ -601,7 +598,10 @@ export default function ParentDashboard() {
       alert('تم تقديم العذر بنجاح، وهو الآن قيد المراجعة من الإدارة.');
       setIsExcuseModalOpen(false);
       setExcuseForm({ excuse_date: format(new Date(), 'yyyy-MM-dd'), duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' });
-      if (activeChildId && activeChild) loadActiveChild(activeChildId, activeChild.section_id);
+      if (activeChildId && activeChild) {
+         lastFetchedChildId.current = null; // لإجبار التحديث
+         loadActiveChild(activeChildId, activeChild.section_id);
+      }
     } catch (error: any) { alert('حدث خطأ أثناء التقديم: ' + error.message); } finally { setIsSubmittingExcuse(false); }
   };
 
