@@ -11,6 +11,14 @@ import { supabase } from '@/lib/supabase';
 
 // 🧠 قاموس الصلاحيات المتاحة في النظام
 const PERMISSIONS_DICTIONARY = {
+  surveillance: { // 🚀 الحزمة الجديدة للقيادة العليا
+    label: 'المراقبة والإشراف العام',
+    items: [
+      { key: 'global_read_only', label: 'صلاحية الرؤية الشاملة (للقراءة فقط)' },
+      { key: 'write_evaluations', label: 'كتابة تقارير زيارة المعلمين' },
+      { key: 'manage_announcements', label: 'إدارة التعاميم والإعلانات' }
+    ]
+  },
   students: {
     label: 'شؤون الطلاب',
     items: [
