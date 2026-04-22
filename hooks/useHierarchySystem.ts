@@ -1,90 +1,34 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// 🧠 القاموس الذكي لتداخل الأقسام وتفرعاتها (كخيار احتياطي ومظلة عامة)
-export const DEPARTMENT_MAPPINGS: Record<string, string[]> = {
-  'العلوم': ['العلوم', 'الفيزياء', 'الكيمياء', 'الأحياء', 'الجيولوجيا', 'علم الأرض'],
-  'الاجتماعيات': ['الدراسات الاجتماعية', 'الاجتماعيات', 'التاريخ', 'الجغرافيا', 'الفلسفة', 'علم النفس', 'علم الاجتماع', 'دستور', 'التربية الوطنية', 'الدستور'],
-  'التربية الإسلامية': ['التربية الإسلامية', 'القرآن الكريم', 'التجويد', 'الفقه', 'الحديث', 'العقيدة'],
-  'اللغة العربية': ['اللغة العربية', 'النحو', 'البلاغة', 'الأدب'],
-  'الرياضيات': ['الرياضيات', 'الجبر', 'الهندسة', 'الإحصاء', 'التفاضل'],
-  'اللغات الأجنبية': ['اللغة الإنجليزية', 'اللغة الفرنسية', 'إنجليزي', 'فرنسي'],
-  'الحاسوب': ['الحاسوب', 'تقنية المعلومات', 'ICT'],
-  'التربية البدنية': ['التربية البدنية', 'بدنية'],
-  'التربية الفنية': ['التربية الفنية', 'فنية'],
-  'الموسيقى': ['الموسيقى', 'موسيقى'],
-};
-
-// دالة لاستخراج القسم الرئيسي لأي تخصص
-export const getParentDepartment = (specialization: string | null) => {
-  if (!specialization) return 'عام';
-  for (const [dept, specs] of Object.entries(DEPARTMENT_MAPPINGS)) {
-    if (specs.includes(specialization) || specialization.includes(dept)) return dept;
-  }
-  return specialization; 
-};
-
-// 🚀 الخوارزمية الذكية لجمع المعلمين تحت رئيس القسم (تعتمد على البيانات الفعلية ثم القاموس)
-export const getTeachersUnderHOD = (hod: any, allTeachers: any[]) => {
-  if (!hod || !hod.subject_id) return [];
-  
-  const hodSubjectName = hod.subject?.name || '';
-  const subSubjects = DEPARTMENT_MAPPINGS[hodSubjectName] || [hodSubjectName];
-
-  return allTeachers.filter(teacher => {
-    // 1. استبعاد رئيس القسم نفسه من قائمة المعلمين التابعين
-    if (teacher.id === hod.teacher_id) return false;
-    
-    // 2. التحقق من تطابق المرحلة (متوسط / ثانوي / الكل)
-    const matchStage = hod.stage_name === 'الكل' || teacher.stage === hod.stage_name || teacher.stage === 'مشترك';
-    
-    // 3. التحقق من الارتباط الفعلي بالمادة (من خلال التعيينات في لوحة المواد أو الجدول)
-    const hasDirectSubject = teacher.teacher_subjects?.some((ts: any) => ts.subject_id === hod.subject_id);
-    const hasSectionSubject = teacher.teacher_sections?.some((ts: any) => ts.subject_id === hod.subject_id);
-    
-    // 4. التحقق الاحتياطي (عبر القاموس النصي للتخصص)
-    const matchDict = subSubjects.includes(teacher.specialization) || teacher.specialization?.includes(hodSubjectName);
-
-    // إذا تحقق أي شرط من شروط الارتباط بالمادة، بالإضافة لتطابق المرحلة
-    return (hasDirectSubject || hasSectionSubject || matchDict) && matchStage;
-  });
-};
-
 export function useHierarchySystem() {
   const [loading, setLoading] = useState(false);
 
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. جلب الإدارة المدرسية (استثناء الأدمن المبرمج)
-      const { data: admins } = await supabase
-        .from('users')
-        .select('id, full_name, avatar_url, role')
-        .eq('role', 'management');
+      // 🚀 1. جلب البيانات دفعة واحدة
+      const [adminsRes, supervisorsRes, deptsRes, teachersRes] = await Promise.all([
+        supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
+        supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
+        supabase.from('academic_departments').select('*').order('name'),
+        supabase.from('teachers').select(`
+          id, custom_titles, specialization, department_id,
+          users!teachers_id_fkey(id, full_name, avatar_url, role), 
+          teacher_sections(section_id, sections(classes(name)))
+        `)
+      ]);
 
-      // 2. جلب رؤساء الأقسام
-      const { data: departmentHeads } = await supabase
-        .from('department_heads')
-        .select('*, teacher:teachers(id, users!teachers_id_fkey(full_name, avatar_url, email)), subject:subjects(id, name)');
+      const admins = adminsRes.data || [];
+      const supervisors = supervisorsRes.data || [];
+      const departments = deptsRes.data || [];
+      const teachers = teachersRes.data || [];
 
-      // 3. 🚀 جلب جميع المعلمين (مع إضافة teacher_subjects و subject_id للربط الذكي)
-      const { data: teachers } = await supabase
-        .from('teachers')
-        .select(`
-          id, 
-          custom_titles, 
-          specialization, 
-          users!teachers_id_fkey(full_name, avatar_url, email), 
-          teacher_sections(subject_id, section:sections(classes(name))),
-          teacher_subjects(subject_id)
-        `);
-
-      // خوارزمية تحديد المرحلة (متوسط/ثانوي)
+      // معالجة بيانات المعلمين وتحديد المرحلة
       const getTeacherStage = (teacher: any) => {
-        let hasMiddle = false;
-        let hasHigh = false;
-        (teacher.teacher_sections || []).forEach((ts: any) => {
-          const className = ts.section?.classes?.name || '';
+        let hasMiddle = false; let hasHigh = false;
+        (teacher?.teacher_sections || []).forEach((ts: any) => {
+          const className = ts?.sections?.classes?.name || '';
           if (className.includes('سادس') || className.includes('سابع') || className.includes('ثامن') || className.includes('تاسع')) hasMiddle = true;
           if (className.includes('عاشر') || className.includes('حادي') || className.includes('ثاني')) hasHigh = true;
         });
@@ -94,21 +38,46 @@ export function useHierarchySystem() {
         return 'غير محدد';
       };
 
-      const processedTeachers = (teachers || []).map((t: any) => ({
-        ...t,
-        stage: getTeacherStage(t),
-        parentDepartment: getParentDepartment(t.specialization)
-      }));
+      const processedTeachers = teachers.map((t: any) => {
+        const userData = Array.isArray(t.users) ? t.users[0] : t.users;
+        return { ...t, users: userData, stage: getTeacherStage(t) };
+      });
 
-      return {
-        admins: admins || [],
-        departmentHeads: departmentHeads || [],
-        teachers: processedTeachers,
-        supervisors: processedTeachers.filter(t => t.custom_titles && t.custom_titles.length > 0)
+      // 🚀 2. معالجة الأقسام الأكاديمية (الآن تبحث عن رئيس القسم من خلال الألقاب)
+      const processedDepartments = departments.map((dept: any) => {
+        // جلب جميع المعلمين التابعين لهذا القسم
+        const deptTeachers = processedTeachers.filter(t => t.department_id === dept.id);
+        
+        // تحديد رئيس القسم (من لديه لقب "رئيس قسم" في custom_titles)
+        const hod = deptTeachers.find(t => t.custom_titles && t.custom_titles.includes('رئيس قسم'));
+        
+        // باقي المعلمين هم أعضاء القسم
+        const members = deptTeachers.filter(t => t.id !== hod?.id);
+        
+        return { ...dept, hod, members };
+      });
+
+      // 🚀 3. دمج شؤون الإدارة مع القيادة العليا
+      const combinedLeadership = [
+        ...admins.map(a => ({ ...a, job_title: 'شؤون الإدارة' })),
+        ...supervisors.map((s: any) => {
+          const userData = Array.isArray(s.users) ? s.users[0] : s.users;
+          return {
+            ...userData, 
+            job_title: s.job_title || 'إشراف إداري',
+            role: userData?.role || 'staff'
+          };
+        })
+      ];
+
+      return { 
+        leadership: combinedLeadership, 
+        departments: processedDepartments 
       };
+
     } catch (error) {
       console.error('Hierarchy Error:', error);
-      throw error;
+      return { leadership: [], departments: [] };
     } finally {
       setLoading(false);
     }
