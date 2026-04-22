@@ -18,15 +18,31 @@ import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } fro
 import * as XLSX from 'xlsx';
 
 export default function AttendanceReportsPage() {
-  const { user, authRole, isChecking } = useAuth() as any; 
+  const { user, authRole, userRole, isChecking } = useAuth() as any; 
   const { fetchTeacherDashboardData } = useDashboardSystem();
   
-  const isAdmin = authRole === 'admin' || authRole === 'management';
+  const [staffPermissions, setStaffPermissions] = useState<any>({});
   
+  // 🚀 جلب صلاحيات الكادر (Staff) إذا كان المستخدم مسجلاً كموظف
+  useEffect(() => {
+    async function checkStaffPerms() {
+      if (userRole === 'staff' && user?.id) {
+        const { data } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
+        if (data) setStaffPermissions(data.permissions || {});
+      }
+    }
+    if (!isChecking) checkStaffPerms();
+  }, [userRole, user?.id, isChecking]);
+
+  // 🛡️ تحديد من يحق له الدخول للإحصائيات الكاملة (المدير + المشرف العام)
+  const isSuperAdmin = authRole === 'admin' || authRole === 'management';
+  const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
+  const hasFullAccess = isSuperAdmin || isGlobalWatcher;
+
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
   
-  const [activeTab, setActiveTab] = useState<'daily_snapshot' | 'analytics'>(isAdmin ? 'daily_snapshot' : 'analytics');
+  const [activeTab, setActiveTab] = useState<'daily_snapshot' | 'analytics'>(hasFullAccess ? 'daily_snapshot' : 'analytics');
   
   const [snapshotDate, setSnapshotDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [dailyStats, setDailyStats] = useState<any[]>([]);
@@ -38,9 +54,8 @@ export default function AttendanceReportsPage() {
   const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
-
   const fetchDailySnapshot = useCallback(async () => {
-    if (!user || !isAdmin) return;
+    if (!user || !hasFullAccess) return;
     setLoading(true); setDbError(null);
     try {
       const { data, error } = await supabase
@@ -61,10 +76,10 @@ export default function AttendanceReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin, snapshotDate]);
+  }, [user, hasFullAccess, snapshotDate]);
 
   const fetchAnalyticsData = useCallback(async () => {
-    if (!user || (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher')) return;
+    if (!user || (!hasFullAccess && authRole !== 'teacher')) return;
 
     setLoading(true); setDbError(null);
     try {
@@ -132,15 +147,14 @@ export default function AttendanceReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, authRole, fetchTeacherDashboardData, selectedSection, dateRange, customStartDate, customEndDate]);
+  }, [user, authRole, hasFullAccess, fetchTeacherDashboardData, selectedSection, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
-    if (isChecking) return;
-    if (activeTab === 'daily_snapshot' && isAdmin) fetchDailySnapshot();
+    if (isChecking || (!isSuperAdmin && Object.keys(staffPermissions).length === 0 && userRole === 'staff')) return;
+    if (activeTab === 'daily_snapshot' && hasFullAccess) fetchDailySnapshot();
     else if (activeTab === 'analytics') fetchAnalyticsData();
-  }, [activeTab, fetchDailySnapshot, fetchAnalyticsData, isChecking, isAdmin]);
+  }, [activeTab, fetchDailySnapshot, fetchAnalyticsData, isChecking, hasFullAccess, staffPermissions, userRole, isSuperAdmin]);
 
-  // 🚀 المحرك المعماري لفرز الإحصائيات مع الاعتماد على جدول الأقسام
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = {
       'المرحلة المتوسطة': {},
@@ -162,7 +176,6 @@ export default function AttendanceReportsPage() {
       const teacherProfile: any = Array.isArray(teacherData?.teachers) ? teacherData.teachers[0] : teacherData?.teachers;
       const academicDept: any = Array.isArray(teacherProfile?.academic_departments) ? teacherProfile.academic_departments[0] : teacherProfile?.academic_departments;
       
-      // 🚀 القراءة الصريحة للقسم من القاعدة بدلاً من التخمين
       let dept = academicDept?.name || 'أقسام أخرى';
 
       if (!groups[stage][dept]) groups[stage][dept] = [];
@@ -386,7 +399,7 @@ export default function AttendanceReportsPage() {
     );
   }
 
-  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
+  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher' && !isGlobalWatcher) {
     return <div className="p-10 text-center font-black text-rose-500 min-h-screen flex items-center justify-center bg-[#090b14]">هذه الصفحة مخصصة لفريق الإدارة والمعلمين فقط.</div>;
   }
 
@@ -399,8 +412,8 @@ export default function AttendanceReportsPage() {
       <div className="max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
         
         <div className="flex justify-between items-center">
-          <Link href="/attendance" className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 font-bold bg-[#131836]/60 backdrop-blur-xl px-5 py-2.5 rounded-2xl border border-white/10 transition-all w-fit group text-sm sm:text-base shadow-lg">
-            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة للرصد
+          <Link href={authRole === 'teacher' ? "/attendance" : "/dashboard/staff"} className="flex items-center gap-2 text-slate-400 hover:text-emerald-400 font-bold bg-[#131836]/60 backdrop-blur-xl px-5 py-2.5 rounded-2xl border border-white/10 transition-all w-fit group text-sm sm:text-base shadow-lg">
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> {authRole === 'teacher' ? 'العودة للرصد' : 'العودة للوحة التحكم'}
           </Link>
           <button onClick={activeTab === 'daily_snapshot' ? fetchDailySnapshot : fetchAnalyticsData} className="flex items-center gap-2 text-slate-900 font-black bg-gradient-to-r from-emerald-500 to-teal-400 px-5 py-2.5 rounded-2xl transition-all hover:opacity-90 active:scale-95 text-sm sm:text-base shadow-[0_0_20px_rgba(16,185,129,0.3)]">
             <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} /> تحديث البيانات
@@ -421,7 +434,7 @@ export default function AttendanceReportsPage() {
               </p>
             </div>
             
-            {isAdmin && (
+            {hasFullAccess && (
               <div className="flex flex-col gap-3 shrink-0 w-full lg:w-auto bg-[#090b14]/50 p-2 rounded-[2rem] border border-white/5">
                 <button onClick={() => setActiveTab('daily_snapshot')} className={`flex items-center justify-center gap-2 px-6 py-4 rounded-[1.5rem] text-sm sm:text-base font-black transition-all ${activeTab === 'daily_snapshot' ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
                   <Layers className="w-5 h-5" /> الإحصائية الإدارية السريعة
@@ -441,7 +454,7 @@ export default function AttendanceReportsPage() {
           </div>
         )}
 
-        {isAdmin && activeTab === 'daily_snapshot' && (
+        {hasFullAccess && activeTab === 'daily_snapshot' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
             
             <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
