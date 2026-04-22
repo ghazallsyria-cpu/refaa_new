@@ -666,12 +666,18 @@ export default function StudentDashboard() {
             {/* 🩺 سجل الغياب والأعذار الطبية (الميزة الجديدة) */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
-                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner"><Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" /></div> سجل الأعذار 
+              <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4">
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
+                    <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
+                  </div> 
+                  سجل الأعذار 
                 </h2>
-                <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center justify-center gap-1 bg-gradient-to-r from-amber-400 to-orange-500 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:opacity-90 transition-colors shadow-md shrink-0 w-full sm:w-auto active:scale-95"><Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد</button>
+                <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md shrink-0 active:scale-95 whitespace-nowrap">
+                  <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
+                </button>
               </div>
+
               
               <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
                 {excuses.length > 0 ? (
