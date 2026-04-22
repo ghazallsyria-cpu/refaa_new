@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -201,7 +202,7 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
               <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20"><FileText className="text-amber-400 w-6 h-6"/></div>
               <div>
                 <h2 className="text-xl font-black text-white drop-shadow-md">سجل التقييمات والأوراق</h2>
-                <p className="text-xs font-bold text-slate-400 mt-1">اضغط على أي مهمة لمشاهدة ورقة إجابة ابنك.</p>
+                <p className="text-xs font-bold text-slate-400 mt-1">اضغط على أي مهمة لمشاهدة الحل.</p>
               </div>
             </div>
 
@@ -294,15 +295,15 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
         <div className="bg-[#0a0d16]/80 backdrop-blur-xl rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col h-fit">
           <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
           
-          {/* 🚀 الحل الجذري لمشكلة تمدد الزر في الجوال */}
-          <div className="p-5 border-b border-white/5 flex flex-row items-center justify-between bg-[#02040a]/40 relative z-10 w-full">
+          {/* 🚀 الحل الجذري والآمن لمشكلة تمدد الزر في الجوال */}
+          <div className="p-5 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 relative z-10 w-full">
             <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-3">
               <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
                 <Stethoscope className="w-5 h-5 text-amber-400 drop-shadow-md" />
               </div> 
               سجل الأعذار 
             </h2>
-            <button onClick={() => setIsExcuseModalOpen(true)} className="shrink-0 w-max px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-xl text-slate-900 font-black text-xs flex items-center gap-2 hover:opacity-90 transition-all active:scale-95 shadow-md">
+            <button onClick={() => setIsExcuseModalOpen(true)} className="flex-none w-auto px-5 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-xl text-slate-900 font-black text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-95 shadow-md">
               <Plus className="w-4 h-4" /> عذر جديد
             </button>
           </div>
@@ -383,7 +384,11 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
 
 export default function ParentDashboard() {
   const { user, authRole, isChecking } = useAuth() as any;
+  
+  // 🛡️ [Anti-Freeze Patch]: قفل دوال الـ Fetch باستخدام useRef
   const { fetchParentDashboardData, fetchParentChildDetails } = useDashboardSystem();
+  const systemRef = useRef({ fetchParentDashboardData, fetchParentChildDetails });
+  
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'academics' | 'behavior'>('overview');
@@ -412,9 +417,13 @@ export default function ParentDashboard() {
   const [childLoading, setChildLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   
-  // 🛡️ [Anti-Freeze Patch]: تأمين النظام ضد التحديث اللانهائي واستهلاك قاعدة البيانات
+  // 🛡️ الأقفال لمنع التكرار
   const initialFetchDone = useRef(false);
   const lastFetchedChildId = useRef<string | null>(null);
+
+  useEffect(() => {
+    systemRef.current = { fetchParentDashboardData, fetchParentChildDetails };
+  }, [fetchParentDashboardData, fetchParentChildDetails]);
 
   useEffect(() => {
     setCurrentTime(new Date());
@@ -423,30 +432,30 @@ export default function ParentDashboard() {
   }, []);
 
   const loadInitialData = useCallback(async () => {
+    if (!user?.id) return;
     try {
       setLoading(true);
       const { data: pData } = await supabase.from('parents').select('*, users(full_name, email, avatar_url)').eq('id', user.id).maybeSingle();
       setParentData(pData);
 
-      const dashboardData = await fetchParentDashboardData(false);
+      const dashboardData = await systemRef.current.fetchParentDashboardData(false);
       if (dashboardData && dashboardData.children.length > 0) {
         setChildren(dashboardData.children);
         setActiveChildId(dashboardData.children[0].id);
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [user, fetchParentDashboardData]);
+  }, [user?.id]); // 🛡️ الاعتماد فقط على الـ ID
 
-  // 🛡️ التنفيذ لمرة واحدة فقط باستخدام القفل الحديدي
   useEffect(() => { 
-    if (isChecking || !user || authRole !== 'parent' || initialFetchDone.current) return;
+    if (isChecking || !user?.id || authRole !== 'parent' || initialFetchDone.current) return;
     initialFetchDone.current = true;
     loadInitialData(); 
-  }, [isChecking, user, authRole, loadInitialData]);
+  }, [isChecking, user?.id, authRole, loadInitialData]);
 
   const loadActiveChild = useCallback(async (childId: string, sectionId: string | null) => {
     try {
       setChildLoading(true);
-      const data = await fetchParentChildDetails(childId, sectionId);
+      const data = await systemRef.current.fetchParentChildDetails(childId, sectionId);
       
       setAttendance(data.attendance);
       setBadges(data.badges);
@@ -511,9 +520,8 @@ export default function ParentDashboard() {
       });
 
     } catch (e) { console.error(e); } finally { setChildLoading(false); }
-  }, [fetchParentChildDetails]);
+  }, []); // 🛡️ لا يوجد تبعيات تتغير
 
-  // 🛡️ التنفيذ فقط عند تغير الابن الفعلي
   useEffect(() => { 
     if (activeChildId && activeChildId !== lastFetchedChildId.current) {
       lastFetchedChildId.current = activeChildId;
@@ -640,6 +648,7 @@ export default function ParentDashboard() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-[#05070e] pb-32 md:pb-24 font-cairo overflow-x-hidden" dir="rtl">
       
+      {/* ✨ خلفية الواجهة (Mesh Gradient) */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-600/10 blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-600/10 blur-[150px]"></div>
@@ -647,6 +656,7 @@ export default function ParentDashboard() {
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8 relative z-10">
         
+        {/* 👑 الهيدر الثابت العُلوي (Global Header & Switcher) */}
         <div className="relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 bg-gradient-to-r from-[#0a0d16] via-[#111827] to-[#0a0d16] p-8 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none mix-blend-overlay"></div>
            
@@ -665,6 +675,7 @@ export default function ParentDashboard() {
               </div>
            </div>
            
+           {/* 🔄 مبدل الأبناء المطور (Children Switcher) */}
            <div className="flex gap-3 overflow-x-auto p-2 w-full md:w-auto custom-scrollbar snap-x relative z-10 mask-fade-edges">
               {children.map(child => (
                 <button 
@@ -697,6 +708,7 @@ export default function ParentDashboard() {
         </AnimatePresence>
       </div>
 
+      {/* 📱 الشريط السفلي للتنقل (Mobile-First Bottom Navigation Bar) */}
       <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-[env(safe-area-inset-bottom)] md:pb-6 pt-2 pointer-events-none flex justify-center">
         <div className="bg-[#131836]/90 backdrop-blur-2xl border border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] rounded-full p-2 flex items-center justify-center gap-2 max-w-[400px] w-full pointer-events-auto">
           {[
@@ -717,6 +729,7 @@ export default function ParentDashboard() {
         </div>
       </div>
 
+      {/* 🚀 نافذة (Modal) تقديم العذر الطبي العائم */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
@@ -733,6 +746,7 @@ export default function ParentDashboard() {
                 </div>
 
                 <div className="space-y-6">
+                  {/* التاريخ ونوع الغياب */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs font-black text-slate-300 uppercase tracking-widest">تاريخ الغياب</label>
@@ -747,6 +761,7 @@ export default function ParentDashboard() {
                     </div>
                   </div>
 
+                  {/* اختيار الحصص */}
                   <AnimatePresence>
                     {excuseForm.duration_type === 'partial_day' && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -767,6 +782,7 @@ export default function ParentDashboard() {
                     )}
                   </AnimatePresence>
 
+                  {/* رفع المرفق */}
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
                     <label className={cn("relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
@@ -781,6 +797,7 @@ export default function ParentDashboard() {
                     </label>
                   </div>
 
+                  {/* تفاصيل إضافية */}
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات للإدارة (اختياري)</label>
                     <textarea 
