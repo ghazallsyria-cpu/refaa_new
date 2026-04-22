@@ -9,7 +9,7 @@ export function useHierarchySystem() {
     try {
       // 🛡️ أمان سيبراني: تحديد الحقول المسموحة فقط (بدون أرقام مدنية أو هواتف)
       const [adminsRes, deptsRes, teachersRes] = await Promise.all([
-        supabase.from('users').select('id, full_name, avatar_url, role, email').in('role', ['admin', 'management']),
+        supabase.from('users').select('id, full_name, avatar_url, role, email').in('role', [ 'management']),
         supabase.from('academic_departments').select('*').order('name'),
         supabase.from('teachers').select(`
           id, 
