@@ -44,19 +44,10 @@ export default function MessagesPage() {
   const { user: currentUser, authRole, userRole, isChecking } = useAuth() as any;
   const role = authRole || userRole;
   
-  const {
-    messages,
-    users,
-    chatRooms,
-    loading,
-    fetchMessages,
-    sendMessage,
-    sendGroupMessage,
-    sendBroadcastMessage,
-    markAsRead,
-    deleteMessages,
-  } = useMessagesSystem();
-
+  // 🛡️ [Anti-Freeze Patch]: قفل دوال الـ Fetch باستخدام useRef
+  const { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages, messages, users, chatRooms, loading } = useMessagesSystem();
+  const systemRef = useRef({ fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages });
+  
   const [privateConversations, setPrivateConversations] = useState<any[]>([]);
   const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
   
@@ -76,21 +67,27 @@ export default function MessagesPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // 🛡️ [Anti-Freeze Patch]
+  // 🛡️ الأقفال لمنع التكرار اللانهائي
   const fetchedRef = useRef(false);
   const markingReadRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!currentUser || isChecking || fetchedRef.current) return;
+    systemRef.current = { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages };
+  }, [fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages]);
+
+  useEffect(() => {
+    if (!currentUser?.id || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
 
     const channel = supabase
       .channel('realtime_messages')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { fetchMessages(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { 
+          systemRef.current.fetchMessages(); 
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentUser, isChecking, fetchMessages]);
+  }, [currentUser?.id, isChecking]); // 🛡️ الاعتماد فقط على الـ ID
 
   useEffect(() => {
     if (!messages.length || !currentUser) { 
@@ -159,14 +156,14 @@ export default function MessagesPage() {
       }));
       setThreadMessages(cleanThread);
 
-      // 🛡️ [Anti-Freeze Patch]: فلترة الرسائل التي لم يتم إرسال طلب القراءة لها مسبقاً
+      // 🛡️ [Anti-Freeze Patch]: فلترة الرسائل وعدم تكرار طلب القراءة
       const unreadIds = cleanThread
         .filter(m => !m.is_read && m.sender_id !== currentUser?.id && !markingReadRef.current.has(m.id))
         .map(m => m.id);
 
       if (unreadIds.length > 0) {
         unreadIds.forEach(id => markingReadRef.current.add(id));
-        markAsRead(unreadIds);
+        systemRef.current.markAsRead(unreadIds);
       }
       
       setTimeout(() => {
@@ -175,7 +172,7 @@ export default function MessagesPage() {
         }
       }, 100);
     }
-  }, [activeThread, messages]);
+  }, [activeThread, messages, currentUser?.id]);
 
   const handleSendReply = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -185,10 +182,10 @@ export default function MessagesPage() {
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
+        await systemRef.current.sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
-        await sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
+        await systemRef.current.sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
       }
       setReplyContent('');
     } catch (error: any) { alert(error.message); } 
@@ -203,11 +200,11 @@ export default function MessagesPage() {
     setIsSubmitting(true);
     try {
       if (recipientType === 'broadcast') {
-        await sendBroadcastMessage(newMessage.subject, newMessage.content);
+        await systemRef.current.sendBroadcastMessage(newMessage.subject, newMessage.content);
         alert('تم إرسال الإذاعة العامة بنجاح لجميع المجالس!');
       } else if (!isGroupMessage) {
         if (!newMessage.receiver_id) return alert('الرجاء اختيار المستلم');
-        await sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
+        await systemRef.current.sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
       }
       
       setShowNewMessage(false);
@@ -220,7 +217,7 @@ export default function MessagesPage() {
   const handleDeleteMessage = async (messageIds: string[]) => {
     if (!confirm('هل أنت متأكد من حذف هذه المحادثة بالكامل؟')) return;
     try {
-      await deleteMessages(messageIds);
+      await systemRef.current.deleteMessages(messageIds);
       if (activeThread && messageIds.some((id: string) => activeThread.allIds?.includes(id))) setActiveThread(null);
     } catch (error: any) { alert('حدث خطأ أثناء الحذف'); }
   };
@@ -261,7 +258,7 @@ export default function MessagesPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 إخفاء هذا الجزء بالكامل في الجوال إذا كانت هناك محادثة مفتوحة، وإلا سيأخذ مساحة من الشاشة */}
+      {/* 🚀 إخفاء هذا الجزء بالكامل في الجوال إذا كانت هناك محادثة مفتوحة */}
       <div className={cn("shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4", activeThread ? "hidden lg:flex mb-4" : "flex mb-4")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
@@ -297,7 +294,6 @@ export default function MessagesPage() {
                           <h4 className={`text-sm font-black truncate drop-shadow-sm ${activeThread?.id === room.id ? 'text-indigo-400' : 'text-white'}`}>مجلس: {room.className}</h4>
                           <p className="text-xs truncate text-slate-400 font-bold mt-1">شعبة {room.name}</p>
                         </div>
-                        {/* 🚀 بادج الرسائل غير المقروءة للمجالس */}
                         {groupUnreadCounts[room.id] > 0 && activeThread?.id !== room.id && (
                           <div className="shrink-0 bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full shadow-[0_0_15px_rgba(225,29,72,0.5)] animate-pulse border border-rose-400/50">
                             {groupUnreadCounts[room.id] > 99 ? '+99' : groupUnreadCounts[room.id]} جديد
@@ -323,13 +319,11 @@ export default function MessagesPage() {
                         <button key={msg.convId} onClick={() => setActiveThread(msg)} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${isActive ? 'bg-emerald-600/20 text-white border-emerald-500/30 shadow-inner' : msg.unreadCount > 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
                           <div className="relative shrink-0">
                             <RenderAvatar user={otherUser} size="h-12 w-12" />
-                            {/* الدائرة النابضة الصغيرة في حالة وجود رسائل */}
                             {msg.unreadCount > 0 && !isActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0f1423] rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <h4 className={`text-sm font-black truncate pr-2 ${isActive ? 'text-emerald-400' : 'text-white'}`}>{otherUser?.full_name}</h4>
-                              {/* 🚀 بادج عدد الرسائل الجديدة للخاص */}
                               {msg.unreadCount > 0 && !isActive && (
                                 <div className="shrink-0 bg-emerald-500 text-[#02040a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-pulse border border-emerald-400">
                                   {msg.unreadCount > 99 ? '+99' : msg.unreadCount}
@@ -442,7 +436,7 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* Input Form - Sticky Bottom */}
+               {/* Input Form */}
                <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-[env(safe-area-inset-bottom)]">
                  <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
                     <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] lg:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden p-1">
