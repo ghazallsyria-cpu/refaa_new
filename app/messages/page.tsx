@@ -12,7 +12,6 @@ import { supabase } from '@/lib/supabase';
 import ForumEditor from '@/components/ForumEditor';
 import { cn } from '@/lib/utils';
 
-// واجهة الغرفة الثابتة (لضمان التوافق)
 interface ChatRoom { id: string; name: string; className: string; type: 'group'; }
 
 const RenderAvatar = ({ user, size = 'h-12 w-12', isGroup = false }: { user?: any, size?: string, isGroup?: boolean }) => {
@@ -50,7 +49,7 @@ export default function MessagesPage() {
   const {
     messages,
     users,
-    chatRooms, // 🚀 جلب الغرف الثابتة من الهوك
+    chatRooms,
     loading,
     fetchMessages,
     sendMessage,
@@ -74,24 +73,18 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
 
-  // 🚀 التحديث المباشر
   useEffect(() => {
     if (!currentUser || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
 
     const channel = supabase
       .channel('realtime_messages')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages' },
-        () => { fetchMessages(); }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { fetchMessages(); })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [currentUser, isChecking, fetchMessages]);
 
-  // 🚀 فصل وتجميع الرسائل الخاصة
   useEffect(() => {
     if (!messages.length || !currentUser) { setPrivateConversations([]); return; }
 
@@ -118,18 +111,16 @@ export default function MessagesPage() {
     setPrivateConversations(Object.values(convos).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   }, [messages, currentUser]);
 
-  // 🚀 معالجة المحادثة النشطة (المجلس أو الخاص)
   useEffect(() => {
     if (activeThread && messages.length >= 0) {
       let thread = [];
       if (activeThread.type === 'group') {
         thread = messages.filter((m: any) => m.section_id === activeThread.id);
         
-        // إزالة التكرار من السيرفر القديم إن وجد
+        // 🚀 الإصلاح: إزالة التكرار بناءً على الـ ID فقط لعدم إخفاء الرسائل المتشابهة
         const unique = []; const seen = new Set();
         for (const msg of thread) {
-          const key = msg.sender_id === currentUser?.id ? `${msg.content}-${msg.subject}` : msg.id;
-          if (!seen.has(key)) { seen.add(key); unique.push(msg); }
+          if (!seen.has(msg.id)) { seen.add(msg.id); unique.push(msg); }
         }
         thread = unique;
       } else {
@@ -244,7 +235,7 @@ export default function MessagesPage() {
 
       <div className="glass-panel rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-1 min-h-0 mx-4 lg:mx-8 relative z-10 bg-[#0f1423]/60">
         
-        {/* 🚀 القائمة الجانبية (الغرف الثابتة + الخاص) */}
+        {/* 🚀 القائمة الجانبية */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -254,8 +245,6 @@ export default function MessagesPage() {
            </div>
 
            <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar">
-              
-              {/* 🏫 قسم مجالس الفصول */}
               {chatRooms.length > 0 && (
                 <div>
                   <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-400"/> مجالس الفصول الثابتة</h3>
@@ -273,7 +262,6 @@ export default function MessagesPage() {
                 </div>
               )}
 
-              {/* 👤 قسم المراسلات الخاصة */}
               <div>
                 <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><User className="w-4 h-4 text-emerald-400"/> المراسلات الخاصة</h3>
                 <div className="space-y-2">
@@ -305,7 +293,7 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) */}
+        {/* 🚀 نافذة الدردشة */}
         <div className={`flex-1 flex flex-col bg-transparent relative ${!activeThread ? 'hidden lg:flex items-center justify-center' : 'flex min-h-0'}`}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
@@ -412,7 +400,6 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: رسالة خاصة جديدة (تم التبسيط وإزالة المجالس منها) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
