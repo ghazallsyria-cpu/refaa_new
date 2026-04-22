@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
@@ -13,7 +14,6 @@ export function useMessagesSystem() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. جلب المجالس الثابتة
   const fetchChatRooms = useCallback(async () => {
     if (!user) return;
     try {
@@ -53,7 +53,6 @@ export function useMessagesSystem() {
     } catch (error) { console.error("Error fetching chat rooms:", error); }
   }, [user, currentRole]);
 
-  // 2. جلب جهات الاتصال للمراسلات الخاصة
   const fetchUsers = useCallback(async () => {
     if (!user) return;
     try {
@@ -89,7 +88,6 @@ export function useMessagesSystem() {
     } catch (err) { console.error('Error fetching users:', err); }
   }, [user, currentRole]);
 
-  // 3. جلب جميع الرسائل (هنا كان الفخ وتم إصلاحه جذرياً 🚀)
   const fetchMessages = useCallback(async () => {
     if (!user) return;
     try {
@@ -98,13 +96,10 @@ export function useMessagesSystem() {
       if (!['admin', 'management', 'staff'].includes(currentRole)) {
         let orString = `sender_id.eq.${user.id},receiver_id.eq.${user.id}`;
         const roomIds = chatRooms.map(r => r.id);
-        
-        // 🚀 الإصلاح: تفكيك الغرف لشرط OR سليم ومحكم 100%
         if (roomIds.length > 0) {
           const roomOrs = roomIds.map(id => `section_id.eq.${id}`).join(',');
           orString += `,${roomOrs}`;
         }
-        
         query = query.or(orString);
       }
       
@@ -128,7 +123,6 @@ export function useMessagesSystem() {
     if (chatRooms.length > 0 || currentRole) { fetchMessages(); }
   }, [chatRooms, fetchMessages, currentRole]);
 
-  // 🚀 تحصين دوال الإرسال لرمي الأخطاء للواجهة إن وجدت
   const sendMessage = async (receiverId: string, subject: string, content: string) => {
     const response = await fetch('/api/messages/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId, subject, content, userId: user.id }) });
     if (!response.ok) {
@@ -147,6 +141,27 @@ export function useMessagesSystem() {
     fetchMessages();
   };
 
+  // 🚀 الدالة الجديدة: إرسال إذاعة عامة لكل الفصول
+  const sendBroadcastMessage = async (subject: string, content: string) => {
+    if (!user) throw new Error('User not authenticated');
+    
+    // جلب جميع الفصول (Sections)
+    const { data: sections } = await supabase.from('sections').select('id');
+    if (!sections || sections.length === 0) throw new Error('لا توجد فصول للإرسال إليها');
+    
+    // إرسال الرسالة لكل فصل عبر API
+    const promises = sections.map(sec => 
+      fetch('/api/messages/send-group', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ sectionId: sec.id, subject, content, senderId: user.id }) 
+      })
+    );
+    
+    await Promise.all(promises);
+    fetchMessages();
+  };
+
   const markAsRead = async (messageIds: string[]) => {
     await fetch('/api/messages/mark-read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageIds, userId: user.id }) });
     fetchMessages();
@@ -157,5 +172,5 @@ export function useMessagesSystem() {
     fetchMessages();
   };
 
-  return { messages, users, chatRooms, loading, fetchMessages, sendMessage, sendGroupMessage, markAsRead, deleteMessages } as const;
+  return { messages, users, chatRooms, loading, fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages } as const;
 }
