@@ -7,18 +7,21 @@ export function useHierarchySystem() {
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 🚀 1. جلب شؤون الإدارة والقيادة العليا والأقسام والمعلمين دفعة واحدة
+      // 🚀 1. جلب البيانات بطريقة آمنة جداً (استخدام النجمة للابتعاد عن أخطاء الحقول المفقودة)
       const [adminsRes, supervisorsRes, deptsRes, teachersRes] = await Promise.all([
         supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
-        supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
-        // 🛡️ استعادة head_id تماماً كما كان في كودك الأصلي
-        supabase.from('academic_departments').select('id, name, head_id, image_url').order('name'),
+        supabase.from('school_staff').select('*, users(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
+        supabase.from('academic_departments').select('*').order('name'),
         supabase.from('teachers').select(`
           id, custom_titles, specialization, department_id,
-          users!teachers_id_fkey(id, full_name, avatar_url, role), 
+          users(id, full_name, avatar_url, role), 
           teacher_sections(section_id, sections(classes(name)))
         `)
       ]);
+
+      // فحص الأخطاء بصمت (تساعد في الـ Debugging إن لزم الأمر)
+      if (deptsRes.error) console.error("Departments Fetch Error:", deptsRes.error);
+      if (teachersRes.error) console.error("Teachers Fetch Error:", teachersRes.error);
 
       const admins = adminsRes.data || [];
       const supervisors = supervisorsRes.data || [];
@@ -40,14 +43,24 @@ export function useHierarchySystem() {
       };
 
       const processedTeachers = teachers.map((t: any) => {
-        const userData = Array.isArray(t.users) ? t.users[0] : t.users;
+        // دعم الصيغتين لضمان عدم حدوث خطأ
+        const userData = Array.isArray(t.users) ? t.users[0] : (t.users || {});
         return { ...t, users: userData, stage: getTeacherStage(t) };
       });
 
-      // 🚀 2. معالجة الأقسام الأكاديمية (الاعتماد على head_id الخاص بك)
+      // 🚀 2. معالجة الأقسام الأكاديمية (نظام ذكي للبحث عن رئيس القسم)
       const processedDepartments = departments.map((dept: any) => {
-        const hod = processedTeachers.find(t => t.id === dept.head_id);
-        const members = processedTeachers.filter(t => t.department_id === dept.id && t.id !== dept.head_id);
+        // البحث عن رئيس القسم باستخدام head_id (إذا كان متوفراً) أو بالبحث في الألقاب
+        let hod = null;
+        if (dept.head_id) {
+          hod = processedTeachers.find(t => String(t.id) === String(dept.head_id));
+        } else {
+          hod = processedTeachers.find(t => t.department_id === dept.id && t.custom_titles && t.custom_titles.includes('رئيس قسم'));
+        }
+
+        // باقي المعلمين في نفس القسم
+        const members = processedTeachers.filter(t => t.department_id === dept.id && t.id !== hod?.id);
+        
         return { ...dept, hod, members };
       });
 
@@ -55,7 +68,7 @@ export function useHierarchySystem() {
       const combinedLeadership = [
         ...admins.map(a => ({ ...a, job_title: 'شؤون الإدارة' })),
         ...supervisors.map((s: any) => {
-          const userData = Array.isArray(s.users) ? s.users[0] : s.users;
+          const userData = Array.isArray(s.users) ? s.users[0] : (s.users || {});
           return {
             ...userData, 
             job_title: s.job_title || 'إشراف إداري',
