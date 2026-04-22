@@ -21,7 +21,7 @@ const navigation = [
   { name: 'ملف الإدارة', href: '/admin/profile', icon: Crown }, 
   { name: 'ملفي الشخصي (CV)', href: '/teachers/profile', icon: UserCircle }, 
   { name: 'الفريق الإداري', href: '/admin/staff', icon: UserCog },
-  { name: 'الهيكل الأكاديمي', href: '/hierarchy', icon: Network }, // 🚀 تمت إضافة الهيكل هنا
+  { name: 'الهيكل الأكاديمي', href: '/hierarchy', icon: Network },
   { name: 'الطلاب', href: '/students', icon: Users },
   { name: 'المعلمين', href: '/teachers', icon: GraduationCap },
   { name: 'متابعة المعلمين', href: '/admin/teachers-monitor', icon: Users },
@@ -58,8 +58,11 @@ const navigation = [
 
 export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onToggleCollapse }: { onClose?: () => void, authRole?: string, isCollapsed?: boolean, onToggleCollapse?: () => void }) {
   const pathname = usePathname();
-  const { user } = useAuth() as any;
+  const { user, userRole } = useAuth() as any;
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
+  
+  // 🚀 جلب صلاحيات الستاف للسماح للمشرفين الإداريين (عين الرفعة) بالرؤية
+  const [staffPermissions, setStaffPermissions] = useState<any>({});
 
   useEffect(() => {
     const fetchSchoolData = async () => {
@@ -71,26 +74,43 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
     fetchSchoolData();
   }, []);
 
+  useEffect(() => {
+    async function checkStaffPerms() {
+      if (userRole === 'staff' && user?.id) {
+        const { data } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
+        if (data) setStaffPermissions(data.permissions || {});
+      }
+    }
+    checkStaffPerms();
+  }, [userRole, user?.id]);
+
+  const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
+
   const filteredNavigation = navigation.filter(item => {
+    // إخفاء هذه الأزرار المخصصة للإدارة فقط (حتى عن المشرف)
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'استيراد البيانات') return (authRole === 'admin' || authRole === 'management');
+    if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
+
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
-    if (item.name === 'تقييم المعلمين') return (authRole === 'admin' || authRole === 'management');
     
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    // 🚀 تحديث الصلاحيات لرؤية الهيكل الأكاديمي
+    // 🚀 تحديث الصلاحيات: إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة (Global Watcher)، دع أغلب الأزرار تظهر له
+    if (isGlobalWatcher) return true;
+    
+    // باقي الصلاحيات للمعلمين والطلاب وأولياء الأمور
     if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
-    
     if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
-    
     if (authRole === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     
     return false;
   });
 
-  const roleDisplayNames: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
-  const roleDisplayName = roleDisplayNames[authRole] || 'مستخدم';
+  const roleDisplayNames: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر', 'staff': 'كادر إداري/مساند' };
+  let roleDisplayName = roleDisplayNames[authRole] || roleDisplayNames[userRole] || 'مستخدم';
+  if (isGlobalWatcher) roleDisplayName = 'مشرف إداري (مراقبة)';
 
   return (
     <div className={cn("flex h-full flex-col bg-[#0a0d16]/80 backdrop-blur-3xl text-slate-300 border-l border-white/5 relative overflow-hidden transition-all duration-500 z-50", isCollapsed ? "w-20" : "w-72", "group/sidebar")} dir="rtl">
@@ -137,6 +157,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
               if (authRole === 'student') itemHref = '/dashboard/student'; 
               else if (authRole === 'teacher') itemHref = '/dashboard/teacher'; 
               else if (authRole === 'parent') itemHref = '/dashboard/parent'; 
+              else if (userRole === 'staff') itemHref = '/dashboard/staff'; // 🚀 تحويل الستاف لداش بورد الستاف
               else if (authRole === 'admin' || authRole === 'management') itemHref = '/dashboard';
             } 
             else if (item.name === 'ملفي الشخصي (CV)') { 
