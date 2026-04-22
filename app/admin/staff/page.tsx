@@ -9,9 +9,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-// 🧠 قاموس الصلاحيات المتاحة في النظام
+// 🚀 🧠 قاموس الصلاحيات المحدث (بما في ذلك المراقبة الشاملة)
 const PERMISSIONS_DICTIONARY = {
-  surveillance: { // 🚀 الحزمة الجديدة للقيادة العليا
+  surveillance: {
     label: 'المراقبة والإشراف العام',
     items: [
       { key: 'global_read_only', label: 'صلاحية الرؤية الشاملة (للقراءة فقط)' },
@@ -62,7 +62,6 @@ export default function StaffManagementPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
 
-  // 🚀 تحديث حالة النموذج لتشمل الصلاحيات (permissions)
   const [formData, setFormData] = useState({
     id: '', full_name: '', national_id: '', email: '', phone: '',
     job_category: '', job_title: '', scope_stage: 'الكل',
@@ -104,7 +103,6 @@ export default function StaffManagementPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 دالة تبديل حالة الصلاحية (Toggle)
   const togglePermission = (key: string) => {
     setFormData(prev => ({
       ...prev,
@@ -126,7 +124,6 @@ export default function StaffManagementPage() {
       if (isEditing) {
         await supabase.from('users').update({ full_name: formData.full_name, phone: formData.phone, email: formData.email }).eq('id', formData.id);
         
-        // 🚀 تحديث الصلاحيات في قاعدة البيانات
         await supabase.from('school_staff').update({
           national_id: formData.national_id,
           job_category: formData.job_category,
@@ -151,7 +148,6 @@ export default function StaffManagementPage() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
 
-        // 🚀 إدخال الموظف الجديد مع صلاحياته
         await supabase.from('school_staff').insert({
           id: result.user.id,
           national_id: formData.national_id,
@@ -189,14 +185,14 @@ export default function StaffManagementPage() {
         id: staff.id, full_name: staff.users?.full_name || '', national_id: staff.national_id,
         email: staff.users?.email || '', phone: staff.users?.phone || '',
         job_category: staff.job_category, job_title: staff.job_title, scope_stage: staff.scope_stage,
-        permissions: staff.permissions || {} // 🚀 جلب الصلاحيات السابقة
+        permissions: staff.permissions || {} 
       });
     } else {
       setIsEditing(false);
       setFormData({ 
         id: '', full_name: '', national_id: '', email: '', phone: '', 
         job_category: '', job_title: '', scope_stage: 'الكل',
-        permissions: {} // 🚀 صلاحيات فارغة للموظف الجديد
+        permissions: {} 
       });
     }
     setShowModal(true);
@@ -270,7 +266,7 @@ export default function StaffManagementPage() {
       <div className="bg-white/80 backdrop-blur-xl p-4 rounded-[2rem] shadow-sm border border-slate-100 mb-8 sticky top-24 z-30">
         <div className="relative w-full max-w-md mx-auto lg:mx-0 lg:mr-auto">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-          <input type="text" placeholder="البحث في سجلات الكادر..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full rounded-2xl bg-slate-50 border border-slate-200 py-3.5 pr-12 pl-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner" />
+          <input type="text" placeholder="البحث في سجلات الكادر..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full rounded-2xl bg-slate-50 border border-slate-200 py-3.5 pr-12 pl-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-50 outline-none shadow-inner" />
         </div>
       </div>
 
@@ -397,7 +393,7 @@ export default function StaffManagementPage() {
                     </div>
                   </div>
 
-                  {/* 🚀 القسم الثالث: مصفوفة الصلاحيات (الجديد) */}
+                  {/* 🚀 القسم الثالث: مصفوفة الصلاحيات */}
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-4">
                       <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><KeySquare className="w-5 h-5"/></div>
@@ -407,7 +403,7 @@ export default function StaffManagementPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                       {Object.entries(PERMISSIONS_DICTIONARY).map(([groupKey, group]) => (
                         <div key={groupKey} className="space-y-4">
                           <h4 className="font-black text-sm text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg w-fit">{group.label}</h4>
