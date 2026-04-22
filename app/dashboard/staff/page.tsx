@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { useUsersSystem } from '@/hooks/useUsersSystem'; 
+import Link from 'next/link';
 import { 
   Shield, Users, Loader2, Sparkles, 
   FileText, Bell, CheckCircle, Search, 
@@ -81,7 +82,6 @@ export default function StaffDashboardPage() {
     setLinkStatus({type: 'loading', msg: 'جاري التحقق والتسجيل والربط الشامل...'});
 
     try {
-      // 1. نبحث أولاً عن الـ id في جدول parents (السليم)
       const { data: existingParent } = await supabase
         .from('parents')
         .select('id')
@@ -93,7 +93,6 @@ export default function StaffDashboardPage() {
       if (existingParent) {
         targetParentId = existingParent.id;
         
-        // 🚀 جلب الاسم بشكل آمن لتجنب خطأ TypeScript
         const { data: userData } = await supabase
           .from('users')
           .select('full_name')
@@ -161,7 +160,6 @@ export default function StaffDashboardPage() {
     }
   };
 
-  // 🚀 شاشات الحماية والتحميل (الثيم الملكي)
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
@@ -194,7 +192,7 @@ export default function StaffDashboardPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6 relative z-10" dir="rtl">
       
-      {/* 🚀 الهيدر الفخم (Obsidian & Indigo/Violet) */}
+      {/* الهيدر الفخم */}
       <div className="relative overflow-hidden rounded-[2.5rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0a0d1a] to-[#02040a] border border-white/10 p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)] mb-8">
         <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] pointer-events-none"></div>
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8 text-center md:text-right">
@@ -240,7 +238,63 @@ export default function StaffDashboardPage() {
           </h2>
 
           <div className="grid grid-cols-1 gap-6">
-            {/* 🚀 مكتب استقبال أولياء الأمور (القسم الأهم) */}
+            
+            {/* 🚀 أدوات المراقبة (عين الرفعة) - للمشرفين الإداريين */}
+            {hasPerm('global_read_only') && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] lg:rounded-[2.5rem] shadow-xl border border-indigo-500/20 relative overflow-hidden group bg-[#0a0d1a]/80">
+                <div className="absolute top-0 left-0 w-48 h-48 sm:w-64 sm:h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
+                
+                <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between mb-8 relative z-10 gap-4 text-center sm:text-right">
+                  <div>
+                    <h3 className="font-black text-xl sm:text-2xl mb-2 flex items-center justify-center sm:justify-start gap-2 sm:gap-3 text-white drop-shadow-md">
+                      <div className="p-2 sm:p-2.5 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30 shadow-inner shrink-0">
+                        <Activity className="w-5 h-5 sm:w-6 sm:h-6"/>
+                      </div> 
+                      مركز المراقبة الشاملة
+                    </h3>
+                    <p className="text-slate-400 text-xs sm:text-sm font-bold opacity-90 max-w-xl mx-auto sm:mx-0 leading-relaxed">
+                      نظرة عامة على جميع العمليات الأكاديمية والسلوكية في المنصة للاطلاع والتدقيق.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
+                  <Link href="/gradebook" className="flex items-center gap-4 p-5 rounded-[1.5rem] bg-[#02040a]/60 border border-white/5 hover:border-indigo-500/30 hover:bg-[#02040a]/90 transition-all group/item shadow-inner active:scale-95">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center group-hover/item:scale-110 transition-transform border border-blue-500/20 shadow-inner shrink-0">
+                      <Calculator className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white group-hover/item:text-blue-400 transition-colors">السجلات الأكاديمية</h4>
+                      <p className="text-[10px] text-slate-500 font-bold mt-1">مراقبة درجات وتقييمات الفصول</p>
+                    </div>
+                  </Link>
+
+                  <Link href="/attendance/reports" className="flex items-center gap-4 p-5 rounded-[1.5rem] bg-[#02040a]/60 border border-white/5 hover:border-indigo-500/30 hover:bg-[#02040a]/90 transition-all group/item shadow-inner active:scale-95">
+                    <div className="w-12 h-12 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center group-hover/item:scale-110 transition-transform border border-rose-500/20 shadow-inner shrink-0">
+                      <CalendarDays className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white group-hover/item:text-rose-400 transition-colors">سجل الحضور والغياب</h4>
+                      <p className="text-[10px] text-slate-500 font-bold mt-1">متابعة الحضور اليومي للمدرسة</p>
+                    </div>
+                  </Link>
+
+                  {hasPerm('write_evaluations') && (
+                    <Link href="/admin/teachers-monitor" className="flex items-center gap-4 p-5 rounded-[1.5rem] bg-[#02040a]/60 border border-white/5 hover:border-indigo-500/30 hover:bg-[#02040a]/90 transition-all group/item shadow-inner active:scale-95 sm:col-span-2">
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center group-hover/item:scale-110 transition-transform border border-amber-500/20 shadow-inner shrink-0">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-white group-hover/item:text-amber-400 transition-colors">تقييم الكادر التعليمي</h4>
+                        <p className="text-[10px] text-slate-500 font-bold mt-1">زيارات الفصول، كتابة التقارير، وتقييم الأداء</p>
+                      </div>
+                    </Link>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* 🚀 مكتب استقبال أولياء الأمور */}
             {hasPerm('link_parents') && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] lg:rounded-[2.5rem] shadow-xl border border-white/10 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-48 h-48 sm:w-64 sm:h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
@@ -257,7 +311,6 @@ export default function StaffDashboardPage() {
                 </div>
                 
                 <div className="space-y-6 sm:space-y-8 relative z-10">
-                  {/* أداة البحث */}
                   <div className="bg-[#0f1423]/60 backdrop-blur-md p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner">
                     <form onSubmit={handleAddStudentToList} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                       <div className="relative flex-1 group/search">
@@ -278,7 +331,6 @@ export default function StaffDashboardPage() {
                     </form>
                   </div>
 
-                  {/* قائمة الطلاب المحددين ونموذج ولي الأمر */}
                   <AnimatePresence>
                     {selectedStudents.length > 0 && (
                       <motion.div initial={{ opacity: 0, y: -20, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="bg-[#02040a]/60 border border-white/10 p-5 sm:p-6 lg:p-8 rounded-[1.5rem] sm:rounded-[2rem] shadow-inner">
