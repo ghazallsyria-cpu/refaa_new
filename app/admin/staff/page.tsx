@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-// 🚀 🧠 قاموس الصلاحيات المحدث (بما في ذلك المراقبة الشاملة)
+// 🚀 🧠 قاموس الصلاحيات المحدث (بما في ذلك المراقبة الشاملة والأعذار الطبية)
 const PERMISSIONS_DICTIONARY = {
   surveillance: {
     label: 'المراقبة والإشراف العام',
@@ -31,7 +31,8 @@ const PERMISSIONS_DICTIONARY = {
     label: 'المتابعة والسلوك',
     items: [
       { key: 'manage_attendance', label: 'إدارة وتبرير الغياب' },
-      { key: 'issue_warnings', label: 'إصدار الإنذارات والتقارير' }
+      { key: 'issue_warnings', label: 'إصدار الإنذارات والتقارير' },
+      { key: 'manage_excuses', label: 'مراجعة واعتماد الأعذار الطبية' } // 🚀 تمت إضافة صلاحية الأعذار هنا
     ]
   },
   academic: {
@@ -167,7 +168,7 @@ export default function StaffManagementPage() {
     }
   };
 
-const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا الكادر نهائياً؟')) return;
     
     setLoading(true);
