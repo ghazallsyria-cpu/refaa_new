@@ -8,15 +8,16 @@ export function useHierarchySystem() {
     setLoading(true);
     try {
       // 🛡️ أمان سيبراني: تحديد الحقول المسموحة فقط (بدون أرقام مدنية أو هواتف)
+      // 🛡️ أمان سيبراني: تحديد الحقول المسموحة فقط (حذفنا الـ email تماماً)
       const [adminsRes, deptsRes, teachersRes] = await Promise.all([
-        supabase.from('users').select('id, full_name, avatar_url, role, email').in('role', [ 'management']),
+        supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
         supabase.from('academic_departments').select('*').order('name'),
         supabase.from('teachers').select(`
           id, 
           custom_titles, 
           specialization, 
           department_id,
-          users!teachers_id_fkey(id, full_name, avatar_url, email, role), 
+          users!teachers_id_fkey(id, full_name, avatar_url, role), 
           teacher_sections(section_id, sections(classes(name)))
         `)
       ]);
