@@ -19,7 +19,7 @@ export function useAnnouncementsSystem() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAnnouncements = useCallback(async (authRole: string | null) => {
+const fetchAnnouncements = useCallback(async (authRole: string | null) => {
     setLoading(true);
     setError(null);
     try {
@@ -35,17 +35,16 @@ export function useAnnouncementsSystem() {
         `)
         .order('created_at', { ascending: false });
 
-      // 🛡️ تطبيق جدار الرفعة الناري للإعلانات
+      // 🛡️ تطبيق جدار الرفعة الناري (مع التوافق مع الإعلانات القديمة التي لا تحتوي على فئة)
       if (authRole !== 'admin' && authRole !== 'management') {
         if (authRole) {
-          // الطالب يرى ما هو موجه له (student) أو ما هو موجه للجميع (all)
-          query = query.in('target_role', [authRole, 'all']);
+          // 🚀 الإصلاح: جلب الإعلانات المخصصة، أو للجميع، أو القديمة (null)
+          query = query.or(`target_role.eq.${authRole},target_role.eq.all,target_role.is.null`);
         } else {
-          // كإجراء أمني إضافي للزوار غير المعروفين
-          query = query.eq('target_role', 'all');
+          // للزوار غير المعروفين
+          query = query.or(`target_role.eq.all,target_role.is.null`);
         }
       }
-      // الإدارة ترى جميع الإعلانات بلا استثناء
 
       const { data, error: fetchError } = await query;
 
