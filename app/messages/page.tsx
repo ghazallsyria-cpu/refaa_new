@@ -58,6 +58,9 @@ export default function MessagesPage() {
   } = useMessagesSystem();
 
   const [privateConversations, setPrivateConversations] = useState<any[]>([]);
+  // 🚀 حالة جديدة لتتبع عدد الرسائل غير المقروءة في المجالس (الجروبات)
+  const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
+  
   const [activeThread, setActiveThread] = useState<any | null>(null);
   const [threadMessages, setThreadMessages] = useState<any[]>([]);
   
@@ -88,8 +91,22 @@ export default function MessagesPage() {
   }, [currentUser, isChecking, fetchMessages]);
 
   useEffect(() => {
-    if (!messages.length || !currentUser) { setPrivateConversations([]); return; }
+    if (!messages.length || !currentUser) { 
+      setPrivateConversations([]); 
+      setGroupUnreadCounts({});
+      return; 
+    }
 
+    // 🚀 1. حساب الرسائل غير المقروءة للمجالس (الجروبات)
+    const gCounts: Record<string, number> = {};
+    messages.filter(m => m.section_id).forEach(msg => {
+      if (!msg.is_read && msg.sender_id !== currentUser?.id) {
+        gCounts[msg.section_id] = (gCounts[msg.section_id] || 0) + 1;
+      }
+    });
+    setGroupUnreadCounts(gCounts);
+
+    // 🚀 2. فرز المحادثات الخاصة وحساب الرسائل غير المقروءة بداخلها
     const privateMsgs = messages.filter(m => !m.section_id);
     const convos = privateMsgs.reduce((acc: any, msg: any) => {
       const ids = [msg.sender_id, msg.receiver_id].sort();
@@ -97,12 +114,16 @@ export default function MessagesPage() {
       const sender = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender;
       const receiver = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver;
       const cleanMsg = { ...msg, sender, receiver };
+      
+      const isUnread = !msg.is_read && msg.sender_id !== currentUser?.id;
 
       if (!acc[convId]) {
-        acc[convId] = { ...cleanMsg, allIds: [msg.id], convId, type: 'private' };
+        acc[convId] = { ...cleanMsg, allIds: [msg.id], convId, type: 'private', unreadCount: isUnread ? 1 : 0 };
       } else {
+        if (isUnread) acc[convId].unreadCount += 1; // زيادة العداد
+        
         if (new Date(msg.created_at) > new Date(acc[convId].created_at)) {
-          acc[convId] = { ...cleanMsg, allIds: [...acc[convId].allIds, msg.id], convId, type: 'private' };
+          acc[convId] = { ...cleanMsg, allIds: [...acc[convId].allIds, msg.id], convId, type: 'private', unreadCount: acc[convId].unreadCount };
         } else {
           acc[convId].allIds.push(msg.id);
         }
@@ -263,12 +284,18 @@ export default function MessagesPage() {
                   <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-400"/> مجالس الفصول الثابتة</h3>
                   <div className="space-y-2">
                     {filteredChatRooms.map((room) => (
-                      <button key={room.id} onClick={() => setActiveThread(room)} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${activeThread?.id === room.id ? 'bg-indigo-600/20 text-white border-indigo-500/30 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
+                      <button key={room.id} onClick={() => setActiveThread(room)} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${activeThread?.id === room.id ? 'bg-indigo-600/20 text-white border-indigo-500/30 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
                         <RenderAvatar isGroup={true} size="h-12 w-12" />
                         <div className="flex-1 min-w-0">
                           <h4 className={`text-sm font-black truncate drop-shadow-sm ${activeThread?.id === room.id ? 'text-indigo-400' : 'text-white'}`}>مجلس: {room.className}</h4>
                           <p className="text-xs truncate text-slate-400 font-bold mt-1">شعبة {room.name}</p>
                         </div>
+                        {/* 🚀 بادج الرسائل غير المقروءة للمجالس */}
+                        {groupUnreadCounts[room.id] > 0 && activeThread?.id !== room.id && (
+                          <div className="shrink-0 bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full shadow-[0_0_15px_rgba(225,29,72,0.5)] animate-pulse border border-rose-400/50">
+                            {groupUnreadCounts[room.id] > 99 ? '+99' : groupUnreadCounts[room.id]} جديد
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -286,16 +313,23 @@ export default function MessagesPage() {
                       const otherUser = isSender ? msg.receiver : msg.sender;
                       const isActive = activeThread?.convId === msg.convId;
                       return (
-                        <button key={msg.convId} onClick={() => setActiveThread(msg)} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${isActive ? 'bg-emerald-600/20 text-white border-emerald-500/30 shadow-inner' : !msg.is_read && !isSender ? 'bg-[#0f1423] border-emerald-500/20 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
+                        <button key={msg.convId} onClick={() => setActiveThread(msg)} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${isActive ? 'bg-emerald-600/20 text-white border-emerald-500/30 shadow-inner' : msg.unreadCount > 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
                           <div className="relative shrink-0">
                             <RenderAvatar user={otherUser} size="h-12 w-12" />
-                            {!msg.is_read && !isSender && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0f1423] rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />}
+                            {/* الدائرة النابضة الصغيرة في حالة وجود رسائل */}
+                            {msg.unreadCount > 0 && !isActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0f1423] rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1">
                               <h4 className={`text-sm font-black truncate pr-2 ${isActive ? 'text-emerald-400' : 'text-white'}`}>{otherUser?.full_name}</h4>
+                              {/* 🚀 بادج عدد الرسائل الجديدة للخاص */}
+                              {msg.unreadCount > 0 && !isActive && (
+                                <div className="shrink-0 bg-emerald-500 text-[#02040a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-pulse border border-emerald-400">
+                                  {msg.unreadCount > 99 ? '+99' : msg.unreadCount}
+                                </div>
+                              )}
                             </div>
-                            <p className={`text-xs truncate pr-2 ${isActive ? 'text-emerald-200' : !msg.is_read && !isSender ? 'text-emerald-400 font-bold' : 'text-slate-400 font-bold'}`}>{msg.subject || 'بدون عنوان'}</p>
+                            <p className={`text-xs truncate pr-2 ${isActive ? 'text-emerald-200' : msg.unreadCount > 0 ? 'text-emerald-400 font-bold' : 'text-slate-400 font-bold'}`}>{msg.subject || 'بدون عنوان'}</p>
                           </div>
                         </button>
                       );
@@ -306,7 +340,7 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) - معالجة الاستجابة والتثبيت (Sticky Form) */}
+        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) */}
         <div className={`flex-col bg-[#090b14] lg:bg-transparent z-[70] lg:z-auto transition-all duration-300 ${!activeThread ? 'hidden lg:flex lg:flex-1 items-center justify-center' : 'flex fixed inset-0 lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden'}`}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
