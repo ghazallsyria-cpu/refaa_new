@@ -8,7 +8,7 @@ import {
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
   AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
-  Siren, Info, MessageSquare, Sparkles
+  Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import Image from 'next/image';
+import * as Dialog from '@radix-ui/react-dialog';
 
 // 🚀 مسارات نسبية
 import AnnouncementsWidget from '../../../components/AnnouncementsWidget';
@@ -58,6 +59,20 @@ export default function StudentDashboard() {
   const [absentPeriods, setAbsentPeriods] = useState<number>(0);
   const [fullDaysAbsent, setFullDaysAbsent] = useState<number>(0);
 
+  // 🚀 حالات نظام الأعذار الطبية للطالب
+  const [excuses, setExcuses] = useState<any[]>([]);
+  const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
+  const [isUploadingReport, setIsUploadingReport] = useState(false);
+  const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
+  const [excuseForm, setExcuseForm] = useState({
+    excuse_date: format(new Date(), 'yyyy-MM-dd'),
+    duration_type: 'full_day',
+    target_periods: [] as number[],
+    reason: '',
+    attachment_url: '',
+    cloudinary_public_id: ''
+  });
+
   useEffect(() => {
     setMounted(true);
     setCurrentTime(new Date());
@@ -84,19 +99,23 @@ export default function StudentDashboard() {
         try {
             const studentId = data.student?.id;
             if (studentId) {
+                // 🚀 تمت إضافة استعلام الأعذار الطبية (absence_excuses) في نفس الـ Promise.all لضمان السرعة
                 const [
                   { data: badgesData },
                   { data: dbGrades },
                   { count: absentCount, error: absErr },
-                  { count: totalCount }
+                  { count: totalCount },
+                  { data: excusesData }
                 ] = await Promise.all([
                   supabase.from('student_badges').select('*, badge:badges(*)').eq('student_id', studentId).order('granted_at', { ascending: false }),
                   supabase.from('exam_attempts').select('*, exams(id, title, max_score, total_marks, exam_date, end_time, subjects(name))').eq('student_id', studentId).order('completed_at', { ascending: false }).limit(10),
                   supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId).eq('status', 'absent'),
-                  supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId)
+                  supabase.from('attendance_records').select('id', { count: 'exact' }).eq('student_id', studentId),
+                  supabase.from('absence_excuses').select('*').eq('student_id', studentId).order('created_at', { ascending: false })
                 ]);
                 
                 if (badgesData) setMyBadges(badgesData);
+                if (excusesData) setExcuses(excusesData);
 
                 if (dbGrades && dbGrades.length > 0) {
                     const formattedGrades = dbGrades.map((g: any) => ({
@@ -133,6 +152,81 @@ export default function StudentDashboard() {
       setLoading(false);
     }
   }, [fetchStudentDashboardData, user, authRole]);
+
+  // ==========================================
+  // 🚀 دوال محرك الأعذار الطبية (للطالب)
+  // ==========================================
+  const handleReportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingReport(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
+      
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      
+      if (data.secure_url) {
+        setExcuseForm(prev => ({ ...prev, attachment_url: data.secure_url, cloudinary_public_id: data.public_id }));
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (err) {
+      alert('فشل رفع الملف. تأكد من جودة اتصالك أو حاول مجدداً.');
+    } finally {
+      setIsUploadingReport(false);
+    }
+  };
+
+  const handleSubmitExcuse = async () => {
+    if (!excuseForm.attachment_url) {
+      alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return;
+    }
+    if (excuseForm.duration_type === 'partial_day' && excuseForm.target_periods.length === 0) {
+      alert('يرجى تحديد الحصص التي غبت عنها.'); return;
+    }
+
+    setIsSubmittingExcuse(true);
+    try {
+      const payload = {
+        student_id: studentData.id,
+        submitted_by: user.id,
+        submitter_role: 'student', // 👈 تحديد أن الطالب هو من رفع العذر
+        excuse_date: excuseForm.excuse_date,
+        duration_type: excuseForm.duration_type,
+        target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [],
+        reason: excuseForm.reason,
+        attachment_url: excuseForm.attachment_url,
+        cloudinary_public_id: excuseForm.cloudinary_public_id,
+        status: 'pending'
+      };
+
+      const { error } = await supabase.from('absence_excuses').insert([payload]);
+      if (error) throw error;
+
+      alert('تم تقديم العذر بنجاح! نتمى لك دوام الصحة والعافية. طلبك الآن قيد المراجعة.');
+      setIsExcuseModalOpen(false);
+      setExcuseForm({ excuse_date: format(new Date(), 'yyyy-MM-dd'), duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' });
+      fetchData(); // تحديث السجل
+    } catch (error: any) {
+      alert('حدث خطأ أثناء التقديم: ' + error.message);
+    } finally {
+      setIsSubmittingExcuse(false);
+    }
+  };
+
+  const togglePeriod = (periodNum: number) => {
+    setExcuseForm(prev => {
+      const exists = prev.target_periods.includes(periodNum);
+      if (exists) return { ...prev, target_periods: prev.target_periods.filter(p => p !== periodNum) };
+      return { ...prev, target_periods: [...prev.target_periods, periodNum].sort((a,b) => a - b) };
+    });
+  };
 
   const handleTrackSelection = async (track: 'scientific' | 'literary') => {
     try {
@@ -247,14 +341,14 @@ export default function StudentDashboard() {
   } else if (absentPeriods >= 50) {
     warningLevel = 2;
     warningTitle = "إنذار ثاني للغياب";
-    warningMessage = "استمرارك في الغياب يعرض مستقبلك الدراسي للخطر. يرجى مراجعة إدارة شؤون الطلاب فوراً.";
+    warningMessage = "استمرارك في الغياب يعرض مستقبلك الدراسي للخطر. يرجى تبرير غيابك فوراً.";
     warningColors = "from-orange-500/20 to-amber-600/20 border-orange-500/50 text-orange-500";
     warningIconColor = "text-orange-500";
     WarningIcon = AlertTriangle;
   } else if (absentPeriods >= 25) {
     warningLevel = 1;
     warningTitle = "إنذار أول للغياب";
-    warningMessage = "لقد تجاوزت الحد المسموح للغياب. نأمل منك الالتزام بالحضور لتجنب الإنذار الثاني.";
+    warningMessage = "لقد تجاوزت الحد المسموح للغياب. نأمل منك الالتزام بالحضور أو تقديم عذر طبي.";
     warningColors = "from-amber-500/20 to-yellow-600/20 border-amber-500/50 text-amber-500";
     warningIconColor = "text-amber-500";
     WarningIcon = AlertTriangle;
@@ -378,7 +472,7 @@ export default function StudentDashboard() {
             >
               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 
-                <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto">
+                <div className="flex items-start gap-4 sm:gap-6 w-full md:w-auto flex-1">
                   <div className={`p-4 rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-inner ${warningPulse ? 'animate-pulse' : ''}`}>
                     <WarningIcon className={`w-8 h-8 sm:w-10 sm:h-10 ${warningIconColor}`} />
                   </div>
@@ -389,6 +483,10 @@ export default function StudentDashboard() {
                     <p className="text-sm sm:text-base font-bold opacity-90 leading-relaxed max-w-2xl text-white/80">
                       {warningMessage}
                     </p>
+                    {/* 🚀 زر الإنقاذ السريع لتقديم العذر */}
+                    <button onClick={() => setIsExcuseModalOpen(true)} className="mt-4 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-sm transition-all border border-white/20 flex items-center gap-2 shadow-inner active:scale-95">
+                      <Stethoscope className="w-4 h-4" /> تقديم عذر طبي لتبرير الغياب
+                    </button>
                   </div>
                 </div>
 
@@ -565,6 +663,41 @@ export default function StudentDashboard() {
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
+            {/* 🩺 سجل الغياب والأعذار الطبية (الميزة الجديدة) */}
+            <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+              <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm w-full sm:w-auto">
+                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner"><Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" /></div> سجل الأعذار 
+                </h2>
+                <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center justify-center gap-1 bg-gradient-to-r from-amber-400 to-orange-500 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:opacity-90 transition-colors shadow-md shrink-0 w-full sm:w-auto active:scale-95"><Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد</button>
+              </div>
+              
+              <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {excuses.length > 0 ? (
+                  excuses.map(exc => (
+                    <div key={exc.id} className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 bg-[#0f1423]/60 flex flex-col gap-2 mb-2 shadow-inner">
+                      <div className="flex justify-between items-center">
+                        <span className="text-white font-black text-sm">{safeFormat(exc.excuse_date, 'dd MMMM yyyy')}</span>
+                        <span className={`text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-md border ${
+                          exc.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                          exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                          'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        }`}>
+                          {exc.status === 'pending' ? 'قيد المراجعة ⏳' : exc.status === 'approved' ? 'عذر مقبول ✓' : 'عذر مرفوض ✕'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400">
+                        {exc.duration_type === 'full_day' ? 'غياب يوم كامل' : `غياب جزئي: حصص (${exc.target_periods?.join(', ')})`}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-slate-500 bg-[#02040a]/50 rounded-[1rem] border border-dashed border-white/10 font-bold text-xs sm:text-sm m-2 shadow-inner">لم تقم بتقديم أي أعذار مسبقة</div>
+                )}
+              </div>
+            </div>
+
             {/* Recent Grades */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden">
               <div className="p-5 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 text-center sm:text-right gap-4">
@@ -670,6 +803,107 @@ export default function StudentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* 🚀 نافذة (Modal) تقديم العذر الطبي */}
+      <AnimatePresence>
+        {isExcuseModalOpen && (
+          <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-md z-50" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-xl shadow-[0_0_50px_rgba(0,0,0,0.7)] z-50 p-8" dir="rtl">
+                
+                <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
+                  <div>
+                    <Dialog.Title className="text-2xl font-black text-white flex items-center gap-3"><Stethoscope className="w-6 h-6 text-amber-400" /> تقديم عذر طبي</Dialog.Title>
+                    <p className="text-xs font-bold text-slate-400 mt-2">يرجى تعبئة تفاصيل الغياب وإرفاق التقرير لاعتماده من الإدارة.</p>
+                  </div>
+                  <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-white/5 p-2 rounded-full transition-colors"><X className="w-5 h-5" /></Dialog.Close>
+                </div>
+
+                <div className="space-y-6">
+                  
+                  {/* التاريخ ونوع الغياب */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-300 uppercase tracking-widest">تاريخ الغياب</label>
+                      <input type="date" value={excuseForm.excuse_date} onChange={(e) => setExcuseForm({...excuseForm, excuse_date: e.target.value})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-sm font-bold text-white outline-none focus:border-amber-500/50" style={{ colorScheme: 'dark' }} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
+                      <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
+                        <option value="full_day">غياب يوم كامل</option>
+                        <option value="partial_day">غياب جزئي (استئذان حصص)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* اختيار الحصص (يظهر فقط إذا كان الغياب جزئياً) */}
+                  <AnimatePresence>
+                    {excuseForm.duration_type === 'partial_day' && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="space-y-2 pt-2">
+                          <label className="text-xs font-black text-slate-300 uppercase tracking-widest flex items-center gap-2"><Clock className="w-4 h-4 text-amber-400" /> حدد الحصص التي غبت عنها</label>
+                          <div className="flex flex-wrap gap-2">
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
+                              <button 
+                                key={p} type="button" onClick={() => togglePeriod(p)}
+                                className={cn("w-10 h-10 rounded-xl font-black text-sm transition-all border", excuseForm.target_periods.includes(p) ? "bg-amber-500 text-slate-900 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]" : "bg-[#090b14] text-slate-400 border-white/10 hover:border-amber-500/50")}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* رفع المرفق */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
+                    <label className={cn("relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleReportUpload} disabled={isUploadingReport} />
+                      {isUploadingReport ? (
+                        <div className="flex flex-col items-center gap-2 text-amber-400"><Loader2 className="w-8 h-8 animate-spin" /><span className="text-xs font-black">جاري الرفع السحابي...</span></div>
+                      ) : excuseForm.attachment_url ? (
+                        <div className="flex flex-col items-center gap-2 text-emerald-400"><CheckCircle2 className="w-8 h-8" /><span className="text-xs font-black">تم إرفاق التقرير بنجاح (انقر لتغييره)</span></div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-slate-500"><UploadCloud className="w-8 h-8" /><span className="text-xs font-bold">اضغط هنا لاختيار صورة التقرير</span></div>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* تفاصيل إضافية */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات للإدارة (اختياري)</label>
+                    <textarea 
+                      value={excuseForm.reason} onChange={(e) => setExcuseForm({...excuseForm, reason: e.target.value})}
+                      placeholder="اكتب أي تفاصيل إضافية هنا..." 
+                      className="w-full bg-[#090b14] border border-white/10 rounded-xl p-4 text-sm font-bold text-white outline-none focus:border-amber-500/50 h-24 resize-none custom-scrollbar"
+                    />
+                  </div>
+
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-white/5 flex gap-3">
+                  <button onClick={handleSubmitExcuse} disabled={isSubmittingExcuse} className="flex-1 py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:opacity-90 text-slate-900 font-black rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] disabled:opacity-50 flex items-center justify-center gap-2">
+                    {isSubmittingExcuse && <Loader2 className="w-5 h-5 animate-spin" />} إرسال الطلب للإدارة
+                  </button>
+                  <button onClick={() => setIsExcuseModalOpen(false)} className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl transition-all border border-white/10">إلغاء</button>
+                </div>
+
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
+      </AnimatePresence>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+      `}</style>
     </motion.div>
   );
 }
