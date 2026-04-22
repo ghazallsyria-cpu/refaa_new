@@ -7,11 +7,11 @@ export function useHierarchySystem() {
   const fetchHierarchyData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch Management, Staff, Departments, and Teachers
-      const [adminsRes, staffRes, deptsRes, teachersRes] = await Promise.all([
+      // 🚀 1. جلب البيانات دفعة واحدة
+      const [adminsRes, supervisorsRes, deptsRes, teachersRes] = await Promise.all([
         supabase.from('users').select('id, full_name, avatar_url, role').eq('role', 'management'),
-        supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)'),
-        supabase.from('academic_departments').select('id, name, head_id, image_url').order('name'),
+        supabase.from('school_staff').select('*, users!school_staff_id_fkey(id, full_name, avatar_url, role)').in('job_category', ['قيادة عليا', 'إدارة ومالية']),
+        supabase.from('academic_departments').select('*').order('name'),
         supabase.from('teachers').select(`
           id, custom_titles, specialization, department_id,
           users!teachers_id_fkey(id, full_name, avatar_url, role), 
@@ -20,11 +20,11 @@ export function useHierarchySystem() {
       ]);
 
       const admins = adminsRes.data || [];
-      const staffRecords = staffRes.data || [];
+      const supervisors = supervisorsRes.data || [];
       const departments = deptsRes.data || [];
       const teachers = teachersRes.data || [];
 
-      // Determine stage for teachers based on their assigned sections
+      // معالجة بيانات المعلمين وتحديد المرحلة
       const getTeacherStage = (teacher: any) => {
         let hasMiddle = false; let hasHigh = false;
         (teacher?.teacher_sections || []).forEach((ts: any) => {
@@ -43,30 +43,32 @@ export function useHierarchySystem() {
         return { ...t, users: userData, stage: getTeacherStage(t) };
       });
 
-      // 2. Process Departments (keep all departments, even empty ones)
+      // 🚀 2. معالجة الأقسام الأكاديمية (الآن تبحث عن رئيس القسم من خلال الألقاب)
       const processedDepartments = departments.map((dept: any) => {
-        const hod = processedTeachers.find(t => t.id === dept.head_id);
-        const members = processedTeachers.filter(t => t.department_id === dept.id && t.id !== dept.head_id);
+        // جلب جميع المعلمين التابعين لهذا القسم
+        const deptTeachers = processedTeachers.filter(t => t.department_id === dept.id);
+        
+        // تحديد رئيس القسم (من لديه لقب "رئيس قسم" في custom_titles)
+        const hod = deptTeachers.find(t => t.custom_titles && t.custom_titles.includes('رئيس قسم'));
+        
+        // باقي المعلمين هم أعضاء القسم
+        const members = deptTeachers.filter(t => t.id !== hod?.id);
+        
         return { ...dept, hod, members };
       });
 
-      // 3. Process Leadership (Combine Management users and School Staff)
-      const formattedAdmins = admins.map(a => ({
-        ...a,
-        job_title: 'شؤون الإدارة',
-        is_management: true
-      }));
-
-      const formattedStaff = staffRecords.map((s: any) => {
-        const userData = Array.isArray(s.users) ? s.users[0] : s.users;
-        return {
-          ...userData,
-          job_title: s.job_title || 'إشراف إداري',
-          is_management: s.job_category === 'قيادة عليا' || s.job_category === 'إدارة ومالية'
-        };
-      });
-
-      const combinedLeadership = [...formattedAdmins, ...formattedStaff];
+      // 🚀 3. دمج شؤون الإدارة مع القيادة العليا
+      const combinedLeadership = [
+        ...admins.map(a => ({ ...a, job_title: 'شؤون الإدارة' })),
+        ...supervisors.map((s: any) => {
+          const userData = Array.isArray(s.users) ? s.users[0] : s.users;
+          return {
+            ...userData, 
+            job_title: s.job_title || 'إشراف إداري',
+            role: userData?.role || 'staff'
+          };
+        })
+      ];
 
       return { 
         leadership: combinedLeadership, 
