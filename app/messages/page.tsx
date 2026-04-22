@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Plus, Search, Send, User, X, Users, Trash2, ArrowRight, Check, CheckCheck, Loader2, ShieldAlert, Sparkles, Calendar, Megaphone } from 'lucide-react';
+import { MessageSquare, Plus, Search, Send, User, X, Users, Trash2, ArrowRight, Check, CheckCheck, Loader2, ShieldAlert, Sparkles, Megaphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/auth-context';
 import { useMessagesSystem } from '@/hooks/useMessagesSystem';
@@ -52,7 +52,7 @@ export default function MessagesPage() {
     fetchMessages,
     sendMessage,
     sendGroupMessage,
-    sendBroadcastMessage, // 🚀 دالة الإذاعة العامة
+    sendBroadcastMessage,
     markAsRead,
     deleteMessages,
   } = useMessagesSystem();
@@ -67,7 +67,7 @@ export default function MessagesPage() {
   
   const [showNewMessage, setShowNewMessage] = useState(false);
   const [step, setStep] = useState(1);
-  const [recipientType, setRecipientType] = useState<'teacher' | 'student' | 'broadcast' | ''>(''); // 🚀 إضافة broadcast
+  const [recipientType, setRecipientType] = useState<'teacher' | 'student' | 'broadcast' | ''>('');
   const [newMessage, setNewMessage] = useState({ receiver_id: '', subject: '', content: '' });
   const [isGroupMessage, setIsGroupMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,7 +141,12 @@ export default function MessagesPage() {
       const unreadIds = cleanThread.filter(m => !m.is_read && m.sender_id !== currentUser?.id).map(m => m.id);
       if (unreadIds.length > 0) markAsRead(unreadIds);
       
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      // التمرير التلقائي للأسفل بسلاسة
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+      }, 100);
     }
   }, [activeThread, messages]);
 
@@ -153,7 +158,7 @@ export default function MessagesPage() {
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await sendGroupMessage(activeThread.id, activeThread.subject || 'رد على النقاش', replyContent);
+        await sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
         await sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
@@ -171,7 +176,6 @@ export default function MessagesPage() {
     setIsSubmitting(true);
     try {
       if (recipientType === 'broadcast') {
-        // 🚀 إرسال الإذاعة العامة لجميع الفصول
         await sendBroadcastMessage(newMessage.subject, newMessage.content);
         alert('تم إرسال الإذاعة العامة بنجاح لجميع المجالس!');
       } else if (!isGroupMessage) {
@@ -225,12 +229,12 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-6rem)] lg:h-[calc(100dvh-8rem)] max-w-[1600px] mx-auto pb-4 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 lg:mb-6 px-4 lg:px-8 relative z-10 pt-4">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 px-4 lg:px-8 relative z-10 pt-4">
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
           <p className="text-slate-400 mt-1 sm:mt-2 font-bold text-xs sm:text-sm">مجالس الفصول والمراسلات الخاصة ⚡</p>
@@ -242,11 +246,11 @@ export default function MessagesPage() {
         )}
       </div>
 
-      <div className="glass-panel rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-1 min-h-0 mx-4 lg:mx-8 relative z-10 bg-[#0f1423]/60">
+      <div className="glass-panel rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60">
         
-        {/* 🚀 القائمة الجانبية (الغرف الثابتة + الخاص) */}
+        {/* 🚀 القائمة الجانبية */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
-           <div className="p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
+           <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
                 <Search className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                 <input type="text" className="w-full rounded-2xl border border-white/5 py-3.5 pr-12 pl-4 text-white bg-[#0f1423]/80 shadow-inner focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 text-sm font-bold outline-none placeholder:text-slate-500" placeholder="ابحث في المجالس والرسائل..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -254,8 +258,6 @@ export default function MessagesPage() {
            </div>
 
            <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar">
-              
-              {/* 🏫 قسم مجالس الفصول */}
               {chatRooms.length > 0 && (
                 <div>
                   <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-400"/> مجالس الفصول الثابتة</h3>
@@ -273,7 +275,6 @@ export default function MessagesPage() {
                 </div>
               )}
 
-              {/* 👤 قسم المراسلات الخاصة */}
               <div>
                 <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><User className="w-4 h-4 text-emerald-400"/> المراسلات الخاصة</h3>
                 <div className="space-y-2">
@@ -305,8 +306,8 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) */}
-        <div className={`flex-1 flex flex-col bg-transparent relative ${!activeThread ? 'hidden lg:flex items-center justify-center' : 'flex min-h-0'}`}>
+        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) - معالجة الاستجابة والتثبيت (Sticky Form) */}
+        <div className={`flex-col bg-[#090b14] lg:bg-transparent z-[70] lg:z-auto transition-all duration-300 ${!activeThread ? 'hidden lg:flex lg:flex-1 items-center justify-center' : 'flex fixed inset-0 lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden'}`}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
                <div className="h-32 w-32 bg-[#02040a]/60 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
@@ -317,23 +318,24 @@ export default function MessagesPage() {
              </div>
            ) : (
              <>
-               <div className="h-20 border-b border-white/5 bg-[#0f1423]/90 backdrop-blur-2xl px-6 flex items-center justify-between z-20 shrink-0">
-                 <div className="flex items-center gap-4 min-w-0 pr-1">
+               {/* Header للمحادثة */}
+               <div className="h-16 lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-4 lg:px-6 flex items-center justify-between z-20 shrink-0 pt-[env(safe-area-inset-top)]">
+                 <div className="flex items-center gap-3 lg:gap-4 min-w-0 pr-1">
                    <button onClick={() => setActiveThread(null)} className="lg:hidden p-2 bg-[#02040a] border border-white/5 shadow-inner rounded-xl text-slate-400 hover:text-indigo-400 active:scale-95 transition-all shrink-0">
                      <ArrowRight className="h-5 w-5" />
                    </button>
                    
                    {activeThread.type === 'group' ? (
-                     <><RenderAvatar isGroup={true} size="h-12 w-12" />
+                     <><RenderAvatar isGroup={true} size="h-10 w-10 lg:h-12 lg:w-12" />
                      <div className="min-w-0">
-                       <h3 className="text-base font-black text-white truncate drop-shadow-sm">مجلس: {activeThread.className}</h3>
-                       <p className="text-xs text-indigo-400 font-bold mt-1 truncate">شعبة {activeThread.name}</p>
+                       <h3 className="text-sm lg:text-base font-black text-white truncate drop-shadow-sm">مجلس: {activeThread.className}</h3>
+                       <p className="text-[10px] lg:text-xs text-indigo-400 font-bold mt-0.5 lg:mt-1 truncate">شعبة {activeThread.name}</p>
                      </div></>
                    ) : (
-                     <><RenderAvatar user={activeThread.sender_id === currentUser?.id ? activeThread.receiver : activeThread.sender} size="h-12 w-12" />
+                     <><RenderAvatar user={activeThread.sender_id === currentUser?.id ? activeThread.receiver : activeThread.sender} size="h-10 w-10 lg:h-12 lg:w-12" />
                      <div className="min-w-0">
-                       <h3 className="text-base font-black text-white truncate drop-shadow-sm">{activeThread.sender_id === currentUser?.id ? activeThread.receiver?.full_name : activeThread.sender?.full_name}</h3>
-                       <p className="text-xs text-emerald-400 font-bold mt-1 truncate">{activeThread.subject}</p>
+                       <h3 className="text-sm lg:text-base font-black text-white truncate drop-shadow-sm">{activeThread.sender_id === currentUser?.id ? activeThread.receiver?.full_name : activeThread.sender?.full_name}</h3>
+                       <p className="text-[10px] lg:text-xs text-emerald-400 font-bold mt-0.5 lg:mt-1 truncate">{activeThread.subject}</p>
                      </div></>
                    )}
                  </div>
@@ -344,7 +346,8 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6 bg-transparent custom-scrollbar">
+               {/* Messages Area - Scrolling Container */}
+               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
                        لا توجد رسائل سابقة في هذا {activeThread.type === 'group' ? 'المجلس' : 'النقاش'}.
@@ -362,30 +365,30 @@ export default function MessagesPage() {
                       return (
                         <div key={msg.id} className="flex flex-col">
                            {showDateDivider && (
-                             <div className="flex justify-center my-4 sm:my-6">
-                               <span className="bg-[#02040a]/80 border border-white/5 text-slate-400 text-[9px] sm:text-[10px] font-black px-3 py-1 sm:py-1.5 rounded-full shadow-inner tracking-widest">
+                             <div className="flex justify-center my-4 lg:my-6">
+                               <span className="bg-[#02040a]/80 border border-white/5 text-slate-400 text-[9px] lg:text-[10px] font-black px-3 py-1.5 rounded-full shadow-inner tracking-widest">
                                  {currentLabel}
                                </span>
                              </div>
                            )}
 
-                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-4 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className="shrink-0 w-10 flex flex-col items-center">
-                              {showAvatar && !isMe && <RenderAvatar user={msg.sender} size="h-10 w-10" />}
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-3 lg:gap-4 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <div className="shrink-0 w-8 lg:w-10 flex flex-col items-center">
+                              {showAvatar && !isMe && <RenderAvatar user={msg.sender} size="h-8 w-8 lg:h-10 lg:w-10" />}
                             </div>
-                            <div className={`flex flex-col max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
-                              {showAvatar && !isMe && <span className="text-[10px] font-bold text-slate-500 mb-1 ml-2 drop-shadow-sm">{msg.sender?.full_name} ({msg.sender?.role === 'teacher' ? 'معلم' : msg.sender?.role === 'admin' ? 'إدارة' : 'طالب'})</span>}
+                            <div className={`flex flex-col max-w-[85%] lg:max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
+                              {showAvatar && !isMe && <span className="text-[9px] lg:text-[10px] font-bold text-slate-500 mb-1 ml-2 drop-shadow-sm">{msg.sender?.full_name} ({msg.sender?.role === 'teacher' ? 'معلم' : msg.sender?.role === 'admin' ? 'إدارة' : 'طالب'})</span>}
                               
-                              <div className={`p-4 shadow-inner border relative text-sm font-bold leading-loose
+                              <div className={`p-3 lg:p-4 shadow-inner border relative text-xs lg:text-sm font-bold leading-relaxed lg:leading-loose
                                 ${isMe 
-                                  ? `bg-gradient-to-br from-${themeColor}-600 to-${themeColor === 'indigo' ? 'violet' : 'teal'}-600 text-white rounded-[1.5rem] rounded-tr-sm border-${themeColor}-400/30` 
-                                  : 'bg-[#0f1423] text-slate-200 border-white/5 rounded-[1.5rem] rounded-tl-sm'}`}
+                                  ? `bg-gradient-to-br from-${themeColor}-600 to-${themeColor === 'indigo' ? 'violet' : 'teal'}-600 text-white rounded-[1.25rem] lg:rounded-[1.5rem] rounded-tr-sm border-${themeColor}-400/30` 
+                                  : 'bg-[#0f1423] text-slate-200 border-white/5 rounded-[1.25rem] lg:rounded-[1.5rem] rounded-tl-sm'}`}
                               >
-                                <div className="prose prose-invert max-w-none text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                                <div className="prose prose-invert max-w-none text-xs lg:text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
                                 
-                                <div className={`text-[9px] mt-2 flex items-center gap-1.5 ${isMe ? `text-${themeColor}-200 justify-end` : 'text-slate-500 justify-start'}`}>
+                                <div className={`text-[8px] lg:text-[9px] mt-2 flex items-center gap-1 lg:gap-1.5 ${isMe ? `text-${themeColor}-200 justify-end` : 'text-slate-500 justify-start'}`}>
                                   <span>{new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
-                                  {isMe && (msg.is_read ? <CheckCheck className="w-3.5 h-3.5 text-sky-300" /> : <Check className={`w-3.5 h-3.5 text-${themeColor}-300/50`} />)}
+                                  {isMe && (msg.is_read ? <CheckCheck className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-sky-300" /> : <Check className={`w-3 h-3 lg:w-3.5 lg:h-3.5 text-${themeColor}-300/50`} />)}
                                 </div>
                               </div>
                             </div>
@@ -397,13 +400,14 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               <div className="bg-[#0f1423]/90 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-safe-bottom">
-                 <form onSubmit={handleSendReply} className="flex items-end gap-3 p-4 transition-all">
-                    <div className="flex-1 bg-[#02040a]/60 rounded-[2rem] border border-white/5 shadow-inner overflow-hidden p-1">
-                       <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="60px" />
+               {/* Input Form - Sticky Bottom */}
+               <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-[env(safe-area-inset-bottom)]">
+                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
+                    <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] lg:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden p-1">
+                       <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="50px" />
                     </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-14 w-14 rounded-[1.8rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 mb-1.5 active:scale-95`}>
-                      {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
+                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-12 w-12 lg:h-14 lg:w-14 rounded-xl lg:rounded-[1.8rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 mb-1 lg:mb-1.5 active:scale-95`}>
+                      {isReplying ? <Loader2 className="w-4 h-4 lg:w-5 lg:h-5 animate-spin" /> : <Send className="w-4 h-4 lg:w-5 lg:h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
                     </button>
                  </form>
                </div>
@@ -415,61 +419,59 @@ export default function MessagesPage() {
       {/* 🚀 Modal: إنشاء رسالة (مع إضافة نظام الإذاعة العامة) */}
       <AnimatePresence>
         {showNewMessage && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 lg:p-6">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-[#02040a]/90 backdrop-blur-md" onClick={() => { setShowNewMessage(false); setStep(1); }} />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-4xl bg-[#0f1423] rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden z-10 flex flex-col" dir="rtl">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-4xl bg-[#0f1423] rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden z-10 flex flex-col max-h-[90dvh] overflow-y-auto" dir="rtl">
               
-              <div className="px-8 pt-8 pb-6 border-b border-white/5 bg-[#02040a]/40 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner">
-                    <Plus className="h-6 w-6" />
+              <div className="px-6 lg:px-8 pt-6 lg:pt-8 pb-4 lg:pb-6 border-b border-white/5 bg-[#02040a]/40 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3 lg:gap-4">
+                  <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-xl lg:rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner">
+                    <Plus className="h-5 w-5 lg:h-6 lg:w-6" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-white drop-shadow-sm">إنشاء رسالة جديدة</h3>
-                    <p className="text-xs text-indigo-400 font-bold uppercase tracking-widest mt-1">تواصل، توجيه، وإدارة</p>
+                    <h3 className="text-xl lg:text-2xl font-black text-white drop-shadow-sm">إنشاء رسالة جديدة</h3>
+                    <p className="text-[10px] lg:text-xs text-indigo-400 font-bold uppercase tracking-widest mt-1">تواصل، توجيه، وإدارة</p>
                   </div>
                 </div>
-                <button onClick={() => { setShowNewMessage(false); setStep(1); }} className="p-2 text-slate-400 hover:text-rose-400 bg-[#0f1423] border border-white/5 rounded-xl shadow-inner active:scale-90"><X className="h-6 w-6" /></button>
+                <button onClick={() => { setShowNewMessage(false); setStep(1); }} className="p-2 text-slate-400 hover:text-rose-400 bg-[#0f1423] border border-white/5 rounded-xl shadow-inner active:scale-90"><X className="h-5 w-5 lg:h-6 lg:w-6" /></button>
               </div>
 
-              <div className="p-8">
+              <div className="p-6 lg:p-8">
                 {step === 1 && (
                   <div className={`grid grid-cols-1 sm:grid-cols-2 ${['admin', 'management'].includes(role) ? 'lg:grid-cols-3' : ''} gap-4 lg:gap-6`}>
                     
-                    {/* خيار 1: مراسلة معلم/إدارة */}
-                    <button onClick={() => { setRecipientType('teacher'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-8 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-indigo-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
-                      <div className="h-16 w-16 rounded-[1rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-110 transition-transform"><User className="h-8 w-8" /></div>
-                      <span className="text-lg font-black text-white drop-shadow-sm">رسالة لمعلم / إدارة</span>
-                      <p className="text-xs text-slate-400 font-bold mt-2">مراسلة مباشرة للفريق الإداري والتدريسي</p>
+                    <button onClick={() => { setRecipientType('teacher'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-6 lg:p-8 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-indigo-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
+                      <div className="h-14 w-14 lg:h-16 lg:w-16 rounded-[1rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-110 transition-transform"><User className="h-7 w-7 lg:h-8 lg:w-8" /></div>
+                      <span className="text-base lg:text-lg font-black text-white drop-shadow-sm">رسالة لمعلم / إدارة</span>
+                      <p className="text-[10px] lg:text-xs text-slate-400 font-bold mt-2">مراسلة مباشرة للفريق الإداري والتدريسي</p>
                     </button>
                     
-                    {/* خيار 2: مراسلة طالب */}
-                    <button onClick={() => { setRecipientType('student'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-8 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-emerald-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
-                      <div className="h-16 w-16 rounded-[1rem] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform"><Users className="h-8 w-8" /></div>
-                      <span className="text-lg font-black text-white drop-shadow-sm">رسالة خاصة لطالب</span>
-                      <p className="text-xs text-slate-400 font-bold mt-2">توجيه رسالة سرية لطالب محدد</p>
-                    </button>
+                    {role !== 'parent' && (
+                      <button onClick={() => { setRecipientType('student'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-6 lg:p-8 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-emerald-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
+                        <div className="h-14 w-14 lg:h-16 lg:w-16 rounded-[1rem] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform"><Users className="h-7 w-7 lg:h-8 lg:w-8" /></div>
+                        <span className="text-base lg:text-lg font-black text-white drop-shadow-sm">رسالة خاصة لطالب</span>
+                        <p className="text-[10px] lg:text-xs text-slate-400 font-bold mt-2">توجيه رسالة سرية لطالب محدد</p>
+                      </button>
+                    )}
 
-                    {/* خيار 3: الإذاعة العامة (للمدير فقط) 🚀 */}
                     {['admin', 'management'].includes(role) && (
-                      <button onClick={() => { setRecipientType('broadcast'); setIsGroupMessage(true); setStep(2); }} className="flex flex-col items-center justify-center p-8 rounded-[1.5rem] border border-rose-500/20 shadow-inner hover:border-rose-500/50 hover:bg-rose-500/10 transition-all group bg-rose-500/5 active:scale-95">
-                        <div className="h-16 w-16 rounded-[1rem] bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 group-hover:scale-110 transition-transform"><Megaphone className="h-8 w-8 drop-shadow-md" /></div>
-                        <span className="text-lg font-black text-rose-400 drop-shadow-sm">إذاعة عامة (لجميع المجالس)</span>
-                        <p className="text-xs text-slate-400 font-bold mt-2 text-center">نشر توجيه فوري في جميع مجالس الفصول دفعة واحدة</p>
+                      <button onClick={() => { setRecipientType('broadcast'); setIsGroupMessage(true); setStep(2); }} className="flex flex-col items-center justify-center p-6 lg:p-8 rounded-[1.5rem] border border-rose-500/20 shadow-inner hover:border-rose-500/50 hover:bg-rose-500/10 transition-all group bg-rose-500/5 active:scale-95">
+                        <div className="h-14 w-14 lg:h-16 lg:w-16 rounded-[1rem] bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 group-hover:scale-110 transition-transform"><Megaphone className="h-7 w-7 lg:h-8 lg:w-8 drop-shadow-md" /></div>
+                        <span className="text-base lg:text-lg font-black text-rose-400 drop-shadow-sm">إذاعة عامة للجميع</span>
+                        <p className="text-[10px] lg:text-xs text-slate-400 font-bold mt-2 text-center">نشر توجيه فوري في جميع مجالس الفصول</p>
                       </button>
                     )}
                   </div>
                 )}
 
                 {step === 2 && (
-                  <form onSubmit={handleSendNewMessage} className="space-y-6">
-                    <button type="button" onClick={() => setStep(1)} className="text-indigo-400 font-black text-sm flex items-center gap-1.5 hover:text-indigo-300 transition-colors w-fit mb-2"><ArrowRight className="h-4 w-4" /> العودة للخيارات</button>
+                  <form onSubmit={handleSendNewMessage} className="space-y-4 lg:space-y-6">
+                    <button type="button" onClick={() => setStep(1)} className="text-indigo-400 font-black text-xs lg:text-sm flex items-center gap-1.5 hover:text-indigo-300 transition-colors w-fit mb-2"><ArrowRight className="h-4 w-4" /> العودة للخيارات</button>
 
-                    {/* إخفاء اختيار المستلم إذا كانت إذاعة عامة */}
                     {recipientType !== 'broadcast' && (
-                      <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المستلم</label>
-                        <select required value={newMessage.receiver_id} onChange={(e) => setNewMessage({...newMessage, receiver_id: e.target.value})} className="block w-full rounded-2xl border border-white/5 py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-indigo-500/50 text-sm font-bold outline-none cursor-pointer shadow-inner [&>option]:bg-[#0f1423]">
+                      <div className="space-y-2 lg:space-y-3 bg-[#02040a]/40 p-4 lg:p-5 rounded-[1.25rem] lg:rounded-[1.5rem] border border-white/5 shadow-inner">
+                        <label className="text-[10px] lg:text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المستلم</label>
+                        <select required value={newMessage.receiver_id} onChange={(e) => setNewMessage({...newMessage, receiver_id: e.target.value})} className="block w-full rounded-xl lg:rounded-2xl border border-white/5 py-3 lg:py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-indigo-500/50 text-xs lg:text-sm font-bold outline-none cursor-pointer shadow-inner [&>option]:bg-[#0f1423]">
                           <option value="">اختر المستلم...</option>
                           {users
                             .filter(u => recipientType === 'teacher' ? ['teacher', 'admin', 'management'].includes(u.role) : u.role === 'student')
@@ -479,21 +481,21 @@ export default function MessagesPage() {
                       </div>
                     )}
                     
-                    <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">عنوان الرسالة</label>
-                      <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-2xl border border-white/5 py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-indigo-500/50 text-sm font-bold outline-none shadow-inner placeholder:text-slate-600" />
+                    <div className="space-y-2 lg:space-y-3 bg-[#02040a]/40 p-4 lg:p-5 rounded-[1.25rem] lg:rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="text-[10px] lg:text-xs font-black text-slate-400 uppercase tracking-widest pl-1">عنوان الرسالة</label>
+                      <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-xl lg:rounded-2xl border border-white/5 py-3 lg:py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-indigo-500/50 text-xs lg:text-sm font-bold outline-none shadow-inner placeholder:text-slate-600" />
                     </div>
                     
-                    <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
-                      <div className="bg-[#0f1423] rounded-2xl border border-white/5 overflow-hidden shadow-inner p-1">
-                        <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="150px" />
+                    <div className="space-y-2 lg:space-y-3 bg-[#02040a]/40 p-4 lg:p-5 rounded-[1.25rem] lg:rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="text-[10px] lg:text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
+                      <div className="bg-[#0f1423] rounded-xl lg:rounded-2xl border border-white/5 overflow-hidden shadow-inner p-1">
+                        <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="120px" />
                       </div>
                     </div>
 
-                    <div className="pt-6 border-t border-white/5 flex justify-end gap-3">
-                      <button type="submit" disabled={isSubmitting} className={`px-8 py-4 rounded-2xl ${recipientType === 'broadcast' ? 'bg-gradient-to-r from-rose-600 to-red-600 shadow-[0_0_20px_rgba(225,29,72,0.4)]' : 'bg-gradient-to-r from-indigo-600 to-blue-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]'} text-white font-black hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2 active:scale-95`}>
-                        {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" /> إرسال الرسالة</>}
+                    <div className="pt-4 lg:pt-6 border-t border-white/5 flex justify-end gap-3">
+                      <button type="submit" disabled={isSubmitting} className={`px-6 lg:px-8 py-3.5 lg:py-4 rounded-xl lg:rounded-2xl ${recipientType === 'broadcast' ? 'bg-gradient-to-r from-rose-600 to-red-600 shadow-[0_0_20px_rgba(225,29,72,0.4)]' : 'bg-gradient-to-r from-indigo-600 to-blue-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]'} text-white text-sm lg:text-base font-black hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2 active:scale-95 w-full sm:w-auto justify-center`}>
+                        {isSubmitting ? <Loader2 className="w-4 h-4 lg:w-5 lg:h-5 animate-spin"/> : <><Send className="w-4 h-4 lg:w-5 lg:h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" /> إرسال الرسالة</>}
                       </button>
                     </div>
                   </form>
