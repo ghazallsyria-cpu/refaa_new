@@ -190,9 +190,9 @@ export default function HierarchyPage() {
 
   const isAdmin = authRole === 'admin' || authRole === 'management';
 
-  // 🚀 فرز القيادة العليا بأمان (مع التحقق من وجود البيانات)
-  const management = data?.leadership ? data.leadership.filter((l:any) => l.role === 'management' || l.job_title === 'شؤون الإدارة') : [];
-  const supervisors = data?.leadership ? data.leadership.filter((l:any) => l.role !== 'management' && l.job_title !== 'شؤون الإدارة') : [];
+  // 🚀 Separate the leadership tier from the supervisor/staff tier
+  const managementList = data?.leadership?.filter((l: any) => l.role === 'management' || l.job_title === 'شؤون الإدارة') || [];
+  const staffList = data?.leadership?.filter((l: any) => l.role !== 'management' && l.job_title !== 'شؤون الإدارة') || [];
   const departments = data?.departments || [];
 
   return (
@@ -215,12 +215,12 @@ export default function HierarchyPage() {
           </div>
           
           <div className="flex flex-wrap justify-center gap-8">
-            {management.map((admin: any, idx: number) => (
+            {managementList.map((admin: any, idx: number) => (
               <AdminCard key={admin.id} user={admin} role="شؤون الإدارة" delay={idx * 0.1} />
             ))}
           </div>
 
-          {supervisors.length > 0 && (
+          {staffList.length > 0 && (
             <div className="pt-8 mt-12 border-t border-white/5 relative">
               <div className="absolute left-1/2 -top-4 -translate-x-1/2 bg-[#090b14] px-4">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-black uppercase tracking-widest text-blue-400">
@@ -228,7 +228,7 @@ export default function HierarchyPage() {
                 </div>
               </div>
               <div className="flex flex-wrap justify-center gap-6 mt-8">
-                {supervisors.map((sup: any, idx: number) => (
+                {staffList.map((sup: any, idx: number) => (
                   <AdminCard key={sup.id} user={sup} role={sup.job_title || 'إشراف'} delay={idx * 0.1} isSupervisor={true} />
                 ))}
               </div>
@@ -236,7 +236,7 @@ export default function HierarchyPage() {
           )}
         </section>
 
-        {/* الأقسام الأكاديمية (الآن معروضة بأمان) */}
+        {/* الأقسام الأكاديمية */}
         <section className="space-y-12">
           <div className="text-center space-y-4">
             <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-3xl shadow-xl mb-4"><GraduationCap className="w-10 h-10" /></div>
