@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, Clock, FileText, 
   GraduationCap, TrendingUp, AlertTriangle, Award, MessageCircle,
@@ -54,7 +54,6 @@ const CircularProgress = ({ value, colorClass, strokeClass }: { value: number, c
 
 const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) => (
   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
-    {/* 🚨 إنذار الغياب المتقدم */}
     {absentCount >= 5 && (
       <div className="bg-rose-950/40 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 text-white shadow-[0_0_40px_rgba(225,29,72,0.2)] border border-rose-500/30 flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-48 h-48 bg-rose-500/20 blur-3xl rounded-full pointer-events-none"></div>
@@ -71,7 +70,6 @@ const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) 
       </div>
     )}
 
-    {/* 📊 مؤشرات الأداء الحيوية */}
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
       {[
         { label: 'مؤشر الالتزام بالحضور', value: stats.attendanceRate, icon: Target, color: 'emerald' },
@@ -94,8 +92,6 @@ const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) 
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <AnnouncementsWidget authRole="parent" />
-      
-      {/* 🎧 جسر التواصل السريع */}
       <div className="bg-gradient-to-br from-[#111827] to-[#05070e] p-8 rounded-[3rem] shadow-2xl border border-white/5 relative overflow-hidden h-full flex flex-col">
           <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none"></div>
           <div className="flex items-center gap-4 mb-8 relative z-10">
@@ -125,16 +121,13 @@ const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) 
 );
 
 const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, activeChildId }: any) => {
-  // 🚀 استخراج قائمة المعلمين الفريدين من بيانات المواد
   const teachers = useMemo(() => {
     const uniqueTeachers = new Map();
     subjectPerformance.forEach((sp: any) => {
       if (sp.teachers && !uniqueTeachers.has(sp.teachers.id)) {
         uniqueTeachers.set(sp.teachers.id, {
-          id: sp.teachers.id,
-          name: sp.teachers.users?.full_name,
-          avatar: sp.teachers.users?.avatar_url,
-          subject: sp.subjects?.name
+          id: sp.teachers.id, name: sp.teachers.users?.full_name,
+          avatar: sp.teachers.users?.avatar_url, subject: sp.subjects?.name
         });
       }
     });
@@ -143,8 +136,6 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
-      
-      {/* 👨‍🏫 شريط التواصل السريع مع المعلمين */}
       {teachers.length > 0 && (
         <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-6 sm:p-8 rounded-[3rem] border border-white/5 shadow-2xl relative overflow-hidden">
           <div className="absolute -top-20 -left-20 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none"></div>
@@ -153,11 +144,7 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
           </div>
           <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar snap-x mask-fade-edges relative z-10">
             {teachers.map((teacher: any) => (
-              <button 
-                key={teacher.id} 
-                onClick={() => router.push(`/messages?to=teacher&teacherId=${teacher.id}`)}
-                className="snap-center flex items-center gap-3 p-3 pr-4 rounded-2xl bg-[#05070e] border border-white/5 hover:border-indigo-500/30 hover:bg-white/5 transition-all min-w-[220px] group shadow-inner shrink-0"
-              >
+              <button key={teacher.id} onClick={() => router.push(`/messages?to=teacher&teacherId=${teacher.id}`)} className="snap-center flex items-center gap-3 p-3 pr-4 rounded-2xl bg-[#05070e] border border-white/5 hover:border-indigo-500/30 hover:bg-white/5 transition-all min-w-[220px] group shadow-inner shrink-0">
                 <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-black overflow-hidden border border-indigo-500/20">
                   {teacher.avatar ? <img src={teacher.avatar} alt={teacher.name} className="w-full h-full object-cover" /> : teacher.name?.charAt(0)}
                 </div>
@@ -176,7 +163,6 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
-          {/* 🔬 مصفوفة الإتقان المفصلة */}
           <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] relative overflow-hidden border border-white/5 shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-[80px] pointer-events-none"></div>
             <div className="flex items-center gap-4 mb-8 relative z-10">
@@ -217,7 +203,6 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
         </div>
 
         <div className="lg:col-span-4">
-          {/* 📝 السجل الزمني للمهام (قابل للضغط لرؤية الحل) */}
           <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] relative overflow-hidden border border-white/5 shadow-2xl h-full flex flex-col">
             <div className="flex items-center gap-4 mb-8 relative z-10">
               <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20"><FileText className="text-amber-400 w-6 h-6"/></div>
@@ -233,11 +218,7 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
               ) : (
                 <div className="divide-y divide-white/5 p-2">
                   {detailedTasks.map((task: any) => {
-                    // 🚀 توليد الرابط الصحيح لرؤية ورقة الإجابة الحقيقية
-                    const href = task.type === 'exam' 
-                      ? `/exams/results/${task.original_id}/student/${activeChildId}`
-                      : `/assignments/${task.original_id}/submissions/${task.submission_id}`;
-
+                    const href = task.type === 'exam' ? `/exams/results/${task.original_id}/student/${activeChildId}` : `/assignments/${task.original_id}/submissions/${task.submission_id}`;
                     return (
                       <Link href={href} key={task.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-all group rounded-2xl cursor-pointer">
                         <div className="flex items-center gap-3">
@@ -275,7 +256,6 @@ const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, a
 };
 
 const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendanceStyle, excuses, safeFormat, setIsExcuseModalOpen, attendance }: any) => {
-  // 🚀 استخراج سجل الغياب الحقيقي والتأخير من الحضور
   const absentRecords = useMemo(() => {
     return attendance.filter((a: any) => a.status === 'absent' || a.status === 'late' || a.status === 'excused')
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -283,9 +263,7 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      
       <div className="space-y-8">
-        {/* ⏱️ الرادار الزمني (الجدول) */}
         <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl h-fit">
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] pointer-events-none"></div>
           <div className="flex items-center justify-between mb-8 relative z-10">
@@ -300,7 +278,6 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
                 const attendanceRecord = todaysAttendance.find((a:any) => a.subjects?.name === lesson.subjects?.name) || todaysAttendance[idx];
                 const style = getAttendanceStyle(attendanceRecord?.status);
                 const current = isCurrentClass(lesson.period);
-                
                 return (
                   <div key={idx} className="relative group">
                     <div className={`absolute -right-[31px] w-4 h-4 rounded-full border-4 border-[#0a0d16] ${current ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]' : style.bg.replace('bg-', 'bg-').replace('/10', '')}`}></div>
@@ -321,11 +298,9 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
           )}
         </div>
 
-        {/* 🩺 سجل الأعذار الطبية */}
         <div className="bg-[#0a0d16]/80 backdrop-blur-xl rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col h-fit">
           <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-          
-          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4 relative z-10">
+          <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4 relative z-10">
             <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
               <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
                 <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
@@ -339,7 +314,7 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
 
           <div className="p-6 space-y-3 relative z-10 max-h-[300px] overflow-y-auto custom-scrollbar">
             {excuses.length === 0 ? (
-              <div className="text-center py-8 text-slate-500 font-bold text-sm">لم تقم بتقديم أي أعذار طبية مسبقة.</div>
+              <div className="text-center py-16 text-slate-500 font-bold text-sm">لم تقم بتقديم أي أعذار طبية مسبقة.</div>
             ) : (
               excuses.map((exc: any) => (
                 <div key={exc.id} className="bg-[#05070e] p-4 rounded-2xl border border-white/5 flex flex-col gap-2 shadow-inner">
@@ -408,7 +383,6 @@ const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendance
           )}
         </div>
       </div>
-      
     </motion.div>
   );
 };
@@ -421,9 +395,7 @@ export default function ParentDashboard() {
   const { fetchParentDashboardData, fetchParentChildDetails } = useDashboardSystem();
   const router = useRouter();
 
-  // 🔹 حالة التبويب النشط (Navigation State)
   const [activeTab, setActiveTab] = useState<'overview' | 'academics' | 'behavior'>('overview');
-
   const [parentData, setParentData] = useState<any>(null);
   const [children, setChildren] = useState<any[]>([]);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
@@ -433,30 +405,27 @@ export default function ParentDashboard() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [stats, setStats] = useState({ attendanceRate: 100, examsAvg: 0, assignmentsAvg: 0, absentCount: 0 });
-  
   const [subjectPerformance, setSubjectPerformance] = useState<any[]>([]);
   const [detailedTasks, setDetailedTasks] = useState<any[]>([]); 
-  
   const [excuses, setExcuses] = useState<any[]>([]);
+  
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   const [excuseForm, setExcuseForm] = useState({
-    excuse_date: format(new Date(), 'yyyy-MM-dd'),
-    duration_type: 'full_day',
-    target_periods: [] as number[],
-    reason: '',
-    attachment_url: '',
-    cloudinary_public_id: ''
+    excuse_date: format(new Date(), 'yyyy-MM-dd'), duration_type: 'full_day',
+    target_periods: [] as number[], reason: '', attachment_url: '', cloudinary_public_id: ''
   });
 
   const [loading, setLoading] = useState(true);
   const [childLoading, setChildLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [mounted, setMounted] = useState(false);
+  
+  // 🛡️ Anti-Freeze Patch: عزل دوال الـ Fetch باستخدام useRef لمنع الحلقة المفرغة
+  const systemRef = useRef({ fetchParentDashboardData, fetchParentChildDetails });
+  useEffect(() => { systemRef.current = { fetchParentDashboardData, fetchParentChildDetails }; }, [fetchParentDashboardData, fetchParentChildDetails]);
 
   useEffect(() => {
-    setMounted(true);
     setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
@@ -469,62 +438,49 @@ export default function ParentDashboard() {
       const { data: pData } = await supabase.from('parents').select('*, users(full_name, email, avatar_url)').eq('id', user.id).maybeSingle();
       setParentData(pData);
 
-      const dashboardData = await fetchParentDashboardData(false);
+      const dashboardData = await systemRef.current.fetchParentDashboardData(false);
       if (dashboardData && dashboardData.children.length > 0) {
         setChildren(dashboardData.children);
         setActiveChildId(dashboardData.children[0].id);
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [user, authRole, fetchParentDashboardData]);
+  }, [user, authRole]);
 
   useEffect(() => { if (!isChecking) loadInitialData(); }, [loadInitialData, isChecking]);
 
-  const loadActiveChild = useCallback(async (childId: string) => {
-    if (!childId) return;
+  const loadActiveChild = useCallback(async (childId: string, sectionId: string | null) => {
     try {
       setChildLoading(true);
-      const activeChild = children.find(c => c.id === childId);
-      
-      const data = await fetchParentChildDetails(childId, activeChild?.section_id || null);
+      const data = await systemRef.current.fetchParentChildDetails(childId, sectionId);
       
       setAttendance(data.attendance);
       setBadges(data.badges);
       setPeriods(data.periods);
       setSchedule(data.schedule);
 
-      const { data: excusesData } = await supabase
-        .from('absence_excuses')
-        .select('*')
-        .eq('student_id', childId)
-        .order('created_at', { ascending: false });
+      const { data: excusesData } = await supabase.from('absence_excuses').select('*').eq('student_id', childId).order('created_at', { ascending: false });
       setExcuses(excusesData || []);
 
       const allTasks: any[] = [];
       data.assignments.forEach((sub: any) => {
         allTasks.push({
           id: `ass_${sub.id}`, type: 'assignment',
-          original_id: sub.assignments?.id, // 👈 للتوجيه لرؤية الحل
-          submission_id: sub.id,            // 👈 للتوجيه لرؤية الحل
+          original_id: sub.assignments?.id, submission_id: sub.id,
           title: sub.assignments?.title || 'واجب تفاعلي',
           subject: sub.assignments?.subjects?.name || 'عام',
-          score: sub.grade || 0,
-          max: sub.assignments?.total_marks || 100,
-          date: sub.submitted_at || new Date().toISOString(),
-          isZero: sub.grade === 0
+          score: sub.grade || 0, max: sub.assignments?.total_marks || 100,
+          date: sub.submitted_at || new Date().toISOString(), isZero: sub.grade === 0
         });
       });
 
       data.exams.forEach((att: any) => {
         allTasks.push({
           id: `ex_${att.id}`, type: 'exam',
-          original_id: att.exams?.id,       // 👈 للتوجيه لرؤية الحل
-          attempt_id: att.id,               // 👈 للتوجيه لرؤية الحل
+          original_id: att.exams?.id, attempt_id: att.id,
           title: att.exams?.title || 'اختبار قصير',
           subject: att.exams?.subjects?.name || 'عام',
-          score: att.score || 0,
-          max: att.exams?.total_marks || att.exams?.max_score || 100,
-          date: att.completed_at || new Date().toISOString(),
-          isZero: att.score === 0
+          score: att.score || 0, max: att.exams?.total_marks || att.exams?.max_score || 100,
+          date: att.completed_at || new Date().toISOString(), isZero: att.score === 0
         });
       });
 
@@ -560,17 +516,21 @@ export default function ParentDashboard() {
       });
 
     } catch (e) { console.error(e); } finally { setChildLoading(false); }
-  }, [children, fetchParentChildDetails]);
+  }, []);
 
-  useEffect(() => { if (activeChildId) loadActiveChild(activeChildId); }, [activeChildId, loadActiveChild]);
+  useEffect(() => { 
+    if (activeChildId) {
+      const child = children.find(c => c.id === activeChildId);
+      loadActiveChild(activeChildId, child?.section_id || null); 
+    }
+  }, [activeChildId, children, loadActiveChild]);
 
   const activeChild = useMemo(() => children.find(c => c.id === activeChildId), [children, activeChildId]);
   
   const todaysAttendance = useMemo(() => {
-    if (!mounted) return [];
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     return attendance.filter(a => a.date && a.date.startsWith(todayStr));
-  }, [attendance, mounted]);
+  }, [attendance]);
 
   const isCurrentClass = useCallback((period: number) => {
     if (!currentTime) return false;
@@ -585,7 +545,6 @@ export default function ParentDashboard() {
   }, [currentTime, periods]);
 
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
-    if (!dateStr || !mounted) return fallback;
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
   };
 
@@ -642,7 +601,7 @@ export default function ParentDashboard() {
       alert('تم تقديم العذر بنجاح، وهو الآن قيد المراجعة من الإدارة.');
       setIsExcuseModalOpen(false);
       setExcuseForm({ excuse_date: format(new Date(), 'yyyy-MM-dd'), duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' });
-      if (activeChildId) loadActiveChild(activeChildId);
+      if (activeChildId && activeChild) loadActiveChild(activeChildId, activeChild.section_id);
     } catch (error: any) { alert('حدث خطأ أثناء التقديم: ' + error.message); } finally { setIsSubmittingExcuse(false); }
   };
 
@@ -681,7 +640,6 @@ export default function ParentDashboard() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-[#05070e] pb-32 md:pb-24 font-cairo overflow-x-hidden" dir="rtl">
       
-      {/* ✨ خلفية الواجهة (Mesh Gradient) */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-600/10 blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-600/10 blur-[150px]"></div>
@@ -689,7 +647,6 @@ export default function ParentDashboard() {
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8 relative z-10">
         
-        {/* 👑 الهيدر الثابت العُلوي (Global Header & Switcher) */}
         <div className="relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 bg-gradient-to-r from-[#0a0d16] via-[#111827] to-[#0a0d16] p-8 sm:p-10 rounded-[2.5rem] sm:rounded-[3rem] border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none mix-blend-overlay"></div>
            
@@ -708,7 +665,6 @@ export default function ParentDashboard() {
               </div>
            </div>
            
-           {/* 🔄 مبدل الأبناء المطور (Children Switcher) */}
            <div className="flex gap-3 overflow-x-auto p-2 w-full md:w-auto custom-scrollbar snap-x relative z-10 mask-fade-edges">
               {children.map(child => (
                 <button 
@@ -741,7 +697,6 @@ export default function ParentDashboard() {
         </AnimatePresence>
       </div>
 
-      {/* 📱 الشريط السفلي للتنقل (Mobile-First Bottom Navigation Bar) */}
       <div className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-[env(safe-area-inset-bottom)] md:pb-6 pt-2 pointer-events-none flex justify-center">
         <div className="bg-[#131836]/90 backdrop-blur-2xl border border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] rounded-full p-2 flex items-center justify-center gap-2 max-w-[400px] w-full pointer-events-auto">
           {[
@@ -762,7 +717,6 @@ export default function ParentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة (Modal) تقديم العذر الطبي العائم */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
@@ -779,7 +733,6 @@ export default function ParentDashboard() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* التاريخ ونوع الغياب */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-xs font-black text-slate-300 uppercase tracking-widest">تاريخ الغياب</label>
@@ -794,7 +747,6 @@ export default function ParentDashboard() {
                     </div>
                   </div>
 
-                  {/* اختيار الحصص */}
                   <AnimatePresence>
                     {excuseForm.duration_type === 'partial_day' && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -815,7 +767,6 @@ export default function ParentDashboard() {
                     )}
                   </AnimatePresence>
 
-                  {/* رفع المرفق */}
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-300 uppercase tracking-widest">إرفاق التقرير الطبي (صورة)</label>
                     <label className={cn("relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all", isUploadingReport ? "border-amber-500/50 bg-amber-500/5" : excuseForm.attachment_url ? "border-emerald-500/50 bg-emerald-500/5" : "border-white/10 bg-[#090b14] hover:border-amber-500/30 hover:bg-white/5")}>
@@ -830,7 +781,6 @@ export default function ParentDashboard() {
                     </label>
                   </div>
 
-                  {/* تفاصيل إضافية */}
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-300 uppercase tracking-widest">ملاحظات للإدارة (اختياري)</label>
                     <textarea 
