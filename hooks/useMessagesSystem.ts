@@ -10,10 +10,10 @@ export function useMessagesSystem() {
   
   const [messages, setMessages] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]); // 🚀 مجالس الفصول الثابتة
+  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
-// 🚀 1. جلب المجالس الثابتة (تظهر حتى لو كانت فارغة من الرسائل)
+  // 1. جلب المجالس الثابتة
   const fetchChatRooms = useCallback(async () => {
     if (!user) return;
     try {
@@ -21,7 +21,6 @@ export function useMessagesSystem() {
       if (currentRole === 'student') {
         const { data } = await supabase.from('students').select('section_id, sections(name, classes(name))').eq('id', user.id).maybeSingle();
         if (data?.sections && data.section_id) {
-           // 🛡️ تجاوز تدقيق TypeScript الصارم هنا باستخدام as any
            const secData = data.sections as any;
            const classObj = Array.isArray(secData.classes) ? secData.classes[0] : secData.classes;
            rooms = [{ id: data.section_id, name: secData.name, className: classObj?.name || '', type: 'group' }];
@@ -33,7 +32,6 @@ export function useMessagesSystem() {
           const uniqueRooms = new Map();
           data.forEach((d: any) => {
             if (d.sections && d.section_id && !uniqueRooms.has(d.section_id)) {
-              // 🛡️ تجاوز تدقيق TypeScript الصارم هنا
               const secData = d.sections as any;
               const classObj = Array.isArray(secData.classes) ? secData.classes[0] : secData.classes;
               uniqueRooms.set(d.section_id, { id: d.section_id, name: secData.name, className: classObj?.name || '', type: 'group' });
@@ -55,7 +53,7 @@ export function useMessagesSystem() {
     } catch (error) { console.error("Error fetching chat rooms:", error); }
   }, [user, currentRole]);
 
-  // 2. جلب جهات الاتصال للمراسلات الخاصة (مفلترة حسب الرتبة)
+  // 2. جلب جهات الاتصال للمراسلات الخاصة
   const fetchUsers = useCallback(async () => {
     if (!user) return;
     try {
@@ -77,7 +75,6 @@ export function useMessagesSystem() {
         else query.in('role', ['admin', 'management']);
       }
       else if (currentRole === 'teacher') {
-        // المعلم يرى طلابه، الإدارة، وزملاءه المعلمين
         const { data: ts } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
         const secIds = ts?.map((t: any) => t.section_id) || [];
         const { data: st } = await supabase.from('students').select('id').in('section_id', secIds);
@@ -88,22 +85,29 @@ export function useMessagesSystem() {
 
       const { data, error } = await query;
       if (error) throw error;
-      setUsers((data || []).filter(u => u.id !== user.id && u.role !== 'parent')); // استبعاد ولي الأمر من الظهور
+      setUsers((data || []).filter(u => u.id !== user.id && u.role !== 'parent'));
     } catch (err) { console.error('Error fetching users:', err); }
   }, [user, currentRole]);
 
-  // 3. جلب جميع الرسائل المتعلقة بالمستخدم
+  // 3. جلب جميع الرسائل (هنا كان الفخ وتم إصلاحه جذرياً 🚀)
   const fetchMessages = useCallback(async () => {
     if (!user) return;
     try {
       let query = supabase.from('messages').select(`*, sender:sender_id(full_name, avatar_url, role), receiver:receiver_id(full_name, avatar_url, role)`).order('created_at', { ascending: false }).limit(2000);
       
       if (!['admin', 'management', 'staff'].includes(currentRole)) {
-        // الطلاب والمعلمين يرون غرفهم ورسائلهم الخاصة فقط
+        let orString = `sender_id.eq.${user.id},receiver_id.eq.${user.id}`;
         const roomIds = chatRooms.map(r => r.id);
-        if (roomIds.length > 0) query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id},section_id.in.(${roomIds.join(',')})`);
-        else query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+        
+        // 🚀 الإصلاح: تفكيك الغرف لشرط OR سليم ومحكم 100%
+        if (roomIds.length > 0) {
+          const roomOrs = roomIds.map(id => `section_id.eq.${id}`).join(',');
+          orString += `,${roomOrs}`;
+        }
+        
+        query = query.or(orString);
       }
+      
       const { data, error } = await query;
       if (error) throw error;
       setMessages(data || []);
@@ -120,18 +124,26 @@ export function useMessagesSystem() {
     load();
   }, [fetchChatRooms, fetchUsers]);
 
-  // جلب الرسائل بعد تحميل الغرف
   useEffect(() => {
     if (chatRooms.length > 0 || currentRole) { fetchMessages(); }
   }, [chatRooms, fetchMessages, currentRole]);
 
+  // 🚀 تحصين دوال الإرسال لرمي الأخطاء للواجهة إن وجدت
   const sendMessage = async (receiverId: string, subject: string, content: string) => {
-    await fetch('/api/messages/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId, subject, content, userId: user.id }) });
+    const response = await fetch('/api/messages/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId, subject, content, userId: user.id }) });
+    if (!response.ok) {
+      const data = await response.json().catch(()=>({}));
+      throw new Error(data.error || 'حدث خطأ أثناء الإرسال');
+    }
     fetchMessages();
   };
 
   const sendGroupMessage = async (sectionId: string, subject: string, content: string) => {
-    await fetch('/api/messages/send-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sectionId, subject, content, senderId: user.id }) });
+    const response = await fetch('/api/messages/send-group', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sectionId, subject, content, senderId: user.id }) });
+    if (!response.ok) {
+      const data = await response.json().catch(()=>({}));
+      throw new Error(data.error || 'حدث خطأ أثناء إرسال الرسالة الجماعية');
+    }
     fetchMessages();
   };
 
