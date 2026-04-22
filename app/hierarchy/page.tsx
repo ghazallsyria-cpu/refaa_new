@@ -12,7 +12,7 @@ import { useHierarchySystem } from '@/hooks/useHierarchySystem';
 import { useAuth } from '@/context/auth-context';
 import Link from 'next/link';
 
-// 🧩 1. بطاقة الإدارة والإشراف (محمية الخصوصية - بدون إيميل/رقم مدني)
+// 🧩 1. بطاقة الإدارة والإشراف 
 const AdminCard = ({ user, role, delay, isSupervisor = false }: any) => {
   const isImage = user?.avatar_url?.trim();
   return (
@@ -39,11 +39,11 @@ const AdminCard = ({ user, role, delay, isSupervisor = false }: any) => {
   );
 };
 
-// 🧩 2. بطاقة القسم الملكية (تدعم الصور السينمائية)
+// 🧩 2. بطاقة القسم الملكية 
 const DepartmentCard = ({ dept, delay, isAdmin, onEditImage }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const hod = dept.hod;
-  const members = dept.members;
+  const members = dept.members || [];
   const hasImage = dept.image_url?.trim();
 
   return (
@@ -95,7 +95,7 @@ const DepartmentCard = ({ dept, delay, isAdmin, onEditImage }: any) => {
         </button>
 
         <AnimatePresence>
-          {isOpen && (
+          {isOpen && members.length > 0 && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="w-full overflow-hidden">
               <div className="pt-4 space-y-2">
                 {members.map((member: any) => (
@@ -123,7 +123,6 @@ export default function HierarchyPage() {
   const { loading, fetchHierarchyData } = useHierarchySystem();
   const [data, setData] = useState<any>(null);
   
-  // حالات الرفع والإشعارات
   const [editingDept, setEditingDept] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -191,9 +190,10 @@ export default function HierarchyPage() {
 
   const isAdmin = authRole === 'admin' || authRole === 'management';
 
-  // 🚀 فرز القيادة العليا: المانجمنت في الأعلى، والمشرفين أسفلهم
-  const management = data.leadership ? data.leadership.filter((l:any) => l.role === 'management' || l.job_title === 'شؤون الإدارة') : data.admins || [];
-  const supervisors = data.leadership ? data.leadership.filter((l:any) => l.role !== 'management' && l.job_title !== 'شؤون الإدارة') : data.supervisors || [];
+  // 🚀 فرز القيادة العليا بأمان (مع التحقق من وجود البيانات)
+  const management = data?.leadership ? data.leadership.filter((l:any) => l.role === 'management' || l.job_title === 'شؤون الإدارة') : [];
+  const supervisors = data?.leadership ? data.leadership.filter((l:any) => l.role !== 'management' && l.job_title !== 'شؤون الإدارة') : [];
+  const departments = data?.departments || [];
 
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-6 lg:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
@@ -214,14 +214,12 @@ export default function HierarchyPage() {
             <p className="text-slate-400 font-bold max-w-2xl mx-auto">شؤون الإدارة والإشراف العام لضمان سير العملية التعليمية وفق دستور الرفعة.</p>
           </div>
           
-          {/* 1. طبقة شؤون الإدارة (Management) */}
           <div className="flex flex-wrap justify-center gap-8">
             {management.map((admin: any, idx: number) => (
               <AdminCard key={admin.id} user={admin} role="شؤون الإدارة" delay={idx * 0.1} />
             ))}
           </div>
 
-          {/* 🚀 2. طبقة الإشراف الإداري (Supervisors) تظهر مباشرة بالأسفل */}
           {supervisors.length > 0 && (
             <div className="pt-8 mt-12 border-t border-white/5 relative">
               <div className="absolute left-1/2 -top-4 -translate-x-1/2 bg-[#090b14] px-4">
@@ -238,22 +236,27 @@ export default function HierarchyPage() {
           )}
         </section>
 
-        {/* الأقسام الأكاديمية */}
+        {/* الأقسام الأكاديمية (الآن معروضة بأمان) */}
         <section className="space-y-12">
           <div className="text-center space-y-4">
             <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-3xl shadow-xl mb-4"><GraduationCap className="w-10 h-10" /></div>
             <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">الأقسام العلمية والأدبية</h2>
             <p className="text-slate-400 font-bold max-w-2xl mx-auto">صُناع الأثر الأكاديمي، مرتبين حسب التخصص والريادة العلمية.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {data.departments.map((dept: any, idx: number) => (
-              <DepartmentCard key={dept.id} dept={dept} isAdmin={isAdmin} onEditImage={setEditingDept} delay={idx * 0.05} />
-            ))}
-          </div>
+          
+          {departments.length === 0 ? (
+            <div className="text-center py-10 bg-white/5 rounded-3xl border border-white/10 text-slate-400">لا توجد أقسام مسجلة حالياً</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {departments.map((dept: any, idx: number) => (
+                <DepartmentCard key={dept.id} dept={dept} isAdmin={isAdmin} onEditImage={setEditingDept} delay={idx * 0.05} />
+              ))}
+            </div>
+          )}
         </section>
       </div>
 
-      {/* 🚀 مودال رفع الصور للمدير مع الإشعارات */}
+      {/* 🚀 مودال رفع الصور للمدير */}
       <AnimatePresence>
         {editingDept && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
