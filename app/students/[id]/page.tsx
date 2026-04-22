@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, use, useMemo } from 'react';
 import { 
   GraduationCap, Calendar, Clock, BookOpen, 
   FileText, CheckCircle2, XCircle, AlertCircle, 
-  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft, SearchX, Trash2, ShieldAlert, Star, Flame, Lock, PenTool
+  TrendingUp, Award, ChevronRight, Activity, CalendarDays, ArrowLeft, SearchX, Trash2, ShieldAlert, Star, Flame, Lock, PenTool, Check, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
@@ -80,48 +80,101 @@ const OverviewTab = ({ attendance, exams, assignments, stats }: any) => (
   </motion.div>
 );
 
-const AttendanceTab = ({ attendance }: any) => (
-  <motion.div key="attendance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
-    {attendance.length === 0 ? (
-      <div className="text-center py-20 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
-          <CalendarDays className="w-14 h-14 text-slate-300 mx-auto mb-4" />
-          <p className="font-bold text-slate-500 text-lg">لا يوجد سجلات غياب مرصودة.</p>
-      </div>
-    ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {attendance.map((record: any) => (
-          <div key={record.id} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between group">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <p className="font-black text-slate-900 text-lg mb-2" dir="ltr">{format(new Date(record.date), 'dd MMM yyyy', { locale: arSA })}</p>
-                <p className="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-inner">
-                  <Clock className="w-3.5 h-3.5" /> الحصة {record.period}
+// 🚀 تم إضافة منطق التبرير الجماعي (للمدير) داخل هذا المكون
+const AttendanceTab = ({ attendance, isAdmin, selectedAbsences, toggleAbsenceSelection, setSelectedAbsences, handleJustifySelected, isJustifying }: any) => {
+  const absentRecords = attendance.filter((a: any) => a.status === 'absent');
+
+  return (
+    <motion.div key="attendance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
+      
+      {/* 🛡️ لوحة تحكم المدير: تبرير الغياب الجماعي */}
+      {isAdmin && absentRecords.length > 0 && (
+        <div className="mb-8 bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-inner">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                if (selectedAbsences.length === absentRecords.length) setSelectedAbsences([]);
+                else setSelectedAbsences(absentRecords.map((a: any) => a.id));
+              }}
+              className="flex items-center gap-3 text-sm font-black text-amber-800 hover:text-amber-600 transition-colors bg-white px-4 py-2 rounded-xl border border-amber-200 shadow-sm"
+            >
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedAbsences.length === absentRecords.length ? 'bg-amber-500 border-amber-500 text-white' : 'border-amber-300'}`}>
+                {selectedAbsences.length === absentRecords.length && <Check className="w-3.5 h-3.5" />}
+              </div>
+              تحديد كل الغيابات
+            </button>
+            <span className="text-xs font-black text-amber-600 bg-amber-100/50 px-3 py-1.5 rounded-lg border border-amber-200/50">
+              تم تحديد: {selectedAbsences.length}
+            </span>
+          </div>
+          <button
+            onClick={handleJustifySelected}
+            disabled={selectedAbsences.length === 0 || isJustifying}
+            className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-500 text-white px-8 py-3 rounded-xl text-sm font-black shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+          >
+            {isJustifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldAlert className="w-4 h-4" />}
+            تبرير السجلات المحددة
+          </button>
+        </div>
+      )}
+
+      {attendance.length === 0 ? (
+        <div className="text-center py-20 bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+            <CalendarDays className="w-14 h-14 text-slate-300 mx-auto mb-4" />
+            <p className="font-bold text-slate-500 text-lg">لا يوجد سجلات غياب مرصودة.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {attendance.map((record: any) => (
+            <div 
+              key={record.id} 
+              onClick={() => { if (isAdmin && record.status === 'absent') toggleAbsenceSelection(record.id); }}
+              className={`bg-white border p-6 rounded-3xl transition-all flex flex-col justify-between group ${
+                isAdmin && record.status === 'absent' ? 'cursor-pointer hover:shadow-md hover:border-amber-300' : 'hover:shadow-md hover:border-slate-300 border-slate-100 shadow-sm'
+              } ${selectedAbsences.includes(record.id) ? 'border-amber-400 bg-amber-50/10 shadow-md ring-1 ring-amber-400/20' : ''}`}
+            >
+              <div className="flex justify-between items-start mb-6">
+                <div className="flex items-start gap-3">
+                  {/* 🚀 مربع اختيار للمدير بجانب سجل الغياب */}
+                  {isAdmin && record.status === 'absent' && (
+                    <div className={`mt-1 shrink-0 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                      selectedAbsences.includes(record.id) ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300 bg-slate-50 group-hover:border-amber-400'
+                    }`}>
+                      {selectedAbsences.includes(record.id) && <CheckCircle2 className="w-4 h-4" />}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-black text-slate-900 text-lg mb-2" dir="ltr">{format(new Date(record.date), 'dd MMM yyyy', { locale: arSA })}</p>
+                    <p className="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 shadow-inner">
+                      <Clock className="w-3.5 h-3.5" /> الحصة {record.period}
+                    </p>
+                  </div>
+                </div>
+                <span className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm border shrink-0 ${
+                  record.status === 'present' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                  record.status === 'absent' ? 'bg-rose-50 text-rose-700 border-rose-100' :
+                  record.status === 'late' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                  'bg-blue-50 text-blue-700 border-blue-100'
+                }`}>
+                  {record.status === 'present' && <CheckCircle2 className="w-4 h-4" />}
+                  {record.status === 'absent' && <XCircle className="w-4 h-4" />}
+                  {record.status === 'late' && <Clock className="w-4 h-4" />}
+                  {record.status === 'excused' && <AlertCircle className="w-4 h-4" />}
+                  {record.status === 'present' ? 'حاضر' : record.status === 'absent' ? 'غائب' : record.status === 'late' ? 'متأخر' : 'مستأذن'}
+                </span>
+              </div>
+              <div className="pt-4 border-t border-slate-100 mt-auto">
+                <p className="text-sm font-bold text-slate-600 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" /> {record.subjects?.name || 'مادة غير محددة'}
                 </p>
               </div>
-              <span className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm border ${
-                record.status === 'present' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                record.status === 'absent' ? 'bg-rose-50 text-rose-700 border-rose-100' :
-                record.status === 'late' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                'bg-blue-50 text-blue-700 border-blue-100'
-              }`}>
-                {record.status === 'present' && <CheckCircle2 className="w-4 h-4" />}
-                {record.status === 'absent' && <XCircle className="w-4 h-4" />}
-                {record.status === 'late' && <Clock className="w-4 h-4" />}
-                {record.status === 'excused' && <AlertCircle className="w-4 h-4" />}
-                {record.status === 'present' ? 'حاضر' : record.status === 'absent' ? 'غائب' : record.status === 'late' ? 'متأخر' : 'مستأذن'}
-              </span>
             </div>
-            <div className="pt-4 border-t border-slate-100 mt-auto">
-              <p className="text-sm font-bold text-slate-600 flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" /> {record.subjects?.name || 'مادة غير محددة'}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </motion.div>
-);
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+};
 
 const ExamsTab = ({ exams, studentId }: any) => (
   <motion.div key="exams" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-6 sm:p-8">
@@ -297,6 +350,11 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
   const [newNote, setNewNote] = useState('');
   const [isSubmittingNote, setIsSubmittingNote] = useState(false);
 
+  // 🛡️ حالات نظام التبرير اليدوي للمدير
+  const [selectedAbsences, setSelectedAbsences] = useState<string[]>([]);
+  const [isJustifying, setIsJustifying] = useState(false);
+  const isAdminOrManagement = userRole === 'admin' || userRole === 'management';
+
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'exams' | 'assignments' | 'private_notes'>('overview');
@@ -418,6 +476,35 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       }
     } catch (err) { console.error(err); }
     finally { setIsSubmittingNote(false); }
+  };
+
+  // 🛡️ دالة لتحديد الغياب المُراد تبريره (المدير)
+  const toggleAbsenceSelection = (recordId: string) => {
+    setSelectedAbsences(prev => prev.includes(recordId) ? prev.filter(id => id !== recordId) : [...prev, recordId]);
+  };
+
+  // 🛡️ دالة إرسال التبرير الجماعي لقاعدة البيانات
+  const handleJustifySelected = async () => {
+    if (selectedAbsences.length === 0) return;
+    if (!confirm(`هل أنت متأكد من تبرير عدد (${selectedAbsences.length}) حصص غياب لهذا الطالب؟ سيتم تعديل السجل الأكاديمي مباشرة.`)) return;
+    
+    setIsJustifying(true);
+    try {
+      const { error } = await supabase
+        .from('attendance_records')
+        .update({ status: 'excused' })
+        .in('id', selectedAbsences);
+
+      if (error) throw error;
+      
+      alert('تم تبرير السجلات المحددة بنجاح وتحديث النظام.');
+      setSelectedAbsences([]);
+      fetchStudentData(); // 🚀 تحديث السجل والواجهة لإظهار التغيير فوراً
+    } catch (error: any) {
+      alert('حدث خطأ أثناء تبرير الغياب: ' + error.message);
+    } finally {
+      setIsJustifying(false);
+    }
   };
 
   const confirmRevokeBadge = async () => {
@@ -629,7 +716,17 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
       <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[400px] overflow-hidden no-print">
         <AnimatePresence mode="wait">
           {activeTab === 'overview' && <OverviewTab attendance={attendance} exams={exams} assignments={assignments} stats={stats} />}
-          {activeTab === 'attendance' && <AttendanceTab attendance={attendance} />}
+          {activeTab === 'attendance' && (
+             <AttendanceTab 
+               attendance={attendance} 
+               isAdmin={isAdminOrManagement} 
+               selectedAbsences={selectedAbsences} 
+               toggleAbsenceSelection={toggleAbsenceSelection} 
+               setSelectedAbsences={setSelectedAbsences} 
+               handleJustifySelected={handleJustifySelected} 
+               isJustifying={isJustifying} 
+             />
+          )}
           {activeTab === 'exams' && <ExamsTab exams={exams} studentId={studentId} />}
           {activeTab === 'assignments' && <AssignmentsTab assignments={assignments} />}
           {activeTab === 'private_notes' && userRole === 'teacher' && <PrivateNotesTab privateNotes={privateNotes} newNote={newNote} setNewNote={setNewNote} handleAddPrivateNote={handleAddPrivateNote} isSubmittingNote={isSubmittingNote} />}
