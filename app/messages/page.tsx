@@ -4,15 +4,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Plus, Search, Send, User, X, Users, Trash2, ArrowRight, Check, CheckCheck, Loader2, ShieldAlert, Sparkles, Calendar } from 'lucide-react';
+import { MessageSquare, Plus, Search, Send, User, X, Users, Trash2, ArrowRight, Check, CheckCheck, Loader2, ShieldAlert, Sparkles, Calendar, Megaphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/auth-context';
 import { useMessagesSystem } from '@/hooks/useMessagesSystem';
 import { supabase } from '@/lib/supabase'; 
 import ForumEditor from '@/components/ForumEditor';
 import { cn } from '@/lib/utils';
-
-interface ChatRoom { id: string; name: string; className: string; type: 'group'; }
 
 const RenderAvatar = ({ user, size = 'h-12 w-12', isGroup = false }: { user?: any, size?: string, isGroup?: boolean }) => {
   if (isGroup) {
@@ -36,7 +34,7 @@ const RenderAvatar = ({ user, size = 'h-12 w-12', isGroup = false }: { user?: an
   }
 
   return (
-    <div className={`${size} rounded-[1.25rem] sm:rounded-2xl bg-[#02040a] flex items-center justify-center text-emerald-400 font-black shadow-inner border border-white/5 shrink-0`}>
+    <div className={`${size} rounded-[1.25rem] sm:rounded-2xl bg-[#02040a] flex items-center justify-center text-indigo-400 font-black shadow-inner border border-white/5 shrink-0`}>
       <span className="drop-shadow-md">{initial}</span>
     </div>
   );
@@ -54,6 +52,7 @@ export default function MessagesPage() {
     fetchMessages,
     sendMessage,
     sendGroupMessage,
+    sendBroadcastMessage, // 🚀 دالة الإذاعة العامة
     markAsRead,
     deleteMessages,
   } = useMessagesSystem();
@@ -67,7 +66,10 @@ export default function MessagesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [showNewMessage, setShowNewMessage] = useState(false);
+  const [step, setStep] = useState(1);
+  const [recipientType, setRecipientType] = useState<'teacher' | 'student' | 'broadcast' | ''>(''); // 🚀 إضافة broadcast
   const [newMessage, setNewMessage] = useState({ receiver_id: '', subject: '', content: '' });
+  const [isGroupMessage, setIsGroupMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -116,8 +118,6 @@ export default function MessagesPage() {
       let thread = [];
       if (activeThread.type === 'group') {
         thread = messages.filter((m: any) => m.section_id === activeThread.id);
-        
-        // 🚀 الإصلاح: إزالة التكرار بناءً على الـ ID فقط لعدم إخفاء الرسائل المتشابهة
         const unique = []; const seen = new Set();
         for (const msg of thread) {
           if (!seen.has(msg.id)) { seen.add(msg.id); unique.push(msg); }
@@ -153,7 +153,7 @@ export default function MessagesPage() {
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await sendGroupMessage(activeThread.id, 'رسالة نقاش', replyContent);
+        await sendGroupMessage(activeThread.id, activeThread.subject || 'رد على النقاش', replyContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
         await sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
@@ -163,16 +163,25 @@ export default function MessagesPage() {
     finally { setIsReplying(false); }
   };
 
-  const handleSendNewPrivateMessage = async (e: React.FormEvent) => {
+  const handleSendNewMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const strippedContent = newMessage.content.replace(/<[^>]*>?/gm, '').trim();
-    if (!newMessage.receiver_id || !newMessage.subject || !strippedContent) return alert('الرجاء تعبئة جميع الحقول');
+    if (!newMessage.subject || !strippedContent) return alert('الرجاء تعبئة جميع الحقول');
 
     setIsSubmitting(true);
     try {
-      await sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
+      if (recipientType === 'broadcast') {
+        // 🚀 إرسال الإذاعة العامة لجميع الفصول
+        await sendBroadcastMessage(newMessage.subject, newMessage.content);
+        alert('تم إرسال الإذاعة العامة بنجاح لجميع المجالس!');
+      } else if (!isGroupMessage) {
+        if (!newMessage.receiver_id) return alert('الرجاء اختيار المستلم');
+        await sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
+      }
+      
       setShowNewMessage(false);
       setNewMessage({ receiver_id: '', subject: '', content: '' });
+      setStep(1); setRecipientType(''); setIsGroupMessage(false);
     } catch (error: any) { alert(error.message); } 
     finally { setIsSubmitting(false); }
   };
@@ -227,15 +236,15 @@ export default function MessagesPage() {
           <p className="text-slate-400 mt-1 sm:mt-2 font-bold text-xs sm:text-sm">مجالس الفصول والمراسلات الخاصة ⚡</p>
         </div>
         {role !== 'parent' && (
-          <button onClick={() => setShowNewMessage(true)} className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 text-sm font-black text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:from-emerald-500 hover:to-teal-500 transition-all active:scale-95 border border-emerald-400/50 shrink-0">
-            <Plus className="ml-2 h-5 w-5" /> رسالة خاصة جديدة
+          <button onClick={() => { setShowNewMessage(true); setStep(1); setRecipientType(''); setIsGroupMessage(false); }} className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 text-sm font-black text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:from-indigo-500 hover:to-blue-500 transition-all active:scale-95 border border-indigo-400/50 shrink-0">
+            <Plus className="ml-2 h-5 w-5" /> رسالة جديدة
           </button>
         )}
       </div>
 
       <div className="glass-panel rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-1 min-h-0 mx-4 lg:mx-8 relative z-10 bg-[#0f1423]/60">
         
-        {/* 🚀 القائمة الجانبية */}
+        {/* 🚀 القائمة الجانبية (الغرف الثابتة + الخاص) */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -245,6 +254,8 @@ export default function MessagesPage() {
            </div>
 
            <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar">
+              
+              {/* 🏫 قسم مجالس الفصول */}
               {chatRooms.length > 0 && (
                 <div>
                   <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-400"/> مجالس الفصول الثابتة</h3>
@@ -262,6 +273,7 @@ export default function MessagesPage() {
                 </div>
               )}
 
+              {/* 👤 قسم المراسلات الخاصة */}
               <div>
                 <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><User className="w-4 h-4 text-emerald-400"/> المراسلات الخاصة</h3>
                 <div className="space-y-2">
@@ -293,7 +305,7 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 نافذة الدردشة */}
+        {/* 🚀 نافذة الدردشة (المجلس أو الخاص) */}
         <div className={`flex-1 flex flex-col bg-transparent relative ${!activeThread ? 'hidden lg:flex items-center justify-center' : 'flex min-h-0'}`}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
@@ -400,53 +412,93 @@ export default function MessagesPage() {
         </div>
       </div>
 
+      {/* 🚀 Modal: إنشاء رسالة (مع إضافة نظام الإذاعة العامة) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-[#02040a]/90 backdrop-blur-md" onClick={() => setShowNewMessage(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-2xl bg-[#0f1423] rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden z-10 flex flex-col" dir="rtl">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-[#02040a]/90 backdrop-blur-md" onClick={() => { setShowNewMessage(false); setStep(1); }} />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-4xl bg-[#0f1423] rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden z-10 flex flex-col" dir="rtl">
               
               <div className="px-8 pt-8 pb-6 border-b border-white/5 bg-[#02040a]/40 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-inner">
-                    <User className="h-6 w-6" />
+                  <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner">
+                    <Plus className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-white drop-shadow-sm">رسالة خاصة جديدة</h3>
-                    <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest mt-1">تواصل مباشر وآمن</p>
+                    <h3 className="text-2xl font-black text-white drop-shadow-sm">إنشاء رسالة جديدة</h3>
+                    <p className="text-xs text-indigo-400 font-bold uppercase tracking-widest mt-1">تواصل، توجيه، وإدارة</p>
                   </div>
                 </div>
-                <button onClick={() => setShowNewMessage(false)} className="p-2 text-slate-400 hover:text-rose-400 bg-[#0f1423] border border-white/5 rounded-xl shadow-inner active:scale-90"><X className="h-6 w-6" /></button>
+                <button onClick={() => { setShowNewMessage(false); setStep(1); }} className="p-2 text-slate-400 hover:text-rose-400 bg-[#0f1423] border border-white/5 rounded-xl shadow-inner active:scale-90"><X className="h-6 w-6" /></button>
               </div>
 
-              <form onSubmit={handleSendNewPrivateMessage} className="p-8 space-y-6">
-                <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المستلم</label>
-                  <select required value={newMessage.receiver_id} onChange={(e) => setNewMessage({...newMessage, receiver_id: e.target.value})} className="block w-full rounded-2xl border border-white/5 py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-emerald-500/50 text-sm font-bold outline-none cursor-pointer shadow-inner [&>option]:bg-[#0f1423]">
-                    <option value="">اختر المستلم...</option>
-                    {users.map((u: any) => <option key={u.id} value={u.id}>{u.full_name} ({u.role === 'teacher' ? 'معلم' : u.role === 'admin' ? 'إدارة' : 'طالب'})</option>)}
-                  </select>
-                </div>
-                
-                <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">عنوان الرسالة</label>
-                  <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-2xl border border-white/5 py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-emerald-500/50 text-sm font-bold outline-none shadow-inner placeholder:text-slate-600" />
-                </div>
-                
-                <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
-                  <div className="bg-[#0f1423] rounded-2xl border border-white/5 overflow-hidden shadow-inner p-1">
-                    <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="150px" />
-                  </div>
-                </div>
+              <div className="p-8">
+                {step === 1 && (
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 ${['admin', 'management'].includes(role) ? 'lg:grid-cols-3' : ''} gap-4 lg:gap-6`}>
+                    
+                    {/* خيار 1: مراسلة معلم/إدارة */}
+                    <button onClick={() => { setRecipientType('teacher'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-8 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-indigo-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
+                      <div className="h-16 w-16 rounded-[1rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-110 transition-transform"><User className="h-8 w-8" /></div>
+                      <span className="text-lg font-black text-white drop-shadow-sm">رسالة لمعلم / إدارة</span>
+                      <p className="text-xs text-slate-400 font-bold mt-2">مراسلة مباشرة للفريق الإداري والتدريسي</p>
+                    </button>
+                    
+                    {/* خيار 2: مراسلة طالب */}
+                    <button onClick={() => { setRecipientType('student'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-8 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-emerald-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
+                      <div className="h-16 w-16 rounded-[1rem] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform"><Users className="h-8 w-8" /></div>
+                      <span className="text-lg font-black text-white drop-shadow-sm">رسالة خاصة لطالب</span>
+                      <p className="text-xs text-slate-400 font-bold mt-2">توجيه رسالة سرية لطالب محدد</p>
+                    </button>
 
-                <div className="pt-6 border-t border-white/5 flex justify-end gap-3">
-                  <button type="submit" disabled={isSubmitting} className="px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black hover:opacity-90 transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:opacity-50 flex items-center gap-2 active:scale-95">
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" /> إرسال الرسالة</>}
-                  </button>
-                  <button type="button" onClick={() => setShowNewMessage(false)} className="px-8 py-4 rounded-2xl bg-[#0f1423] border border-white/5 text-slate-300 font-black hover:bg-white/5 transition-all active:scale-95 shadow-inner">إلغاء</button>
-                </div>
-              </form>
+                    {/* خيار 3: الإذاعة العامة (للمدير فقط) 🚀 */}
+                    {['admin', 'management'].includes(role) && (
+                      <button onClick={() => { setRecipientType('broadcast'); setIsGroupMessage(true); setStep(2); }} className="flex flex-col items-center justify-center p-8 rounded-[1.5rem] border border-rose-500/20 shadow-inner hover:border-rose-500/50 hover:bg-rose-500/10 transition-all group bg-rose-500/5 active:scale-95">
+                        <div className="h-16 w-16 rounded-[1rem] bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 group-hover:scale-110 transition-transform"><Megaphone className="h-8 w-8 drop-shadow-md" /></div>
+                        <span className="text-lg font-black text-rose-400 drop-shadow-sm">إذاعة عامة (لجميع المجالس)</span>
+                        <p className="text-xs text-slate-400 font-bold mt-2 text-center">نشر توجيه فوري في جميع مجالس الفصول دفعة واحدة</p>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {step === 2 && (
+                  <form onSubmit={handleSendNewMessage} className="space-y-6">
+                    <button type="button" onClick={() => setStep(1)} className="text-indigo-400 font-black text-sm flex items-center gap-1.5 hover:text-indigo-300 transition-colors w-fit mb-2"><ArrowRight className="h-4 w-4" /> العودة للخيارات</button>
+
+                    {/* إخفاء اختيار المستلم إذا كانت إذاعة عامة */}
+                    {recipientType !== 'broadcast' && (
+                      <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المستلم</label>
+                        <select required value={newMessage.receiver_id} onChange={(e) => setNewMessage({...newMessage, receiver_id: e.target.value})} className="block w-full rounded-2xl border border-white/5 py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-indigo-500/50 text-sm font-bold outline-none cursor-pointer shadow-inner [&>option]:bg-[#0f1423]">
+                          <option value="">اختر المستلم...</option>
+                          {users
+                            .filter(u => recipientType === 'teacher' ? ['teacher', 'admin', 'management'].includes(u.role) : u.role === 'student')
+                            .map((u: any) => <option key={u.id} value={u.id}>{u.full_name}</option>)
+                          }
+                        </select>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">عنوان الرسالة</label>
+                      <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-2xl border border-white/5 py-4 px-4 text-white bg-[#0f1423] focus:ring-1 focus:ring-indigo-500/50 text-sm font-bold outline-none shadow-inner placeholder:text-slate-600" />
+                    </div>
+                    
+                    <div className="space-y-3 bg-[#02040a]/40 p-5 rounded-[1.5rem] border border-white/5 shadow-inner">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
+                      <div className="bg-[#0f1423] rounded-2xl border border-white/5 overflow-hidden shadow-inner p-1">
+                        <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="150px" />
+                      </div>
+                    </div>
+
+                    <div className="pt-6 border-t border-white/5 flex justify-end gap-3">
+                      <button type="submit" disabled={isSubmitting} className={`px-8 py-4 rounded-2xl ${recipientType === 'broadcast' ? 'bg-gradient-to-r from-rose-600 to-red-600 shadow-[0_0_20px_rgba(225,29,72,0.4)]' : 'bg-gradient-to-r from-indigo-600 to-blue-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]'} text-white font-black hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2 active:scale-95`}>
+                        {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin"/> : <><Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" /> إرسال الرسالة</>}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </motion.div>
           </div>
         )}
