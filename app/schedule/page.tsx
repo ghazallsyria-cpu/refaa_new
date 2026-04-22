@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useSchedulesSystem } from '@/hooks/useSchedulesSystem';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
+import { supabase } from '@/lib/supabase';
 
 // استيراد المكتبات القوية لتوليد الـ PDF
 import jsPDF from 'jspdf';
@@ -51,7 +52,7 @@ const getEntityTitle = (entity: any, type: string) => {
 };
 
 export default function SchedulePage() {
-  const { user, authRole, isChecking } = useAuth() as any;
+  const { user, authRole, userRole, isChecking } = useAuth() as any;
   const [viewType, setViewType] = useState<'teacher' | 'section'>('teacher');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
@@ -60,7 +61,10 @@ export default function SchedulePage() {
   const [scheduleData, setScheduleData] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // حالات الأمان
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isWatcher, setIsWatcher] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{day: number, period: number} | null>(null);
@@ -90,8 +94,18 @@ export default function SchedulePage() {
   const fetchFilters = useCallback(async () => {
     if (isChecking) return;
     try {
-      let currentUserRole = authRole;
-      if (user) setIsAdmin(currentUserRole === 'admin' || currentUserRole === 'management');
+      let isSuperAdmin = authRole === 'admin' || authRole === 'management';
+      let isGlobalWatcher = false;
+
+      if (userRole === 'staff' && user?.id) {
+        const { data } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
+        if (data?.permissions?.global_read_only === true) {
+          isGlobalWatcher = true;
+        }
+      }
+
+      setIsAdmin(isSuperAdmin);
+      setIsWatcher(isGlobalWatcher);
 
       const data = await fetchInitialScheduleData();
       setTeachers(data.teachers || []);
@@ -99,16 +113,16 @@ export default function SchedulePage() {
       setSubjects(data.subjects || []);
       setPeriods(data.periods || []);
 
-      if (currentUserRole === 'teacher' && user) {
+      if (authRole === 'teacher' && user) {
         setSelectedId(user.id); setViewType('teacher'); setShowAllSchedules(false);
-      } else if (currentUserRole === 'student' && user) {
+      } else if (authRole === 'student' && user) {
         const sectionId = await fetchStudentSection(user.id);
         if (sectionId) { setSelectedId(sectionId); setViewType('section'); setShowAllSchedules(false); }
-      } else if (data.teachers?.[0]) {
+      } else if ((isSuperAdmin || isGlobalWatcher) && data.teachers?.[0]) {
         setSelectedId(data.teachers[0].id);
       }
     } catch (err) { console.error(err); }
-  }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, isChecking]);
+  }, [fetchInitialScheduleData, fetchStudentSection, user, authRole, userRole, isChecking]);
 
   useEffect(() => { fetchFilters(); }, [fetchFilters]);
 
@@ -131,7 +145,7 @@ export default function SchedulePage() {
   };
 
   const handleSwap = async (targetDay: number, targetPeriod: number, targetSlot: any | null) => {
-    if (!swappingFrom || !isAdmin) return;
+    if (!swappingFrom || !isAdmin) return; // المراقب لا يستطيع التبديل
     try {
       setLoading(true);
       const sourceDay = Number(swappingFrom.day_of_week);
@@ -157,6 +171,7 @@ export default function SchedulePage() {
   };
 
   const handleAddSchedule = async () => {
+    if (!isAdmin) return; // 🔒 حماية إضافية
     if (!formData.teacher_id || !formData.section_id || !formData.subject_id || !selectedSlot) { alert('يرجى تعبئة جميع الحقول المطلوبة.'); return; }
     try {
       try {
@@ -172,6 +187,7 @@ export default function SchedulePage() {
   };
 
   const handleDeleteSchedule = async (id: string) => {
+    if (!isAdmin) return; // 🔒 حماية إضافية
     if (!confirm('هل أنت متأكد من حذف هذه الحصة؟')) return;
     try { await deleteSchedule(String(id)); await fetchSchedule(); } catch (err: any) { alert(`خطأ: ${err.message}`); }
   };
@@ -180,14 +196,14 @@ export default function SchedulePage() {
     setLoading(true);
     try {
       let filters: any = {};
-      if (!(isAdmin && showAllSchedules)) {
+      if (!((isAdmin || isWatcher) && showAllSchedules)) {
         if (viewType === 'teacher') filters.teacherId = selectedId;
         else filters.sectionId = selectedId;
       }
       const data = await fetchSchedulesData(filters);
       setScheduleData(data || []);
     } catch (err: any) { setScheduleData([]); } finally { setLoading(false); }
-  }, [selectedId, viewType, isAdmin, showAllSchedules, fetchSchedulesData]);
+  }, [selectedId, viewType, isAdmin, isWatcher, showAllSchedules, fetchSchedulesData]);
 
   useEffect(() => { if (!selectedId && !showAllSchedules) return; fetchSchedule(); }, [selectedId, viewType, showAllSchedules, fetchSchedule]);
 
@@ -368,7 +384,7 @@ export default function SchedulePage() {
   }
 
   // ==========================================
-  // 🚀 ADMIN / TEACHER VIEW (Dark Glassmorphism + Print Center)
+  // 🚀 ADMIN / TEACHER / WATCHER VIEW (Dark Glassmorphism + Print Center)
   // ==========================================
   return (
     <div className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo" dir="rtl">
@@ -440,6 +456,13 @@ export default function SchedulePage() {
           </div>
         )}
 
+        {isWatcher && (
+          <div className="bg-blue-500/10 p-5 rounded-2xl text-sm text-blue-400 font-bold border border-blue-500/30 flex items-center gap-3 backdrop-blur-md shadow-lg print:hidden">
+            <ShieldAlert className="w-6 h-6 shrink-0" />
+            <p>وضع المراقبة الشاملة مفعل. الجداول تظهر بوضعية القراءة فقط.</p>
+          </div>
+        )}
+
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 print:hidden">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-xs font-black text-emerald-400 mb-3 shadow-sm">
@@ -452,9 +475,9 @@ export default function SchedulePage() {
             <button onClick={() => executePDF('single')} className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 border border-white/10 px-6 py-3.5 text-sm font-black text-white hover:bg-white/10 transition-all active:scale-95 shrink-0">
               <FileDown className="h-5 w-5" /> تحميل الجدول الحالي
             </button>
-            {isAdmin && (
+            {(isAdmin || isWatcher) && (
                <button onClick={() => setIsPrintModalOpen(true)} className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-3.5 text-sm font-black text-slate-900 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:opacity-90 transition-all active:scale-95 shrink-0">
-                  <Printer className="h-5 w-5" /> مركز الطباعة الذكي
+                 <Printer className="h-5 w-5" /> مركز الطباعة الذكي
                </button>
             )}
           </div>
@@ -480,7 +503,7 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {isAdmin && authRole !== 'teacher' && (
+        {(isAdmin || isWatcher) && authRole !== 'teacher' && (
           <div className="bg-[#131836]/60 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-lg border border-white/10 flex flex-col lg:flex-row gap-6 items-center print:hidden">
             <div className="flex rounded-2xl shadow-inner bg-[#090b14]/50 p-1.5 w-full lg:w-auto shrink-0 border border-white/5">
               <button type="button" onClick={() => { setViewType('teacher'); if (teachers.length > 0) setSelectedId(String(teachers[0].id)); }} className={`flex-1 flex justify-center items-center gap-2 px-6 py-3.5 text-sm font-black rounded-xl transition-all ${viewType === 'teacher' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><User className="w-4 h-4" /> جدول المعلمين</button>
@@ -563,7 +586,7 @@ export default function SchedulePage() {
                       <div className={`font-black text-sm flex items-center justify-center rounded-2xl shadow-sm border transition-all ${day.id === currentDayOfWeek ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-slate-900 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-[#090b14]/80 text-slate-400 border-white/5'}`}>{day.name}</div>
                       {periods.map(p => {
                         const slot = scheduleData.find(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number) && (viewType === 'teacher' ? String(s.teacher_id) === String(selectedId) : String(s.section_id) === String(selectedId)));
-                        const others = (isAdmin && showAllSchedules) ? scheduleData.filter(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number) && (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))) : [];
+                        const others = ((isAdmin || isWatcher) && showAllSchedules) ? scheduleData.filter(s => String(s.day_of_week) === String(day.id) && String(s.period) === String(p.period_number) && (viewType === 'teacher' ? String(s.teacher_id) !== String(selectedId) : String(s.section_id) !== String(selectedId))) : [];
                         const displaySlot = slot || (swappingFrom && others.find(o => String(o.id) === String(swappingFrom.id)) ? swappingFrom : others[0]);
 
                         return (
@@ -590,7 +613,13 @@ export default function SchedulePage() {
                                 )}
                               </div>
                             ) : (
-                              <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2"><Plus className="w-6 h-6 opacity-30 group-hover:opacity-100 group-hover:text-emerald-400 transition-colors" /></div>
+                              <div className="flex flex-col items-center justify-center h-full text-slate-600 gap-2">
+                                {isAdmin ? (
+                                  <Plus className="w-6 h-6 opacity-30 group-hover:opacity-100 group-hover:text-emerald-400 transition-colors" />
+                                ) : (
+                                  <span className="text-[10px] font-bold tracking-widest uppercase opacity-30">فراغ</span>
+                                )}
+                              </div>
                             )}
                           </div>
                         );
