@@ -3,16 +3,16 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  Users, Crown, ShieldCheck, ChevronDown, ChevronUp, 
-  Sparkles, GraduationCap, MapPin, Mail, Award, 
-  Edit2, Image as ImageIcon, Loader2, X, UploadCloud, ArrowRight
+  Users, Crown, ChevronDown, ChevronUp, 
+  Sparkles, GraduationCap, Edit2, 
+  Image as ImageIcon, Loader2, X, UploadCloud 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useHierarchySystem } from '@/hooks/useHierarchySystem';
 import { useAuth } from '@/context/auth-context';
 import Link from 'next/link';
 
-// 🧩 1. بطاقة الإدارة (محمية الخصوصية)
+// 🧩 1. بطاقة الإدارة (محمية الخصوصية - بدون إيميل/رقم مدني)
 const AdminCard = ({ user, role, delay }: any) => {
   const isImage = user?.avatar_url?.trim();
   return (
@@ -51,6 +51,7 @@ const DepartmentCard = ({ dept, delay, isAdmin, onEditImage }: any) => {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#05070e] via-[#05070e]/40 to-transparent"></div>
         
+        {/* زر التعديل (للمدير فقط) */}
         {isAdmin && (
           <button onClick={() => onEditImage(dept)} className="absolute top-4 left-4 p-2.5 bg-white/10 hover:bg-indigo-600 backdrop-blur-md rounded-xl border border-white/10 text-white transition-all active:scale-90 z-20 shadow-lg group/btn">
              <Edit2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
@@ -65,6 +66,7 @@ const DepartmentCard = ({ dept, delay, isAdmin, onEditImage }: any) => {
         </div>
       </div>
 
+      {/* تفاصيل القسم */}
       <div className="p-6 flex flex-col items-center relative z-10 -mt-6">
         {hod ? (
           <div className="flex flex-col items-center w-full">
@@ -111,8 +113,11 @@ export default function HierarchyPage() {
   const { authRole } = useAuth() as any;
   const { loading, fetchHierarchyData } = useHierarchySystem();
   const [data, setData] = useState<any>(null);
+  
+  // حالات الرفع والإشعارات
   const [editingDept, setEditingDept] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     fetchHierarchyData().then(setData);
@@ -122,7 +127,15 @@ export default function HierarchyPage() {
     const file = e.target.files?.[0];
     if (!file || !editingDept) return;
 
+    // 1. التحقق من حجم الملف (5 ميجا كحد أقصى)
+    if (file.size > 5 * 1024 * 1024) {
+      setStatusMessage({ type: 'error', text: 'حجم الصورة كبير جداً (الحد الأقصى 5MB)' });
+      return;
+    }
+
     setIsUploading(true);
+    setStatusMessage(null);
+
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onloadend = async () => {
@@ -132,16 +145,31 @@ export default function HierarchyPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image: reader.result, departmentId: editingDept.id }),
         });
-        if (response.ok) {
-          const result = await response.json();
+        
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          setStatusMessage({ type: 'success', text: 'تم تحديث هوية القسم بنجاح! ✨' });
+          // تحديث البيانات محلياً لتظهر فوراً
           setData((prev: any) => ({
             ...prev,
-            departments: prev.departments.map((d: any) => d.id === editingDept.id ? { ...d, image_url: result.url } : d)
+            departments: prev.departments.map((d: any) => 
+              d.id === editingDept.id ? { ...d, image_url: result.url } : d
+            )
           }));
-          setEditingDept(null);
+          setTimeout(() => {
+            setEditingDept(null);
+            setStatusMessage(null);
+          }, 1500);
+        } else {
+          throw new Error(result.error || 'حدث خطأ أثناء معالجة الصورة');
         }
-      } catch (err) { alert('خطأ في الرفع'); } 
-      finally { setIsUploading(false); }
+      } catch (err: any) {
+        console.error('Frontend Upload Error:', err);
+        setStatusMessage({ type: 'error', text: err.message });
+      } finally {
+        setIsUploading(false);
+      }
     };
   };
 
@@ -196,24 +224,41 @@ export default function HierarchyPage() {
         </section>
       </div>
 
-      {/* 🚀 مودال رفع الصور للمدير */}
+      {/* 🚀 مودال رفع الصور للمدير مع الإشعارات */}
       <AnimatePresence>
         {editingDept && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-[#02040a]/90 backdrop-blur-md" onClick={() => setEditingDept(null)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-[#02040a]/90 backdrop-blur-md" onClick={() => { setEditingDept(null); setStatusMessage(null); }} />
             <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-md bg-[#0f1423] rounded-[2.5rem] border border-white/10 p-8 shadow-2xl z-10 text-center">
+              
               <div className="h-16 w-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-indigo-500/20">
                 <ImageIcon className="text-indigo-400 w-8 h-8" />
               </div>
               <h3 className="text-xl font-black text-white mb-2">تغيير خلفية القسم</h3>
-              <p className="text-slate-400 text-sm font-bold mb-8 leading-relaxed">قسم {editingDept.name} يستحق هوية بصرية متميزة. اختر صورة سينمائية تعكس روح المادة.</p>
+              <p className="text-slate-400 text-sm font-bold mb-6 leading-relaxed">قسم {editingDept.name} يستحق هوية بصرية متميزة. اختر صورة سينمائية تعكس روح المادة.</p>
               
+              {/* 🚀 عرض حالة الرفع هنا */}
+              <AnimatePresence>
+                {statusMessage && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                    className={`mb-4 p-3 rounded-xl text-xs font-black border ${
+                      statusMessage.type === 'success' 
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    }`}
+                  >
+                    {statusMessage.text}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <label className="relative group cursor-pointer block">
                 <input type="file" className="hidden" onChange={handleImageUpload} accept="image/*" disabled={isUploading} />
-                <div className="py-6 px-4 bg-white/5 border-2 border-dashed border-white/10 rounded-2xl group-hover:border-indigo-500/50 group-hover:bg-white/10 transition-all">
+                <div className={`py-6 px-4 border-2 border-dashed rounded-2xl transition-all ${isUploading ? 'bg-indigo-500/10 border-indigo-500/50' : 'bg-white/5 border-white/10 group-hover:border-indigo-500/50 group-hover:bg-white/10'}`}>
                   {isUploading ? (
                     <div className="flex items-center justify-center gap-3 text-indigo-400 font-black">
-                      <Loader2 className="animate-spin w-5 h-5" /> جاري الرفع لكلاودينري...
+                      <Loader2 className="animate-spin w-5 h-5" /> جاري المعالجة...
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2">
@@ -224,7 +269,7 @@ export default function HierarchyPage() {
                 </div>
               </label>
               
-              <button onClick={() => setEditingDept(null)} className="mt-8 text-slate-500 font-black text-xs hover:text-rose-400 transition-colors flex items-center justify-center gap-2 mx-auto">
+              <button onClick={() => { setEditingDept(null); setStatusMessage(null); }} className="mt-8 text-slate-500 font-black text-xs hover:text-rose-400 transition-colors flex items-center justify-center gap-2 mx-auto">
                 <X className="w-4 h-4" /> إلغاء العملية
               </button>
             </motion.div>
