@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  Users, Crown, ChevronDown, ChevronUp, 
+  Users, Crown, ShieldCheck, ChevronDown, ChevronUp, 
   Sparkles, GraduationCap, Edit2, 
   Image as ImageIcon, Loader2, X, UploadCloud 
 } from 'lucide-react';
@@ -12,19 +12,28 @@ import { useHierarchySystem } from '@/hooks/useHierarchySystem';
 import { useAuth } from '@/context/auth-context';
 import Link from 'next/link';
 
-// 🧩 1. بطاقة الإدارة (محمية الخصوصية - بدون إيميل/رقم مدني)
-const AdminCard = ({ user, role, delay }: any) => {
+// 🧩 1. بطاقة الإدارة والإشراف (محمية الخصوصية - بدون إيميل/رقم مدني)
+const AdminCard = ({ user, role, delay, isSupervisor = false }: any) => {
   const isImage = user?.avatar_url?.trim();
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }} className="w-full sm:w-80 relative group">
-      <div className="absolute -inset-0.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2.5rem] blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }} className={`w-full sm:w-80 relative group ${isSupervisor ? 'scale-95' : ''}`}>
+      <div className={`absolute -inset-0.5 bg-gradient-to-br ${isSupervisor ? 'from-blue-500 to-indigo-600' : 'from-indigo-500 to-purple-600'} rounded-[2.5rem] blur opacity-20 group-hover:opacity-40 transition duration-500`}></div>
       <div className="relative flex flex-col items-center p-8 bg-[#0a0d16] rounded-[2.5rem] border border-white/10 shadow-2xl h-full overflow-hidden">
-        <Crown className="absolute -top-5 text-yellow-500 h-10 w-10 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]" />
-        <div className="w-24 h-24 rounded-3xl bg-indigo-500/10 flex items-center justify-center mb-5 overflow-hidden shadow-inner border border-indigo-500/30">
-          {isImage ? <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" /> : <Users className="h-10 w-10 text-indigo-400" />}
+        
+        {isSupervisor ? (
+           <ShieldCheck className="absolute -top-5 text-blue-400 h-10 w-10 drop-shadow-[0_0_15px_rgba(96,165,250,0.5)]" />
+        ) : (
+           <Crown className="absolute -top-5 text-yellow-500 h-10 w-10 drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]" />
+        )}
+
+        <div className={`w-24 h-24 rounded-3xl ${isSupervisor ? 'bg-blue-500/10 border-blue-500/30' : 'bg-indigo-500/10 border-indigo-500/30'} flex items-center justify-center mb-5 overflow-hidden shadow-inner border`}>
+          {isImage ? <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" /> : <Users className={`h-10 w-10 ${isSupervisor ? 'text-blue-400' : 'text-indigo-400'}`} />}
         </div>
+        
         <h3 className="font-black text-xl text-white text-center truncate w-full drop-shadow-sm">{user?.full_name}</h3>
-        <span className="text-[10px] font-black px-4 py-1.5 rounded-xl bg-indigo-500/20 text-indigo-300 mt-4 border border-indigo-500/20 uppercase tracking-widest">{role}</span>
+        <span className={`text-[10px] font-black px-4 py-1.5 rounded-xl ${isSupervisor ? 'bg-blue-500/20 text-blue-300 border-blue-500/20' : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/20'} mt-4 border uppercase tracking-widest`}>
+          {role}
+        </span>
       </div>
     </motion.div>
   );
@@ -34,7 +43,7 @@ const AdminCard = ({ user, role, delay }: any) => {
 const DepartmentCard = ({ dept, delay, isAdmin, onEditImage }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const hod = dept.hod;
-  const members = dept.members;
+  const members = dept.members || [];
   const hasImage = dept.image_url?.trim();
 
   return (
@@ -86,7 +95,7 @@ const DepartmentCard = ({ dept, delay, isAdmin, onEditImage }: any) => {
         </button>
 
         <AnimatePresence>
-          {isOpen && (
+          {isOpen && members.length > 0 && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="w-full overflow-hidden">
               <div className="pt-4 space-y-2">
                 {members.map((member: any) => (
@@ -114,7 +123,6 @@ export default function HierarchyPage() {
   const { loading, fetchHierarchyData } = useHierarchySystem();
   const [data, setData] = useState<any>(null);
   
-  // حالات الرفع والإشعارات
   const [editingDept, setEditingDept] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -127,7 +135,6 @@ export default function HierarchyPage() {
     const file = e.target.files?.[0];
     if (!file || !editingDept) return;
 
-    // 1. التحقق من حجم الملف (5 ميجا كحد أقصى)
     if (file.size > 5 * 1024 * 1024) {
       setStatusMessage({ type: 'error', text: 'حجم الصورة كبير جداً (الحد الأقصى 5MB)' });
       return;
@@ -150,7 +157,6 @@ export default function HierarchyPage() {
 
         if (response.ok && result.success) {
           setStatusMessage({ type: 'success', text: 'تم تحديث هوية القسم بنجاح! ✨' });
-          // تحديث البيانات محلياً لتظهر فوراً
           setData((prev: any) => ({
             ...prev,
             departments: prev.departments.map((d: any) => 
@@ -184,6 +190,11 @@ export default function HierarchyPage() {
 
   const isAdmin = authRole === 'admin' || authRole === 'management';
 
+  // 🚀 فرز القيادة العليا: المانجمنت في الأعلى، والمشرفين والستاف الإداري أسفلهم
+  const management = data?.leadership ? data.leadership.filter((l:any) => l.role === 'management' || l.job_title === 'شؤون الإدارة') : [];
+  const supervisors = data?.leadership ? data.leadership.filter((l:any) => l.role !== 'management' && l.job_title !== 'شؤون الإدارة') : [];
+  const departments = data?.departments || [];
+
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-6 lg:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
@@ -195,18 +206,36 @@ export default function HierarchyPage() {
 
       <div className="max-w-7xl mx-auto space-y-20 relative z-10">
         
-        {/* قسم الإدارة */}
+        {/* قسم القيادة العليا والإدارة */}
         <section className="space-y-12">
           <div className="text-center space-y-4">
             <div className="inline-flex items-center justify-center p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-3xl shadow-xl mb-4"><Crown className="w-10 h-10" /></div>
             <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight drop-shadow-md">القيادة العليا للمنصة</h1>
-            <p className="text-slate-400 font-bold max-w-2xl mx-auto">شؤون الإدارة والتدقيق العام لضمان سير العملية التعليمية وفق دستور الرفعة.</p>
+            <p className="text-slate-400 font-bold max-w-2xl mx-auto">شؤون الإدارة والإشراف العام لضمان سير العملية التعليمية وفق دستور الرفعة.</p>
           </div>
+          
+          {/* 1. طبقة شؤون الإدارة (Management) */}
           <div className="flex flex-wrap justify-center gap-8">
-            {data.admins.map((admin: any, idx: number) => (
+            {management.map((admin: any, idx: number) => (
               <AdminCard key={admin.id} user={admin} role="شؤون الإدارة" delay={idx * 0.1} />
             ))}
           </div>
+
+          {/* 🚀 2. طبقة الإشراف الإداري (Supervisors and Staff) تظهر مباشرة بالأسفل */}
+          {supervisors.length > 0 && (
+            <div className="pt-8 mt-12 border-t border-white/5 relative">
+              <div className="absolute left-1/2 -top-4 -translate-x-1/2 bg-[#090b14] px-4">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-black uppercase tracking-widest text-blue-400 shadow-inner">
+                  <ShieldCheck className="w-4 h-4" /> الإشراف الإداري والتربوي
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-center gap-6 mt-8">
+                {supervisors.map((sup: any, idx: number) => (
+                  <AdminCard key={sup.id} user={sup} role={sup.job_title || 'إشراف'} delay={idx * 0.1} isSupervisor={true} />
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* الأقسام الأكاديمية */}
@@ -216,11 +245,16 @@ export default function HierarchyPage() {
             <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">الأقسام العلمية والأدبية</h2>
             <p className="text-slate-400 font-bold max-w-2xl mx-auto">صُناع الأثر الأكاديمي، مرتبين حسب التخصص والريادة العلمية.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {data.departments.map((dept: any, idx: number) => (
-              <DepartmentCard key={dept.id} dept={dept} isAdmin={isAdmin} onEditImage={setEditingDept} delay={idx * 0.05} />
-            ))}
-          </div>
+          
+          {departments.length === 0 ? (
+            <div className="text-center py-10 bg-white/5 rounded-3xl border border-white/10 text-slate-400">لا توجد أقسام مسجلة حالياً</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {departments.map((dept: any, idx: number) => (
+                <DepartmentCard key={dept.id} dept={dept} isAdmin={isAdmin} onEditImage={setEditingDept} delay={idx * 0.05} />
+              ))}
+            </div>
+          )}
         </section>
       </div>
 
@@ -237,7 +271,6 @@ export default function HierarchyPage() {
               <h3 className="text-xl font-black text-white mb-2">تغيير خلفية القسم</h3>
               <p className="text-slate-400 text-sm font-bold mb-6 leading-relaxed">قسم {editingDept.name} يستحق هوية بصرية متميزة. اختر صورة سينمائية تعكس روح المادة.</p>
               
-              {/* 🚀 عرض حالة الرفع هنا */}
               <AnimatePresence>
                 {statusMessage && (
                   <motion.div 
