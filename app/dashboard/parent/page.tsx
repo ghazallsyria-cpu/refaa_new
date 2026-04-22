@@ -7,7 +7,7 @@ import {
   GraduationCap, TrendingUp, AlertTriangle, Award, MessageCircle,
   Play, Star, ShieldAlert, XCircle, Activity, Loader2, Heart, 
   ChevronDown, Send, UserCheck, ShieldCheck, Headphones,
-  BarChart3, Target, Sparkles, Zap, Coffee, Crown, Plus, Stethoscope, UploadCloud, X, LayoutDashboard, Shield
+  BarChart3, Target, Sparkles, Zap, Coffee, Crown, Plus, Stethoscope, UploadCloud, X, LayoutDashboard, Shield, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
+import Link from 'next/link';
 
 // ==========================================
 // 🎨 مكونات الرسوم البيانية الملكية
@@ -123,180 +124,294 @@ const OverviewTab = ({ stats, absentCount, setIsExcuseModalOpen, router }: any) 
   </motion.div>
 );
 
-const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router }: any) => (
-  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
-    {/* 🔬 مصفوفة الإتقان المفصلة */}
-    <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] relative overflow-hidden border border-white/5 shadow-2xl">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-[80px] pointer-events-none"></div>
-      <div className="flex items-center gap-4 mb-8 relative z-10">
-        <div className="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20"><BookOpen className="text-blue-400 w-6 h-6"/></div>
-        <div>
-          <h2 className="text-2xl font-black text-white drop-shadow-md">التحليل الأكاديمي الدقيق</h2>
-          <p className="text-sm font-bold text-slate-400 mt-1">مستوى إتقان الابن موزعاً على المواد والمعلمين.</p>
-        </div>
-      </div>
+const AcademicsTab = ({ subjectPerformance, detailedTasks, safeFormat, router, activeChildId }: any) => {
+  // 🚀 استخراج قائمة المعلمين الفريدين من بيانات المواد
+  const teachers = useMemo(() => {
+    const uniqueTeachers = new Map();
+    subjectPerformance.forEach((sp: any) => {
+      if (sp.teachers && !uniqueTeachers.has(sp.teachers.id)) {
+        uniqueTeachers.set(sp.teachers.id, {
+          id: sp.teachers.id,
+          name: sp.teachers.users?.full_name,
+          avatar: sp.teachers.users?.avatar_url,
+          subject: sp.subjects?.name
+        });
+      }
+    });
+    return Array.from(uniqueTeachers.values());
+  }, [subjectPerformance]);
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-        {subjectPerformance.map((item: any, idx: number) => (
-          <div key={idx} className="bg-[#05070e] p-6 rounded-[2rem] border border-white/5 hover:border-blue-500/20 transition-all group relative overflow-hidden shadow-inner">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-[1.2rem] bg-[#0a0d16] text-blue-400 flex items-center justify-center font-black text-xl border border-white/5 shadow-inner drop-shadow-sm">{item.average}%</div>
-                <div>
-                  <h3 className="font-black text-white text-lg group-hover:text-blue-400 transition-colors">{item.subjects?.name}</h3>
-                  <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5"/> أ. {item.teachers?.users?.full_name?.split(' ')[0]}</p>
-                </div>
-              </div>
-              <button onClick={() => router.push(`/messages?to=teacher&teacherId=${item.teachers?.id}`)} className="w-10 h-10 bg-white/5 text-slate-400 border border-white/10 rounded-xl flex items-center justify-center hover:bg-blue-500 hover:text-white hover:border-blue-500 transition-all shadow-sm active:scale-95" title="مراسلة المعلم"><MessageCircle className="w-4 h-4"/></button>
-            </div>
-            <div className="bg-[#0a0d16] rounded-2xl p-4 border border-white/5 shadow-inner flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500"/> الواجبات</span>
-                <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md">{item.assignments.length} مهام</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 flex items-center gap-2"><Award className="w-4 h-4 text-emerald-500"/> الاختبارات</span>
-                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">{item.exams.length} تم التقييم</span>
-              </div>
-            </div>
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
+      
+      {/* 👨‍🏫 شريط التواصل السريع مع المعلمين */}
+      {teachers.length > 0 && (
+        <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-6 sm:p-8 rounded-[3rem] border border-white/5 shadow-2xl relative overflow-hidden">
+          <div className="absolute -top-20 -left-20 w-48 h-48 bg-indigo-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+          <div className="flex items-center justify-between mb-6 relative z-10">
+            <h3 className="text-xl font-black text-white flex items-center gap-3 drop-shadow-sm"><Users className="w-6 h-6 text-indigo-400" /> كادر المعلمين المتابعين للابن</h3>
           </div>
-        ))}
-      </div>
-    </section>
-
-    {/* 📝 السجل الزمني للمهام */}
-    <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] relative overflow-hidden border border-white/5 shadow-2xl">
-      <div className="flex items-center gap-4 mb-8 relative z-10">
-        <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20"><FileText className="text-amber-400 w-6 h-6"/></div>
-        <div>
-          <h2 className="text-2xl font-black text-white drop-shadow-md">سجل التقييمات الحديثة</h2>
-          <p className="text-sm font-bold text-slate-400 mt-1">تتبع درجات ونتائج الابن أولاً بأول.</p>
-        </div>
-      </div>
-
-      <div className="bg-[#05070e] rounded-[2rem] border border-white/5 overflow-hidden shadow-inner relative z-10">
-        {detailedTasks.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 font-bold text-sm">لا يوجد مهام أو اختبارات مسجلة حتى الآن.</div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {detailedTasks.slice(0, 10).map((task: any) => (
-              <div key={task.id} className="p-5 flex items-center justify-between hover:bg-white/[0.02] transition-colors group">
-                <div className="flex items-center gap-4">
-                  <div className={cn("w-12 h-12 rounded-[1.2rem] flex items-center justify-center shrink-0 border shadow-inner", task.type === 'exam' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20')}>
-                    {task.type === 'exam' ? <Award className="w-6 h-6"/> : <FileText className="w-6 h-6"/>}
-                  </div>
-                  <div>
-                    <h4 className="font-black text-white text-base group-hover:text-indigo-400 transition-colors drop-shadow-sm">{task.title}</h4>
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <span className="text-[10px] font-black bg-white/5 text-slate-300 px-2 py-1 rounded-md border border-white/10">{task.subject}</span>
-                      <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5"><Clock className="w-3 h-3"/> {safeFormat(task.date, 'dd MMMM')}</span>
-                    </div>
-                  </div>
+          <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar snap-x mask-fade-edges relative z-10">
+            {teachers.map((teacher: any) => (
+              <button 
+                key={teacher.id} 
+                onClick={() => router.push(`/messages?to=teacher&teacherId=${teacher.id}`)}
+                className="snap-center flex items-center gap-3 p-3 pr-4 rounded-2xl bg-[#05070e] border border-white/5 hover:border-indigo-500/30 hover:bg-white/5 transition-all min-w-[220px] group shadow-inner shrink-0"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-black overflow-hidden border border-indigo-500/20">
+                  {teacher.avatar ? <img src={teacher.avatar} alt={teacher.name} className="w-full h-full object-cover" /> : teacher.name?.charAt(0)}
                 </div>
-                <div className="shrink-0 text-left">
-                  {task.isZero ? (
-                    <div className="bg-rose-500/10 border border-rose-500/30 px-4 py-2 rounded-xl text-center shadow-inner">
-                      <span className="block text-rose-400 font-black text-xs">لم ينجز (انتهى الوقت)</span>
-                      <span className="block text-rose-500/70 font-bold text-[10px] mt-0.5">تم رصد (0)</span>
-                    </div>
-                  ) : (
-                    <div className="bg-[#0a0d16] border border-emerald-500/20 px-5 py-2 rounded-xl text-center shadow-inner group-hover:border-emerald-500/40 transition-colors">
-                      <span className="block text-slate-500 font-black text-[10px] uppercase tracking-widest mb-0.5">الدرجة المعتمدة</span>
-                      <span className="block text-emerald-400 font-black text-xl drop-shadow-md">{task.score} <span className="text-xs text-emerald-500/50">/ {task.max}</span></span>
-                    </div>
-                  )}
+                <div className="text-right flex-1 min-w-0">
+                  <p className="font-black text-sm text-white truncate group-hover:text-indigo-300 transition-colors">أ. {teacher.name?.split(' ')[0]}</p>
+                  <p className="text-[10px] font-bold text-slate-400 truncate">{teacher.subject}</p>
                 </div>
-              </div>
+                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-500 group-hover:bg-indigo-500 group-hover:text-white transition-all shrink-0">
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+              </button>
             ))}
           </div>
-        )}
-      </div>
-    </section>
-  </motion.div>
-);
-
-const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendanceStyle, excuses, safeFormat, setIsExcuseModalOpen }: any) => (
-  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    
-    {/* ⏱️ الرادار الزمني (الجدول) */}
-    <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl h-fit">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-      <div className="flex items-center justify-between mb-8 relative z-10">
-        <h3 className="text-xl font-black text-white flex items-center gap-3 drop-shadow-sm"><Clock className="w-6 h-6 text-emerald-500" /> البث المباشر والدوام</h3>
-      </div>
-
-      {schedule.length === 0 ? (
-          <div className="text-center py-12 bg-[#05070e] rounded-[2rem] border border-dashed border-white/10 text-slate-500 font-bold text-sm shadow-inner">لا يوجد دوام مسجل اليوم.</div>
-      ) : (
-        <div className="relative border-r-2 border-white/5 pr-6 space-y-6 z-10">
-          {schedule.map((lesson: any, idx: number) => {
-            const attendanceRecord = todaysAttendance.find((a:any) => a.subjects?.name === lesson.subjects?.name) || todaysAttendance[idx];
-            const style = getAttendanceStyle(attendanceRecord?.status);
-            const current = isCurrentClass(lesson.period);
-            
-            return (
-              <div key={idx} className="relative group">
-                <div className={`absolute -right-[31px] w-4 h-4 rounded-full border-4 border-[#0a0d16] ${current ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]' : style.bg.replace('bg-', 'bg-').replace('/10', '')}`}></div>
-                <div className={cn("p-5 rounded-[1.5rem] border transition-all", current ? "bg-[#05070e] border-emerald-500/50 shadow-[0_0_20px_rgba(52,211,153,0.15)]" : "bg-[#05070e]/60 border-white/5 hover:border-white/10 shadow-inner")}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className={cn("font-black text-sm drop-shadow-sm", current ? "text-emerald-400" : "text-white")}>{lesson.subjects?.name}</h4>
-                      <p className="text-[10px] font-bold text-slate-500 mt-1">الحصة {lesson.period} • أ. {lesson.teachers?.users?.full_name?.split(' ')[0]}</p>
-                    </div>
-                    {current && <span className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] px-2.5 py-1 rounded-md font-black shadow-inner">حصة تفاعلية الآن</span>}
-                  </div>
-                  <div className={`text-[10px] font-black px-3 py-1.5 rounded-lg inline-flex items-center gap-2 border shadow-inner ${style.bg} ${style.textCol} ${style.border}`}><style.icon className="w-3.5 h-3.5 shrink-0"/>{style.text}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        </section>
       )}
-    </div>
 
-    {/* 🩺 سجل الغياب والأعذار الطبية */}
-    <div className="bg-[#0a0d16]/80 backdrop-blur-xl rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col h-fit">
-      <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-      
-      <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4 relative z-10">
-        <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
-          <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
-            <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
-          </div> 
-          سجل الأعذار 
-        </h2>
-        <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md shrink-0 active:scale-95 whitespace-nowrap">
-          <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
-        </button>
-      </div>
-
-      <div className="p-6 space-y-3 relative z-10 max-h-[500px] overflow-y-auto custom-scrollbar">
-        {excuses.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 font-bold text-sm">لم تقم بتقديم أي أعذار طبية مسبقة.</div>
-        ) : (
-          excuses.map((exc: any) => (
-            <div key={exc.id} className="bg-[#05070e] p-4 rounded-2xl border border-white/5 flex flex-col gap-2 shadow-inner">
-              <div className="flex justify-between items-center">
-                <span className="text-white font-black text-sm">{safeFormat(exc.excuse_date, 'dd MMMM yyyy')}</span>
-                <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${
-                  exc.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                  exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                  'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                }`}>
-                  {exc.status === 'pending' ? 'قيد المراجعة ⏳' : exc.status === 'approved' ? 'عذر مقبول ✓' : 'عذر مرفوض ✕'}
-                </span>
-              </div>
-              <div className="text-[10px] font-bold text-slate-400">
-                {exc.duration_type === 'full_day' ? 'غياب يوم كامل' : `غياب جزئي: حصص (${exc.target_periods?.join(', ')})`}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-8 space-y-8">
+          {/* 🔬 مصفوفة الإتقان المفصلة */}
+          <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] relative overflow-hidden border border-white/5 shadow-2xl">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-[80px] pointer-events-none"></div>
+            <div className="flex items-center gap-4 mb-8 relative z-10">
+              <div className="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20"><BookOpen className="text-blue-400 w-6 h-6"/></div>
+              <div>
+                <h2 className="text-2xl font-black text-white drop-shadow-md">التحليل الأكاديمي الدقيق</h2>
+                <p className="text-sm font-bold text-slate-400 mt-1">مستوى إتقان الابن موزعاً على المواد والمعلمين.</p>
               </div>
             </div>
-          ))
-        )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 relative z-10">
+              {subjectPerformance.map((item: any, idx: number) => (
+                <div key={idx} className="bg-[#05070e] p-6 rounded-[2rem] border border-white/5 hover:border-blue-500/20 transition-all group relative overflow-hidden shadow-inner">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="flex items-start justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-[1.2rem] bg-[#0a0d16] text-blue-400 flex items-center justify-center font-black text-xl border border-white/5 shadow-inner drop-shadow-sm">{item.average}%</div>
+                      <div>
+                        <h3 className="font-black text-white text-lg group-hover:text-blue-400 transition-colors">{item.subjects?.name}</h3>
+                        <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5"/> أ. {item.teachers?.users?.full_name?.split(' ')[0]}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-[#0a0d16] rounded-2xl p-4 border border-white/5 shadow-inner flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-400 flex items-center gap-2"><FileText className="w-4 h-4 text-amber-500"/> الواجبات</span>
+                      <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md">{item.assignments.length} مهام</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-400 flex items-center gap-2"><Award className="w-4 h-4 text-emerald-500"/> الاختبارات</span>
+                      <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">{item.exams.length} تم التقييم</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <div className="lg:col-span-4">
+          {/* 📝 السجل الزمني للمهام (قابل للضغط لرؤية الحل) */}
+          <section className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] relative overflow-hidden border border-white/5 shadow-2xl h-full flex flex-col">
+            <div className="flex items-center gap-4 mb-8 relative z-10">
+              <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20"><FileText className="text-amber-400 w-6 h-6"/></div>
+              <div>
+                <h2 className="text-xl font-black text-white drop-shadow-md">سجل التقييمات والأوراق</h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">اضغط على أي مهمة لمشاهدة ورقة إجابة ابنك.</p>
+              </div>
+            </div>
+
+            <div className="bg-[#05070e] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-inner relative z-10 flex-1 max-h-[600px] overflow-y-auto custom-scrollbar">
+              {detailedTasks.length === 0 ? (
+                <div className="text-center py-16 text-slate-500 font-bold text-sm">لا يوجد مهام أو اختبارات مسجلة حتى الآن.</div>
+              ) : (
+                <div className="divide-y divide-white/5 p-2">
+                  {detailedTasks.map((task: any) => {
+                    // 🚀 توليد الرابط الصحيح لرؤية ورقة الإجابة الحقيقية
+                    const href = task.type === 'exam' 
+                      ? `/exams/results/${task.original_id}/student/${activeChildId}`
+                      : `/assignments/${task.original_id}/submissions/${task.submission_id}`;
+
+                    return (
+                      <Link href={href} key={task.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-all group rounded-2xl cursor-pointer">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("w-10 h-10 rounded-[1rem] flex items-center justify-center shrink-0 border shadow-inner transition-transform group-hover:scale-110", task.type === 'exam' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20')}>
+                            {task.type === 'exam' ? <Award className="w-5 h-5"/> : <FileText className="w-5 h-5"/>}
+                          </div>
+                          <div>
+                            <h4 className="font-black text-white text-sm group-hover:text-indigo-300 transition-colors drop-shadow-sm line-clamp-1">{task.title}</h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[9px] font-black bg-white/5 text-slate-300 px-2 py-0.5 rounded-md border border-white/10 truncate max-w-[80px]">{task.subject}</span>
+                              <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3"/> {safeFormat(task.date, 'dd MMM')}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-left flex flex-col items-end gap-1 pl-1 border-l border-white/10 ml-2">
+                          <div className={cn("px-3 py-1.5 rounded-xl text-center shadow-inner flex items-baseline gap-1", task.isZero ? "bg-rose-500/10 border border-rose-500/30 text-rose-400" : "bg-[#0a0d16] border border-emerald-500/30 text-emerald-400")}>
+                            <span className="font-black text-sm">{task.score}</span>
+                            <span className="text-[9px] font-bold opacity-70">/ {task.max}</span>
+                          </div>
+                          <span className="text-[9px] font-black flex items-center gap-1 text-slate-500 group-hover:text-indigo-400 transition-colors">
+                            ورقة الإجابة <Eye className="w-3 h-3" />
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
-  </motion.div>
-);
+    </motion.div>
+  );
+};
+
+const BehaviorTab = ({ schedule, todaysAttendance, isCurrentClass, getAttendanceStyle, excuses, safeFormat, setIsExcuseModalOpen, attendance }: any) => {
+  // 🚀 استخراج سجل الغياب الحقيقي والتأخير من الحضور
+  const absentRecords = useMemo(() => {
+    return attendance.filter((a: any) => a.status === 'absent' || a.status === 'late' || a.status === 'excused')
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [attendance]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      
+      <div className="space-y-8">
+        {/* ⏱️ الرادار الزمني (الجدول) */}
+        <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl h-fit">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <h3 className="text-xl font-black text-white flex items-center gap-3 drop-shadow-sm"><Clock className="w-6 h-6 text-emerald-500" /> البث المباشر لدوام اليوم</h3>
+          </div>
+
+          {schedule.length === 0 ? (
+              <div className="text-center py-12 bg-[#05070e] rounded-[2rem] border border-dashed border-white/10 text-slate-500 font-bold text-sm shadow-inner">لا يوجد دوام مسجل اليوم.</div>
+          ) : (
+            <div className="relative border-r-2 border-white/5 pr-6 space-y-6 z-10">
+              {schedule.map((lesson: any, idx: number) => {
+                const attendanceRecord = todaysAttendance.find((a:any) => a.subjects?.name === lesson.subjects?.name) || todaysAttendance[idx];
+                const style = getAttendanceStyle(attendanceRecord?.status);
+                const current = isCurrentClass(lesson.period);
+                
+                return (
+                  <div key={idx} className="relative group">
+                    <div className={`absolute -right-[31px] w-4 h-4 rounded-full border-4 border-[#0a0d16] ${current ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]' : style.bg.replace('bg-', 'bg-').replace('/10', '')}`}></div>
+                    <div className={cn("p-5 rounded-[1.5rem] border transition-all", current ? "bg-[#05070e] border-emerald-500/50 shadow-[0_0_20px_rgba(52,211,153,0.15)]" : "bg-[#05070e]/60 border-white/5 hover:border-white/10 shadow-inner")}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className={cn("font-black text-sm drop-shadow-sm", current ? "text-emerald-400" : "text-white")}>{lesson.subjects?.name}</h4>
+                          <p className="text-[10px] font-bold text-slate-500 mt-1">الحصة {lesson.period} • أ. {lesson.teachers?.users?.full_name?.split(' ')[0]}</p>
+                        </div>
+                        {current && <span className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] px-2.5 py-1 rounded-md font-black shadow-inner">حصة تفاعلية الآن</span>}
+                      </div>
+                      <div className={`text-[10px] font-black px-3 py-1.5 rounded-lg inline-flex items-center gap-2 border shadow-inner ${style.bg} ${style.textCol} ${style.border}`}><style.icon className="w-3.5 h-3.5 shrink-0"/>{style.text}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 🩺 سجل الأعذار الطبية */}
+        <div className="bg-[#0a0d16]/80 backdrop-blur-xl rounded-[3rem] border border-white/5 relative overflow-hidden shadow-2xl flex flex-col h-fit">
+          <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+          
+          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4 relative z-10">
+            <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2 drop-shadow-sm">
+              <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-inner">
+                <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-md" />
+              </div> 
+              الأعذار المُقدمة
+            </h2>
+            <button onClick={() => setIsExcuseModalOpen(true)} className="text-[10px] sm:text-xs font-black text-slate-900 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 rounded-xl hover:opacity-90 transition-all shadow-md shrink-0 active:scale-95 whitespace-nowrap">
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4" /> عذر جديد
+            </button>
+          </div>
+
+          <div className="p-6 space-y-3 relative z-10 max-h-[300px] overflow-y-auto custom-scrollbar">
+            {excuses.length === 0 ? (
+              <div className="text-center py-8 text-slate-500 font-bold text-sm">لم تقم بتقديم أي أعذار طبية مسبقة.</div>
+            ) : (
+              excuses.map((exc: any) => (
+                <div key={exc.id} className="bg-[#05070e] p-4 rounded-2xl border border-white/5 flex flex-col gap-2 shadow-inner">
+                  <div className="flex justify-between items-center">
+                    <span className="text-white font-black text-sm">{safeFormat(exc.excuse_date, 'dd MMMM yyyy')}</span>
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${
+                      exc.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                      exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                      'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                    }`}>
+                      {exc.status === 'pending' ? 'قيد المراجعة ⏳' : exc.status === 'approved' ? 'عذر مقبول ✓' : 'عذر مرفوض ✕'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-400">
+                    {exc.duration_type === 'full_day' ? 'غياب يوم كامل' : `غياب جزئي: حصص (${exc.target_periods?.join(', ')})`}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 🔴 سجل الغياب التفصيلي (الشفافية المطلقة) */}
+      <div className="bg-[#0a0d16]/80 backdrop-blur-xl p-8 rounded-[3rem] border border-rose-500/20 relative overflow-hidden shadow-2xl h-full flex flex-col">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 rounded-full blur-[60px] pointer-events-none"></div>
+        <div className="flex items-center gap-4 mb-8 relative z-10">
+          <div className="p-3 bg-rose-500/10 rounded-2xl border border-rose-500/20"><XCircle className="text-rose-400 w-6 h-6"/></div>
+          <div>
+            <h2 className="text-xl font-black text-white drop-shadow-md">سجل الغياب التفصيلي (الفعلي)</h2>
+            <p className="text-xs font-bold text-slate-400 mt-1">كشف شفاف للحصص التي لم يحضرها الابن.</p>
+          </div>
+        </div>
+
+        <div className="bg-[#05070e] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-inner relative z-10 flex-1 max-h-[750px] overflow-y-auto custom-scrollbar">
+          {absentRecords.length === 0 ? (
+            <div className="text-center py-20 text-slate-500 font-bold text-sm flex flex-col items-center gap-4">
+              <CheckCircle2 className="w-16 h-16 text-emerald-500/50" />
+              سجل الابن نظيف تماماً ولا يوجد أي غيابات. ممتاز!
+            </div>
+          ) : (
+            <div className="divide-y divide-white/5 p-2">
+              {absentRecords.map((record: any) => {
+                const style = getAttendanceStyle(record.status);
+                return (
+                  <div key={record.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-all rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("w-10 h-10 rounded-[1rem] flex items-center justify-center shrink-0 border shadow-inner", style.bg, style.textCol, style.border)}>
+                        <style.icon className="w-5 h-5"/>
+                      </div>
+                      <div>
+                        <h4 className="font-black text-white text-sm drop-shadow-sm flex items-center gap-2">
+                          {safeFormat(record.date, 'EEEE، d MMMM')}
+                          <span className={cn("text-[9px] font-black px-2 py-0.5 rounded-md border", style.bg, style.textCol, style.border)}>{style.text.split(' ')[0]}</span>
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[9px] font-black bg-white/5 text-slate-300 px-2 py-0.5 rounded-md border border-white/10 truncate max-w-[100px]">{record.subjects?.name || 'مادة'}</span>
+                          <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3"/> الحصة {record.period}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      
+    </motion.div>
+  );
+};
 
 // ==========================================
 // 🚀 المكون الرئيسي للصفحة (Parent Dashboard SPA)
@@ -388,6 +503,8 @@ export default function ParentDashboard() {
       data.assignments.forEach((sub: any) => {
         allTasks.push({
           id: `ass_${sub.id}`, type: 'assignment',
+          original_id: sub.assignments?.id, // 👈 للتوجيه لرؤية الحل
+          submission_id: sub.id,            // 👈 للتوجيه لرؤية الحل
           title: sub.assignments?.title || 'واجب تفاعلي',
           subject: sub.assignments?.subjects?.name || 'عام',
           score: sub.grade || 0,
@@ -400,6 +517,8 @@ export default function ParentDashboard() {
       data.exams.forEach((att: any) => {
         allTasks.push({
           id: `ex_${att.id}`, type: 'exam',
+          original_id: att.exams?.id,       // 👈 للتوجيه لرؤية الحل
+          attempt_id: att.id,               // 👈 للتوجيه لرؤية الحل
           title: att.exams?.title || 'اختبار قصير',
           subject: att.exams?.subjects?.name || 'عام',
           score: att.score || 0,
@@ -615,8 +734,8 @@ export default function ParentDashboard() {
           ) : activeChild && (
             <motion.div key={activeTab} className="w-full">
               {activeTab === 'overview' && <OverviewTab stats={stats} absentCount={stats.absentCount} setIsExcuseModalOpen={setIsExcuseModalOpen} router={router} />}
-              {activeTab === 'academics' && <AcademicsTab subjectPerformance={subjectPerformance} detailedTasks={detailedTasks} safeFormat={safeFormat} router={router} />}
-              {activeTab === 'behavior' && <BehaviorTab schedule={schedule} todaysAttendance={todaysAttendance} isCurrentClass={isCurrentClass} getAttendanceStyle={getAttendanceStyle} excuses={excuses} safeFormat={safeFormat} setIsExcuseModalOpen={setIsExcuseModalOpen} />}
+              {activeTab === 'academics' && <AcademicsTab subjectPerformance={subjectPerformance} detailedTasks={detailedTasks} safeFormat={safeFormat} router={router} activeChildId={activeChildId} />}
+              {activeTab === 'behavior' && <BehaviorTab schedule={schedule} todaysAttendance={todaysAttendance} isCurrentClass={isCurrentClass} getAttendanceStyle={getAttendanceStyle} excuses={excuses} safeFormat={safeFormat} setIsExcuseModalOpen={setIsExcuseModalOpen} attendance={attendance} />}
             </motion.div>
           )}
         </AnimatePresence>
