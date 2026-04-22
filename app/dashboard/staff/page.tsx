@@ -12,7 +12,7 @@ import {
   FileText, Bell, CheckCircle, Search, 
   UserPlus, AlertTriangle, CalendarDays, GraduationCap,
   Calculator, Activity, UserCheck, PlusCircle, X, ShieldAlert,
-  BarChart3, MessageSquare, Megaphone, TrendingUp, ChevronLeft, MapPin
+  BarChart3, MessageSquare, Megaphone, TrendingUp, MapPin, ClipboardList, Building2
 } from 'lucide-react';
 
 // 🧩 مكون إحصائية سريعة
@@ -28,8 +28,8 @@ const StatCard = ({ icon: Icon, title, value, trend, color, delay }: any) => (
         <Icon className="h-7 w-7 drop-shadow-md" />
       </div>
     </div>
-    {trend && (
-      <div className={`mt-4 flex items-center gap-1.5 text-xs font-bold ${trend > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+    {trend !== undefined && (
+      <div className={`mt-4 flex items-center gap-1.5 text-xs font-bold ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
         <TrendingUp className={`w-4 h-4 ${trend < 0 ? 'rotate-180' : ''}`} />
         <span>{Math.abs(trend)}% مقارنة بالشهر الماضي</span>
       </div>
@@ -68,7 +68,6 @@ export default function StaffDashboardPage() {
     if (!isChecking) loadWorkspace();
   }, [user, isChecking, fetchStudents]);
 
-  // دالة الإضافة للقائمة (مربوطة مع الخلفية القديمة)
   const handleAddStudentToList = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchStudentId) return;
@@ -215,7 +214,7 @@ export default function StaffDashboardPage() {
           {/* 🚀 3. العمود الأيمن الرئيسي (بوابة عين الرفعة + ربط الآباء) */}
           <div className="xl:col-span-2 space-y-8">
             
-            {/* بوابة المراقبة الشاملة (للمشرفين) */}
+            {/* بوابة المراقبة الشاملة (للمشرفين والقيادة العليا) */}
             {hasPerm('global_read_only') && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-8 sm:p-10 rounded-[2.5rem] shadow-xl border border-indigo-500/30 relative overflow-hidden bg-gradient-to-br from-[#0a0d1a] to-[#02040a]">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none"></div>
@@ -235,7 +234,6 @@ export default function StaffDashboardPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
-                  {/* أزرار البوابة المركزية */}
                   <Link href="/hierarchy" className="p-5 rounded-2xl bg-[#0f1423]/80 border border-white/5 hover:border-indigo-500/50 hover:bg-[#0f1423] transition-all group shadow-inner">
                     <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Building2 className="w-6 h-6" /></div>
                     <h4 className="text-sm font-black text-white group-hover:text-indigo-400 transition-colors">الهيكل الأكاديمي</h4>
@@ -244,14 +242,20 @@ export default function StaffDashboardPage() {
 
                   <Link href="/attendance/reports" className="p-5 rounded-2xl bg-[#0f1423]/80 border border-white/5 hover:border-emerald-500/50 hover:bg-[#0f1423] transition-all group shadow-inner">
                     <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><CalendarDays className="w-6 h-6" /></div>
-                    <h4 className="text-sm font-black text-white group-hover:text-emerald-400 transition-colors">سجل الحضور والغياب</h4>
-                    <p className="text-[10px] text-slate-500 font-bold mt-1">مراقبة غياب وتأخير الطلاب</p>
+                    <h4 className="text-sm font-black text-white group-hover:text-emerald-400 transition-colors">إحصائيات الغياب</h4>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1">مراقبة الحضور والغياب الشامل</p>
                   </Link>
 
                   <Link href="/gradebook" className="p-5 rounded-2xl bg-[#0f1423]/80 border border-white/5 hover:border-blue-500/50 hover:bg-[#0f1423] transition-all group shadow-inner">
                     <div className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Calculator className="w-6 h-6" /></div>
                     <h4 className="text-sm font-black text-white group-hover:text-blue-400 transition-colors">السجل الأكاديمي</h4>
                     <p className="text-[10px] text-slate-500 font-bold mt-1">الاطلاع على درجات جميع الفصول</p>
+                  </Link>
+
+                  <Link href="/admin/teachers-report" className="p-5 rounded-2xl bg-[#0f1423]/80 border border-white/5 hover:border-fuchsia-500/50 hover:bg-[#0f1423] transition-all group shadow-inner">
+                    <div className="w-12 h-12 bg-fuchsia-500/10 text-fuchsia-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><ClipboardList className="w-6 h-6" /></div>
+                    <h4 className="text-sm font-black text-white group-hover:text-fuchsia-400 transition-colors">إنجاز المعلمين</h4>
+                    <p className="text-[10px] text-slate-500 font-bold mt-1">إحصائيات الواجبات والاختبارات</p>
                   </Link>
 
                   <Link href="/messages" className="p-5 rounded-2xl bg-[#0f1423]/80 border border-white/5 hover:border-violet-500/50 hover:bg-[#0f1423] transition-all group shadow-inner">
@@ -265,14 +269,6 @@ export default function StaffDashboardPage() {
                     <h4 className="text-sm font-black text-white group-hover:text-amber-400 transition-colors">التعاميم والإعلانات</h4>
                     <p className="text-[10px] text-slate-500 font-bold mt-1">نشر وتعديل الإعلانات المدرسية</p>
                   </Link>
-
-                  {hasPerm('write_evaluations') && (
-                    <Link href="/admin/teachers-monitor" className="p-5 rounded-2xl bg-[#0f1423]/80 border border-white/5 hover:border-rose-500/50 hover:bg-[#0f1423] transition-all group shadow-inner">
-                      <div className="w-12 h-12 bg-rose-500/10 text-rose-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><FileText className="w-6 h-6" /></div>
-                      <h4 className="text-sm font-black text-white group-hover:text-rose-400 transition-colors">التقييمات والتقارير</h4>
-                      <p className="text-[10px] text-slate-500 font-bold mt-1">تقييم الكادر التدريسي</p>
-                    </Link>
-                  )}
                 </div>
               </motion.div>
             )}
@@ -361,6 +357,23 @@ export default function StaffDashboardPage() {
                 </div>
               </motion.div>
             )}
+
+            {/* سجل الطلاب */}
+            {hasPerm('view_students') && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-panel p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-sm hover:shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:border-blue-500/30 transition-all group relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:scale-150 transition-transform duration-500"></div>
+                <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 text-center sm:text-right">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-500/10 text-blue-400 rounded-xl sm:rounded-2xl border border-blue-500/20 flex items-center justify-center shrink-0 shadow-inner"><Users className="w-6 h-6 sm:w-7 sm:h-7"/></div>
+                    <div>
+                      <h3 className="font-black text-white text-lg sm:text-xl mb-1 drop-shadow-sm">سجل الطلاب الشامل</h3>
+                      <p className="text-slate-400 text-xs sm:text-sm font-bold">استعراض وتعديل بيانات جميع الطلاب المسجلين في المنصة.</p>
+                    </div>
+                  </div>
+                  <button className="w-full sm:w-auto px-6 py-2.5 sm:py-3 bg-[#02040a]/80 hover:bg-[#0f1423] text-blue-400 hover:text-blue-300 border border-blue-500/30 font-black text-xs sm:text-sm rounded-xl transition-all shadow-inner active:scale-95 shrink-0 whitespace-nowrap">فتح السجل</button>
+                </div>
+              </motion.div>
+            )}
           </div>
 
           {/* 🚀 4. العمود الأيسر (إحصائيات بيانية وتقارير النظام) */}
@@ -410,6 +423,15 @@ export default function StaffDashboardPage() {
                       </div>
                     </div>
                  </div>
+               </div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="glass-panel p-6 sm:p-8 rounded-[2rem] shadow-sm border border-white/10 relative overflow-hidden bg-[#0a0d16]/40">
+               <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+               <div className="relative z-10">
+                 <div className="inline-flex items-center gap-2 bg-[#02040a]/60 text-slate-400 px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-black mb-5 sm:mb-6 w-fit border border-white/5 shadow-inner"><Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400"/> مساحة مشتركة</div>
+                 <h3 className="text-lg sm:text-xl font-black text-white mb-4 sm:mb-5 flex items-center gap-2 drop-shadow-sm"><Bell className="w-5 h-5 text-amber-500" /> التعاميم الداخلية</h3>
+                 <button className="w-full text-center sm:text-right px-4 sm:px-5 py-3 sm:py-3.5 bg-[#02040a]/60 hover:bg-[#0f1423] border border-white/5 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-400 font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-inner active:scale-95">تقديم طلب إجازة</button>
                </div>
             </motion.div>
           </div>
