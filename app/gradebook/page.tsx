@@ -10,9 +10,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import * as Dialog from '@radix-ui/react-dialog';
 import Image from 'next/image'; 
 import { useAuth } from '@/context/auth-context';
+import { supabase } from '@/lib/supabase';
 
 export default function GradebookPage() {
-  const { authRole, isChecking } = useAuth();
+  const { user, authRole, userRole, isChecking } = useAuth() as any;
   const { data: formData, isLoading: formLoading } = useSchoolFormData();
   const { fetchTeacherScope, teacherSections, teacherSubjects, fetchGradebook, loading, saving, gradeData, addCustomColumn, editCustomColumn, deleteCustomColumn, saveCustomGradesBulk } = useGradebook();
 
@@ -28,21 +29,40 @@ export default function GradebookPage() {
 
   const [modifiedGrades, setModifiedGrades] = useState<Record<string, any>>({}); 
 
-  const isAdmin = authRole === 'admin' || authRole === 'management';
+  // 🚀 جلب صلاحيات الكادر (Staff) لتمكين نظام عين الرفعة (المراقبة)
+  const [staffPermissions, setStaffPermissions] = useState<any>({});
+  const [permChecking, setPermChecking] = useState(userRole === 'staff');
+
+  useEffect(() => {
+    async function checkStaffPerms() {
+      if (userRole === 'staff' && user?.id) {
+        const { data } = await supabase.from('school_staff').select('permissions').eq('id', user.id).maybeSingle();
+        if (data) setStaffPermissions(data.permissions || {});
+      }
+      setPermChecking(false);
+    }
+    if (!isChecking) checkStaffPerms();
+  }, [userRole, user?.id, isChecking]);
+
+  // 🛡️ تعريف الصلاحيات
+  const isSuperAdmin = authRole === 'admin' || authRole === 'management';
+  const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
+  const canViewAll = isSuperAdmin || isGlobalWatcher; // الإدارة والمشرفين يرون كل شيء
+  const canEdit = isSuperAdmin || authRole === 'teacher'; // الإدارة والمعلم فقط يحق لهم التعديل
 
   // 🚀 جلب نطاق المعلم (فصول ومواد) عند الدخول
   useEffect(() => {
-    if (!isChecking && !isAdmin && authRole === 'teacher') {
+    if (!isChecking && authRole === 'teacher') {
       fetchTeacherScope();
     }
-  }, [isChecking, isAdmin, authRole, fetchTeacherScope]);
+  }, [isChecking, authRole, fetchTeacherScope]);
 
-  // 🚀 الفصول والمواد (ديناميكية بناءً على الصلاحية)
-  const sections = isAdmin 
+  // 🚀 الفصول والمواد (ديناميكية: الكل للمدير والمشرف، المخصص للمعلم)
+  const sections = canViewAll 
       ? formData?.sections?.map((s: any) => ({ id: s.id, name: s.classes?.name ? `${s.classes.name} - ${s.name}` : s.name })) || []
       : teacherSections;
       
-  const subjects = isAdmin 
+  const subjects = canViewAll 
       ? formData?.subjects || []
       : teacherSubjects;
 
@@ -90,6 +110,7 @@ export default function GradebookPage() {
   const maxAssignmentTotal = assignments.reduce((sum, a) => sum + getAssignmentMax(a), 0);
 
   const handleScoreChange = (studentId: string, column: any, val: string) => {
+    if (!canEdit) return; // 🛡️ منع إضافي للحماية
     const scoreVal = val === '' ? 0 : Number(val);
     const key = `${studentId}_${column.id}`;
     const existingRecord = customScores.find(s => String(s.student_id) === String(studentId) && String(s.column_id) === String(column.id));
@@ -109,6 +130,7 @@ export default function GradebookPage() {
   const maxCustomTotal = customColumns.reduce((sum, c) => sum + (Number(c.max_score) || 0), 0);
 
   const handleSaveBulk = async () => {
+    if (!canEdit) return;
     const gradesArray = Object.values(modifiedGrades);
     if (gradesArray.length > 0) { 
       try {
@@ -158,7 +180,7 @@ export default function GradebookPage() {
     return { name: col.title, متوسط_الدرجات: count > 0 ? Number((totalScore / count).toFixed(1)) : 0, fullMark: col.max_score };
   });
 
-  if (isChecking) {
+  if (isChecking || permChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
         <div className="flex flex-col items-center gap-5">
@@ -172,7 +194,7 @@ export default function GradebookPage() {
     );
   }
 
-  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
+  if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher' && !isGlobalWatcher) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent p-4 font-cairo">
         <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
@@ -202,7 +224,7 @@ export default function GradebookPage() {
         }
       `}} />
 
-      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
+      {/* 🚀 الخلفية الزجاجية */}
       <div className="fixed top-1/4 right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
       <div className="fixed bottom-0 left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none print:hidden z-0" />
 
@@ -220,11 +242,11 @@ export default function GradebookPage() {
             <div className="relative w-full h-32 sm:h-48 md:h-56 bg-[#02040a] overflow-hidden rounded-t-[2rem] sm:rounded-t-[3rem]">
                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay z-10"></div>
                <Image 
-                  src="/images/gradebook_hero.png" 
-                  alt="Gradebook Banner"
-                  fill
-                  className="object-cover opacity-60 mix-blend-screen"
-                  priority
+                 src="/images/gradebook_hero.png" 
+                 alt="Gradebook Banner"
+                 fill
+                 className="object-cover opacity-60 mix-blend-screen"
+                 priority
                />
                <div className="absolute inset-0 bg-gradient-to-t from-[#02040a] via-[#02040a]/40 to-transparent z-20"></div>
             </div>
@@ -233,7 +255,7 @@ export default function GradebookPage() {
               
               <div className="text-center lg:text-right w-full lg:w-auto flex flex-col items-center lg:items-start">
                 <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[#02040a]/80 text-emerald-400 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black mb-3 border border-emerald-500/30 backdrop-blur-md shadow-inner">
-                  <Calculator className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> سجل الدرجات الذكي
+                  <Calculator className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> سجل الدرجات {isGlobalWatcher ? 'للقراءة فقط' : 'الذكي'}
                 </div>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight drop-shadow-lg leading-tight">سجل التقييم الشامل</h1>
               </div>
@@ -302,33 +324,36 @@ export default function GradebookPage() {
                     <div className="flex flex-wrap items-center justify-center md:justify-end gap-2 sm:gap-3 w-full md:w-auto">
                       <button onClick={() => window.print()} className="flex-1 md:flex-none flex items-center justify-center gap-1.5 sm:gap-2 font-black text-slate-300 bg-[#02040a] border border-white/5 hover:bg-white/5 hover:text-white px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all active:scale-95 text-xs sm:text-sm shadow-inner"><Printer className="w-4 h-4 sm:w-4 sm:h-4" /> PDF</button>
                       
-                      <Dialog.Root open={isAddColModalOpen} onOpenChange={(open) => { setIsAddColModalOpen(open); if(!open){setNewColTitle(''); setNewColMax(10);} }}>
-                        <Dialog.Trigger asChild>
-                          <button className="flex-1 md:flex-none flex items-center justify-center gap-1.5 sm:gap-2 font-black text-slate-950 bg-emerald-500 hover:bg-emerald-400 border border-emerald-400/50 px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 text-xs sm:text-sm"><Plus className="w-4 h-4 sm:w-5 sm:h-5" /> إضافة نشاط</button>
-                        </Dialog.Trigger>
-                        <Dialog.Portal>
-                          <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-50 print:hidden animate-in fade-in duration-300" />
-                          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#0f1423] border border-emerald-500/30 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 shadow-[0_20px_60px_rgba(16,185,129,0.2)] z-50 w-[95%] sm:w-full max-w-md print:hidden animate-in zoom-in-95 duration-300" dir="rtl">
-                            <div className="flex justify-between items-center mb-6 sm:mb-8">
-                               <Dialog.Title className="text-xl sm:text-2xl font-black text-white tracking-tight">نشاط تقييم جديد</Dialog.Title>
-                               <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-[#02040a] p-2 sm:p-2.5 rounded-xl border border-white/5 shadow-inner transition-colors active:scale-90"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
-                            </div>
-                            <div className="space-y-4 sm:space-y-6">
-                              <div className="bg-[#02040a]/60 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
-                                <label className="block text-[10px] sm:text-xs font-black text-slate-400 mb-2 uppercase tracking-widest pl-1">اسم النشاط</label>
-                                <input type="text" placeholder="مثال: سلوك ومواظبة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 sm:px-5 py-3 sm:py-4 bg-[#0f1423] border border-white/5 text-white rounded-xl sm:rounded-2xl font-bold focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all text-xs sm:text-sm shadow-inner placeholder:text-slate-600" />
+                      {/* 🛡️ إخفاء زر إضافة عمود للمراقب */}
+                      {canEdit && (
+                        <Dialog.Root open={isAddColModalOpen} onOpenChange={(open) => { setIsAddColModalOpen(open); if(!open){setNewColTitle(''); setNewColMax(10);} }}>
+                          <Dialog.Trigger asChild>
+                            <button className="flex-1 md:flex-none flex items-center justify-center gap-1.5 sm:gap-2 font-black text-slate-950 bg-emerald-500 hover:bg-emerald-400 border border-emerald-400/50 px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] active:scale-95 text-xs sm:text-sm"><Plus className="w-4 h-4 sm:w-5 sm:h-5" /> إضافة نشاط</button>
+                          </Dialog.Trigger>
+                          <Dialog.Portal>
+                            <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-50 print:hidden animate-in fade-in duration-300" />
+                            <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#0f1423] border border-emerald-500/30 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 shadow-[0_20px_60px_rgba(16,185,129,0.2)] z-50 w-[95%] sm:w-full max-w-md print:hidden animate-in zoom-in-95 duration-300" dir="rtl">
+                              <div className="flex justify-between items-center mb-6 sm:mb-8">
+                                 <Dialog.Title className="text-xl sm:text-2xl font-black text-white tracking-tight">نشاط تقييم جديد</Dialog.Title>
+                                 <Dialog.Close className="text-slate-400 hover:text-rose-400 bg-[#02040a] p-2 sm:p-2.5 rounded-xl border border-white/5 shadow-inner transition-colors active:scale-90"><X className="w-4 h-4 sm:w-5 sm:h-5" /></Dialog.Close>
                               </div>
-                              <div className="bg-[#02040a]/60 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
-                                <label className="block text-[10px] sm:text-xs font-black text-slate-400 mb-2 uppercase tracking-widest pl-1">الدرجة العظمى</label>
-                                <input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 sm:px-5 py-3 sm:py-4 bg-[#0f1423] border border-white/5 text-white rounded-xl sm:rounded-2xl font-bold focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all text-xs sm:text-sm shadow-inner" />
+                              <div className="space-y-4 sm:space-y-6">
+                                <div className="bg-[#02040a]/60 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
+                                  <label className="block text-[10px] sm:text-xs font-black text-slate-400 mb-2 uppercase tracking-widest pl-1">اسم النشاط</label>
+                                  <input type="text" placeholder="مثال: سلوك ومواظبة..." value={newColTitle} onChange={e => setNewColTitle(e.target.value)} className="w-full px-4 sm:px-5 py-3 sm:py-4 bg-[#0f1423] border border-white/5 text-white rounded-xl sm:rounded-2xl font-bold focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all text-xs sm:text-sm shadow-inner placeholder:text-slate-600" />
+                                </div>
+                                <div className="bg-[#02040a]/60 p-4 sm:p-5 rounded-2xl border border-white/5 shadow-inner">
+                                  <label className="block text-[10px] sm:text-xs font-black text-slate-400 mb-2 uppercase tracking-widest pl-1">الدرجة العظمى</label>
+                                  <input type="number" value={newColMax} onChange={e => setNewColMax(Number(e.target.value))} className="w-full px-4 sm:px-5 py-3 sm:py-4 bg-[#0f1423] border border-white/5 text-white rounded-xl sm:rounded-2xl font-bold focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all text-xs sm:text-sm shadow-inner" />
+                                </div>
+                                <div className="pt-2 sm:pt-4">
+                                  <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-slate-950 font-black py-3.5 sm:py-4 rounded-xl sm:rounded-2xl hover:opacity-90 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 active:scale-95 transition-all text-xs sm:text-sm">اعتماد النشاط</button>
+                                </div>
                               </div>
-                              <div className="pt-2 sm:pt-4">
-                                <button onClick={handleAddColumn} disabled={!newColTitle} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 text-slate-950 font-black py-3.5 sm:py-4 rounded-xl sm:rounded-2xl hover:opacity-90 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 active:scale-95 transition-all text-xs sm:text-sm">اعتماد النشاط</button>
-                              </div>
-                            </div>
-                          </Dialog.Content>
-                        </Dialog.Portal>
-                      </Dialog.Root>
+                            </Dialog.Content>
+                          </Dialog.Portal>
+                        </Dialog.Root>
+                      )}
 
                       <Dialog.Root open={isEditColModalOpen} onOpenChange={(open) => { setIsEditColModalOpen(open); if(!open){setEditingColId(''); setNewColTitle(''); setNewColMax(10); } }}>
                         <Dialog.Portal>
@@ -362,7 +387,7 @@ export default function GradebookPage() {
                     <div className="p-16 sm:p-24 lg:p-32 text-center flex flex-col items-center bg-transparent print:hidden relative z-10">
                       <div className="p-5 sm:p-6 bg-[#02040a]/80 rounded-3xl mb-4 sm:mb-6 border border-white/5 shadow-inner"><Edit3 className="w-10 h-10 sm:w-12 sm:h-12 text-slate-600 drop-shadow-md" /></div>
                       <p className="text-base sm:text-lg lg:text-xl font-black text-slate-500 drop-shadow-sm">دفتر المتابعة المستمرة فارغ حالياً.</p>
-                      <p className="text-xs sm:text-sm font-bold text-slate-600 mt-2">قم بإضافة أنشطة مثل (مشاركة، سلوك، مشروع) للبدء بالرصد.</p>
+                      {canEdit && <p className="text-xs sm:text-sm font-bold text-slate-600 mt-2">قم بإضافة أنشطة مثل (مشاركة، سلوك، مشروع) للبدء بالرصد.</p>}
                     </div>
                   ) : (
                     <>
@@ -375,7 +400,10 @@ export default function GradebookPage() {
                                 <th key={c.id} className="bg-[#0f1423]/80 text-slate-300 font-black py-4 px-2 sm:px-4 border-b border-white/5 text-center min-w-[100px] sm:min-w-[130px] print:border-slate-300 group shadow-inner">
                                   <div className="flex items-center justify-center gap-2">
                                     <div className="text-[10px] sm:text-xs lg:text-sm truncate drop-shadow-sm" title={c.title}>{c.title}</div>
-                                    <button onClick={() => openEditModal(c)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1.5 sm:p-2 bg-[#02040a] text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 rounded-lg transition-all print:hidden border border-white/5 shadow-inner active:scale-90"><Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
+                                    {/* 🛡️ إخفاء أيقونة التعديل للمراقب */}
+                                    {canEdit && (
+                                      <button onClick={() => openEditModal(c)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1.5 sm:p-2 bg-[#02040a] text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 rounded-lg transition-all print:hidden border border-white/5 shadow-inner active:scale-90"><Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" /></button>
+                                    )}
                                   </div>
                                   <div className="text-[9px] sm:text-[10px] font-bold text-slate-500 mt-1 print:text-slate-600 uppercase tracking-widest">من {c.max_score}</div>
                                 </th>
@@ -398,9 +426,12 @@ export default function GradebookPage() {
                                         type="number" 
                                         max={c.max_score} 
                                         min="0" 
+                                        readOnly={!canEdit} // 🔒 الجدار الناري المنيع
                                         value={getCustomScoreDisplay(student.id, c.id)} 
-                                        onChange={(e) => handleScoreChange(student.id, c, e.target.value)} 
-                                        className="w-14 sm:w-16 lg:w-20 mx-auto text-center font-black text-white bg-[#02040a] hover:bg-[#090b14] border border-white/5 focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 rounded-xl py-2 sm:py-2.5 outline-none transition-all print:border-none print:bg-transparent print:text-black print:p-0 print:w-auto shadow-inner text-xs sm:text-sm" 
+                                        onChange={(e) => canEdit && handleScoreChange(student.id, c, e.target.value)} 
+                                        className={`w-14 sm:w-16 lg:w-20 mx-auto text-center font-black text-white bg-[#02040a] border border-white/5 rounded-xl py-2 sm:py-2.5 outline-none transition-all print:border-none print:bg-transparent print:text-black print:p-0 print:w-auto shadow-inner text-xs sm:text-sm
+                                          ${canEdit ? 'hover:bg-[#090b14] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20' : 'opacity-70 cursor-not-allowed'}
+                                        `} 
                                       />
                                     </td>
                                   ))}
@@ -519,22 +550,24 @@ export default function GradebookPage() {
         </main>
       </div>
 
-      {/* 🚀 شريط الحفظ الطافي (Floating Save Bar - Mobile Friendly) */}
-      <AnimatePresence>
-        {Object.keys(modifiedGrades).length > 0 && (
-          <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50 print:hidden w-[90%] sm:w-auto max-w-md sm:max-w-none">
-            <div className="bg-[#0f1423]/95 backdrop-blur-3xl text-white px-5 sm:px-8 py-4 sm:py-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col sm:flex-row items-center gap-4 sm:gap-6 border border-emerald-500/30">
-              <div className="text-center sm:text-right">
-                <p className="font-black text-sm sm:text-base drop-shadow-sm">تغييرات قيد الانتظار!</p>
-                <p className="text-[10px] sm:text-xs text-emerald-400 font-bold mt-0.5">يرجى حفظ الدرجات لكي لا تفقدها من السجل.</p>
+      {/* 🚀 شريط الحفظ الطافي (يظهر فقط لمن يملك الصلاحية) */}
+      {canEdit && (
+        <AnimatePresence>
+          {Object.keys(modifiedGrades).length > 0 && (
+            <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-50 print:hidden w-[90%] sm:w-auto max-w-md sm:max-w-none">
+              <div className="bg-[#0f1423]/95 backdrop-blur-3xl text-white px-5 sm:px-8 py-4 sm:py-5 rounded-[1.5rem] sm:rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.8)] flex flex-col sm:flex-row items-center gap-4 sm:gap-6 border border-emerald-500/30">
+                <div className="text-center sm:text-right">
+                  <p className="font-black text-sm sm:text-base drop-shadow-sm">تغييرات قيد الانتظار!</p>
+                  <p className="text-[10px] sm:text-xs text-emerald-400 font-bold mt-0.5">يرجى حفظ الدرجات لكي لا تفقدها من السجل.</p>
+                </div>
+                <button onClick={handleSaveBulk} disabled={saving} className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 text-xs sm:text-sm shrink-0">
+                  {saving ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Save className="w-4 h-4 sm:w-5 sm:h-5" />} حفظ التغييرات الآن
+                </button>
               </div>
-              <button onClick={handleSaveBulk} disabled={saving} className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/50 text-xs sm:text-sm shrink-0">
-                {saving ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Save className="w-4 h-4 sm:w-5 sm:h-5" />} حفظ التغييرات الآن
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </div>
   );
 }
