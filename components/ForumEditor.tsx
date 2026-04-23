@@ -283,7 +283,8 @@ export default function ForumEditor({
   );
 
   return (
-    <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative" dir="rtl">
+    // 🚀 تطبيق الـ Wrapper Structure: flex-col, min-h-[300px], overflow-visible
+    <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative flex flex-col min-h-[300px] overflow-visible" dir="rtl">
       
       {showWatermarkModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -333,7 +334,8 @@ export default function ForumEditor({
         </div>
       )}
 
-      <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sticky top-0 z-20 rounded-t-[1.5rem]">
+      {/* 🚀 إزالة sticky top-0 ووضع relative shrink-0 */}
+      <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 relative shrink-0 z-20 rounded-t-[1.5rem]">
         
         <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
           <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} title="عريض" />
@@ -400,7 +402,6 @@ export default function ForumEditor({
              </div>
           )}
 
-          {/* 🚀 لوحة الـ LaTeX الجديدة والمطورة */}
           {showMathUI && (
             <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 w-[350px] sm:w-[400px] animate-in fade-in zoom-in" dir="rtl">
               <div className="flex justify-between items-center mb-4 border-b pb-3">
@@ -484,7 +485,8 @@ export default function ForumEditor({
         )}
       </div>
 
-      <div className="relative">
+      {/* 🚀 جعل الـ Container الداخلي flex-1 مع إزالة الإخفاء */}
+      <div className="relative flex-1 flex flex-col overflow-visible">
         {(isUploading || isProcessingPdf) && (
           <div className="absolute inset-0 bg-white/70 backdrop-blur-[4px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
              <div className="bg-white px-6 py-4 rounded-[2rem] shadow-xl border border-indigo-100 flex flex-col items-center justify-center gap-3 font-bold text-sm text-indigo-700 max-w-[80%] text-center">
@@ -494,13 +496,14 @@ export default function ForumEditor({
           </div>
         )}
         
+        {/* 🚀 إزالة الخنق وإعطاء flex-1 ليأخذ مساحته الطبيعية */}
         <div 
           ref={editorRef}
           contentEditable
           onInput={handleInput}
           onPaste={handlePaste}
           onBlur={saveSelection} 
-          className="w-full min-h-[150px] max-h-[600px] overflow-y-auto p-6 outline-none prose prose-slate max-w-none text-slate-800 leading-loose text-base rounded-b-[1.5rem]"
+          className="flex-1 w-full min-h-[180px] lg:min-h-[280px] overflow-y-auto p-6 outline-none prose prose-slate max-w-none text-slate-800 leading-loose text-base rounded-b-[1.5rem]"
           data-placeholder={placeholder}
           dir="auto"
           style={{ WebkitUserModify: 'read-write' } as any}
