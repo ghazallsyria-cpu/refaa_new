@@ -560,7 +560,6 @@ export default function AssignmentsPage() {
                     
                       <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner flex flex-col min-h-[300px]">
                         <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">الوصف والتعليمات التفصيلية</label>
-                        {/* 🚀 إزالة الخنق عن المحرر وتركه يتمدد براحة تامة */}
                         <div className="bg-[#02040a]/40 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner flex-1 flex flex-col overflow-visible">
                           <ForumEditor
                             content={currentAssignment.description || ''}
