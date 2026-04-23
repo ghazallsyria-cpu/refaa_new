@@ -137,22 +137,21 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت العبقري المطور حصرياً للتعامل مع الـ JSON والرياضيات
-  const basePromptText = `أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة بصيغة JSON حصراً.
+  // 🚀 البرومبت السحري المطور: يستخدم String.raw لضمان وصول أوامر الشرطات المائلة بدقة تامة للـ AI بدون تشوه
+  const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة بصيغة JSON حصراً.
 
 🛑 قواعد كتابة الرياضيات والفيزياء (حرج جداً لعمل النظام):
 1. استخدم صيغة LaTeX القياسية لأي معادلة، رقم، أو رمز.
-2. للهروب البرمجي (Escaping) داخل الـ JSON، يجب استخدام شرطتين مائلتين فقط (\\\\) قبل الرموز لتتحول برمجياً لشرطة واحدة. 
-   - ✔️ صحيح: "\\\\frac{\\\\mu_0 I}{2 \\\\pi d}"
-   - ❌ خاطئ: "\\frac" أو "\\\\\\\\frac"
-3. ضع المعادلات والرموز داخل علامتي دولار مزدوجة $$ للمعادلات المستقلة، أو $ للمعادلات المدمجة بالنص.
-   - ✔️ مثال: "الحل هو $$B = \\\\frac{\\\\mu_0 N I}{2 r}$$"
-4. لا تضع أي كلمات عربية داخل علامات الـ $ أو $$ لأنها تكسر ترتيب الرياضيات، اجعل العربي خارجها.
+2. للهروب البرمجي (Escaping) داخل الـ JSON، يجب استخدام شرطتين مائلتين فقط (\\) قبل أوامر LaTeX لتصبح صالحة ولا تكسر النظام.
+   - ✔️ مثال صحيح للكسر: "\\frac{\\mu_0 I}{2 \\pi d}"
+   - ❌ أمثلة خاطئة تدمر النظام: "\frac" أو "\\\\frac"
+3. ⚠️ هام جداً: استخدم علامة دولار واحدة $ فقط في بداية ونهاية المعادلات (مثال: "$2 \times 10^{-6} \text{T}$"). يُمنع منعاً باتاً استخدام علامتي دولار $$ نهائياً لأنها تكسر أسطر النص.
+4. لا تضع أي كلمات عربية داخل علامات الـ $ لأنها تكسر ترتيب الرياضيات، اجعل العربي خارجها.
 
 🛑 قواعد بناء الـ JSON:
-1. إذا كان هناك نص رئيسي يتبعه أسئلة (مثل رأس مسألة)، ضعه كعنصر "section_header" مستقل.
-2. الإجابة النموذجية: يجب أن تُضاف في نهاية نص السؤال حرفياً داخل أقواس بهذا الشكل: [الإجابة النموذجية: الحل].
-3. تجنب استخدام سطر جديد (Enter / \\n) داخل النصوص.
+1. إذا كان هناك نص رئيسي يتبعه أسئلة، ضعه كعنصر "section_header" مستقل.
+2. الإجابة النموذجية: أضفها في نهاية نص السؤال حرفياً داخل أقواس بهذا الشكل: [الإجابة النموذجية: الحل].
+3. لا تستخدم أسطر جديدة (Enter / \n) داخل النصوص.
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
@@ -162,7 +161,7 @@ export default function AIAssignmentsSandbox() {
       "content": "نص السؤال هنا [الإجابة النموذجية: الحل]",
       "type": "multiple_choice",
       "points": 1,
-      "options": ["$$32^\\\\circ \\\\text{F}$$", "$$212^\\\\circ \\\\text{F}$$"]
+      "options": ["$32^\\circ \\text{F}$", "$212^\\circ \\text{F}$"]
     }
   ]
 }`;
@@ -170,7 +169,7 @@ export default function AIAssignmentsSandbox() {
   const copyPrompt = () => { 
     let finalPrompt = basePromptText;
     if (inputType === 'pdf' && pdfMode === 'range') {
-      finalPrompt = `[توجيه صارم: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق. يمنع استخراج أي شيء خارج هذا النطاق.]\n\n` + basePromptText;
+      finalPrompt = `[توجيه صارم للذكاء الاصطناعي: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق. يمنع منعاً باتاً استخراج أي شيء خارج هذا النطاق.]\n\n` + basePromptText;
     }
     navigator.clipboard.writeText(finalPrompt); 
     alert('تم نسخ أمر التوليد المخصص بنجاح! يمكنك الآن لصقه في حسابك الخارجي.'); 
@@ -370,6 +369,25 @@ export default function AIAssignmentsSandbox() {
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
+      {/* 🚀 إضافة الستايل الخاص بتصحيح الـ RTL لمكتبة الرياضيات */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
+        
+        /* 🚀 الكود السحري: منع المعادلات من التشقلب (RTL Isolation) ومنع الأسطر من الانكسار */
+        .katex { 
+          direction: ltr !important; 
+          unicode-bidi: isolate !important; 
+          display: inline-block !important; 
+        }
+        .katex-display { 
+          display: inline-block !important; 
+          margin: 0 !important; 
+        }
+      `}} />
+
       {/* 🚀 الخلفية الزجاجية المضيئة */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]"></div>
@@ -545,30 +563,35 @@ export default function AIAssignmentsSandbox() {
                 <div className="bg-[#090b14]/50 p-5 sm:p-6 rounded-3xl border border-white/10 max-h-[450px] overflow-y-auto custom-scrollbar shadow-inner">
                   <p className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2 bg-emerald-500/10 w-fit px-3 py-1.5 rounded-xl border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم استخراج {result.questions.length} أسئلة:</p>
                   
-                  {/* 🚀 استخدام المعاينة بالمكتبة الصحيحة للرياضيات */}
                   <ul className="space-y-6 font-bold text-slate-300 text-sm">
                     {result.questions.map((q, i) => {
                       let displayContent = q.content;
                       const answerIndex = displayContent.indexOf('[الإجابة النموذجية');
                       if (answerIndex !== -1) displayContent = displayContent.substring(0, answerIndex).trim();
                       
+                      // 🚀 الفلتر السحري: تحويل أي $$ إلى $ لمنع التشويه وكسر الأسطر
+                      displayContent = displayContent.replace(/\$\$/g, '$');
+                      
                       return (
                         <li key={i} className="border-b border-white/5 pb-5 last:border-0 leading-loose">
                           <div className="flex gap-3 items-start">
                             <span className="text-emerald-500/50 mt-1 shrink-0 font-black">{i + 1}.</span>
                             <div className={q.type === 'section_header' ? "text-indigo-400 font-black text-base w-full" : "w-full"}>
-                                {/* 🚀 هنا يتم رندرة المعادلة في المعاينة */}
+                                {/* 🚀 رندرة المعادلات بشكل مدمج ومرتب */}
                                 <Latex>{displayContent}</Latex>
                             </div>
                           </div>
                           {q.options && q.options.length > 0 && (
                             <div className="mt-4 ml-6 flex flex-wrap gap-2">
-                              {q.options.map((opt, oIdx) => (
-                                <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center">
-                                   {/* 🚀 وهنا أيضاً للخيارات */}
-                                   <Latex>{opt}</Latex>
-                                </span>
-                              ))}
+                              {q.options.map((opt, oIdx) => {
+                                // 🚀 تطبيق الفلتر على الخيارات أيضاً
+                                const cleanOpt = String(opt).replace(/\$\$/g, '$');
+                                return (
+                                  <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center">
+                                     <Latex>{cleanOpt}</Latex>
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                         </li>
@@ -629,13 +652,6 @@ export default function AIAssignmentsSandbox() {
             )}
           </div>
         </div>
-
-        <style dangerouslySetInnerHTML={{ __html: `
-          .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-          .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
-          .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
-        `}} />
       </div>
     </div>
   );
