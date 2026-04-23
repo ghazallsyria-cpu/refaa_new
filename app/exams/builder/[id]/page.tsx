@@ -246,6 +246,11 @@ export default function QuizBuilder() {
       return;
     }
 
+    if (!exam.duration || exam.duration <= 0) {
+      showNotification('error', 'يرجى تحديد مدة الاختبار بالدقائق بشكل صحيح');
+      return;
+    }
+
     const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
     const maxScore = Number(exam.max_score) || 0;
 
@@ -457,6 +462,19 @@ export default function QuizBuilder() {
               <label className="text-[10px] sm:text-xs font-black text-indigo-400 uppercase tracking-widest block drop-shadow-sm">الدرجة العظمى</label>
               <input type="number" value={exam.max_score} onChange={(e) => setExam({...exam, max_score: parseInt(e.target.value) || 0})} className="w-full px-4 sm:px-5 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-[#02040a]/60 border border-white/5 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/50 outline-none font-bold text-white transition-all appearance-none shadow-inner text-xs sm:text-sm" />
             </div>
+            
+            {/* 🚀 استعادة حقل مدة الاختبار هنا */}
+            <div className="space-y-2 sm:space-y-3">
+              <label className="text-[10px] sm:text-xs font-black text-indigo-400 uppercase tracking-widest block drop-shadow-sm">مدة الاختبار (بالدقائق) <span className="text-rose-500">*</span></label>
+              <input 
+                 type="number" 
+                 min="1" 
+                 value={exam.duration} 
+                 onChange={(e) => setExam({...exam, duration: parseInt(e.target.value) || 0})} 
+                 className="w-full px-4 sm:px-5 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-[#02040a]/60 border border-white/5 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/50 outline-none font-bold text-white transition-all appearance-none shadow-inner text-xs sm:text-sm" 
+              />
+            </div>
+
             <div className="space-y-2 sm:space-y-3">
               <label className="text-[10px] sm:text-xs font-black text-indigo-400 uppercase tracking-widest block drop-shadow-sm">تاريخ الاختبار</label>
               <input type="date" value={exam.exam_date} onChange={(e) => setExam({...exam, exam_date: e.target.value})} className="w-full px-4 sm:px-5 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-[#02040a]/60 border border-white/5 focus:bg-[#02040a] focus:ring-2 focus:ring-indigo-500/50 outline-none font-bold text-white transition-all appearance-none cursor-pointer shadow-inner text-xs sm:text-sm" style={{ colorScheme: 'dark' }} />
