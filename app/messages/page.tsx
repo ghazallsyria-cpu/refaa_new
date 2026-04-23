@@ -86,7 +86,7 @@ export default function MessagesPage() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentUser?.id, isChecking]); // 🛡️ الاعتماد فقط على الـ ID
+  }, [currentUser?.id, isChecking]); 
 
   useEffect(() => {
     if (!messages.length || !currentUser) { 
@@ -459,7 +459,7 @@ export default function MessagesPage() {
                     </button>
                  </form>
                </div>
-             </>
+             </div>
            )}
         </div>
       </div>
