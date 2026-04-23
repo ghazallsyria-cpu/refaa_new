@@ -251,7 +251,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const openFullEditModal = async () => {
     if (!assignment) return;
     const dateObj = new Date(assignment.due_date);
-    setEditData({ ...assignment, due_date: new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16), teacher_id: assignment.teacher_id });
+    
+    // 🚀 القفل: استخراج المعرف الصافي وتجميده
+    const originalTeacherId = typeof assignment.teacher_id === 'object' 
+      ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id 
+      : assignment.teacher_id;
+
+    setEditData({ 
+      ...assignment, 
+      due_date: new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16), 
+      teacher_id: originalTeacherId 
+    });
     setEditDescription(assignment.description || ''); setEditFileUrl(assignment.file_url || '');
     setEditSectionIds(assignment.assignment_sections?.map((as: any) => as.section_id) || (assignment as any).section_ids || []);
     setEditQuestions(questions); setIsFullEditModalOpen(true);
@@ -263,9 +273,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
-      const payload = { title: editData.title, description: editDescription, due_date: new Date(editData.due_date).toISOString(), file_url: editFileUrl, teacher_id: editData.teacher_id || assignment?.teacher_id };
+      // 🚀 القفل النهائي لحماية الملكية عند الحفظ
+      const finalTeacherId = typeof editData.teacher_id === 'object' 
+        ? (editData as any).teacher_id?.id || (editData as any).teacher_id?.auth_id 
+        : editData.teacher_id;
+
+      const payload: any = { 
+        title: editData.title, 
+        description: editDescription, 
+        due_date: new Date(editData.due_date).toISOString(), 
+        file_url: editFileUrl,
+        teacher_id: finalTeacherId // 👈 تمرير البصمة النظيفة
+      };
+      
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
       else await saveAssignment(payload, assignmentId, editQuestions, editSectionIds, subjects);
+      
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
       showNotification('success', 'تم حفظ التعديلات بنجاح');
       setIsFullEditModalOpen(false);
@@ -339,7 +362,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const sectionName = firstSection?.name || '';
   const fullSectionName = className ? `${className} - ${sectionName}` : sectionName;
   const isGraded = mySubmission?.status === 'graded';
-  const canEdit = currentRole === 'admin' || currentRole === 'management' || (assignment as any)?.teacher_id === user?.id;
+  
+  // 🚀 السماح للمدير أو صاحب الواجب الأصلي فقط برؤية أزرار التعديل
+  const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
+  const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
   return (
     <div className="min-h-screen bg-[#090b14] text-slate-200 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
@@ -565,7 +591,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       <h3 className="text-lg sm:text-xl font-black text-white mb-6 flex items-center gap-2"><FileText className="h-6 w-6 text-indigo-400" /> المرفقات والنصوص الإضافية التي أرسلتها</h3>
                       {mySubmission?.content && (
                         <div className="bg-[#131836] p-5 rounded-2xl border border-white/5 mb-4 shadow-inner">
-                          <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-wrap font-bold text-base sm:text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: mySubmission.content }} />
+                          <p className="text-slate-300 whitespace-pre-wrap font-bold text-base sm:text-lg leading-relaxed">{mySubmission.content}</p>
                         </div>
                       )}
                       {mySubmission?.file_url && (
@@ -588,7 +614,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   >
                     <div className="bg-[#131836]/60 p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-lg mt-8">
                       <label className="block text-sm sm:text-base font-black text-white mb-4">نص الإجابة الإضافي (اختياري)</label>
-                      {/* 🚀 استبدال textarea بمحرر نصوص تفاعلي */}
                       <div className="mb-6 rounded-2xl overflow-hidden border border-white/10 shadow-inner">
                         <ForumEditor 
                            content={content} 
@@ -623,7 +648,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="bg-[#131836]/60 p-6 sm:p-8 rounded-[2.5rem] border border-white/10 shadow-lg">
                     <div>
                       <label className="block text-sm sm:text-base font-black text-white mb-4">نص الإجابة (اختياري إذا كان هناك ملف)</label>
-                      {/* 🚀 استبدال textarea بمحرر نصوص تفاعلي */}
                       <div className="rounded-2xl overflow-hidden border border-white/10 shadow-inner">
                         <ForumEditor 
                            content={content} 
