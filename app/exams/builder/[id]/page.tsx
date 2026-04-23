@@ -18,8 +18,8 @@ import * as Switch from '@radix-ui/react-switch';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useExamsSystem } from '@/hooks/useExamsSystem';
-import ForumEditor from '@/components/ForumEditor'; 
-
+import ForumEditorOriginal from '@/components/ForumEditor';
+const ForumEditor = ForumEditorOriginal as any;
 import { Question, QuestionType, Option, createQuestion } from '@/types/question';
 import { useAuth } from '@/context/auth-context';
 import { useSchoolFormData } from '@/hooks/useSchoolFormData';
