@@ -44,19 +44,10 @@ export default function MessagesPage() {
   const { user: currentUser, authRole, userRole, isChecking } = useAuth() as any;
   const role = authRole || userRole;
   
-  const {
-    messages,
-    users,
-    chatRooms,
-    loading,
-    fetchMessages,
-    sendMessage,
-    sendGroupMessage,
-    sendBroadcastMessage,
-    markAsRead,
-    deleteMessages,
-  } = useMessagesSystem();
-
+  // 🛡️ [Anti-Freeze Patch]: قفل دوال الـ Fetch باستخدام useRef
+  const { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages, messages, users, chatRooms, loading } = useMessagesSystem();
+  const systemRef = useRef({ fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages });
+  
   const [privateConversations, setPrivateConversations] = useState<any[]>([]);
   const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
   
@@ -75,21 +66,27 @@ export default function MessagesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // 🛡️ الأقفال لمنع التكرار اللانهائي
   const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (!currentUser || isChecking || fetchedRef.current) return;
+    systemRef.current = { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages };
+  }, [fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages]);
+
+  useEffect(() => {
+    if (!currentUser?.id || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
 
     const channel = supabase
       .channel('realtime_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => { 
-        fetchMessages(); 
+          systemRef.current.fetchMessages(); 
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentUser, isChecking, fetchMessages]);
+  }, [currentUser?.id, isChecking]); // 🛡️ الاعتماد فقط على الـ ID
 
   useEffect(() => {
     if (!messages.length || !currentUser) { 
@@ -157,14 +154,14 @@ export default function MessagesPage() {
          ...m, sender: Array.isArray(m.sender) ? m.sender[0] : m.sender, receiver: Array.isArray(m.receiver) ? m.receiver[0] : m.receiver,
       }));
       setThreadMessages(cleanThread);
-
+      
       setTimeout(() => {
         if (messagesEndRef.current) {
           messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }
       }, 100);
     }
-  }, [activeThread, messages]);
+  }, [activeThread, messages, currentUser?.id]);
 
   const handleOpenThread = (thread: any, type: 'group' | 'private') => {
     setActiveThread(thread);
@@ -175,21 +172,21 @@ export default function MessagesPage() {
       return `private-${ids.join('-')}` === thread.convId;
     }).map(m => m.id);
 
-    if (unreadIds.length > 0) markAsRead(unreadIds);
+    if (unreadIds.length > 0) systemRef.current.markAsRead(unreadIds);
   };
 
   const handleSendReply = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const strippedContent = replyContent.replace(/<[^>]*>?/gm, '').trim();
+    const strippedContent = replyContent.trim();
     if (!strippedContent || !activeThread || !currentUser) return;
     
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', strippedContent);
+        await systemRef.current.sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', strippedContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
-        await sendMessage(receiverId, activeThread.subject || 'رد', strippedContent);
+        await systemRef.current.sendMessage(receiverId, activeThread.subject || 'رد', strippedContent);
       }
       setReplyContent('');
     } catch (error: any) { alert(error.message); } 
@@ -204,11 +201,11 @@ export default function MessagesPage() {
     setIsSubmitting(true);
     try {
       if (recipientType === 'broadcast') {
-        await sendBroadcastMessage(newMessage.subject, newMessage.content);
+        await systemRef.current.sendBroadcastMessage(newMessage.subject, newMessage.content);
         alert('تم إرسال الإذاعة العامة بنجاح لجميع المجالس!');
       } else if (!isGroupMessage) {
         if (!newMessage.receiver_id) return alert('الرجاء اختيار المستلم');
-        await sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
+        await systemRef.current.sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
       }
       
       setShowNewMessage(false);
@@ -221,7 +218,7 @@ export default function MessagesPage() {
   const handleDeleteMessage = async (messageIds: string[]) => {
     if (!confirm('هل أنت متأكد من حذف هذه المحادثة بالكامل؟')) return;
     try {
-      await deleteMessages(messageIds);
+      await systemRef.current.deleteMessages(messageIds);
       if (activeThread && messageIds.some((id: string) => activeThread.allIds?.includes(id))) setActiveThread(null);
     } catch (error: any) { alert('حدث خطأ أثناء الحذف'); }
   };
@@ -262,7 +259,8 @@ export default function MessagesPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      <div className={cn("shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4 mb-4", activeThread ? "hidden lg:flex" : "flex")}>
+      {/* 🚀 إخفاء العناوين في الجوال إذا كانت المحادثة مفتوحة لزيادة المساحة */}
+      <div className={cn("shrink-0 flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4 mb-4", activeThread ? "hidden lg:flex" : "flex")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
           <p className="text-slate-400 mt-1 sm:mt-2 font-bold text-xs sm:text-sm">مجالس الفصول والمراسلات الخاصة ⚡</p>
@@ -276,8 +274,8 @@ export default function MessagesPage() {
 
       <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
-        {/* 🚀 القائمة الجانبية */}
-        <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
+        {/* القائمة الجانبية */}
+        <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
                 <Search className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
@@ -344,8 +342,8 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 نافذة الدردشة - إصلاح جذري لهندسة الموبايل (Flex-Col + Textarea) */}
-        <div className={cn("flex-col transition-all duration-300 z-50 lg:z-auto", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex fixed inset-0 lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden bg-[#090b14] lg:bg-transparent")}>
+        {/* 🚀 4. نافذة الدردشة - إصلاح جذري لدعم الكيبورد في الموبايل */}
+        <div className={cn("flex-col transition-all duration-300 relative", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex absolute inset-0 z-[100] bg-[#090b14] lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden")}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
                <div className="h-32 w-32 bg-[#02040a]/60 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
@@ -355,9 +353,9 @@ export default function MessagesPage() {
                <p className="text-slate-400 font-bold mt-2 text-base">اختر مجلس الفصل أو محادثة خاصة للبدء.</p>
              </div>
            ) : (
-             <>
-               {/* Header للمحادثة */}
-               <div className="h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between z-20 shrink-0 pt-[env(safe-area-inset-top)]">
+             <div className="flex flex-col h-full w-full absolute inset-0 pb-[env(safe-area-inset-bottom)] lg:pb-0">
+               {/* Header */}
+               <div className="h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between shrink-0 pt-[env(safe-area-inset-top)] z-20">
                  <div className="flex items-center gap-2 lg:gap-4 min-w-0 pr-1">
                    <button onClick={() => setActiveThread(null)} className="lg:hidden p-2.5 mr-[-5px] text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-all shrink-0 active:scale-95 flex items-center justify-center">
                      <ArrowRight className="h-6 w-6" />
@@ -384,7 +382,7 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Area - Scrolling Container */}
+               {/* Messages Container */}
                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
@@ -439,8 +437,8 @@ export default function MessagesPage() {
                </div>
 
                {/* 🚀 Input Form - تم استبدال المحرر الضخم بصندوق دردشة ذكي (Textarea) للموبايل */}
-               <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-[env(safe-area-inset-bottom)]">
-                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
+               <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 z-30">
+                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4 pb-4">
                     <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex items-center">
                        <textarea 
                          value={replyContent} 
