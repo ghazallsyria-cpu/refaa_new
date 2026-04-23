@@ -21,20 +21,8 @@ export default function LoginPage() {
 
   const [schoolData, setSchoolData] = useState({ name: 'مدرسة الرفعة النموذجية', logo_url: '' });
 
-  // 🚀 الضربة الوقائية: مسح كاش Supabase القديم المتعارض
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith('sb-')) {
-            localStorage.removeItem(key);
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Error clearing old cache:', err);
-    }
-  }, []);
+  // 🚀 إزالة كود مسح الـ localStorage الذي كان يسبب انهيار المتصفح (Crash)
+  // والاعتماد على إدارة الجلسات الرسمية لـ Supabase
 
   useEffect(() => {
     const fetchSchoolData = async () => {
@@ -224,7 +212,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 py-4.5 text-base font-black text-white shadow-xl shadow-indigo-500/20 hover:from-indigo-500 hover:to-blue-500 transition-all active:scale-[0.98] disabled:opacity-70 mt-4 flex items-center justify-center border border-indigo-400/50 group"
+              className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 py-4 text-base font-black text-white shadow-xl shadow-indigo-500/20 hover:from-indigo-500 hover:to-blue-500 transition-all active:scale-[0.98] disabled:opacity-70 mt-4 flex items-center justify-center border border-indigo-400/50 group"
             >
               {loading ? (
                 <div className="flex items-center gap-3">
