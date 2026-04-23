@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase';
 import ForumEditorOriginal from '@/components/ForumEditor';
 import { cn } from '@/lib/utils';
 
-// 🪄 الحيلة السحرية لإسكات TypeScript
+// 🪄 إسكات TypeScript كما فعلت أنت
 const ForumEditor = ForumEditorOriginal as any;
 
 const RenderAvatar = ({ user, size = 'h-12 w-12', isGroup = false }: { user?: any, size?: string, isGroup?: boolean }) => {
@@ -242,7 +242,7 @@ export default function MessagesPage() {
 
   if (isChecking || loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
@@ -255,12 +255,11 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[100dvh] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 Header */}
       <div className={cn("shrink-0 flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4 mb-4", activeThread ? "hidden lg:flex" : "flex")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
@@ -273,19 +272,18 @@ export default function MessagesPage() {
         )}
       </div>
 
-      {/* 🚀 Main Chat Layout (Strict Flexbox Container) */}
-      <div className="flex flex-1 min-h-0 overflow-hidden mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/80 backdrop-blur-md rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+      <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
-        {/* 1️⃣ Sidebar (List of chats) */}
-        <div className={cn("flex flex-col w-full lg:w-[350px] xl:w-[400px] shrink-0 border-l border-white/5 bg-[#02040a]/40 h-full", activeThread ? "hidden lg:flex" : "flex")}>
+        {/* Sidebar */}
+        <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
                 <Search className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-                <input type="text" className="w-full rounded-2xl border border-white/5 py-3 pr-12 pl-4 text-white bg-[#0f1423]/80 shadow-inner focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 text-sm font-bold outline-none placeholder:text-slate-500" placeholder="ابحث في المجالس والرسائل..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <input type="text" className="w-full rounded-2xl border border-white/5 py-3.5 pr-12 pl-4 text-white bg-[#0f1423]/80 shadow-inner focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 text-sm font-bold outline-none placeholder:text-slate-500" placeholder="ابحث في المجالس والرسائل..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
            </div>
 
-           <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar">
+           <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar pb-20 lg:pb-0">
               {chatRooms.length > 0 && (
                 <div>
                   <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-400"/> مجالس الفصول الثابتة</h3>
@@ -344,34 +342,33 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 2️⃣ Chat Window (Strict Flex Layout for Mobile & Desktop) */}
-        <div className={cn("flex flex-col flex-1 h-full min-w-0 bg-[#090b14]/50 lg:bg-transparent relative", !activeThread ? "hidden lg:flex" : "flex")}>
+        {/* 🚀 Chat Window */}
+        <div className={cn("flex-col transition-all duration-300 z-50 lg:z-auto", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex fixed inset-0 lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden bg-[#090b14] lg:bg-transparent")}>
            {!activeThread ? (
-             <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-               <div className="h-24 w-24 sm:h-32 sm:w-32 bg-[#02040a]/60 rounded-[2rem] sm:rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
-                 <MessageSquare className="h-10 w-10 sm:h-12 sm:w-12 text-slate-600 drop-shadow-md" />
+             <div className="text-center flex flex-col items-center">
+               <div className="h-32 w-32 bg-[#02040a]/60 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
+                 <MessageSquare className="h-12 w-12 text-slate-600 drop-shadow-md" />
                </div>
-               <h3 className="text-xl sm:text-2xl font-black text-white drop-shadow-sm">مرحباً بك في مركز التواصل</h3>
-               <p className="text-slate-400 font-bold mt-2 text-sm sm:text-base">اختر مجلس الفصل أو محادثة خاصة للبدء.</p>
+               <h3 className="text-2xl font-black text-white drop-shadow-sm">مرحباً بك في مركز التواصل</h3>
+               <p className="text-slate-400 font-bold mt-2 text-base">اختر مجلس الفصل أو محادثة خاصة للبدء.</p>
              </div>
            ) : (
              <>
-               {/* 🚀 Chat Header */}
-               <div className="shrink-0 h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between z-20">
-                 <div className="flex items-center gap-3 min-w-0">
-                   {/* زر العودة الواضح للموبايل */}
+               {/* Chat Header */}
+               <div className="shrink-0 h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between z-20 pt-[env(safe-area-inset-top)]">
+                 <div className="flex items-center gap-2 lg:gap-4 min-w-0 pr-1">
                    <button onClick={() => setActiveThread(null)} className="lg:hidden h-10 w-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 transition-all shrink-0 active:scale-95 flex items-center justify-center shadow-inner">
                      <ArrowRight className="h-5 w-5" />
                    </button>
                    
                    {activeThread.type === 'group' ? (
-                     <><RenderAvatar isGroup={true} size="h-10 w-10 sm:h-12 sm:w-12" />
+                     <><RenderAvatar isGroup={true} size="h-10 w-10 lg:h-12 lg:w-12" />
                      <div className="min-w-0">
                        <h3 className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">مجلس: {activeThread.className}</h3>
                        <p className="text-[10px] sm:text-xs text-indigo-400 font-bold mt-0.5 truncate">شعبة {activeThread.name}</p>
                      </div></>
                    ) : (
-                     <><RenderAvatar user={activeThread.sender_id === currentUser?.id ? activeThread.receiver : activeThread.sender} size="h-10 w-10 sm:h-12 sm:w-12" />
+                     <><RenderAvatar user={activeThread.sender_id === currentUser?.id ? activeThread.receiver : activeThread.sender} size="h-10 w-10 lg:h-12 lg:w-12" />
                      <div className="min-w-0">
                        <h3 className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{activeThread.sender_id === currentUser?.id ? activeThread.receiver?.full_name : activeThread.sender?.full_name}</h3>
                        <p className="text-[10px] sm:text-xs text-emerald-400 font-bold mt-0.5 truncate">{activeThread.subject}</p>
@@ -385,8 +382,8 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* 🚀 Messages Area (Scrollable independently without bottom padding hacks) */}
-               <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar space-y-6">
+               {/* Chat Body */}
+               <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar space-y-6 bg-transparent">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-xs sm:text-sm">
                        لا توجد رسائل سابقة في هذا {activeThread.type === 'group' ? 'المجلس' : 'النقاش'}.
@@ -439,18 +436,19 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-1" />
                </div>
 
-               {/* 🚀 Chat Input Area (Strictly shrink-0, not absolute!) */}
-               <div className="shrink-0 p-3 sm:p-4 border-t border-white/5 bg-[#0a0d16]/95 backdrop-blur-md">
-                 <form onSubmit={handleSendReply} className="flex flex-col sm:flex-row items-end gap-2 sm:gap-3">
-                    <div className="flex-1 w-full bg-[#02040a]/60 rounded-2xl sm:rounded-[1.5rem] border border-white/5 shadow-inner flex flex-col justify-center min-h-[50px] max-h-[150px] overflow-hidden">
-                       {/* @ts-ignore - إجبار المترجم على تجاهل الخطأ لضمان مرور البناء */}
+               {/* 🚀 Chat Input Box (Strictly overflow-visible to show ForumEditor toolbar) */}
+               <div className="shrink-0 border-t border-white/5 bg-[#0a0d16]/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
+                 <form onSubmit={handleSendReply} className="flex flex-col sm:flex-row items-end gap-2 sm:gap-3 p-3 sm:p-4 overflow-visible">
+                    <div className="flex-1 w-full bg-transparent overflow-visible flex flex-col justify-center">
+                       {/* 🚀 تمرير isCompact لجعل المحرر يقلل من ارتفاعه داخل الرد السريع */}
                        <ForumEditor 
                          content={replyContent} 
                          setContent={(val: any) => setReplyContent(val)} 
-                         canUploadImage={true} 
+                         canUploadImage={true}
+                         isCompact={true}
                        />
                     </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] sm:h-[54px] w-full sm:w-[54px] rounded-xl sm:rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-0.5 sm:mb-1`}>
+                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] sm:h-[54px] w-full sm:w-[54px] rounded-xl sm:rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95`}>
                       {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
                     </button>
                  </form>
@@ -460,7 +458,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة */}
+      {/* 🚀 Modal: إنشاء رسالة جديدة (لا يزال يستخدم المحرر الكامل العميق) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 lg:p-6 bg-[#02040a]/90 backdrop-blur-md">
@@ -525,10 +523,9 @@ export default function MessagesPage() {
                       <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-xl border border-white/5 py-3 px-4 text-white bg-[#0f1423] outline-none shadow-inner placeholder:text-slate-600" />
                     </div>
                     
-                    <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner flex flex-col min-h-[250px]">
+                    <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner flex flex-col min-h-[250px] overflow-visible">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
-                      <div className="bg-[#0f1423] rounded-xl border border-white/5 shadow-inner p-1 flex-1 flex flex-col min-h-[150px]">
-                        {/* @ts-ignore */}
+                      <div className="bg-transparent rounded-xl border-none overflow-visible p-1 flex-1 flex flex-col min-h-[150px]">
                         <ForumEditor content={newMessage.content} setContent={(val: any) => setNewMessage({...newMessage, content: val})} canUploadImage={true} />
                       </div>
                     </div>
