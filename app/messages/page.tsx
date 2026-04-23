@@ -162,7 +162,7 @@ export default function MessagesPage() {
         }
       }, 100);
     }
-  }, [activeThread, messages]);
+  }, [activeThread, messages, currentUser?.id]);
 
   // 🚀 التحديث الآمن: قراءة الرسائل عند فتح المحادثة فقط
   const handleOpenThread = (thread: any, type: 'group' | 'private') => {
@@ -243,7 +243,7 @@ export default function MessagesPage() {
 
   if (isChecking || loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
@@ -256,11 +256,12 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[100dvh] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
+      {/* 🚀 إخفاء العناوين في الجوال إذا كانت المحادثة مفتوحة لزيادة المساحة */}
       <div className={cn("shrink-0 flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4 mb-4", activeThread ? "hidden lg:flex" : "flex")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
@@ -275,7 +276,7 @@ export default function MessagesPage() {
 
       <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
-        {/* القائمة الجانبية */}
+        {/* הקائمة الجانبية */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -383,8 +384,8 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Container - مع إعطاء مساحة تعويضية سفلية لعدم اختفاء الرسائل */}
-               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar pb-[200px] lg:pb-6">
+               {/* Messages Container - مع مسافة تعويضية سفلية */}
+               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar pb-[180px] lg:pb-6">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
                        لا توجد رسائل سابقة في هذا {activeThread.type === 'group' ? 'المجلس' : 'النقاش'}.
@@ -437,10 +438,10 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* 🚀 عودة المكون المعتمد (ForumEditor) وتثبيته في الأسفل للموبايل */}
+               {/* 🚀 عودة المكون الأصلي (ForumEditor) مع تثبيته في أسفل الموبايل بشكل صحيح */}
                <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
-                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
-                    <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center">
+                 <form onSubmit={handleSendReply} className="flex flex-col lg:flex-row items-end gap-2 lg:gap-3 p-3 lg:p-4">
+                    <div className="flex-1 w-full bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center max-h-[150px] overflow-y-auto custom-scrollbar">
                        <ForumEditor 
                          content={replyContent} 
                          setContent={setReplyContent} 
@@ -449,7 +450,7 @@ export default function MessagesPage() {
                          minHeight="40px" 
                        />
                     </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-[50px] lg:h-[54px] lg:w-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
+                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-full lg:w-[54px] lg:h-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
                       {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
                     </button>
                  </form>
