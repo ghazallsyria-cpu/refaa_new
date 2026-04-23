@@ -78,7 +78,7 @@ export default function MessagesPage() {
     if (!currentUser?.id || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
 
-    // 🚀 إيقاف الحلقة المفرغة بالاستماع لـ INSERT فقط
+    // 🚀 إيقاف الحلقة المفرغة بالالتقاط لـ INSERT فقط
     const channel = supabase
       .channel('realtime_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => { 
@@ -276,7 +276,7 @@ export default function MessagesPage() {
 
       <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
-        {/* הקائمة الجانبية */}
+        {/* القائمة الجانبية */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -384,7 +384,7 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Container - تم إضافة مساحة تعويضية سفلية لعدم الاختفاء تحت الكيبورد */}
+               {/* Messages Container - مع إعطاء مساحة تعويضية سفلية لعدم اختفاء الرسائل */}
                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar pb-[180px] lg:pb-6">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
@@ -438,11 +438,11 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* 🚀 عودة المكون الأصلي (ForumEditor) وتغليفه بحاوية تحدد ارتفاعه في الجوال */}
+               {/* 🚀 المكون المعتمد (ForumEditor) بدون خصائص غير معرفة لكي لا يغضب الـ TypeScript */}
                <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
                  <form onSubmit={handleSendReply} className="flex flex-col lg:flex-row items-end gap-2 lg:gap-3 p-3 lg:p-4">
                     <div className="flex-1 w-full bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center max-h-[140px] overflow-y-auto custom-scrollbar">
-                       {/* تم إرسال الـ Props الأساسية فقط لكي لا يغضب الـ TypeScript */}
+                       {/* تم إزالة placeholder و minHeight للالتزام بالـ Props الأصلية */}
                        <ForumEditor 
                          content={replyContent} 
                          setContent={setReplyContent} 
@@ -459,7 +459,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة (مستقلة) */}
+      {/* 🚀 Modal: إنشاء رسالة (مستقلة وتدعم الموبايل) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 lg:p-6 bg-[#02040a]/90 backdrop-blur-md">
