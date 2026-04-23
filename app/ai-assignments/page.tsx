@@ -8,6 +8,10 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 
+// 🚀 استيراد مكتبة الرياضيات لعرض المعاينة بشكل صحيح
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -55,7 +59,6 @@ export default function AIAssignmentsSandbox() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ExtractedAssignment | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showJson, setShowJson] = useState(false);
   
   const [customApiKey, setCustomApiKey] = useState('');
   const [manualJson, setManualJson] = useState('');
@@ -134,19 +137,24 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  const basePromptText = `أنت خبير تعليمي. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة.
+  // 🚀 البرومبت العبقري المطور حصرياً للتعامل مع الـ JSON والرياضيات
+  const basePromptText = `أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة بصيغة JSON حصراً.
 
-🛑 تعليمات برمجية صارمة جداً (لضمان سلامة كود JSON):
-1. علامات التنصيص (حرج جداً): يُمنع منعاً باتاً كتابة أي معادلة رياضية أو رقم بدون وضعها داخل علامات تنصيص مزدوجة (" "). 
-   - مثال خاطئ: "options": [$1$]
-   - مثال صحيح: "options": ["$1$"]
-2. الرموز والرياضيات: ضع جميع الأرقام، الرموز، والدرجات المئوية بين علامتي دولار $ لتعمل مكتبة LaTeX. (مثال: "$100^\\circ \\text{C}$").
-3. التنسيق الآمن للـ JSON: استخدم دائماً شرطتين مائلتين (\\\\) قبل الرموز لضمان سلامة الكود، مثل \\\\mu أو \\\\circ أو \\\\text. لا تستخدم شرطة واحدة أبداً.
-4. الأسطر الجديدة: لا تضغط Enter داخل النصوص نهائياً، استخدام النزول العشوائي يدمر الكود.
-5. الهيكلية: إذا كان المحتوى يحتوي على مسألة رئيسية يتبعها طلبات، اجعل رأس المسألة في عنصر مستقل "section_header"، والطلبات كأسئلة فرعية.
-6. الإجابة النموذجية: يجب أن تضع الإجابة النموذجية في نهاية نص السؤال محاطة بأقواس مربعة بهذا النص الحرفي: [الإجابة النموذجية: الحل هو كذا].
+🛑 قواعد كتابة الرياضيات والفيزياء (حرج جداً لعمل النظام):
+1. استخدم صيغة LaTeX القياسية لأي معادلة، رقم، أو رمز.
+2. للهروب البرمجي (Escaping) داخل الـ JSON، يجب استخدام شرطتين مائلتين فقط (\\\\) قبل الرموز لتتحول برمجياً لشرطة واحدة. 
+   - ✔️ صحيح: "\\\\frac{\\\\mu_0 I}{2 \\\\pi d}"
+   - ❌ خاطئ: "\\frac" أو "\\\\\\\\frac"
+3. ضع المعادلات والرموز داخل علامتي دولار مزدوجة $$ للمعادلات المستقلة، أو $ للمعادلات المدمجة بالنص.
+   - ✔️ مثال: "الحل هو $$B = \\\\frac{\\\\mu_0 N I}{2 r}$$"
+4. لا تضع أي كلمات عربية داخل علامات الـ $ أو $$ لأنها تكسر ترتيب الرياضيات، اجعل العربي خارجها.
 
-أخرج الناتج بصيغة JSON فقط بهذا الهيكل:
+🛑 قواعد بناء الـ JSON:
+1. إذا كان هناك نص رئيسي يتبعه أسئلة (مثل رأس مسألة)، ضعه كعنصر "section_header" مستقل.
+2. الإجابة النموذجية: يجب أن تُضاف في نهاية نص السؤال حرفياً داخل أقواس بهذا الشكل: [الإجابة النموذجية: الحل].
+3. تجنب استخدام سطر جديد (Enter / \\n) داخل النصوص.
+
+أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
@@ -154,7 +162,7 @@ export default function AIAssignmentsSandbox() {
       "content": "نص السؤال هنا [الإجابة النموذجية: الحل]",
       "type": "multiple_choice",
       "points": 1,
-      "options": ["$32^\\\\circ \\\\text{F}$", "$212^\\\\circ \\\\text{F}$"]
+      "options": ["$$32^\\\\circ \\\\text{F}$$", "$$212^\\\\circ \\\\text{F}$$"]
     }
   ]
 }`;
@@ -349,13 +357,13 @@ export default function AIAssignmentsSandbox() {
       const response = await fetch('/api/assignments/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          payload: { title: result.title || 'واجب تفاعلي ذكي', description: 'تم التوليد باستخدام خوارزمية ايهاب جمال غزال للواجبات.', subject_id: selectedSubject, due_date: dueDate.toISOString(), status: 'draft' },
+          payload: { title: result.title || 'واجب تفاعلي ذكي', description: 'تم التوليد باستخدام خوارزمية مدرسة الرفعة.', subject_id: selectedSubject, due_date: dueDate.toISOString(), status: 'draft' },
           assignmentId: null, questions: formattedQuestions, sectionIds: selectedSections, subjects: [], userId: selectedTeacher 
         }),
       });
 
       if (!response.ok) { const errData = await response.json(); throw new Error(errData.error || 'فشل الحفظ'); }
-      alert('تم إرسال الواجب بنجاح!'); router.push('/assignments'); 
+      alert('تم إنشاء الواجب وتوجيهه للمعلم بنجاح!'); router.push('/assignments'); 
     } catch (error: any) { alert('خطأ: ' + error.message); } finally { setIsSavingDB(false); }
   };
 
@@ -534,24 +542,32 @@ export default function AIAssignmentsSandbox() {
             
             {result && (
               <div className="space-y-8 flex-1 animate-in fade-in relative z-10">
-                <div className="bg-[#090b14]/50 p-5 sm:p-6 rounded-3xl border border-white/10 max-h-[350px] overflow-y-auto custom-scrollbar shadow-inner">
+                <div className="bg-[#090b14]/50 p-5 sm:p-6 rounded-3xl border border-white/10 max-h-[450px] overflow-y-auto custom-scrollbar shadow-inner">
                   <p className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2 bg-emerald-500/10 w-fit px-3 py-1.5 rounded-xl border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم استخراج {result.questions.length} أسئلة:</p>
-                  <ul className="space-y-4 font-bold text-slate-300 text-sm">
+                  
+                  {/* 🚀 استخدام المعاينة بالمكتبة الصحيحة للرياضيات */}
+                  <ul className="space-y-6 font-bold text-slate-300 text-sm">
                     {result.questions.map((q, i) => {
                       let displayContent = q.content;
                       const answerIndex = displayContent.indexOf('[الإجابة النموذجية');
                       if (answerIndex !== -1) displayContent = displayContent.substring(0, answerIndex).trim();
                       
                       return (
-                        <li key={i} className="border-b border-white/5 pb-4 last:border-0 leading-loose">
-                          <div className="flex gap-3">
-                            <span className="text-emerald-500/50 mt-1 shrink-0">•</span>
-                            <span className={q.type === 'section_header' ? "block text-indigo-400 font-black text-base" : "block"}>{displayContent}</span>
+                        <li key={i} className="border-b border-white/5 pb-5 last:border-0 leading-loose">
+                          <div className="flex gap-3 items-start">
+                            <span className="text-emerald-500/50 mt-1 shrink-0 font-black">{i + 1}.</span>
+                            <div className={q.type === 'section_header' ? "text-indigo-400 font-black text-base w-full" : "w-full"}>
+                                {/* 🚀 هنا يتم رندرة المعادلة في المعاينة */}
+                                <Latex>{displayContent}</Latex>
+                            </div>
                           </div>
                           {q.options && q.options.length > 0 && (
-                            <div className="mt-3 ml-6 flex flex-wrap gap-2">
+                            <div className="mt-4 ml-6 flex flex-wrap gap-2">
                               {q.options.map((opt, oIdx) => (
-                                <span key={oIdx} className="px-3 py-1.5 rounded-lg bg-[#131836] border border-white/5 text-xs text-slate-400 shadow-sm">{opt}</span>
+                                <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center">
+                                   {/* 🚀 وهنا أيضاً للخيارات */}
+                                   <Latex>{opt}</Latex>
+                                </span>
                               ))}
                             </div>
                           )}
