@@ -33,6 +33,18 @@ interface Teacher { id: string; full_name: string; }
 interface Subject { id: string; name: string; }
 interface Section { id: string; name: string; }
 
+// 🚀 الفلتر السحري: ينظف جميع أخطاء الذكاء الاصطناعي ويجهز المعادلات لـ KaTeX
+const cleanMathLatex = (text: string) => {
+  if (!text) return '';
+  return text
+    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
+    .replace(/\\\\([a-zA-Z])/g, '\\$1')
+    // 2. إصلاح مسافات النص الإنجليزي داخل المعادلات التي تسبب تشوهات
+    .replace(/\\text{([^}]*)}/g, '\\mathrm{$1}')
+    // 3. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
+    .replace(/\$\$/g, '$');
+};
+
 export default function AIAssignmentsSandbox() {
   const router = useRouter();
   const { user, authRole, userRole } = useAuth() as any;
@@ -138,45 +150,30 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت الحديدي المطور لمعالجة مشاكل التنسيق الرياضي بدقة:
-  // تم إجبار الذكاء الاصطناعي على استخدام "الشرطة المزدوجة" كهروب داخل الـ JSON لضمان وصول أوامر KaTeX سليمة
+  // 🚀 البرومبت الرياضي المنطقي الجديد: يطلب الهروب الصحيح للـ JSON بدون تعقيد
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
-🛑 1. هيكلية الأسئلة المتسلسلة (Section Headers) - مهم جداً:
-إذا كان هناك أمر عام أو عنوان رئيسي يتبعه عدة أسئلة (مثل: "علل لما يأتي:"، أو "بناءً على الشكل المرفق:").
-يجب أن تضع هذا الأمر العام كعنصر مستقل في المصفوفة نوعه "section_header"، ثم تضع الأسئلة التي تتبعه كعناصر مستقلة تحته.
-مثال:
-{
-  "content": "علل لكل مما يأتي تعليلاً علمياً صحيحاً:",
-  "type": "section_header",
-  "points": 0,
-  "options": []
-},
-{
-  "content": "يفضل استخدام التنجستين في المصابيح. [الإجابة النموذجية: لأن درجة انصهاره عالية]",
-  "type": "essay",
-  "points": 2,
-  "options": []
-}
+🛑 1. هيكلية الأسئلة (مهم جداً):
+إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "اقرأ المسألة التالية:"، أو "بناءً على الشكل:").
+ضعه كعنصر مستقل في المصفوفة نوعه "section_header"، ثم الأسئلة تحته.
 
-🛑 2. قواعد الرياضيات والفيزياء (LaTeX) - حرج جداً لعمل النظام:
-- لكي تعمل المعادلات وتُقرأ بشكل صحيح بعد فك شفرة الـ JSON، يجب إضافة شرطتين مائلتين (\\\\) قبل أي أمر LaTeX يحتوي على رموز (مثل: \\\\frac, \\\\times, \\\\pi, \\\\mu).
-  ✔️ صحيح للكسر: "\\\\frac{\\\\mu_0 I}{2 \\\\pi d}"
-  ❌ خاطئ ويدمر النظام: "\\frac" أو "frac"
-- أي معادلة، رقم، أو رمز رياضي يجب أن يكون محاطاً بعلامتي دولار مزدوجة $$ للمعادلات الكبيرة، أو علامة دولار مفردة $ للمعادلات داخل سطر النص. (مثال للخيارات: "$$4\\\\pi \\\\times 10^{-5} \\\\text{T}$$").
-- لا تضع أبداً أي كلمات أو أحرف عربية داخل علامات الـ $ أو $$، ابقِ العربي خارجها تماماً.
+🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
+- اكتب أوامر LaTeX بشكلها الطبيعي مع وضع شرطة مائلة إضافية للهروب البرمجي (Escaping) الخاص بـ JSON.
+  ✔️ صحيح للكسر في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
+  ❌ خاطئ: "\frac" أو "\\\\frac"
+- أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط (مثال: "$2 \times 10^{-6} \text{T}$"). لا تستخدم $$ نهائياً.
 
-🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً في حقل "type"):
+🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
 - "essay": سؤال مقالي.
-- "file": إذا كان السؤال يتطلب من الطالب أن (يرسم، يصور حله، أو يرفق ورقة عمل).
+- "file": يتطلب رفع صورة/ملف.
 
-أخرج الناتج ككود JSON فقط، وتأكد من صحة بناء الـ JSON وأقواسه:
+أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
-    // ضع الأسئلة والعناوين الرئيسية هنا
+    // الأسئلة هنا. الإجابة النموذجية في نهاية الـ content داخل: [الإجابة النموذجية: الحل]
   ]
 }`;
 
@@ -262,7 +259,7 @@ export default function AIAssignmentsSandbox() {
     parsedData.questions.forEach((q: any) => {
       if (q.type === 'section_header' || (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader)) {
         normalizedQuestions.push({
-          content: q.content || q.section_header,
+          content: cleanMathLatex(q.content || q.section_header), // 🚀 تنظيف المحتوى
           type: 'section_header',
           points: 0,
           options: []
@@ -280,14 +277,14 @@ export default function AIAssignmentsSandbox() {
          parsedOptions = ['صح', 'خطأ']; 
       } else if (Array.isArray(q.options)) {
         parsedOptions = q.options.map((opt: any) => {
-          if (typeof opt === 'string') return opt;
-          if (opt && typeof opt === 'object') return String(opt.content || opt.text || opt.value || '');
-          return String(opt);
+          if (typeof opt === 'string') return cleanMathLatex(opt); // 🚀 تنظيف الخيارات
+          if (opt && typeof opt === 'object') return cleanMathLatex(String(opt.content || opt.text || opt.value || ''));
+          return cleanMathLatex(String(opt));
         }).filter(Boolean);
       }
 
       normalizedQuestions.push({
-        content: q.content || q.question_text || q.text || q.question || 'سؤال بدون نص',
+        content: cleanMathLatex(q.content || q.question_text || q.text || q.question || 'سؤال بدون نص'), // 🚀 تنظيف نص السؤال
         type: qType,
         points: Number(q.points) || 1,
         options: parsedOptions
@@ -428,26 +425,36 @@ export default function AIAssignmentsSandbox() {
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 الحماية القصوى لترتيب المعادلات الرياضية (RTL Isolation) والحفاظ على الأسطر */}
+      {/* 🚀 الحماية القصوى لترتيب المعادلات الرياضية:
+          استخدام dir="ltr" لعزل المعادلات عن المتصفح 
+          واستخدام word-wrap لمنع المعادلات الطويلة من الخروج عن الإطار */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
         
-        /* عزل المعادلات الرياضية لمنع المتصفح من قلب الأرقام والرموز */
-        .katex, .katex * { 
+        .katex-container {
+          direction: ltr !important;
+          unicode-bidi: isolate !important;
+          display: inline-block;
+          max-width: 100%;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+        
+        .katex { 
           direction: ltr !important; 
+          text-align: left !important;
         }
-        .katex-html {
-          unicode-bidi: isolate-override !important;
-        }
-        /* عرض البلوكات (المعادلات الكبيرة) بشكل صحيح ومستقل وتوسيطها */
+        
         .katex-display { 
           display: flex !important; 
           justify-content: center !important;
-          margin: 1rem 0 !important; 
+          margin: 0.5rem 0 !important; 
           width: 100% !important;
+          overflow-x: auto;
+          overflow-y: hidden;
         }
       `}} />
 
@@ -458,7 +465,6 @@ export default function AIAssignmentsSandbox() {
 
       <div className="max-w-6xl mx-auto space-y-8 relative z-10">
         
-        {/* Header */}
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-[2rem] shadow-[0_0_30px_rgba(16,185,129,0.15)] mb-2 backdrop-blur-md">
             <Sparkles className="w-10 h-10" />
@@ -467,7 +473,6 @@ export default function AIAssignmentsSandbox() {
           <p className="text-base sm:text-lg text-slate-400 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
         </div>
 
-        {/* API Key Box */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2rem] shadow-xl border border-white/10 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-inner">
             <Key className="w-6 h-6 text-amber-400" />
@@ -634,9 +639,10 @@ export default function AIAssignmentsSandbox() {
                           <div className="flex gap-3 items-start">
                             <span className="text-emerald-500/50 mt-1 shrink-0 font-black">{i + 1}.</span>
                             <div className={q.type === 'section_header' ? "text-indigo-400 font-black text-base w-full" : "w-full"}>
-                                <Latex>{displayContent}</Latex>
+                                {/* 🚀 تطبيق درع العزل الرياضي */}
+                                <div className="katex-container"><Latex>{displayContent}</Latex></div>
                                 {q.type !== 'section_header' && (
-                                  <span className="inline-block mt-2 text-[10px] text-slate-500 bg-[#090b14] px-2 py-1 rounded-md border border-white/5 shadow-inner">نوع: {translateQuestionType(q.type)}</span>
+                                  <span className="block mt-2 text-[10px] text-slate-500 bg-[#090b14] px-2 py-1 rounded-md border border-white/5 shadow-inner w-fit">نوع: {translateQuestionType(q.type)}</span>
                                 )}
                             </div>
                           </div>
@@ -645,7 +651,7 @@ export default function AIAssignmentsSandbox() {
                               {q.options.map((opt, oIdx) => {
                                 return (
                                   <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center min-w-[60px] text-center">
-                                     <Latex>{String(opt)}</Latex>
+                                     <div className="katex-container"><Latex>{String(opt)}</Latex></div>
                                   </span>
                                 );
                               })}
