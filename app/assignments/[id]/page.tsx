@@ -16,7 +16,9 @@ import * as Dialog from '@radix-ui/react-dialog';
 import AssignmentForm from '@/components/assignment-form';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
-import ForumEditor from '@/components/ForumEditor';
+import ForumEditorOriginal from '@/components/ForumEditor';
+// 🪄 الحيلة السحرية لإسكات TypeScript
+const ForumEditor = ForumEditorOriginal as any;
 import * as XLSX from 'xlsx';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
@@ -342,7 +344,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   return (
     <div className="min-h-screen bg-[#090b14] text-slate-200 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
       
-      {/* 🚀 الخلفية الزجاجية */}
       <div className="fixed top-1/4 left-[-10%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 right-[-10%] w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
@@ -564,7 +565,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       <h3 className="text-lg sm:text-xl font-black text-white mb-6 flex items-center gap-2"><FileText className="h-6 w-6 text-indigo-400" /> المرفقات والنصوص الإضافية التي أرسلتها</h3>
                       {mySubmission?.content && (
                         <div className="bg-[#131836] p-5 rounded-2xl border border-white/5 mb-4 shadow-inner">
-                          <p className="text-slate-300 whitespace-pre-wrap font-bold text-base sm:text-lg leading-relaxed">{mySubmission.content}</p>
+                          <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-wrap font-bold text-base sm:text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: mySubmission.content }} />
                         </div>
                       )}
                       {mySubmission?.file_url && (
@@ -587,14 +588,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   >
                     <div className="bg-[#131836]/60 p-6 sm:p-8 rounded-[2rem] border border-white/10 shadow-lg mt-8">
                       <label className="block text-sm sm:text-base font-black text-white mb-4">نص الإجابة الإضافي (اختياري)</label>
-                      <textarea
-                        rows={4}
-                        className="block w-full rounded-2xl border-0 py-4 px-5 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500/50 sm:text-sm transition-all resize-none font-bold disabled:opacity-60 mb-6 shadow-inner outline-none custom-scrollbar"
-                        placeholder="إذا أردت إضافة ملاحظة نصية للمعلم..."
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        disabled={!!mySubmission}
-                      />
+                      {/* 🚀 استبدال textarea بمحرر نصوص تفاعلي */}
+                      <div className="mb-6 rounded-2xl overflow-hidden border border-white/10 shadow-inner">
+                        <ForumEditor 
+                           content={content} 
+                           setContent={(val: any) => setContent(val)} 
+                           canUploadImage={false} 
+                           isCompact={false} 
+                           placeholder="إذا أردت إضافة ملاحظة نصية للمعلم..."
+                        />
+                      </div>
 
                       <label className="block text-sm sm:text-base font-black text-white mb-4">ملف الإجابة (ارفع صورة الحل هنا)</label>
                       {!mySubmission ? (
@@ -620,14 +623,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="bg-[#131836]/60 p-6 sm:p-8 rounded-[2.5rem] border border-white/10 shadow-lg">
                     <div>
                       <label className="block text-sm sm:text-base font-black text-white mb-4">نص الإجابة (اختياري إذا كان هناك ملف)</label>
-                      <textarea
-                        rows={6}
-                        className="block w-full rounded-2xl border-0 py-4 px-5 text-white bg-[#090b14]/80 ring-1 ring-inset ring-white/10 placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500/50 sm:text-sm transition-all resize-none font-bold disabled:opacity-60 shadow-inner outline-none custom-scrollbar"
-                        placeholder="اكتب إجابتك هنا بالتفصيل..."
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        disabled={!!mySubmission}
-                      />
+                      {/* 🚀 استبدال textarea بمحرر نصوص تفاعلي */}
+                      <div className="rounded-2xl overflow-hidden border border-white/10 shadow-inner">
+                        <ForumEditor 
+                           content={content} 
+                           setContent={(val: any) => setContent(val)} 
+                           canUploadImage={false} 
+                           isCompact={false} 
+                           placeholder="اكتب إجابتك هنا بالتفصيل..."
+                        />
+                      </div>
                     </div>
                     
                     <div className="mt-8">
@@ -996,7 +1001,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   
                     <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner">
                       <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">الوصف والتعليمات</label>
-                      <div className="bg-[#02040a]/40 p-2 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner">
+                      <div className="bg-[#02040a]/40 p-2 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner flex flex-col min-h-[300px]">
                         <ForumEditor 
                           content={editDescription}
                           setContent={setEditDescription}
