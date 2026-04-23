@@ -385,7 +385,7 @@ export default function AIAssignmentsSandbox() {
       // 🚀 The Ownership Patch: استخدام معرف المعلم (selectedTeacher) بوضوح لضمان الملكية
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات الذكاء الاصطناعي.', 
+        description: 'تم التوليد الذكي باستخدام خوارزميات  ايهاب جمال غزال .', 
         subject_id: selectedSubject, 
         teacher_id: selectedTeacher, // 👈 هذه هي الإضافة السحرية لحل مشكلة ملكية الواجب
         due_date: dueDate.toISOString(), 
