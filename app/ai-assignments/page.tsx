@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
@@ -67,6 +67,8 @@ export default function AIAssignmentsSandbox() {
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
+  // 🚀 حالة جديدة لتحديد هل الواجب سيتم إرساله كمسودة أم منشور للطلاب مباشرة
+  const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
   const [isSavingDB, setIsSavingDB] = useState(false);
 
   useEffect(() => {
@@ -137,21 +139,27 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت السحري المطور: يستخدم String.raw لضمان وصول أوامر الشرطات المائلة بدقة تامة للـ AI بدون تشوه
+  // 🚀 البرومبت المطور (أصبح يعرف كل أنواع الأسئلة المتوفرة في نظامك)
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة بصيغة JSON حصراً.
 
 🛑 قواعد كتابة الرياضيات والفيزياء (حرج جداً لعمل النظام):
 1. استخدم صيغة LaTeX القياسية لأي معادلة، رقم، أو رمز.
 2. للهروب البرمجي (Escaping) داخل الـ JSON، يجب استخدام شرطتين مائلتين فقط (\\) قبل أوامر LaTeX لتصبح صالحة ولا تكسر النظام.
    - ✔️ مثال صحيح للكسر: "\\frac{\\mu_0 I}{2 \\pi d}"
-   - ❌ أمثلة خاطئة تدمر النظام: "\frac" أو "\\\\frac"
-3. ⚠️ هام جداً: استخدم علامة دولار واحدة $ فقط في بداية ونهاية المعادلات (مثال: "$2 \times 10^{-6} \text{T}$"). يُمنع منعاً باتاً استخدام علامتي دولار $$ نهائياً لأنها تكسر أسطر النص.
-4. لا تضع أي كلمات عربية داخل علامات الـ $ لأنها تكسر ترتيب الرياضيات، اجعل العربي خارجها.
+3. ⚠️ هام جداً: استخدم علامة دولار واحدة $ فقط في بداية ونهاية المعادلات (مثال: "$2 \times 10^{-6} \text{T}$"). يُمنع منعاً باتاً استخدام علامتي دولار $$ نهائياً.
+
+🛑 أنواع الأسئلة المسموحة (استخدم هذه المفاتيح الإنجليزية حرفياً في حقل "type" ليتوافق مع قاعدة البيانات):
+- "multiple_choice": سؤال اختيار من متعدد (إجابة واحدة صحيحة).
+- "true_false": سؤال صح أو خطأ.
+- "multi_select": سؤال اختيار متعدد (عدة إجابات صحيحة محتملة).
+- "essay": سؤال مقالي يتطلب من الطالب كتابة نص أو فقرة.
+- "fill_in_blank": سؤال إكمال الفراغ (استخدم [____] مكان الفراغ في نص السؤال).
+- "file": إذا كان السؤال يطلب من الطالب (الرسم، التصوير، أو إرفاق حل في ورقة خارجية)، فهذا يعني أن الطالب يجب أن يرفع ملفاً لحله.
 
 🛑 قواعد بناء الـ JSON:
-1. إذا كان هناك نص رئيسي يتبعه أسئلة، ضعه كعنصر "section_header" مستقل.
+1. إذا كان هناك نص رئيسي يتبعه أسئلة (قطعة قراءة، رأس مسألة فيزيائية ضخمة)، ضعه كعنصر "section_header" مستقل.
 2. الإجابة النموذجية: أضفها في نهاية نص السؤال حرفياً داخل أقواس بهذا الشكل: [الإجابة النموذجية: الحل].
-3. لا تستخدم أسطر جديدة (Enter / \n) داخل النصوص.
+3. إذا كان النوع "file" أو "essay" أو "fill_in_blank"، اجعل مصفوفة الخيارات (options) فارغة [].
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
@@ -162,6 +170,12 @@ export default function AIAssignmentsSandbox() {
       "type": "multiple_choice",
       "points": 1,
       "options": ["$32^\\circ \\text{F}$", "$212^\\circ \\text{F}$"]
+    },
+    {
+      "content": "ارسم خطوط المجال المغناطيسي للمغناطيس الموضح بالصورة ثم ارفع صورة لحلك.",
+      "type": "file",
+      "points": 5,
+      "options": []
     }
   ]
 }`;
@@ -258,10 +272,11 @@ export default function AIAssignmentsSandbox() {
 
       let qType = q.type || 'essay';
       if (qType === 'short_answer') qType = 'essay'; 
+      if (qType === 'file_upload' || qType === 'upload' || qType === 'image') qType = 'file';
       
       let parsedOptions: string[] = [];
       if (qType === 'true_false' && (!q.options || q.options.length === 0)) {
-         parsedOptions = ['✓', '✗'];
+         parsedOptions = ['صح', 'خطأ']; // الخيارات الافتراضية لأسئلة الصح والخطأ
       } else if (Array.isArray(q.options)) {
         parsedOptions = q.options.map((opt: any) => {
           if (typeof opt === 'string') return opt;
@@ -349,21 +364,58 @@ export default function AIAssignmentsSandbox() {
     setIsSavingDB(true);
     try {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
-      const formattedQuestions = result.questions.map((q, i) => ({
-        id: crypto.randomUUID(), content: q.content, type: q.type, points: q.points || 1, isRequired: true, order_index: i + 1, options: q.options || []
-      }));
+      
+      const formattedQuestions = result.questions.map((q, i) => {
+        // 🚀 معالجة ذكية لخيارات الصح والخطأ إذا كانت مفقودة
+        let finalOptions = q.options || [];
+        if (q.type === 'true_false' && finalOptions.length === 0) {
+           finalOptions = [{ id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }];
+        } else {
+           finalOptions = finalOptions.map((opt: string) => ({ id: crypto.randomUUID(), content: opt, is_correct: false }));
+        }
+
+        return {
+          id: crypto.randomUUID(), 
+          content: q.content, 
+          type: q.type, 
+          points: q.points || 1, 
+          isRequired: true, 
+          order_index: i + 1, 
+          options: finalOptions 
+        };
+      });
 
       const response = await fetch('/api/assignments/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          payload: { title: result.title || 'واجب تفاعلي ذكي', description: 'تم التوليد باستخدام خوارزمية مدرسة الرفعة.', subject_id: selectedSubject, due_date: dueDate.toISOString(), status: 'draft' },
+          payload: { 
+            title: result.title || 'واجب تفاعلي ذكي', 
+            description: 'تم التوليد الذكي باستخدام خوارزميات الذكاء الاصطناعي.', 
+            subject_id: selectedSubject, 
+            due_date: dueDate.toISOString(), 
+            status: assignmentStatus // 🚀 استخدام حالة الواجب التي اختارها المدير
+          },
           assignmentId: null, questions: formattedQuestions, sectionIds: selectedSections, subjects: [], userId: selectedTeacher 
         }),
       });
 
       if (!response.ok) { const errData = await response.json(); throw new Error(errData.error || 'فشل الحفظ'); }
-      alert('تم إنشاء الواجب وتوجيهه للمعلم بنجاح!'); router.push('/assignments'); 
+      alert(assignmentStatus === 'published' ? 'تم إنشاء الواجب ونشره للطلاب بنجاح!' : 'تم إنشاء الواجب كـ(مسودة) وإرساله للمعلم لمراجعته!'); 
+      router.push('/assignments'); 
     } catch (error: any) { alert('خطأ: ' + error.message); } finally { setIsSavingDB(false); }
+  };
+
+  const translateQuestionType = (type: string) => {
+    switch (type) {
+      case 'multiple_choice': return 'اختيار من متعدد';
+      case 'true_false': return 'صح أو خطأ';
+      case 'multi_select': return 'اختيار متعدد';
+      case 'essay': return 'سؤال مقالي';
+      case 'fill_in_blank': return 'إكمال الفراغ';
+      case 'file': return 'رفع صورة / ملف';
+      case 'section_header': return 'رأس مسألة / قطعة';
+      default: return type;
+    }
   };
 
   return (
@@ -563,6 +615,7 @@ export default function AIAssignmentsSandbox() {
                 <div className="bg-[#090b14]/50 p-5 sm:p-6 rounded-3xl border border-white/10 max-h-[450px] overflow-y-auto custom-scrollbar shadow-inner">
                   <p className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2 bg-emerald-500/10 w-fit px-3 py-1.5 rounded-xl border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم استخراج {result.questions.length} أسئلة:</p>
                   
+                  {/* 🚀 استخدام المعاينة بالمكتبة الصحيحة للرياضيات */}
                   <ul className="space-y-6 font-bold text-slate-300 text-sm">
                     {result.questions.map((q, i) => {
                       let displayContent = q.content;
@@ -577,8 +630,12 @@ export default function AIAssignmentsSandbox() {
                           <div className="flex gap-3 items-start">
                             <span className="text-emerald-500/50 mt-1 shrink-0 font-black">{i + 1}.</span>
                             <div className={q.type === 'section_header' ? "text-indigo-400 font-black text-base w-full" : "w-full"}>
-                                {/* 🚀 رندرة المعادلات بشكل مدمج ومرتب */}
+                                {/* 🚀 هنا يتم رندرة المعادلة في المعاينة */}
                                 <Latex>{displayContent}</Latex>
+                                {/* 🚀 إظهار نوع السؤال المستخرج للمدير ليتأكد */}
+                                {q.type !== 'section_header' && (
+                                  <span className="inline-block mt-2 text-[10px] text-slate-500 bg-[#090b14] px-2 py-1 rounded-md border border-white/5 shadow-inner">نوع: {translateQuestionType(q.type)}</span>
+                                )}
                             </div>
                           </div>
                           {q.options && q.options.length > 0 && (
@@ -604,6 +661,18 @@ export default function AIAssignmentsSandbox() {
                   <h3 className="text-lg sm:text-xl font-black text-emerald-400 mb-6 flex items-center gap-2"><UserCheck className="w-5 h-5" /> تعيين الواجب وإرساله</h3>
                   
                   <div className="space-y-5">
+                    {/* 🚀 خيار حالة الواجب الجديد (مسودة/منشور) */}
+                    <div>
+                      <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        حالة الواجب عند الإرسال
+                      </label>
+                      <select value={assignmentStatus} onChange={(e) => setAssignmentStatus(e.target.value as 'draft' | 'published')} className="w-full bg-[#090b14]/80 border border-emerald-500/30 p-3.5 rounded-xl font-black text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none [&>option]:bg-[#131836] cursor-pointer shadow-inner transition-all">
+                        <option value="draft">مسودة (يحتاج المعلم لمراجعته قبل النشر)</option>
+                        <option value="published">منشور (يتم إرساله للطلاب فوراً)</option>
+                      </select>
+                    </div>
+
                     <div>
                       <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest">إرسال إلى المعلم</label>
                       <select value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)} className="w-full bg-[#090b14]/80 border border-white/10 p-3.5 rounded-xl font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/30 appearance-none [&>option]:bg-[#131836] cursor-pointer shadow-inner">
@@ -645,7 +714,7 @@ export default function AIAssignmentsSandbox() {
                   </div>
                   
                   <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-teal-500 text-[#090b14] font-black text-lg py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95 border border-emerald-400/50">
-                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب للمعلم
+                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب
                   </button>
                 </div>
               </div>
