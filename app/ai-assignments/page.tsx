@@ -138,43 +138,44 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى المرفق واستخرج منه عنوان الواجب والأسئلة بصيغة JSON حصراً.
+  // 🚀 البرومبت العبقري المطور للتعامل مع العناوين الرئيسية (section_header) وإصلاح المعادلات تماماً
+  const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
-🛑 قواعد كتابة الرياضيات والفيزياء (حرج جداً لعمل النظام):
-1. استخدم صيغة LaTeX القياسية لأي معادلة، رقم، أو رمز.
-2. للهروب البرمجي (Escaping) داخل الـ JSON، يجب استخدام شرطتين مائلتين فقط (\\) قبل أوامر LaTeX لتصبح صالحة ولا تكسر النظام.
-   - ✔️ مثال صحيح للكسر: "\\frac{\\mu_0 I}{2 \\pi d}"
-3. ⚠️ هام جداً: استخدم علامة دولار واحدة $ فقط في بداية ونهاية المعادلات (مثال: "$2 \times 10^{-6} \text{T}$"). يُمنع منعاً باتاً استخدام علامتي دولار $$ نهائياً.
+🛑 1. هيكلية الأسئلة المتسلسلة (Section Headers) - مهم جداً:
+إذا كان هناك أمر عام أو عنوان رئيسي يتبعه عدة أسئلة (مثل: "علل لما يأتي:"، "اقرأ القطعة التالية ثم أجب:"، أو "بناءً على الشكل المرفق:").
+يجب أن تضع هذا الأمر العام كعنصر مستقل في المصفوفة نوعه "section_header"، ثم تضع الأسئلة التي تتبعه كعناصر مستقلة تحته.
+مثال:
+{
+  "content": "علل لكل مما يأتي تعليلاً علمياً صحيحاً:",
+  "type": "section_header",
+  "points": 0,
+  "options": []
+},
+{
+  "content": "يفضل استخدام التنجستين في المصابيح. [الإجابة النموذجية: لأن درجة انصهاره عالية]",
+  "type": "essay",
+  "points": 2,
+  "options": []
+}
 
-🛑 أنواع الأسئلة المسموحة (استخدم هذه المفاتيح الإنجليزية حرفياً في حقل "type" ليتوافق مع قاعدة البيانات):
-- "multiple_choice": سؤال اختيار من متعدد (إجابة واحدة صحيحة).
-- "true_false": سؤال صح أو خطأ.
-- "multi_select": سؤال اختيار متعدد (عدة إجابات صحيحة محتملة).
-- "essay": سؤال مقالي يتطلب من الطالب كتابة نص أو فقرة.
-- "fill_in_blank": سؤال إكمال الفراغ (استخدم [____] مكان الفراغ في نص السؤال).
-- "file": إذا كان السؤال يطلب من الطالب (الرسم، التصوير، أو إرفاق حل في ورقة خارجية)، فهذا يعني أن الطالب يجب أن يرفع ملفاً لحله.
+🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
+- لكي تعمل المعادلات، يجب استخدام شرطتين مائلتين (\\\\) قبل أي أمر LaTeX (مثل الكسر، الجذر، الخ).
+  ✔️ صحيح للكسر: "\\\\frac{A}{B}"
+  ❌ خاطئ ويدمر النظام: "\\frac{A}{B}" أو "fracAB"
+- يجب وضع أي معادلة، رقم، أو رمز فيزيائي داخل علامة دولار واحدة فقط $. (مثال: "$2 \\\\times 10^{-6} \\\\text{T}$"). 
+- يُمنع استخدام علامتي دولار $$ نهائياً.
 
-🛑 قواعد بناء الـ JSON:
-1. إذا كان هناك نص رئيسي يتبعه أسئلة (قطعة قراءة، رأس مسألة فيزيائية ضخمة)، ضعه كعنصر "section_header" مستقل.
-2. الإجابة النموذجية: أضفها في نهاية نص السؤال حرفياً داخل أقواس بهذا الشكل: [الإجابة النموذجية: الحل].
-3. إذا كان النوع "file" أو "essay" أو "fill_in_blank"، اجعل مصفوفة الخيارات (options) فارغة [].
+🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً في حقل "type"):
+- "multiple_choice": اختيار من متعدد.
+- "true_false": صح أو خطأ.
+- "essay": سؤال مقالي.
+- "file": إذا كان السؤال يتطلب من الطالب أن (يرسم، يصور حله، أو يرفق ورقة عمل).
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
-    {
-      "content": "نص السؤال هنا [الإجابة النموذجية: الحل]",
-      "type": "multiple_choice",
-      "points": 1,
-      "options": ["$32^\\circ \\text{F}$", "$212^\\circ \\text{F}$"]
-    },
-    {
-      "content": "ارسم خطوط المجال المغناطيسي للمغناطيس الموضح بالصورة ثم ارفع صورة لحلك.",
-      "type": "file",
-      "points": 5,
-      "options": []
-    }
+    // ضع الأسئلة والعناوين الرئيسية هنا
   ]
 }`;
 
@@ -258,14 +259,16 @@ export default function AIAssignmentsSandbox() {
     }
 
     parsedData.questions.forEach((q: any) => {
-      if (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader) {
+      // التعامل مع الهيدر المستقل
+      if (q.type === 'section_header' || (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader)) {
         normalizedQuestions.push({
-          content: q.section_header,
+          content: q.content || q.section_header,
           type: 'section_header',
           points: 0,
           options: []
         });
-        lastHeader = q.section_header;
+        lastHeader = q.content || q.section_header;
+        if (q.type === 'section_header') return; // تخطي إكمال اللوب إذا كان العنصر هيدر فقط
       }
 
       let qType = q.type || 'essay';
@@ -382,12 +385,11 @@ export default function AIAssignmentsSandbox() {
         };
       });
 
-      // 🚀 The Ownership Patch: استخدام معرف المعلم (selectedTeacher) بوضوح لضمان الملكية
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات الذكاء الاصطناعي.', 
+        description: 'تم التوليد الذكي باستخدام خوارزميات ايهاب جمال غزال .', 
         subject_id: selectedSubject, 
-        teacher_id: selectedTeacher, // 👈 هذه هي الإضافة السحرية لحل مشكلة ملكية الواجب
+        teacher_id: selectedTeacher, 
         due_date: dueDate.toISOString(), 
         status: assignmentStatus 
       };
@@ -400,7 +402,7 @@ export default function AIAssignmentsSandbox() {
           questions: formattedQuestions, 
           sectionIds: selectedSections, 
           subjects: [], 
-          userId: selectedTeacher // تمرير الـ ID كصاحب العملية الأصلي
+          userId: selectedTeacher 
         }),
       });
 
@@ -418,7 +420,7 @@ export default function AIAssignmentsSandbox() {
       case 'essay': return 'سؤال مقالي';
       case 'fill_in_blank': return 'إكمال الفراغ';
       case 'file': return 'رفع صورة / ملف';
-      case 'section_header': return 'رأس مسألة / قطعة';
+      case 'section_header': return 'رأس مسألة / تعليمة عامة';
       default: return type;
     }
   };
@@ -426,16 +428,19 @@ export default function AIAssignmentsSandbox() {
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
+      {/* 🚀 الحماية القصوى لترتيب المعادلات الرياضية (RTL Isolation) */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
         
-        .katex { 
+        /* عزل المعادلات الرياضية لمنع المتصفح من قلب الأرقام والرموز */
+        .katex, .katex * { 
           direction: ltr !important; 
-          unicode-bidi: isolate !important; 
-          display: inline-block !important; 
+        }
+        .katex-html {
+          unicode-bidi: isolate-override !important;
         }
         .katex-display { 
           display: inline-block !important; 
@@ -450,7 +455,6 @@ export default function AIAssignmentsSandbox() {
 
       <div className="max-w-6xl mx-auto space-y-8 relative z-10">
         
-        {/* Header */}
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-[2rem] shadow-[0_0_30px_rgba(16,185,129,0.15)] mb-2 backdrop-blur-md">
             <Sparkles className="w-10 h-10" />
@@ -459,7 +463,6 @@ export default function AIAssignmentsSandbox() {
           <p className="text-base sm:text-lg text-slate-400 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
         </div>
 
-        {/* API Key Box */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2rem] shadow-xl border border-white/10 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-inner">
             <Key className="w-6 h-6 text-amber-400" />
@@ -471,7 +474,6 @@ export default function AIAssignmentsSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           
-          {/* Left Column: AI Tools */}
           <div className="space-y-6">
             <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 relative overflow-hidden">
               <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full"></div>
@@ -592,7 +594,6 @@ export default function AIAssignmentsSandbox() {
             </div>
           </div>
 
-          {/* Right Column: Results & Assignment */}
           <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 flex flex-col min-h-[500px] relative overflow-hidden">
             <h2 className="relative z-10 text-xl sm:text-2xl font-black mb-6 flex items-center gap-3 text-white"><FileText className="w-6 h-6 text-emerald-400" /> نتيجة الواجب والتعيين</h2>
             
@@ -658,7 +659,6 @@ export default function AIAssignmentsSandbox() {
                   <h3 className="text-lg sm:text-xl font-black text-emerald-400 mb-6 flex items-center gap-2"><UserCheck className="w-5 h-5" /> تعيين الواجب وإرساله</h3>
                   
                   <div className="space-y-5">
-                    {/* 🚀 خيار حالة الواجب الجديد (مسودة/منشور) */}
                     <div>
                       <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -711,7 +711,7 @@ export default function AIAssignmentsSandbox() {
                   </div>
                   
                   <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-teal-500 text-[#090b14] font-black text-lg py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95 border border-emerald-400/50">
-                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب
+                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب للمعلم
                   </button>
                 </div>
               </div>
