@@ -8,6 +8,9 @@ import {
   Palette, Type, X, Calculator, BarChart3, FileText, Files, Check, ShieldCheck, ShieldAlert
 } from 'lucide-react';
 
+// 🚀 استيراد دالة cn الناقصة
+import { cn } from '@/lib/utils';
+
 // 🚀 مكتبة الرياضيات
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
