@@ -8,7 +8,6 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 استيراد مكتبة الرياضيات لعرض المعاينة بشكل صحيح
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -33,16 +32,12 @@ interface Teacher { id: string; full_name: string; }
 interface Subject { id: string; name: string; }
 interface Section { id: string; name: string; }
 
-// 🚀 الفلتر السحري: ينظف جميع أخطاء الذكاء الاصطناعي ويجهز المعادلات لـ KaTeX
+// 🚀 الفلتر السحري المحدث: تمت إزالة الفلتر الذي كان يدمر الحروف العربية داخل \text
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
-    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
-    .replace(/\\\\([a-zA-Z])/g, '\\$1')
-    // 2. إصلاح مسافات النص الإنجليزي داخل المعادلات التي تسبب تشوهات
-    .replace(/\\text{([^}]*)}/g, '\\mathrm{$1}')
-    // 3. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
-    .replace(/\$\$/g, '$');
+    .replace(/\\\\([a-zA-Z])/g, '\\$1') // توحيد الشرطات للأوامر
+    .replace(/\$\$/g, '$'); // توحيد علامات الدولار
 };
 
 export default function AIAssignmentsSandbox() {
@@ -150,18 +145,19 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت الرياضي المنطقي الجديد: يطلب الهروب الصحيح للـ JSON بدون تعقيد
+  // 🚀 البرومبت المطور لدعم الحروف العربية في المعادلات
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
-🛑 1. هيكلية الأسئلة (مهم جداً):
-إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "اقرأ المسألة التالية:"، أو "بناءً على الشكل:").
+🛑 1. هيكلية الأسئلة:
+إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "أوجد مركز الدائرة التي معادلتها:").
 ضعه كعنصر مستقل في المصفوفة نوعه "section_header"، ثم الأسئلة تحته.
 
-🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
-- اكتب أوامر LaTeX بشكلها الطبيعي مع وضع شرطة مائلة إضافية للهروب البرمجي (Escaping) الخاص بـ JSON.
-  ✔️ صحيح للكسر في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
-  ❌ خاطئ: "\frac" أو "\\\\frac"
-- أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط (مثال: "$2 \times 10^{-6} \text{T}$"). لا تستخدم $$ نهائياً.
+🛑 2. قواعد الرياضيات والفيزياء (LaTeX) - حرج جداً:
+- اكتب أوامر LaTeX مع وضع شرطة مائلة إضافية للهروب البرمجي (Escaping).
+  ✔️ صحيح في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
+- أي معادلة ضعها داخل علامة دولار مفردة $ فقط (مثال: "$2 \\times 10^{-6} \\text{T}$"). لا تستخدم $$ نهائياً.
+- ⚠️ دعم الرياضيات العربية: إذا كانت المعادلة تحتوي على متغيرات عربية (مثل س، ص)، يجب وضع الحرف العربي داخل أمر \\text{} ليعمل بشكل صحيح.
+  ✔️ مثال صحيح للمعادلة: "$(\\text{س} + 2)^2 + (\\text{ص} - 3)^2 = 9$"
 
 🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
@@ -259,7 +255,7 @@ export default function AIAssignmentsSandbox() {
     parsedData.questions.forEach((q: any) => {
       if (q.type === 'section_header' || (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader)) {
         normalizedQuestions.push({
-          content: cleanMathLatex(q.content || q.section_header), // 🚀 تنظيف المحتوى
+          content: cleanMathLatex(q.content || q.section_header),
           type: 'section_header',
           points: 0,
           options: []
@@ -277,14 +273,14 @@ export default function AIAssignmentsSandbox() {
          parsedOptions = ['صح', 'خطأ']; 
       } else if (Array.isArray(q.options)) {
         parsedOptions = q.options.map((opt: any) => {
-          if (typeof opt === 'string') return cleanMathLatex(opt); // 🚀 تنظيف الخيارات
+          if (typeof opt === 'string') return cleanMathLatex(opt);
           if (opt && typeof opt === 'object') return cleanMathLatex(String(opt.content || opt.text || opt.value || ''));
           return cleanMathLatex(String(opt));
         }).filter(Boolean);
       }
 
       normalizedQuestions.push({
-        content: cleanMathLatex(q.content || q.question_text || q.text || q.question || 'سؤال بدون نص'), // 🚀 تنظيف نص السؤال
+        content: cleanMathLatex(q.content || q.question_text || q.text || q.question || 'سؤال بدون نص'),
         type: qType,
         points: Number(q.points) || 1,
         options: parsedOptions
@@ -425,37 +421,12 @@ export default function AIAssignmentsSandbox() {
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 الحماية القصوى لترتيب المعادلات الرياضية:
-          استخدام dir="ltr" لعزل المعادلات عن المتصفح 
-          واستخدام word-wrap لمنع المعادلات الطويلة من الخروج عن الإطار */}
+      {/* 🚀 إزالة الحماية من هنا، لأنها أصبحت في globals.css */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
-        
-        .katex-container {
-          direction: ltr !important;
-          unicode-bidi: isolate !important;
-          display: inline-block;
-          max-width: 100%;
-          overflow-wrap: break-word;
-          word-wrap: break-word;
-        }
-        
-        .katex { 
-          direction: ltr !important; 
-          text-align: left !important;
-        }
-        
-        .katex-display { 
-          display: flex !important; 
-          justify-content: center !important;
-          margin: 0.5rem 0 !important; 
-          width: 100% !important;
-          overflow-x: auto;
-          overflow-y: hidden;
-        }
       `}} />
 
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
@@ -639,10 +610,9 @@ export default function AIAssignmentsSandbox() {
                           <div className="flex gap-3 items-start">
                             <span className="text-emerald-500/50 mt-1 shrink-0 font-black">{i + 1}.</span>
                             <div className={q.type === 'section_header' ? "text-indigo-400 font-black text-base w-full" : "w-full"}>
-                                {/* 🚀 تطبيق درع العزل الرياضي */}
-                                <div className="katex-container"><Latex>{displayContent}</Latex></div>
+                                <Latex>{displayContent}</Latex>
                                 {q.type !== 'section_header' && (
-                                  <span className="block mt-2 text-[10px] text-slate-500 bg-[#090b14] px-2 py-1 rounded-md border border-white/5 shadow-inner w-fit">نوع: {translateQuestionType(q.type)}</span>
+                                  <span className="inline-block mt-2 text-[10px] text-slate-500 bg-[#090b14] px-2 py-1 rounded-md border border-white/5 shadow-inner">نوع: {translateQuestionType(q.type)}</span>
                                 )}
                             </div>
                           </div>
@@ -651,7 +621,7 @@ export default function AIAssignmentsSandbox() {
                               {q.options.map((opt, oIdx) => {
                                 return (
                                   <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center min-w-[60px] text-center">
-                                     <div className="katex-container"><Latex>{String(opt)}</Latex></div>
+                                     <Latex>{String(opt)}</Latex>
                                   </span>
                                 );
                               })}
