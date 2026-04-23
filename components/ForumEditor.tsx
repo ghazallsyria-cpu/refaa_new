@@ -1,546 +1,519 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
-/* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Plus, Search, Send, User, X, Users, Trash2, ArrowRight, Check, CheckCheck, Loader2, ShieldAlert, Sparkles, Megaphone } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '@/context/auth-context';
-import { useMessagesSystem } from '@/hooks/useMessagesSystem';
-import { supabase } from '@/lib/supabase'; 
-import ForumEditor from '@/components/ForumEditor';
-import { cn } from '@/lib/utils';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { 
+  Bold, Italic, Underline, Link as LinkIcon, Image as ImageIcon, 
+  List, ListOrdered, RemoveFormatting, Loader2, Table, 
+  Heading1, Heading2, TerminalSquare, AlignRight, AlignCenter, AlignLeft, AlignJustify,
+  Palette, Type, X, Calculator, BarChart3, FileText, Files, Check, ShieldCheck, ShieldAlert
+} from 'lucide-react';
 
-const RenderAvatar = ({ user, size = 'h-12 w-12', isGroup = false }: { user?: any, size?: string, isGroup?: boolean }) => {
-  if (isGroup) {
-    return (
-      <div className={`${size} rounded-[1.25rem] sm:rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner border border-indigo-500/30 shrink-0`}>
-        <Users className="h-1/2 w-1/2 drop-shadow-md" />
-      </div>
-    );
-  }
+// 🚀 مكتبة الرياضيات
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
 
-  const url = user?.avatar_url;
-  const name = user?.full_name || 'مستخدم';
-  const initial = name.charAt(0);
+interface ForumEditorProps {
+  content: string;
+  setContent: (content: string) => void;
+  canUploadImage: boolean;
+  placeholder?: string;
+}
 
-  if (url) {
-    return (
-      <div className={`${size} rounded-[1.25rem] sm:rounded-2xl overflow-hidden shadow-inner border border-white/10 shrink-0 relative bg-[#02040a]`}>
-        <img src={url} alt={name} className="w-full h-full object-cover" />
-      </div>
-    );
-  }
+export default function ForumEditor({ 
+  content, 
+  setContent, 
+  canUploadImage, 
+  placeholder = "اكتب مقالك الاحترافي هنا..." 
+}: ForumEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null); 
+  
+  const [isUploading, setIsUploading] = useState(false);
+  
+  // حالات معالجة الـ PDF
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+  const [pdfProgressText, setPdfProgressText] = useState('');
+  
+  const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
+  const [showWatermarkModal, setShowWatermarkModal] = useState(false);
+  const [applyWatermark, setApplyWatermark] = useState(false);
+  const [watermarkText, setWatermarkText] = useState('منصة الرفعة الرقمية');
 
-  return (
-    <div className={`${size} rounded-[1.25rem] sm:rounded-2xl bg-[#02040a] flex items-center justify-center text-indigo-400 font-black shadow-inner border border-white/5 shrink-0`}>
-      <span className="drop-shadow-md">{initial}</span>
-    </div>
-  );
-};
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showFontSize, setShowFontSize] = useState(false);
+  const [showMathUI, setShowMathUI] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  
+  // 🚀 حالة معادلة الـ LaTeX
+  const [latexInput, setLatexInput] = useState('');
 
-export default function MessagesPage() {
-  const { user: currentUser, authRole, userRole, isChecking } = useAuth() as any;
-  const role = authRole || userRole;
-  
-  // 🛡️ [Anti-Freeze Patch]: قفل دوال الـ Fetch باستخدام useRef
-  const { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages, messages, users, chatRooms, loading } = useMessagesSystem();
-  const systemRef = useRef({ fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages });
-  
-  const [privateConversations, setPrivateConversations] = useState<any[]>([]);
-  const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
-  
-  const [activeThread, setActiveThread] = useState<any | null>(null);
-  const [threadMessages, setThreadMessages] = useState<any[]>([]);
-  
-  const [replyContent, setReplyContent] = useState('');
-  const [isReplying, setIsReplying] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  const [showNewMessage, setShowNewMessage] = useState(false);
-  const [step, setStep] = useState(1);
-  const [recipientType, setRecipientType] = useState<'teacher' | 'student' | 'broadcast' | ''>('');
-  const [newMessage, setNewMessage] = useState({ receiver_id: '', subject: '', content: '' });
-  const [isGroupMessage, setIsGroupMessage] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // 🛡️ الأقفال لمنع التكرار اللانهائي
-  const fetchedRef = useRef(false);
+  const savedSelection = useRef<Range | null>(null);
 
   useEffect(() => {
-    systemRef.current = { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages };
-  }, [fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages]);
-
-  useEffect(() => {
-    if (!currentUser?.id || isChecking || fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    const channel = supabase
-      .channel('realtime_messages')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => { 
-          systemRef.current.fetchMessages(); 
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [currentUser?.id, isChecking]); 
-
-  useEffect(() => {
-    if (!messages.length || !currentUser) { 
-      setPrivateConversations([]); 
-      setGroupUnreadCounts({});
-      return; 
+    if (!document.getElementById('pdfjs-script')) {
+      const script = document.createElement('script');
+      script.id = 'pdfjs-script';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        if ((window as any).pdfjsLib) {
+          (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+      };
+      document.head.appendChild(script);
     }
+  }, []);
 
-    const gCounts: Record<string, number> = {};
-    messages.filter(m => m.section_id).forEach(msg => {
-      if (!msg.is_read && msg.sender_id !== currentUser?.id) {
-        gCounts[msg.section_id] = (gCounts[msg.section_id] || 0) + 1;
-      }
-    });
-    setGroupUnreadCounts(gCounts);
+  const saveSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      savedSelection.current = selection.getRangeAt(0);
+    }
+  }, []);
 
-    const privateMsgs = messages.filter(m => !m.section_id);
-    const convos = privateMsgs.reduce((acc: any, msg: any) => {
-      const ids = [msg.sender_id, msg.receiver_id].sort();
-      const convId = `private-${ids.join('-')}`;
-      const sender = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender;
-      const receiver = Array.isArray(msg.receiver) ? msg.receiver[0] : msg.receiver;
-      const cleanMsg = { ...msg, sender, receiver };
-      
-      const isUnread = !msg.is_read && msg.sender_id !== currentUser?.id;
-
-      if (!acc[convId]) {
-        acc[convId] = { ...cleanMsg, allIds: [msg.id], convId, type: 'private', unreadCount: isUnread ? 1 : 0 };
-      } else {
-        if (isUnread) acc[convId].unreadCount += 1;
-        
-        if (new Date(msg.created_at) > new Date(acc[convId].created_at)) {
-          acc[convId] = { ...cleanMsg, allIds: [...acc[convId].allIds, msg.id], convId, type: 'private', unreadCount: acc[convId].unreadCount };
-        } else {
-          acc[convId].allIds.push(msg.id);
-        }
-      }
-      return acc;
-    }, {});
-
-    setPrivateConversations(Object.values(convos).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-  }, [messages, currentUser]);
+  const restoreSelection = useCallback(() => {
+    if (savedSelection.current) {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(savedSelection.current);
+    }
+  }, []);
 
   useEffect(() => {
-    if (activeThread && messages.length >= 0) {
-      let thread = [];
-      if (activeThread.type === 'group') {
-        thread = messages.filter((m: any) => m.section_id === activeThread.id);
-        const unique = []; const seen = new Set();
-        for (const msg of thread) {
-          if (!seen.has(msg.id)) { seen.add(msg.id); unique.push(msg); }
-        }
-        thread = unique;
-      } else {
-        thread = messages.filter((m: any) => {
-          if (m.section_id) return false;
-          const ids = [m.sender_id, m.receiver_id].sort();
-          return `private-${ids.join('-')}` === activeThread.convId;
-        });
-      }
-
-      thread.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      
-      const cleanThread = thread.map(m => ({
-         ...m, sender: Array.isArray(m.sender) ? m.sender[0] : m.sender, receiver: Array.isArray(m.receiver) ? m.receiver[0] : m.receiver,
-      }));
-      setThreadMessages(cleanThread);
-      
-      setTimeout(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-      }, 100);
+    if (editorRef.current && content !== editorRef.current.innerHTML && document.activeElement !== editorRef.current) {
+      editorRef.current.innerHTML = content || '';
     }
-  }, [activeThread, messages, currentUser?.id]);
+  }, [content]);
 
-  const handleOpenThread = (thread: any, type: 'group' | 'private') => {
-    setActiveThread(thread);
-    const unreadIds = messages.filter(m => {
-      if (m.is_read || m.sender_id === currentUser?.id) return false;
-      if (type === 'group') return m.section_id === thread.id;
-      const ids = [m.sender_id, m.receiver_id].sort();
-      return `private-${ids.join('-')}` === thread.convId;
-    }).map(m => m.id);
-
-    if (unreadIds.length > 0) systemRef.current.markAsRead(unreadIds);
+  const handleInput = () => {
+    if (editorRef.current) setContent(editorRef.current.innerHTML);
   };
 
-  const handleSendReply = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const strippedContent = replyContent.trim();
-    if (!strippedContent || !activeThread || !currentUser) return;
+  const execCommand = (command: string, value: string | undefined = undefined) => {
+    editorRef.current?.focus();
+    restoreSelection();
+    document.execCommand(command, false, value);
+    if (editorRef.current) setContent(editorRef.current.innerHTML);
+  };
+
+  const addLink = () => {
+    if (linkUrl) {
+      execCommand('createLink', linkUrl);
+      setLinkUrl('');
+      setShowLinkInput(false);
+    }
+  };
+
+  const uploadImageFile = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+      
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST', body: formData
+      });
+      const data = await res.json();
+      
+      if (data.secure_url) {
+        editorRef.current?.focus();
+        restoreSelection(); 
+        const imgHTML = `<br/><img src="${data.secure_url}" alt="صورة مرفقة" style="max-width: 100%; height: auto; border-radius: 12px; margin: 15px 0; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" /><br/>`;
+        
+        let inserted = false;
+        try { inserted = document.execCommand('insertHTML', false, imgHTML); } catch(e) {}
+        
+        if (!inserted && editorRef.current) {
+           editorRef.current.innerHTML += imgHTML;
+        }
+        
+        if (editorRef.current) setContent(editorRef.current.innerHTML);
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء رفع الصورة.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const executePdfProcessing = async () => {
+    if (!pendingPdfFile) return;
     
-    setIsReplying(true);
-    try {
-      if (activeThread.type === 'group') {
-        await systemRef.current.sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', strippedContent);
-      } else {
-        const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
-        await systemRef.current.sendMessage(receiverId, activeThread.subject || 'رد', strippedContent);
-      }
-      setReplyContent('');
-    } catch (error: any) { alert(error.message); } 
-    finally { setIsReplying(false); }
-  };
+    setShowWatermarkModal(false);
+    const file = pendingPdfFile;
 
-  const handleSendNewMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const strippedContent = newMessage.content.replace(/<[^>]*>?/gm, '').trim();
-    if (!newMessage.subject || !strippedContent) return alert('الرجاء تعبئة جميع الحقول');
+    const pdfjsLib = (window as any).pdfjsLib;
+    if (!pdfjsLib) {
+      alert("جاري تحميل مكتبة قراءة الملفات، يرجى المحاولة بعد قليل...");
+      return;
+    }
 
-    setIsSubmitting(true);
+    setIsProcessingPdf(true);
+    setPdfProgressText("جاري تهيئة الملف وقراءة الصفحات...");
+
     try {
-      if (recipientType === 'broadcast') {
-        await systemRef.current.sendBroadcastMessage(newMessage.subject, newMessage.content);
-        alert('تم إرسال الإذاعة العامة بنجاح لجميع المجالس!');
-      } else if (!isGroupMessage) {
-        if (!newMessage.receiver_id) return alert('الرجاء اختيار المستلم');
-        await systemRef.current.sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const totalPages = pdf.numPages;
+      const imageUrls: string[] = [];
+
+      const blobs: Blob[] = [];
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} ${applyWatermark ? 'وطباعة العلامة المائية' : ''}...`);
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.0 }); 
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+        
+        if (applyWatermark && watermarkText.trim() !== '') {
+          ctx.save();
+          ctx.globalAlpha = 0.20; 
+          const fontSize = Math.floor(canvas.width / 12);
+          ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
+          ctx.fillStyle = "#4f46e5"; 
+          
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate(-Math.PI / 4); 
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(watermarkText, 0, 0);
+          ctx.restore(); 
+        }
+
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8)); 
+        if (blob) blobs.push(blob);
       }
+
+      for (let i = 0; i < blobs.length; i++) {
+         setPdfProgressText(`جاري الرفع الآمن للصفحة ${i + 1} من ${blobs.length}...`);
+         const formData = new FormData();
+         formData.append('file', blobs[i]);
+         formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
+         
+         const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+           method: 'POST', body: formData
+         });
+         const data = await res.json();
+         if (data.secure_url) {
+           imageUrls.push(data.secure_url);
+         }
+      }
+
+      setPdfProgressText("جاري الترتيب النهائي وإدراج الصفحات...");
       
-      setShowNewMessage(false);
-      setNewMessage({ receiver_id: '', subject: '', content: '' });
-      setStep(1); setRecipientType(''); setIsGroupMessage(false);
-    } catch (error: any) { alert(error.message); } 
-    finally { setIsSubmitting(false); }
+      let htmlToInsert = '<br/>';
+      imageUrls.forEach((url, idx) => {
+         htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;">
+            <img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
+         </div>`;
+      });
+      htmlToInsert += '<br/>';
+
+      if (editorRef.current) {
+        editorRef.current.focus();
+        let inserted = false;
+        try {
+          if (savedSelection.current) {
+            restoreSelection();
+            inserted = document.execCommand('insertHTML', false, htmlToInsert);
+          }
+        } catch(e) {}
+        if (!inserted) editorRef.current.innerHTML += htmlToInsert;
+        setContent(editorRef.current.innerHTML);
+      }
+
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء معالجة ملف الـ PDF. يرجى التأكد من أن الملف سليم.");
+    } finally {
+      setIsProcessingPdf(false);
+      setPdfProgressText("");
+      setPendingPdfFile(null); 
+    }
   };
 
-  const handleDeleteMessage = async (messageIds: string[]) => {
-    if (!confirm('هل أنت متأكد من حذف هذه المحادثة بالكامل؟')) return;
-    try {
-      await systemRef.current.deleteMessages(messageIds);
-      if (activeThread && messageIds.some((id: string) => activeThread.allIds?.includes(id))) setActiveThread(null);
-    } catch (error: any) { alert('حدث خطأ أثناء الحذف'); }
+  const handleCancelPdf = () => {
+    setShowWatermarkModal(false);
+    setPendingPdfFile(null);
+    if (pdfInputRef.current) pdfInputRef.current.value = '';
   };
 
-  const filteredChatRooms = chatRooms.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.className.toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredPrivate = privateConversations.filter(m => m.sender?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.receiver?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || m.subject?.toLowerCase().includes(searchTerm.toLowerCase()));
+  const handlePaste = async (e: React.ClipboardEvent<HTMLDivElement>) => {
+    saveSelection(); 
+    const items = e.clipboardData?.items;
+    if (!items) return;
 
-  const formatDateLabel = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) return 'اليوم';
-    if (date.toDateString() === yesterday.toDateString()) return 'أمس';
-    return date.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1 && canUploadImage) {
+        e.preventDefault(); 
+        const file = items[i].getAsFile();
+        if (file) await uploadImageFile(file);
+        return; 
+      }
+    }
   };
 
-  let lastDateLabel = '';
+  const insertTable = () => {
+    const tableHTML = `<table style="width: 100%; border-collapse: collapse; margin: 15px 0; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;"><tbody><tr><td style="border: 1px solid #e2e8f0; padding: 12px; background: #f8fafc; font-weight: bold;">عنوان 1</td><td style="border: 1px solid #e2e8f0; padding: 12px; background: #f8fafc; font-weight: bold;">عنوان 2</td></tr><tr><td style="border: 1px solid #e2e8f0; padding: 12px;">خلية 1</td><td style="border: 1px solid #e2e8f0; padding: 12px;">خلية 2</td></tr></tbody></table><br/>`;
+    execCommand('insertHTML', tableHTML);
+  };
 
-  if (isChecking || loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
-        <div className="flex flex-col items-center gap-5">
-          <div className="relative flex items-center justify-center">
-             <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
-             <ShieldAlert className="absolute h-8 w-8 text-indigo-400 animate-pulse" />
-          </div>
-          <p className="text-indigo-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تأمين الغرف والرسائل...</p>
-        </div>
-      </div>
-    );
-  }
+  const insertMathSymbol = (symbol: string) => {
+     execCommand('insertHTML', `&nbsp;<span style="background: #fdf2f8; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #db2777; font-weight: bold;" dir="ltr">${symbol}</span>&nbsp;`);
+  };
+
+  const ToolbarButton = ({ icon: Icon, onClick, title }: any) => (
+    <button
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }} 
+      className="p-2 rounded-lg transition-all bg-transparent text-slate-600 hover:bg-slate-200 hover:text-indigo-600"
+      title={title}
+    >
+      <Icon className="w-4.5 h-4.5" />
+    </button>
+  );
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative" dir="rtl">
       
-      <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
+      {showWatermarkModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+           <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full animate-in zoom-in-95 duration-200 border border-slate-100">
+              <div className="flex items-center gap-3 mb-6">
+                 <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShieldCheck className="h-6 w-6" /></div>
+                 <div>
+                   <h3 className="text-xl font-black text-slate-900">حماية الملف (اختياري)</h3>
+                   <p className="text-xs font-bold text-slate-500">هل تريد إضافة علامة مائية لصور الـ PDF؟</p>
+                 </div>
+              </div>
 
-      <div className={cn("shrink-0 flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4 mb-4", activeThread ? "hidden lg:flex" : "flex")}>
-        <div>
-          <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
-          <p className="text-slate-400 mt-1 sm:mt-2 font-bold text-xs sm:text-sm">مجالس الفصول والمراسلات الخاصة ⚡</p>
-        </div>
-        {role !== 'parent' && (
-          <button onClick={() => { setShowNewMessage(true); setStep(1); setRecipientType(''); setIsGroupMessage(false); }} className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 text-sm font-black text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:from-indigo-500 hover:to-blue-500 transition-all active:scale-95 border border-indigo-400/50 shrink-0">
-            <Plus className="ml-2 h-5 w-5" /> رسالة جديدة
-          </button>
-        )}
-      </div>
+              <div className="space-y-6">
+                <div className="flex gap-3">
+                  <button onClick={() => setApplyWatermark(true)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-2 ${applyWatermark ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-indigo-300'}`}>
+                    <Check className="w-4 h-4" /> نعم، أضف علامة
+                  </button>
+                  <button onClick={() => setApplyWatermark(false)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-2 ${!applyWatermark ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-500 hover:border-rose-300'}`}>
+                    <X className="w-4 h-4" /> لا، بدون علامة
+                  </button>
+                </div>
 
-      <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
-        
-        {/* القائمة الجانبية */}
-        <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
-           <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
-              <div className="relative group">
-                <Search className="absolute inset-y-0 right-4 h-full w-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-                <input type="text" className="w-full rounded-2xl border border-white/5 py-3.5 pr-12 pl-4 text-white bg-[#0f1423]/80 shadow-inner focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 text-sm font-bold outline-none placeholder:text-slate-500" placeholder="ابحث في المجالس والرسائل..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                {applyWatermark && (
+                  <div className="animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-xs font-black text-slate-500 mb-2 uppercase tracking-widest">اكتب نص العلامة المائية:</label>
+                    <input 
+                      type="text" 
+                      value={watermarkText} 
+                      onChange={(e) => setWatermarkText(e.target.value)} 
+                      placeholder="أ. محمد (فيزياء)" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all text-center"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-2 text-center font-bold">ستتم طباعتها بشكل شفاف ومائل في منتصف كل صفحة لضمان عدم تشويه المسائل.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-8 pt-6 border-t border-slate-100">
+                <button onClick={handleCancelPdf} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all text-sm">
+                  إلغاء الأمر
+                </button>
+                <button onClick={executePdfProcessing} className="flex-1 px-6 py-3 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95 text-sm flex items-center justify-center gap-2">
+                  <Files className="w-4 h-4" /> ابدأ معالجة الملف
+                </button>
               </div>
            </div>
+        </div>
+      )}
 
-           <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar pb-20 lg:pb-0">
-              {chatRooms.length > 0 && (
+      <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 sticky top-0 z-20 rounded-t-[1.5rem]">
+        
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} title="عريض" />
+          <ToolbarButton icon={Italic} onClick={() => execCommand('italic')} title="مائل" />
+          <ToolbarButton icon={Underline} onClick={() => execCommand('underline')} title="تسطير" />
+        </div>
+
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={Heading1} onClick={() => execCommand('formatBlock', 'H3')} title="عنوان كبير" />
+          <ToolbarButton icon={Heading2} onClick={() => execCommand('formatBlock', 'H4')} title="عنوان متوسط" />
+        </div>
+
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={AlignRight} onClick={() => execCommand('justifyRight')} title="يمين" />
+          <ToolbarButton icon={AlignCenter} onClick={() => execCommand('justifyCenter')} title="وسط" />
+          <ToolbarButton icon={AlignLeft} onClick={() => execCommand('justifyLeft')} title="يسار" />
+          <ToolbarButton icon={AlignJustify} onClick={() => execCommand('justifyFull')} title="ضبط النص" />
+        </div>
+
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1 relative">
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowColorPicker(!showColorPicker); setShowFontSize(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-2 rounded-lg ${showColorPicker ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="لون النص">
+            <Palette className="w-4.5 h-4.5" />
+          </button>
+          
+          {showColorPicker && (
+            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex flex-wrap gap-2 z-50 w-48">
+              {['#000000', '#ef4444', '#f97316', '#84cc16', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'].map(color => (
+                <button key={color} onMouseDown={(e) => { e.preventDefault(); execCommand('foreColor', color); setShowColorPicker(false); }} className="w-8 h-8 rounded-full border border-slate-200 hover:scale-110 transition-transform" style={{ backgroundColor: color }} />
+              ))}
+            </div>
+          )}
+
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowFontSize(!showFontSize); setShowColorPicker(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-2 rounded-lg ${showFontSize ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="حجم الخط">
+            <Type className="w-4.5 h-4.5" />
+          </button>
+
+          {showFontSize && (
+            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-xl p-2 flex flex-col z-50 w-32">
+              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '2'); setShowFontSize(false); }} className="px-3 py-2 text-sm text-right hover:bg-slate-100 rounded">صغير</button>
+              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '3'); setShowFontSize(false); }} className="px-3 py-2 text-base text-right hover:bg-slate-100 rounded">عادي</button>
+              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '5'); setShowFontSize(false); }} className="px-3 py-2 text-lg font-semibold text-right hover:bg-slate-100 rounded">كبير</button>
+              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '7'); setShowFontSize(false); }} className="px-3 py-2 text-2xl font-bold text-right hover:bg-slate-100 rounded">ضخم</button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+          <ToolbarButton icon={List} onClick={() => execCommand('insertUnorderedList')} title="قائمة نقطية" />
+          <ToolbarButton icon={ListOrdered} onClick={() => execCommand('insertOrderedList')} title="قائمة رقمية" />
+        </div>
+
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1 relative">
+          <ToolbarButton icon={LinkIcon} onClick={() => { saveSelection(); setShowLinkInput(!showLinkInput); setShowMathUI(false); setShowColorPicker(false); setShowFontSize(false); }} title="إضافة رابط" />
+          <ToolbarButton icon={Table} onClick={insertTable} title="إدراج جدول" />
+          
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowMathUI(!showMathUI); setShowLinkInput(false); setShowColorPicker(false); setShowFontSize(false); }} className={`p-2 rounded-lg ${showMathUI ? 'bg-pink-100 text-pink-700' : 'text-slate-600 hover:bg-slate-200'}`} title="كتابة معادلات رياضية">
+            <Calculator className="w-4.5 h-4.5" />
+          </button>
+
+          {showLinkInput && (
+             <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex gap-2 z-50 w-72">
+                <input type="url" placeholder="https://..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); addLink(); } }} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 font-bold text-left" dir="ltr" />
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); addLink(); }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors">إدراج</button>
+             </div>
+          )}
+
+          {/* 🚀 لوحة الـ LaTeX الجديدة والمطورة */}
+          {showMathUI && (
+            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 w-[350px] sm:w-[400px] animate-in fade-in zoom-in" dir="rtl">
+              <div className="flex justify-between items-center mb-4 border-b pb-3">
+                <span className="font-black text-sm text-pink-600 flex items-center gap-2">
+                  <Calculator className="w-5 h-5"/> إدراج معادلة (LaTeX)
+                </span>
+                <button onMouseDown={(e) => { e.preventDefault(); setShowMathUI(false); }} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full p-1.5 transition-all"><X className="w-4 h-4"/></button>
+              </div>
+
+              <div className="space-y-4">
                 <div>
-                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-400"/> مجالس الفصول الثابتة</h3>
-                  <div className="space-y-2">
-                    {filteredChatRooms.map((room) => (
-                      <button key={room.id} onClick={() => handleOpenThread(room, 'group')} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${activeThread?.id === room.id ? 'bg-indigo-600/20 text-white border-indigo-500/30 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
-                        <RenderAvatar isGroup={true} size="h-12 w-12" />
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`text-sm font-black truncate drop-shadow-sm ${activeThread?.id === room.id ? 'text-indigo-400' : 'text-white'}`}>مجلس: {room.className}</h4>
-                          <p className="text-xs truncate text-slate-400 font-bold mt-1">شعبة {room.name}</p>
-                        </div>
-                        {groupUnreadCounts[room.id] > 0 && activeThread?.id !== room.id && (
-                          <div className="shrink-0 bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-full shadow-[0_0_15px_rgba(225,29,72,0.5)] animate-pulse border border-rose-400/50">
-                            {groupUnreadCounts[room.id] > 99 ? '+99' : groupUnreadCounts[room.id]}
-                          </div>
-                        )}
-                      </button>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">رموز سريعة:</p>
+                  <div className="grid grid-cols-6 gap-2" dir="ltr">
+                    {['½','¾','√','∛','x²','x³','π','∞','∑','∫','≠','≈'].map(sym => (
+                      <button key={sym} onMouseDown={(e) => { e.preventDefault(); insertMathSymbol(sym); }} className="p-2 border border-slate-200 rounded-xl hover:bg-pink-50 hover:border-pink-300 hover:text-pink-600 font-mono font-bold text-slate-600 transition-all shadow-sm">{sym}</button>
                     ))}
                   </div>
                 </div>
-              )}
 
-              <div>
-                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 px-2 flex items-center gap-2"><User className="w-4 h-4 text-emerald-400"/> المراسلات الخاصة</h3>
-                <div className="space-y-2">
-                  {filteredPrivate.length === 0 ? (
-                    <p className="text-xs text-slate-500 font-bold text-center py-4 bg-white/5 rounded-xl border border-white/5 shadow-inner">لا توجد رسائل خاصة</p>
-                  ) : (
-                    filteredPrivate.map((msg) => {
-                      const isSender = msg.sender_id === currentUser?.id;
-                      const otherUser = isSender ? msg.receiver : msg.sender;
-                      const isActive = activeThread?.convId === msg.convId;
-                      return (
-                        <button key={msg.convId} onClick={() => handleOpenThread(msg, 'private')} className={`relative w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-right group border outline-none ${isActive ? 'bg-emerald-600/20 text-white border-emerald-500/30 shadow-inner' : msg.unreadCount > 0 ? 'bg-emerald-500/10 border-emerald-500/20 shadow-inner' : 'hover:bg-[#0f1423]/60 border-transparent hover:border-white/5'}`}>
-                          <div className="relative shrink-0">
-                            <RenderAvatar user={otherUser} size="h-12 w-12" />
-                            {msg.unreadCount > 0 && !isActive && <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-[#0f1423] rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <h4 className={`text-sm font-black truncate pr-2 ${isActive ? 'text-emerald-400' : 'text-white'}`}>{otherUser?.full_name}</h4>
-                              {msg.unreadCount > 0 && !isActive && (
-                                <div className="shrink-0 bg-emerald-500 text-[#02040a] text-[10px] font-black px-2 py-0.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-pulse border border-emerald-400">
-                                  {msg.unreadCount > 99 ? '+99' : msg.unreadCount}
-                                </div>
-                              )}
-                            </div>
-                            <p className={`text-xs truncate pr-2 ${isActive ? 'text-emerald-200' : msg.unreadCount > 0 ? 'text-emerald-400 font-bold' : 'text-slate-400 font-bold'}`}>{msg.subject || 'بدون عنوان'}</p>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
+                <div className="border-t border-slate-100 pt-4">
+                   <label className="block text-xs font-black text-slate-500 mb-2">اكتب المعادلة بصيغة LaTeX:</label>
+                   <textarea
+                      value={latexInput}
+                      onChange={(e) => setLatexInput(e.target.value)}
+                      placeholder="\frac{1}{2} mv^2"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 font-mono text-left focus:border-pink-500 focus:ring-2 focus:ring-pink-200 outline-none text-sm font-bold text-slate-700 transition-all"
+                      dir="ltr"
+                      rows={2}
+                   />
                 </div>
-              </div>
-           </div>
-        </div>
 
-        {/* 🚀 نافذة الدردشة - إصلاح جذري لهندسة الموبايل (Flex-Col + ForumEditor) */}
-        <div className={cn("flex-col transition-all duration-300 relative", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex absolute inset-0 z-[100] bg-[#090b14] lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden")}>
-           {!activeThread ? (
-             <div className="text-center flex flex-col items-center">
-               <div className="h-32 w-32 bg-[#02040a]/60 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
-                 <MessageSquare className="h-12 w-12 text-slate-600 drop-shadow-md" />
-               </div>
-               <h3 className="text-2xl font-black text-white drop-shadow-sm">مرحباً بك في مركز التواصل</h3>
-               <p className="text-slate-400 font-bold mt-2 text-base">اختر مجلس الفصل أو محادثة خاصة للبدء.</p>
-             </div>
-           ) : (
-             <div className="flex flex-col h-full w-full absolute inset-0 pb-[env(safe-area-inset-bottom)] lg:pb-0">
-               {/* Header */}
-               <div className="h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between shrink-0 pt-[env(safe-area-inset-top)] z-20">
-                 <div className="flex items-center gap-2 lg:gap-4 min-w-0 pr-1">
-                   <button onClick={() => setActiveThread(null)} className="lg:hidden p-2.5 mr-[-5px] text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-all shrink-0 active:scale-95 flex items-center justify-center">
-                     <ArrowRight className="h-6 w-6" />
-                   </button>
-                   
-                   {activeThread.type === 'group' ? (
-                     <><RenderAvatar isGroup={true} size="h-10 w-10 lg:h-12 lg:w-12" />
-                     <div className="min-w-0">
-                       <h3 className="text-sm lg:text-base font-black text-white truncate drop-shadow-sm">مجلس: {activeThread.className}</h3>
-                       <p className="text-[10px] lg:text-xs text-indigo-400 font-bold mt-0.5 lg:mt-1 truncate">شعبة {activeThread.name}</p>
-                     </div></>
-                   ) : (
-                     <><RenderAvatar user={activeThread.sender_id === currentUser?.id ? activeThread.receiver : activeThread.sender} size="h-10 w-10 lg:h-12 lg:w-12" />
-                     <div className="min-w-0">
-                       <h3 className="text-sm lg:text-base font-black text-white truncate drop-shadow-sm">{activeThread.sender_id === currentUser?.id ? activeThread.receiver?.full_name : activeThread.sender?.full_name}</h3>
-                       <p className="text-[10px] lg:text-xs text-emerald-400 font-bold mt-0.5 lg:mt-1 truncate">{activeThread.subject}</p>
-                     </div></>
-                   )}
-                 </div>
-                 {activeThread.type !== 'group' && (
-                   <button onClick={() => handleDeleteMessage(activeThread.allIds)} className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-inner shrink-0 active:scale-95">
-                     <Trash2 className="h-4 w-4 lg:h-5 lg:w-5" />
-                   </button>
-                 )}
-               </div>
-
-               {/* Messages Container */}
-               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
-                  {threadMessages.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
-                       لا توجد رسائل سابقة في هذا {activeThread.type === 'group' ? 'المجلس' : 'النقاش'}.
-                    </div>
-                  ) : (
-                    threadMessages.map((msg, idx) => {
-                      const isMe = msg.sender_id === currentUser?.id;
-                      const showAvatar = idx === 0 || threadMessages[idx - 1].sender_id !== msg.sender_id;
-                      const themeColor = activeThread.type === 'group' ? 'indigo' : 'emerald';
-                      
-                      const currentLabel = formatDateLabel(msg.created_at);
-                      const showDateDivider = currentLabel !== lastDateLabel;
-                      if (showDateDivider) lastDateLabel = currentLabel;
-
-                      return (
-                        <div key={msg.id} className="flex flex-col">
-                           {showDateDivider && (
-                             <div className="flex justify-center my-4 lg:my-6">
-                               <span className="bg-[#02040a]/80 border border-white/5 text-slate-400 text-[9px] lg:text-[10px] font-black px-3 py-1.5 rounded-full shadow-inner tracking-widest">
-                                 {currentLabel}
-                               </span>
-                             </div>
-                           )}
-
-                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-3 lg:gap-4 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className="shrink-0 w-8 lg:w-10 flex flex-col items-center hidden sm:flex">
-                              {showAvatar && !isMe && <RenderAvatar user={msg.sender} size="h-8 w-8 lg:h-10 lg:w-10" />}
-                            </div>
-                            <div className={`flex flex-col max-w-[90%] sm:max-w-[85%] lg:max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
-                              {showAvatar && !isMe && <span className="text-[9px] lg:text-[10px] font-bold text-slate-500 mb-1 ml-2 drop-shadow-sm">{msg.sender?.full_name} ({msg.sender?.role === 'teacher' ? 'معلم' : msg.sender?.role === 'admin' ? 'إدارة' : 'طالب'})</span>}
-                              
-                              <div className={`p-3 lg:p-4 shadow-inner border relative text-sm lg:text-sm font-bold leading-relaxed lg:leading-loose
-                                ${isMe 
-                                  ? `bg-gradient-to-br from-${themeColor}-600 to-${themeColor === 'indigo' ? 'violet' : 'teal'}-600 text-white rounded-[1.25rem] lg:rounded-[1.5rem] rounded-tr-sm border-${themeColor}-400/30` 
-                                  : 'bg-[#0f1423] text-slate-200 border-white/5 rounded-[1.25rem] lg:rounded-[1.5rem] rounded-tl-sm'}`}
-                              >
-                                <div className="prose prose-invert max-w-none text-xs sm:text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
-                                
-                                <div className={`text-[9px] lg:text-[9px] mt-2 flex items-center gap-1 lg:gap-1.5 ${isMe ? `text-${themeColor}-200 justify-end` : 'text-slate-500 justify-start'}`}>
-                                  <span>{new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
-                                  {isMe && (msg.is_read ? <CheckCheck className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-sky-300" /> : <Check className={`w-3 h-3 lg:w-3.5 lg:h-3.5 text-${themeColor}-300/50`} />)}
-                                </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        </div>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEndRef} className="h-2" />
-               </div>
-
-               {/* 🚀 عودة المكون المعتمد (ForumEditor) متجاوباً مع الموبايل */}
-               <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 z-30">
-                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4 pb-4">
-                    <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center max-h-[150px] overflow-y-auto custom-scrollbar">
-                       <ForumEditor 
-                         content={replyContent} 
-                         setContent={setReplyContent} 
-                         canUploadImage={true} 
-                         placeholder="اكتب رسالتك هنا..." 
-                         minHeight="40px" 
-                       />
-                    </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-[50px] lg:h-[54px] lg:w-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
-                      {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
-                    </button>
-                 </form>
-               </div>
-             </div>
-           )}
-        </div>
-      </div>
-
-      {/* 🚀 Modal: إنشاء رسالة (مستقلة وتدعم الموبايل) */}
-      <AnimatePresence>
-        {showNewMessage && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 lg:p-6 bg-[#02040a]/90 backdrop-blur-md">
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-4xl bg-[#0f1423] rounded-[2rem] lg:rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10 flex flex-col h-[90dvh] lg:h-auto lg:max-h-[90dvh] overflow-hidden" dir="rtl">
-              
-              <div className="px-5 lg:px-8 py-5 lg:py-6 border-b border-white/5 bg-[#02040a]/40 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3 lg:gap-4">
-                  <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner">
-                    <Plus className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white drop-shadow-sm">إنشاء رسالة</h3>
-                  </div>
-                </div>
-                <button onClick={() => { setShowNewMessage(false); setStep(1); }} className="p-2 text-slate-400 hover:text-rose-400 bg-[#0f1423] border border-white/5 rounded-xl shadow-inner active:scale-90"><X className="h-5 w-5" /></button>
-              </div>
-
-              <div className="p-5 lg:p-8 flex-1 overflow-y-auto custom-scrollbar">
-                {step === 1 && (
-                  <div className={`grid grid-cols-1 sm:grid-cols-2 ${['admin', 'management'].includes(role) ? 'lg:grid-cols-3' : ''} gap-4 lg:gap-6 pb-10`}>
-                    
-                    <button onClick={() => { setRecipientType('teacher'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-6 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-indigo-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
-                      <div className="h-14 w-14 rounded-[1rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-110 transition-transform"><User className="h-7 w-7" /></div>
-                      <span className="text-base font-black text-white drop-shadow-sm">رسالة لمعلم / إدارة</span>
-                    </button>
-                    
-                    {role !== 'parent' && (
-                      <button onClick={() => { setRecipientType('student'); setIsGroupMessage(false); setStep(2); }} className="flex flex-col items-center justify-center p-6 rounded-[1.5rem] border border-white/5 shadow-inner hover:border-emerald-500/50 hover:bg-[#02040a]/60 transition-all group bg-[#02040a]/40 active:scale-95">
-                        <div className="h-14 w-14 rounded-[1rem] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform"><Users className="h-7 w-7" /></div>
-                        <span className="text-base font-black text-white drop-shadow-sm">رسالة خاصة لطالب</span>
-                      </button>
-                    )}
-
-                    {['admin', 'management'].includes(role) && (
-                      <button onClick={() => { setRecipientType('broadcast'); setIsGroupMessage(true); setStep(2); }} className="flex flex-col items-center justify-center p-6 rounded-[1.5rem] border border-rose-500/20 shadow-inner hover:border-rose-500/50 hover:bg-rose-500/10 transition-all group bg-rose-500/5 active:scale-95">
-                        <div className="h-14 w-14 rounded-[1rem] bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4 group-hover:scale-110 transition-transform"><Megaphone className="h-7 w-7 drop-shadow-md" /></div>
-                        <span className="text-base font-black text-rose-400 drop-shadow-sm">إذاعة عامة للجميع</span>
-                      </button>
-                    )}
-                  </div>
+                {latexInput && (
+                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-center overflow-x-auto min-h-[60px] items-center text-white shadow-inner">
+                       <Latex>{`$${latexInput}$`}</Latex>
+                   </div>
                 )}
 
-                {step === 2 && (
-                  <form onSubmit={handleSendNewMessage} className="space-y-4 lg:space-y-6 pb-[env(safe-area-inset-bottom)]">
-                    <button type="button" onClick={() => setStep(1)} className="text-indigo-400 font-black text-xs flex items-center gap-1.5 hover:text-indigo-300 w-fit mb-2"><ArrowRight className="h-4 w-4" /> العودة للخيارات</button>
-
-                    {recipientType !== 'broadcast' && (
-                      <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">المستلم</label>
-                        <select required value={newMessage.receiver_id} onChange={(e) => setNewMessage({...newMessage, receiver_id: e.target.value})} className="block w-full rounded-xl border border-white/5 py-3 px-4 text-white bg-[#0f1423] outline-none shadow-inner [&>option]:bg-[#0f1423]">
-                          <option value="">اختر المستلم...</option>
-                          {users
-                            .filter(u => recipientType === 'teacher' ? ['teacher', 'admin', 'management'].includes(u.role) : u.role === 'student')
-                            .map((u: any) => <option key={u.id} value={u.id}>{u.full_name}</option>)
-                          }
-                        </select>
-                      </div>
-                    )}
-                    
-                    <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">عنوان الرسالة</label>
-                      <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-xl border border-white/5 py-3 px-4 text-white bg-[#0f1423] outline-none shadow-inner placeholder:text-slate-600" />
-                    </div>
-                    
-                    <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner flex flex-col min-h-[250px]">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
-                      <div className="bg-[#0f1423] rounded-xl border border-white/5 overflow-hidden shadow-inner p-1 flex-1 flex flex-col">
-                        <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="150px" />
-                      </div>
-                    </div>
-
-                    <div className="pt-4 flex justify-end gap-3 pb-8">
-                      <button type="submit" disabled={isSubmitting} className={`px-6 py-3.5 rounded-xl ${recipientType === 'broadcast' ? 'bg-gradient-to-r from-rose-600 to-red-600 shadow-[0_0_20px_rgba(225,29,72,0.4)]' : 'bg-gradient-to-r from-indigo-600 to-blue-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]'} text-white text-sm font-black flex items-center gap-2 active:scale-95 w-full justify-center`}>
-                        {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Send className="w-4 h-4 rtl:-mr-1 rtl:rotate-180" /> إرسال الرسالة</>}
-                      </button>
-                    </div>
-                  </form>
-                )}
+                <button
+                   type="button"
+                   onMouseDown={(e) => {
+                      e.preventDefault();
+                      if(latexInput.trim()) {
+                         execCommand('insertText', ` $${latexInput}$ `);
+                         setLatexInput('');
+                         setShowMathUI(false);
+                      }
+                   }}
+                   className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black text-sm py-4 rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-pink-200 flex items-center justify-center gap-2"
+                >
+                   إدراج المعادلة في النص <Check className="w-4 h-4" />
+                </button>
               </div>
-            </motion.div>
+            </div>
+          )}
+        </div>
+
+        <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
+
+        {canUploadImage && (
+          <div className="mr-auto flex flex-wrap items-center gap-2">
+             <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
+             
+             <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={(e) => { 
+                const file = e.target.files?.[0]; 
+                if(file) {
+                  setPendingPdfFile(file);
+                  setShowWatermarkModal(true);
+                }
+             }} />
+             
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); fileInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 font-bold text-sm border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50">
+               <ImageIcon className="w-4 h-4 text-indigo-500" />
+               <span className="hidden sm:inline">صورة</span>
+             </button>
+
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور">
+               <Files className="w-4 h-4 text-indigo-600" />
+               <span className="hidden sm:inline">إدراج من PDF</span>
+             </button>
           </div>
         )}
-      </AnimatePresence>
+      </div>
+
+      <div className="relative">
+        {(isUploading || isProcessingPdf) && (
+          <div className="absolute inset-0 bg-white/70 backdrop-blur-[4px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
+             <div className="bg-white px-6 py-4 rounded-[2rem] shadow-xl border border-indigo-100 flex flex-col items-center justify-center gap-3 font-bold text-sm text-indigo-700 max-w-[80%] text-center">
+               <Loader2 className="w-8 h-8 animate-spin text-indigo-500" /> 
+               <span>{isProcessingPdf ? pdfProgressText : 'جاري معالجة ورفع الصورة...'}</span>
+             </div>
+          </div>
+        )}
+        
+        <div 
+          ref={editorRef}
+          contentEditable
+          onInput={handleInput}
+          onPaste={handlePaste}
+          onBlur={saveSelection} 
+          className="w-full min-h-[150px] max-h-[600px] overflow-y-auto p-6 outline-none prose prose-slate max-w-none text-slate-800 leading-loose text-base rounded-b-[1.5rem]"
+          data-placeholder={placeholder}
+          dir="auto"
+          style={{ WebkitUserModify: 'read-write' } as any}
+        />
+      </div>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; font-weight: 500; }
+        [contenteditable]:focus:empty:before { opacity: 0.5; }
+        .prose table { width: 100%; border-collapse: collapse; margin: 1.5em 0; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .prose td, .prose th { border: 1px solid #e2e8f0; padding: 0.75rem; vertical-align: top; }
+        .prose img { display: inline-block; max-width: 100%; height: auto; border-radius: 12px; margin: 15px 0; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+      `}} />
     </div>
   );
 }
