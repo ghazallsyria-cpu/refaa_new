@@ -13,6 +13,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import AssignmentForm from '@/components/assignment-form';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
+import ForumEditor from '@/components/ForumEditor';
 import * as XLSX from 'xlsx';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
@@ -21,10 +22,6 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// 🪄 الحيلة السحرية لإسكات TypeScript تماماً وعدم المساس بالمكون الأصلي
-import ForumEditorOriginal from '@/components/ForumEditor';
-const ForumEditor = ForumEditorOriginal as any;
 
 const getStatusColor = (status: string) => {
   switch (status) {
