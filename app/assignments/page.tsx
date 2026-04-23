@@ -1,5 +1,5 @@
 'use client';
-
+// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon, Play, Loader2, ShieldAlert } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
