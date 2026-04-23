@@ -243,7 +243,7 @@ export default function MessagesPage() {
 
   if (isChecking || loading) {
     return (
-      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo">
+      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
@@ -256,7 +256,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
@@ -384,7 +384,7 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Container - مع مسافة تعويضية سفلية */}
+               {/* Messages Container - تم إضافة مساحة تعويضية سفلية لعدم الاختفاء تحت الكيبورد */}
                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar pb-[180px] lg:pb-6">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
@@ -438,16 +438,15 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* 🚀 عودة المكون الأصلي (ForumEditor) مع تثبيته في أسفل الموبايل بشكل صحيح */}
+               {/* 🚀 عودة المكون الأصلي (ForumEditor) وتغليفه بحاوية تحدد ارتفاعه في الجوال */}
                <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
                  <form onSubmit={handleSendReply} className="flex flex-col lg:flex-row items-end gap-2 lg:gap-3 p-3 lg:p-4">
-                    <div className="flex-1 w-full bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center max-h-[150px] overflow-y-auto custom-scrollbar">
+                    <div className="flex-1 w-full bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center max-h-[140px] overflow-y-auto custom-scrollbar">
+                       {/* تم إرسال الـ Props الأساسية فقط لكي لا يغضب الـ TypeScript */}
                        <ForumEditor 
                          content={replyContent} 
                          setContent={setReplyContent} 
                          canUploadImage={true} 
-                         placeholder="اكتب رسالتك هنا..." 
-                         minHeight="40px" 
                        />
                     </div>
                     <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-full lg:w-[54px] lg:h-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
@@ -528,7 +527,7 @@ export default function MessagesPage() {
                     <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner flex flex-col min-h-[250px]">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
                       <div className="bg-[#0f1423] rounded-xl border border-white/5 overflow-hidden shadow-inner p-1 flex-1 flex flex-col">
-                        <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} placeholder="اكتب رسالتك هنا..." minHeight="150px" />
+                        <ForumEditor content={newMessage.content} setContent={(val) => setNewMessage({...newMessage, content: val})} canUploadImage={true} />
                       </div>
                     </div>
 
