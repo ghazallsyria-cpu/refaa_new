@@ -77,7 +77,6 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
 
-  // 🚀 1. إيقاف الحلقة المفرغة (الاستماع فقط لرسائل جديدة وليس لتحديثات القراءة)
   useEffect(() => {
     if (!currentUser || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
@@ -99,7 +98,6 @@ export default function MessagesPage() {
       return; 
     }
 
-    // 🚀 2. حساب العدادات بصمت بدون إرسال طلبات للسيرفر
     const gCounts: Record<string, number> = {};
     messages.filter(m => m.section_id).forEach(msg => {
       if (!msg.is_read && msg.sender_id !== currentUser?.id) {
@@ -168,7 +166,6 @@ export default function MessagesPage() {
     }
   }, [activeThread, messages]);
 
-  // 🚀 3. تحويل الرسائل لمقروءة حصراً عند ضغط المستخدم بإصبعه (آمن 100%)
   const handleOpenThread = (thread: any, type: 'group' | 'private') => {
     setActiveThread(thread);
     const unreadIds = messages.filter(m => {
@@ -189,10 +186,10 @@ export default function MessagesPage() {
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
+        await sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', strippedContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
-        await sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
+        await sendMessage(receiverId, activeThread.subject || 'رد', strippedContent);
       }
       setReplyContent('');
     } catch (error: any) { alert(error.message); } 
@@ -247,7 +244,7 @@ export default function MessagesPage() {
 
   if (isChecking || loading) {
     return (
-      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo">
+      <div className="flex h-screen items-center justify-center bg-[#090b14] font-cairo">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
@@ -260,7 +257,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
@@ -279,7 +276,7 @@ export default function MessagesPage() {
 
       <div className={cn("glass-panel overflow-hidden flex flex-1 min-h-0 mx-0 lg:mx-8 relative z-10 bg-[#0f1423]/60", activeThread ? "rounded-none lg:rounded-[2.5rem] lg:border lg:border-white/10 lg:shadow-[0_20px_50px_rgba(0,0,0,0.5)]" : "rounded-t-[2.5rem] lg:rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]")}>
         
-        {/* القائمة الجانبية */}
+        {/* 🚀 القائمة الجانبية */}
         <div className={cn("w-full lg:w-[400px] flex-shrink-0 flex flex-col border-l border-white/5 bg-[#02040a]/40 transition-all duration-300", activeThread ? 'hidden lg:flex' : 'flex')}>
            <div className="p-4 lg:p-6 border-b border-white/5 bg-[#02040a]/40 backdrop-blur-xl z-10 shrink-0">
               <div className="relative group">
@@ -347,8 +344,8 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 4. نافذة الدردشة - إصلاح جذري لدعم الكيبورد في الموبايل */}
-        <div className={cn("flex-col transition-all duration-300", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex fixed inset-0 z-[100] bg-[#090b14] lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden")}>
+        {/* 🚀 نافذة الدردشة - إصلاح جذري لهندسة الموبايل (Flex-Col + Textarea) */}
+        <div className={cn("flex-col transition-all duration-300 z-50 lg:z-auto", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex fixed inset-0 lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden bg-[#090b14] lg:bg-transparent")}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
                <div className="h-32 w-32 bg-[#02040a]/60 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-inner border border-white/5">
@@ -359,7 +356,7 @@ export default function MessagesPage() {
              </div>
            ) : (
              <>
-               {/* Header */}
+               {/* Header للمحادثة */}
                <div className="h-[70px] lg:h-20 border-b border-white/5 bg-[#0f1423]/95 backdrop-blur-2xl px-3 lg:px-6 flex items-center justify-between z-20 shrink-0 pt-[env(safe-area-inset-top)]">
                  <div className="flex items-center gap-2 lg:gap-4 min-w-0 pr-1">
                    <button onClick={() => setActiveThread(null)} className="lg:hidden p-2.5 mr-[-5px] text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-all shrink-0 active:scale-95 flex items-center justify-center">
@@ -387,8 +384,8 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Container */}
-               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar pb-[100px] lg:pb-6">
+               {/* Messages Area - Scrolling Container */}
+               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
                        لا توجد رسائل سابقة في هذا {activeThread.type === 'group' ? 'المجلس' : 'النقاش'}.
@@ -441,13 +438,25 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* Input Form - ملتصق بالأسفل بقوة لدعم لوحة المفاتيح */}
-               <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423] border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
-                 <form onSubmit={handleSendReply} className="flex items-end gap-2 p-3 lg:p-4">
-                    <div className="flex-1 bg-[#02040a]/60 rounded-2xl border border-white/5 shadow-inner overflow-hidden p-1 max-h-[120px] overflow-y-auto custom-scrollbar">
-                       <ForumEditor content={replyContent} setContent={setReplyContent} canUploadImage={true} placeholder="رسالتك..." minHeight="40px" />
+               {/* 🚀 Input Form - تم استبدال المحرر الضخم بصندوق دردشة ذكي (Textarea) للموبايل */}
+               <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 pb-[env(safe-area-inset-bottom)]">
+                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
+                    <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex items-center">
+                       <textarea 
+                         value={replyContent} 
+                         onChange={(e) => setReplyContent(e.target.value)} 
+                         placeholder="اكتب رسالتك هنا..." 
+                         className="w-full bg-transparent text-white placeholder-slate-500 p-4 outline-none resize-none min-h-[50px] max-h-[120px] custom-scrollbar block text-sm"
+                         rows={1}
+                         onKeyDown={(e) => {
+                           if (e.key === 'Enter' && !e.shiftKey) {
+                             e.preventDefault();
+                             handleSendReply();
+                           }
+                         }}
+                       />
                     </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-12 w-12 rounded-xl bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 mb-1 active:scale-95`}>
+                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-[50px] lg:h-[54px] lg:w-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95`}>
                       {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
                     </button>
                  </form>
@@ -457,7 +466,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة جديدة - إصلاح حجم الشاشة */}
+      {/* 🚀 Modal: إنشاء رسالة جديدة (لا يزال يستخدم المحرر الكامل لأنه شاشة مستقلة) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 lg:p-6 bg-[#02040a]/90 backdrop-blur-md">
