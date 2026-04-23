@@ -562,12 +562,12 @@ export default function AssignmentsPage() {
                       <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner">
                         <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">الوصف والتعليمات التفصيلية</label>
                         <div className="bg-[#02040a]/40 p-2 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner">
-                          <ForumEditor 
-                            content={currentAssignment.description || ''}
-                            setContent={(content) => setCurrentAssignment({...currentAssignment, description: content})}
-                            canUploadImage={true}
-                            placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)"
-                          />
+<ForumEditor
+  content={currentAssignment.description || ''}
+  setContent={(content: any) => setCurrentAssignment({...currentAssignment, description: content})}
+  canUploadImage={true}
+  placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)"
+/>
                         </div>
                       </div>
 
