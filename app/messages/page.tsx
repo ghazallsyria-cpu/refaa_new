@@ -78,6 +78,7 @@ export default function MessagesPage() {
     if (!currentUser?.id || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
 
+    // 🚀 إيقاف الحلقة المفرغة بالاستماع لـ INSERT فقط
     const channel = supabase
       .channel('realtime_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => { 
@@ -161,8 +162,9 @@ export default function MessagesPage() {
         }
       }, 100);
     }
-  }, [activeThread, messages, currentUser?.id]);
+  }, [activeThread, messages]);
 
+  // 🚀 التحديث الآمن: قراءة الرسائل عند فتح المحادثة فقط
   const handleOpenThread = (thread: any, type: 'group' | 'private') => {
     setActiveThread(thread);
     const unreadIds = messages.filter(m => {
@@ -177,16 +179,16 @@ export default function MessagesPage() {
 
   const handleSendReply = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const strippedContent = replyContent.trim();
+    const strippedContent = replyContent.replace(/<[^>]*>?/gm, '').trim();
     if (!strippedContent || !activeThread || !currentUser) return;
     
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await systemRef.current.sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', strippedContent);
+        await systemRef.current.sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
-        await systemRef.current.sendMessage(receiverId, activeThread.subject || 'رد', strippedContent);
+        await systemRef.current.sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
       }
       setReplyContent('');
     } catch (error: any) { alert(error.message); } 
@@ -259,7 +261,6 @@ export default function MessagesPage() {
       <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 إخفاء العناوين في الجوال إذا كانت المحادثة مفتوحة لزيادة المساحة */}
       <div className={cn("shrink-0 flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 lg:px-8 relative z-10 pt-4 mb-4", activeThread ? "hidden lg:flex" : "flex")}>
         <div>
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">مركز التواصل الرقمي</h1>
@@ -342,7 +343,7 @@ export default function MessagesPage() {
            </div>
         </div>
 
-        {/* 🚀 4. نافذة الدردشة - إصلاح جذري لدعم الكيبورد في الموبايل */}
+        {/* 🚀 نافذة الدردشة - محصنة وتظهر كشاشة كاملة في الموبايل */}
         <div className={cn("flex-col transition-all duration-300 relative", !activeThread ? "hidden lg:flex lg:flex-1 items-center justify-center bg-[#090b14] lg:bg-transparent" : "flex absolute inset-0 z-[100] bg-[#090b14] lg:static lg:flex-1 h-[100dvh] lg:h-auto overflow-hidden")}>
            {!activeThread ? (
              <div className="text-center flex flex-col items-center">
@@ -382,8 +383,8 @@ export default function MessagesPage() {
                  )}
                </div>
 
-               {/* Messages Container */}
-               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar">
+               {/* Messages Container - مع إعطاء مساحة تعويضية سفلية لعدم اختفاء الرسائل */}
+               <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6 space-y-4 lg:space-y-6 bg-transparent custom-scrollbar pb-[200px] lg:pb-6">
                   {threadMessages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500 font-bold text-sm">
                        لا توجد رسائل سابقة في هذا {activeThread.type === 'group' ? 'المجلس' : 'النقاش'}.
@@ -436,25 +437,19 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* 🚀 Input Form - تم استبدال المحرر الضخم بصندوق دردشة ذكي (Textarea) للموبايل */}
-               <div className="bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 shrink-0 z-30">
-                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4 pb-4">
-                    <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex items-center">
-                       <textarea 
-                         value={replyContent} 
-                         onChange={(e) => setReplyContent(e.target.value)} 
+               {/* 🚀 عودة المكون المعتمد (ForumEditor) وتثبيته في الأسفل للموبايل */}
+               <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
+                 <form onSubmit={handleSendReply} className="flex items-end gap-2 lg:gap-3 p-3 lg:p-4">
+                    <div className="flex-1 bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center">
+                       <ForumEditor 
+                         content={replyContent} 
+                         setContent={setReplyContent} 
+                         canUploadImage={true} 
                          placeholder="اكتب رسالتك هنا..." 
-                         className="w-full bg-transparent text-white placeholder-slate-500 p-4 outline-none resize-none min-h-[50px] max-h-[120px] custom-scrollbar block text-sm"
-                         rows={1}
-                         onKeyDown={(e) => {
-                           if (e.key === 'Enter' && !e.shiftKey) {
-                             e.preventDefault();
-                             handleSendReply();
-                           }
-                         }}
+                         minHeight="40px" 
                        />
                     </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-[50px] lg:h-[54px] lg:w-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95`}>
+                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-[50px] lg:h-[54px] lg:w-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
                       {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
                     </button>
                  </form>
@@ -464,7 +459,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة جديدة (لا يزال يستخدم المحرر الكامل لأنه شاشة مستقلة) */}
+      {/* 🚀 Modal: إنشاء رسالة (مستقلة) */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 lg:p-6 bg-[#02040a]/90 backdrop-blur-md">
