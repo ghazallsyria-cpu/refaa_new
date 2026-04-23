@@ -349,7 +349,7 @@ export default function AIAssignmentsSandbox() {
       const response = await fetch('/api/assignments/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          payload: { title: result.title || 'واجب تفاعلي ذكي', description: 'تم التوليد آلياً وتجزئة المسائل بواسطة الذكاء الاصطناعي.', subject_id: selectedSubject, due_date: dueDate.toISOString(), status: 'draft' },
+          payload: { title: result.title || 'واجب تفاعلي ذكي', description: 'تم التوليد باستخدام خوارزمية ايهاب جمال غزال للواجبات.', subject_id: selectedSubject, due_date: dueDate.toISOString(), status: 'draft' },
           assignmentId: null, questions: formattedQuestions, sectionIds: selectedSections, subjects: [], userId: selectedTeacher 
         }),
       });
