@@ -17,13 +17,15 @@ interface ForumEditorProps {
   setContent: (content: string) => void;
   canUploadImage: boolean;
   placeholder?: string;
+  isCompact?: boolean; // 🚀 إضافة خاصية الحجم المدمج لشريط المحادثة
 }
 
 export default function ForumEditor({ 
   content, 
   setContent, 
   canUploadImage, 
-  placeholder = "اكتب مقالك الاحترافي هنا..." 
+  placeholder = "اكتب مقالك الاحترافي هنا...",
+  isCompact = false 
 }: ForumEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,7 +33,6 @@ export default function ForumEditor({
   
   const [isUploading, setIsUploading] = useState(false);
   
-  // حالات معالجة الـ PDF
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
   const [pdfProgressText, setPdfProgressText] = useState('');
   
@@ -46,7 +47,6 @@ export default function ForumEditor({
   const [showMathUI, setShowMathUI] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   
-  // 🚀 حالة معادلة الـ LaTeX
   const [latexInput, setLatexInput] = useState('');
 
   const savedSelection = useRef<Range | null>(null);
@@ -145,23 +145,20 @@ export default function ForumEditor({
     const file = pendingPdfFile;
 
     const pdfjsLib = (window as any).pdfjsLib;
-    if (!pdfjsLib) {
-      alert("جاري تحميل مكتبة قراءة الملفات، يرجى المحاولة بعد قليل...");
-      return;
-    }
+    if (!pdfjsLib) return alert("جاري تحميل مكتبة قراءة الملفات، يرجى المحاولة بعد قليل...");
 
     setIsProcessingPdf(true);
-    setPdfProgressText("جاري تهيئة الملف وقراءة الصفحات...");
+    setPdfProgressText("جاري تهيئة الملف...");
 
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const totalPages = pdf.numPages;
       const imageUrls: string[] = [];
-
       const blobs: Blob[] = [];
+
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        setPdfProgressText(`جاري تحويل الصفحة ${pageNum} من ${totalPages} ${applyWatermark ? 'وطباعة العلامة المائية' : ''}...`);
+        setPdfProgressText(`جاري تحويل الصفحة ${pageNum}...`);
         const page = await pdf.getPage(pageNum);
         const viewport = page.getViewport({ scale: 2.0 }); 
         
@@ -171,7 +168,6 @@ export default function ForumEditor({
 
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
         if (applyWatermark && watermarkText.trim() !== '') {
@@ -180,7 +176,6 @@ export default function ForumEditor({
           const fontSize = Math.floor(canvas.width / 12);
           ctx.font = `bold ${fontSize}px Arial, sans-serif`; 
           ctx.fillStyle = "#4f46e5"; 
-          
           ctx.translate(canvas.width / 2, canvas.height / 2);
           ctx.rotate(-Math.PI / 4); 
           ctx.textAlign = "center";
@@ -194,27 +189,20 @@ export default function ForumEditor({
       }
 
       for (let i = 0; i < blobs.length; i++) {
-         setPdfProgressText(`جاري الرفع الآمن للصفحة ${i + 1} من ${blobs.length}...`);
+         setPdfProgressText(`رفع الصفحة ${i + 1}...`);
          const formData = new FormData();
          formData.append('file', blobs[i]);
          formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'ml_default');
-         
-         const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
-           method: 'POST', body: formData
-         });
+         const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
          const data = await res.json();
-         if (data.secure_url) {
-           imageUrls.push(data.secure_url);
-         }
+         if (data.secure_url) imageUrls.push(data.secure_url);
       }
 
-      setPdfProgressText("جاري الترتيب النهائي وإدراج الصفحات...");
+      setPdfProgressText("جاري الإدراج...");
       
       let htmlToInsert = '<br/>';
       imageUrls.forEach((url, idx) => {
-         htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;">
-            <img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
-         </div>`;
+         htmlToInsert += `<div style="text-align: center; margin-bottom: 24px;"><img src="${url}" alt="صفحة ${idx + 1}" style="max-width: 100%; height: auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" /></div>`;
       });
       htmlToInsert += '<br/>';
 
@@ -232,8 +220,7 @@ export default function ForumEditor({
       }
 
     } catch (error) {
-      console.error(error);
-      alert("حدث خطأ أثناء معالجة ملف الـ PDF. يرجى التأكد من أن الملف سليم.");
+      alert("حدث خطأ أثناء معالجة ملف الـ PDF.");
     } finally {
       setIsProcessingPdf(false);
       setPdfProgressText("");
@@ -275,16 +262,17 @@ export default function ForumEditor({
     <button
       type="button"
       onMouseDown={(e) => { e.preventDefault(); onClick(); }} 
-      className="p-2 rounded-lg transition-all bg-transparent text-slate-600 hover:bg-slate-200 hover:text-indigo-600"
+      className="p-1.5 sm:p-2 rounded-lg transition-all bg-transparent text-slate-600 hover:bg-slate-200 hover:text-indigo-600 shrink-0"
       title={title}
     >
-      <Icon className="w-4.5 h-4.5" />
+      <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
     </button>
   );
 
   return (
-    // 🚀 تطبيق الـ Wrapper Structure: flex-col, min-h-[300px], overflow-visible
-    <div className="border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans relative flex flex-col min-h-[300px] overflow-visible" dir="rtl">
+    // 🚀 تطبيق الـ Wrapper Structure الدقيق: flex-col, overflow-visible
+    // مع الاعتماد على isCompact لتحديد الحد الأدنى للارتفاع
+    <div className={cn("w-full border border-slate-200 rounded-[1.5rem] bg-white shadow-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all font-sans flex flex-col overflow-visible", isCompact ? "min-h-[100px]" : "min-h-[300px]")} dir="rtl">
       
       {showWatermarkModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -317,93 +305,97 @@ export default function ForumEditor({
                       placeholder="أ. محمد (فيزياء)" 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all text-center"
                     />
-                    <p className="text-[10px] text-slate-400 mt-2 text-center font-bold">ستتم طباعتها بشكل شفاف ومائل في منتصف كل صفحة لضمان عدم تشويه المسائل.</p>
                   </div>
                 )}
               </div>
 
               <div className="flex gap-3 mt-8 pt-6 border-t border-slate-100">
                 <button onClick={handleCancelPdf} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all text-sm">
-                  إلغاء الأمر
+                  إلغاء
                 </button>
                 <button onClick={executePdfProcessing} className="flex-1 px-6 py-3 rounded-xl font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95 text-sm flex items-center justify-center gap-2">
-                  <Files className="w-4 h-4" /> ابدأ معالجة الملف
+                  <Files className="w-4 h-4" /> معالجة الملف
                 </button>
               </div>
            </div>
         </div>
       )}
 
-      {/* 🚀 إزالة sticky top-0 ووضع relative shrink-0 */}
+      {/* 🚀 Toolbar: shrink-0 (الارتفاع مستقل)، relative (إزالة sticky) */}
       <div className="bg-slate-50/95 backdrop-blur-md border-b border-slate-200 p-2 flex flex-wrap items-center gap-1 relative shrink-0 z-20 rounded-t-[1.5rem]">
         
-        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1">
           <ToolbarButton icon={Bold} onClick={() => execCommand('bold')} title="عريض" />
           <ToolbarButton icon={Italic} onClick={() => execCommand('italic')} title="مائل" />
-          <ToolbarButton icon={Underline} onClick={() => execCommand('underline')} title="تسطير" />
+          {!isCompact && <ToolbarButton icon={Underline} onClick={() => execCommand('underline')} title="تسطير" />}
         </div>
 
-        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
-          <ToolbarButton icon={Heading1} onClick={() => execCommand('formatBlock', 'H3')} title="عنوان كبير" />
-          <ToolbarButton icon={Heading2} onClick={() => execCommand('formatBlock', 'H4')} title="عنوان متوسط" />
-        </div>
+        {!isCompact && (
+          <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1 hidden sm:flex">
+            <ToolbarButton icon={Heading1} onClick={() => execCommand('formatBlock', 'H3')} title="عنوان كبير" />
+            <ToolbarButton icon={Heading2} onClick={() => execCommand('formatBlock', 'H4')} title="عنوان متوسط" />
+          </div>
+        )}
 
-        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1">
           <ToolbarButton icon={AlignRight} onClick={() => execCommand('justifyRight')} title="يمين" />
           <ToolbarButton icon={AlignCenter} onClick={() => execCommand('justifyCenter')} title="وسط" />
           <ToolbarButton icon={AlignLeft} onClick={() => execCommand('justifyLeft')} title="يسار" />
-          <ToolbarButton icon={AlignJustify} onClick={() => execCommand('justifyFull')} title="ضبط النص" />
         </div>
 
-        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1 relative">
-          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowColorPicker(!showColorPicker); setShowFontSize(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-2 rounded-lg ${showColorPicker ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="لون النص">
-            <Palette className="w-4.5 h-4.5" />
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1 relative">
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowColorPicker(!showColorPicker); setShowFontSize(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-1.5 sm:p-2 rounded-lg ${showColorPicker ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="لون النص">
+            <Palette className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </button>
           
           {showColorPicker && (
-            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex flex-wrap gap-2 z-50 w-48">
+            <div className="absolute top-full mt-2 right-0 sm:right-auto bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex flex-wrap gap-2 z-50 w-48">
               {['#000000', '#ef4444', '#f97316', '#84cc16', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'].map(color => (
                 <button key={color} onMouseDown={(e) => { e.preventDefault(); execCommand('foreColor', color); setShowColorPicker(false); }} className="w-8 h-8 rounded-full border border-slate-200 hover:scale-110 transition-transform" style={{ backgroundColor: color }} />
               ))}
             </div>
           )}
 
-          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowFontSize(!showFontSize); setShowColorPicker(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-2 rounded-lg ${showFontSize ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="حجم الخط">
-            <Type className="w-4.5 h-4.5" />
-          </button>
+          {!isCompact && (
+            <>
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowFontSize(!showFontSize); setShowColorPicker(false); setShowMathUI(false); setShowLinkInput(false); }} className={`p-1.5 sm:p-2 rounded-lg ${showFontSize ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`} title="حجم الخط">
+                <Type className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              </button>
 
-          {showFontSize && (
-            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-xl p-2 flex flex-col z-50 w-32">
-              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '2'); setShowFontSize(false); }} className="px-3 py-2 text-sm text-right hover:bg-slate-100 rounded">صغير</button>
-              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '3'); setShowFontSize(false); }} className="px-3 py-2 text-base text-right hover:bg-slate-100 rounded">عادي</button>
-              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '5'); setShowFontSize(false); }} className="px-3 py-2 text-lg font-semibold text-right hover:bg-slate-100 rounded">كبير</button>
-              <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '7'); setShowFontSize(false); }} className="px-3 py-2 text-2xl font-bold text-right hover:bg-slate-100 rounded">ضخم</button>
-            </div>
+              {showFontSize && (
+                <div className="absolute top-full mt-2 right-0 sm:right-auto bg-white border border-slate-200 shadow-xl rounded-xl p-2 flex flex-col z-50 w-32">
+                  <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '2'); setShowFontSize(false); }} className="px-3 py-2 text-sm text-right hover:bg-slate-100 rounded">صغير</button>
+                  <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '3'); setShowFontSize(false); }} className="px-3 py-2 text-base text-right hover:bg-slate-100 rounded">عادي</button>
+                  <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '5'); setShowFontSize(false); }} className="px-3 py-2 text-lg font-semibold text-right hover:bg-slate-100 rounded">كبير</button>
+                  <button onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '7'); setShowFontSize(false); }} className="px-3 py-2 text-2xl font-bold text-right hover:bg-slate-100 rounded">ضخم</button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1">
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1">
           <ToolbarButton icon={List} onClick={() => execCommand('insertUnorderedList')} title="قائمة نقطية" />
           <ToolbarButton icon={ListOrdered} onClick={() => execCommand('insertOrderedList')} title="قائمة رقمية" />
         </div>
 
-        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-2 ml-1 relative">
+        <div className="flex items-center gap-0.5 border-l border-slate-300 pl-1 sm:pl-2 ml-1 relative">
           <ToolbarButton icon={LinkIcon} onClick={() => { saveSelection(); setShowLinkInput(!showLinkInput); setShowMathUI(false); setShowColorPicker(false); setShowFontSize(false); }} title="إضافة رابط" />
-          <ToolbarButton icon={Table} onClick={insertTable} title="إدراج جدول" />
+          {!isCompact && <ToolbarButton icon={Table} onClick={insertTable} title="إدراج جدول" />}
           
-          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowMathUI(!showMathUI); setShowLinkInput(false); setShowColorPicker(false); setShowFontSize(false); }} className={`p-2 rounded-lg ${showMathUI ? 'bg-pink-100 text-pink-700' : 'text-slate-600 hover:bg-slate-200'}`} title="كتابة معادلات رياضية">
-            <Calculator className="w-4.5 h-4.5" />
+          <button type="button" onMouseDown={(e) => { e.preventDefault(); saveSelection(); setShowMathUI(!showMathUI); setShowLinkInput(false); setShowColorPicker(false); setShowFontSize(false); }} className={`p-1.5 sm:p-2 rounded-lg ${showMathUI ? 'bg-pink-100 text-pink-700' : 'text-slate-600 hover:bg-slate-200'}`} title="معادلات">
+            <Calculator className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
           </button>
 
           {showLinkInput && (
-             <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex gap-2 z-50 w-72">
+             <div className="absolute top-full mt-2 right-0 sm:right-auto bg-white border border-slate-200 shadow-xl rounded-xl p-3 flex gap-2 z-50 w-64 sm:w-72">
                 <input type="url" placeholder="https://..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); addLink(); } }} className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-500 font-bold text-left" dir="ltr" />
                 <button type="button" onMouseDown={(e) => { e.preventDefault(); addLink(); }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors">إدراج</button>
              </div>
           )}
 
           {showMathUI && (
-            <div className="absolute top-full mt-2 right-0 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 w-[350px] sm:w-[400px] animate-in fade-in zoom-in" dir="rtl">
+            <div className="absolute top-full mt-2 right-0 sm:-right-24 bg-white border border-slate-200 shadow-2xl rounded-3xl p-5 z-50 w-[300px] sm:w-[400px] animate-in fade-in zoom-in" dir="rtl">
               <div className="flex justify-between items-center mb-4 border-b pb-3">
                 <span className="font-black text-sm text-pink-600 flex items-center gap-2">
                   <Calculator className="w-5 h-5"/> إدراج معادلة (LaTeX)
@@ -413,16 +405,14 @@ export default function ForumEditor({
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">رموز سريعة:</p>
                   <div className="grid grid-cols-6 gap-2" dir="ltr">
                     {['½','¾','√','∛','x²','x³','π','∞','∑','∫','≠','≈'].map(sym => (
-                      <button key={sym} onMouseDown={(e) => { e.preventDefault(); insertMathSymbol(sym); }} className="p-2 border border-slate-200 rounded-xl hover:bg-pink-50 hover:border-pink-300 hover:text-pink-600 font-mono font-bold text-slate-600 transition-all shadow-sm">{sym}</button>
+                      <button key={sym} onMouseDown={(e) => { e.preventDefault(); insertMathSymbol(sym); }} className="p-2 border border-slate-200 rounded-xl hover:bg-pink-50 hover:border-pink-300 hover:text-pink-600 font-mono font-bold text-slate-600 transition-all shadow-sm flex items-center justify-center">{sym}</button>
                     ))}
                   </div>
                 </div>
 
                 <div className="border-t border-slate-100 pt-4">
-                   <label className="block text-xs font-black text-slate-500 mb-2">اكتب المعادلة بصيغة LaTeX:</label>
                    <textarea
                       value={latexInput}
                       onChange={(e) => setLatexInput(e.target.value)}
@@ -451,7 +441,7 @@ export default function ForumEditor({
                    }}
                    className="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black text-sm py-4 rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-lg shadow-pink-200 flex items-center justify-center gap-2"
                 >
-                   إدراج المعادلة في النص <Check className="w-4 h-4" />
+                   إدراج المعادلة <Check className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -461,7 +451,7 @@ export default function ForumEditor({
         <ToolbarButton icon={RemoveFormatting} onClick={() => execCommand('removeFormat')} title="إزالة التنسيق" />
 
         {canUploadImage && (
-          <div className="mr-auto flex flex-wrap items-center gap-2">
+          <div className="mr-auto flex items-center gap-1 sm:gap-2">
              <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={async(e) => { const file = e.target.files?.[0]; if(file) await uploadImageFile(file); if(fileInputRef.current) fileInputRef.current.value = ''; }} />
              
              <input type="file" accept="application/pdf" className="hidden" ref={pdfInputRef} onChange={(e) => { 
@@ -472,41 +462,43 @@ export default function ForumEditor({
                 }
              }} />
              
-             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); fileInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 font-bold text-sm border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50">
+             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); fileInputRef.current?.click(); }} className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50 shrink-0">
                <ImageIcon className="w-4 h-4 text-indigo-500" />
                <span className="hidden sm:inline">صورة</span>
              </button>
 
-             <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50" title="استخراج الصفحات من ملف PDF كصور">
-               <Files className="w-4 h-4 text-indigo-600" />
-               <span className="hidden sm:inline">إدراج من PDF</span>
-             </button>
+             {!isCompact && (
+               <button type="button" disabled={isUploading || isProcessingPdf} onMouseDown={(e) => { e.preventDefault(); saveSelection(); pdfInputRef.current?.click(); }} className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs sm:text-sm border border-indigo-100 hover:bg-indigo-100 transition-colors disabled:opacity-50 shrink-0" title="استخراج من PDF">
+                 <Files className="w-4 h-4 text-indigo-600" />
+                 <span className="hidden sm:inline">PDF</span>
+               </button>
+             )}
           </div>
         )}
       </div>
 
-      {/* 🚀 جعل الـ Container الداخلي flex-1 مع إزالة الإخفاء */}
-      <div className="relative flex-1 flex flex-col overflow-visible">
+      {/* 🚀 Editor Body: flex-1, overflow-y-auto (إزالة الخانق max-height) */}
+      <div className="relative flex-1 flex flex-col min-h-0 bg-transparent rounded-b-[1.5rem]">
         {(isUploading || isProcessingPdf) && (
           <div className="absolute inset-0 bg-white/70 backdrop-blur-[4px] flex items-center justify-center z-20 rounded-b-[1.5rem]">
              <div className="bg-white px-6 py-4 rounded-[2rem] shadow-xl border border-indigo-100 flex flex-col items-center justify-center gap-3 font-bold text-sm text-indigo-700 max-w-[80%] text-center">
                <Loader2 className="w-8 h-8 animate-spin text-indigo-500" /> 
-               <span>{isProcessingPdf ? pdfProgressText : 'جاري معالجة ورفع الصورة...'}</span>
+               <span>{isProcessingPdf ? pdfProgressText : 'جاري الرفع...'}</span>
              </div>
           </div>
         )}
         
-        {/* 🚀 إزالة الخنق وإعطاء flex-1 ليأخذ مساحته الطبيعية */}
+        {/* حقل الكتابة المرن الذي يأخذ المساحة المتبقية كاملة دون أن يتم قصه */}
         <div 
           ref={editorRef}
           contentEditable
           onInput={handleInput}
           onPaste={handlePaste}
           onBlur={saveSelection} 
-          className="flex-1 w-full min-h-[180px] lg:min-h-[280px] overflow-y-auto p-6 outline-none prose prose-slate max-w-none text-slate-800 leading-loose text-base rounded-b-[1.5rem]"
+          className={cn("flex-1 w-full overflow-y-auto p-4 sm:p-6 outline-none prose prose-sm sm:prose-base prose-slate max-w-none text-slate-800 leading-loose rounded-b-[1.5rem]", isCompact ? "min-h-[100px]" : "min-h-[180px] lg:min-h-[280px]")}
           data-placeholder={placeholder}
           dir="auto"
-          style={{ WebkitUserModify: 'read-write' } as any}
+          style={{ WebkitUserModify: 'read-write', maxHeight: 'none' } as any}
         />
       </div>
 
