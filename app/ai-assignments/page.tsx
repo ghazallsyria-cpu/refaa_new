@@ -21,7 +21,7 @@ interface ExtractedQuestion {
   content: string;
   type: string;
   points: number;
-  options?: string[] | any[]; 
+  options?: string[] | any[]; // 🚀 السماح لكلا النوعين لإسكات TypeScript
 }
 
 interface ExtractedAssignment {
@@ -155,7 +155,7 @@ export default function AIAssignmentsSandbox() {
 - "file": إذا كان السؤال يطلب من الطالب (الرسم، التصوير، أو إرفاق حل في ورقة خارجية)، فهذا يعني أن الطالب يجب أن يرفع ملفاً لحله.
 
 🛑 قواعد بناء الـ JSON:
-1. إذا كان هناك نص رئيسي يتبعه أسئلة (قطعة قراءة، رأس مسألة فيزيائية ضخمة)، ضعه كعنصر "section_header" مستقل.
+1. إذا كان هناك نص رئيسي يتبعه أسئلة، ضعه كعنصر "section_header" مستقل.
 2. الإجابة النموذجية: أضفها في نهاية نص السؤال حرفياً داخل أقواس بهذا الشكل: [الإجابة النموذجية: الحل].
 3. إذا كان النوع "file" أو "essay" أو "fill_in_blank"، اجعل مصفوفة الخيارات (options) فارغة [].
 
@@ -168,12 +168,6 @@ export default function AIAssignmentsSandbox() {
       "type": "multiple_choice",
       "points": 1,
       "options": ["$32^\\circ \\text{F}$", "$212^\\circ \\text{F}$"]
-    },
-    {
-      "content": "ارسم خطوط المجال المغناطيسي للمغناطيس الموضح بالصورة ثم ارفع صورة لحلك.",
-      "type": "file",
-      "points": 5,
-      "options": []
     }
   ]
 }`;
@@ -364,6 +358,7 @@ export default function AIAssignmentsSandbox() {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
       
       const formattedQuestions = result.questions.map((q, i) => {
+        // 🚀 جعل الخيارات من نوع any[] لكي لا تعترض لغة TypeScript
         let finalOptions: any[] = q.options || [];
         if (q.type === 'true_false' && finalOptions.length === 0) {
            finalOptions = [{ id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }];
@@ -382,25 +377,17 @@ export default function AIAssignmentsSandbox() {
         };
       });
 
-      // 🚀 The Ownership Patch: استخدام معرف المعلم (selectedTeacher) بوضوح لضمان الملكية
-      const payloadData = { 
-        title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات  ايهاب جمال غزال .', 
-        subject_id: selectedSubject, 
-        teacher_id: selectedTeacher, // 👈 هذه هي الإضافة السحرية لحل مشكلة ملكية الواجب
-        due_date: dueDate.toISOString(), 
-        status: assignmentStatus 
-      };
-
       const response = await fetch('/api/assignments/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          payload: payloadData,
-          assignmentId: null, 
-          questions: formattedQuestions, 
-          sectionIds: selectedSections, 
-          subjects: [], 
-          userId: selectedTeacher // تمرير الـ ID كصاحب العملية الأصلي
+          payload: { 
+            title: result.title || 'واجب تفاعلي ذكي', 
+            description: 'تم التوليد الذكي باستخدام خوارزميات الذكاء الاصطناعي.', 
+            subject_id: selectedSubject, 
+            due_date: dueDate.toISOString(), 
+            status: assignmentStatus 
+          },
+          assignmentId: null, questions: formattedQuestions, sectionIds: selectedSections, subjects: [], userId: selectedTeacher 
         }),
       });
 
@@ -450,7 +437,6 @@ export default function AIAssignmentsSandbox() {
 
       <div className="max-w-6xl mx-auto space-y-8 relative z-10">
         
-        {/* Header */}
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-[2rem] shadow-[0_0_30px_rgba(16,185,129,0.15)] mb-2 backdrop-blur-md">
             <Sparkles className="w-10 h-10" />
@@ -459,7 +445,6 @@ export default function AIAssignmentsSandbox() {
           <p className="text-base sm:text-lg text-slate-400 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
         </div>
 
-        {/* API Key Box */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2rem] shadow-xl border border-white/10 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-inner">
             <Key className="w-6 h-6 text-amber-400" />
@@ -471,7 +456,6 @@ export default function AIAssignmentsSandbox() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           
-          {/* Left Column: AI Tools */}
           <div className="space-y-6">
             <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 relative overflow-hidden">
               <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full"></div>
@@ -592,7 +576,6 @@ export default function AIAssignmentsSandbox() {
             </div>
           </div>
 
-          {/* Right Column: Results & Assignment */}
           <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 flex flex-col min-h-[500px] relative overflow-hidden">
             <h2 className="relative z-10 text-xl sm:text-2xl font-black mb-6 flex items-center gap-3 text-white"><FileText className="w-6 h-6 text-emerald-400" /> نتيجة الواجب والتعيين</h2>
             
@@ -658,7 +641,6 @@ export default function AIAssignmentsSandbox() {
                   <h3 className="text-lg sm:text-xl font-black text-emerald-400 mb-6 flex items-center gap-2"><UserCheck className="w-5 h-5" /> تعيين الواجب وإرساله</h3>
                   
                   <div className="space-y-5">
-                    {/* 🚀 خيار حالة الواجب الجديد (مسودة/منشور) */}
                     <div>
                       <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
