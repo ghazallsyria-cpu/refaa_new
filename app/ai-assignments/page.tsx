@@ -138,11 +138,12 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت العبقري المطور للتعامل مع العناوين الرئيسية (section_header) وإصلاح المعادلات تماماً
+  // 🚀 البرومبت الحديدي المطور لمعالجة مشاكل التنسيق الرياضي بدقة:
+  // تم إجبار الذكاء الاصطناعي على استخدام "الشرطة المزدوجة" كهروب داخل الـ JSON لضمان وصول أوامر KaTeX سليمة
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
 🛑 1. هيكلية الأسئلة المتسلسلة (Section Headers) - مهم جداً:
-إذا كان هناك أمر عام أو عنوان رئيسي يتبعه عدة أسئلة (مثل: "علل لما يأتي:"، "اقرأ القطعة التالية ثم أجب:"، أو "بناءً على الشكل المرفق:").
+إذا كان هناك أمر عام أو عنوان رئيسي يتبعه عدة أسئلة (مثل: "علل لما يأتي:"، أو "بناءً على الشكل المرفق:").
 يجب أن تضع هذا الأمر العام كعنصر مستقل في المصفوفة نوعه "section_header"، ثم تضع الأسئلة التي تتبعه كعناصر مستقلة تحته.
 مثال:
 {
@@ -158,12 +159,12 @@ export default function AIAssignmentsSandbox() {
   "options": []
 }
 
-🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
-- لكي تعمل المعادلات، يجب استخدام شرطتين مائلتين (\\\\) قبل أي أمر LaTeX (مثل الكسر، الجذر، الخ).
-  ✔️ صحيح للكسر: "\\\\frac{A}{B}"
-  ❌ خاطئ ويدمر النظام: "\\frac{A}{B}" أو "fracAB"
-- يجب وضع أي معادلة، رقم، أو رمز فيزيائي داخل علامة دولار واحدة فقط $. (مثال: "$2 \\\\times 10^{-6} \\\\text{T}$"). 
-- يُمنع استخدام علامتي دولار $$ نهائياً.
+🛑 2. قواعد الرياضيات والفيزياء (LaTeX) - حرج جداً لعمل النظام:
+- لكي تعمل المعادلات وتُقرأ بشكل صحيح بعد فك شفرة الـ JSON، يجب إضافة شرطتين مائلتين (\\\\) قبل أي أمر LaTeX يحتوي على رموز (مثل: \\\\frac, \\\\times, \\\\pi, \\\\mu).
+  ✔️ صحيح للكسر: "\\\\frac{\\\\mu_0 I}{2 \\\\pi d}"
+  ❌ خاطئ ويدمر النظام: "\\frac" أو "frac"
+- أي معادلة، رقم، أو رمز رياضي يجب أن يكون محاطاً بعلامتي دولار مزدوجة $$ للمعادلات الكبيرة، أو علامة دولار مفردة $ للمعادلات داخل سطر النص. (مثال للخيارات: "$$4\\\\pi \\\\times 10^{-5} \\\\text{T}$$").
+- لا تضع أبداً أي كلمات أو أحرف عربية داخل علامات الـ $ أو $$، ابقِ العربي خارجها تماماً.
 
 🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً في حقل "type"):
 - "multiple_choice": اختيار من متعدد.
@@ -171,7 +172,7 @@ export default function AIAssignmentsSandbox() {
 - "essay": سؤال مقالي.
 - "file": إذا كان السؤال يتطلب من الطالب أن (يرسم، يصور حله، أو يرفق ورقة عمل).
 
-أخرج الناتج ككود JSON فقط بهذا الهيكل:
+أخرج الناتج ككود JSON فقط، وتأكد من صحة بناء الـ JSON وأقواسه:
 {
   "title": "عنوان الواجب",
   "questions": [
@@ -259,7 +260,6 @@ export default function AIAssignmentsSandbox() {
     }
 
     parsedData.questions.forEach((q: any) => {
-      // التعامل مع الهيدر المستقل
       if (q.type === 'section_header' || (q.section_header && typeof q.section_header === 'string' && q.section_header !== lastHeader)) {
         normalizedQuestions.push({
           content: q.content || q.section_header,
@@ -268,7 +268,7 @@ export default function AIAssignmentsSandbox() {
           options: []
         });
         lastHeader = q.content || q.section_header;
-        if (q.type === 'section_header') return; // تخطي إكمال اللوب إذا كان العنصر هيدر فقط
+        if (q.type === 'section_header') return; 
       }
 
       let qType = q.type || 'essay';
@@ -387,7 +387,7 @@ export default function AIAssignmentsSandbox() {
 
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات ايهاب جمال غزال .', 
+        description: 'تم التوليد الذكي باستخدام خوارزميات الذكاء الاصطناعي.', 
         subject_id: selectedSubject, 
         teacher_id: selectedTeacher, 
         due_date: dueDate.toISOString(), 
@@ -428,7 +428,7 @@ export default function AIAssignmentsSandbox() {
   return (
     <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
       
-      {/* 🚀 الحماية القصوى لترتيب المعادلات الرياضية (RTL Isolation) */}
+      {/* 🚀 الحماية القصوى لترتيب المعادلات الرياضية (RTL Isolation) والحفاظ على الأسطر */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
@@ -442,9 +442,12 @@ export default function AIAssignmentsSandbox() {
         .katex-html {
           unicode-bidi: isolate-override !important;
         }
+        /* عرض البلوكات (المعادلات الكبيرة) بشكل صحيح ومستقل وتوسيطها */
         .katex-display { 
-          display: inline-block !important; 
-          margin: 0 !important; 
+          display: flex !important; 
+          justify-content: center !important;
+          margin: 1rem 0 !important; 
+          width: 100% !important;
         }
       `}} />
 
@@ -455,6 +458,7 @@ export default function AIAssignmentsSandbox() {
 
       <div className="max-w-6xl mx-auto space-y-8 relative z-10">
         
+        {/* Header */}
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-[2rem] shadow-[0_0_30px_rgba(16,185,129,0.15)] mb-2 backdrop-blur-md">
             <Sparkles className="w-10 h-10" />
@@ -463,6 +467,7 @@ export default function AIAssignmentsSandbox() {
           <p className="text-base sm:text-lg text-slate-400 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
         </div>
 
+        {/* API Key Box */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2rem] shadow-xl border border-white/10 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
           <div className="h-12 w-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-inner">
             <Key className="w-6 h-6 text-amber-400" />
@@ -624,8 +629,6 @@ export default function AIAssignmentsSandbox() {
                       const answerIndex = displayContent.indexOf('[الإجابة النموذجية');
                       if (answerIndex !== -1) displayContent = displayContent.substring(0, answerIndex).trim();
                       
-                      displayContent = displayContent.replace(/\$\$/g, '$');
-                      
                       return (
                         <li key={i} className="border-b border-white/5 pb-5 last:border-0 leading-loose">
                           <div className="flex gap-3 items-start">
@@ -640,10 +643,9 @@ export default function AIAssignmentsSandbox() {
                           {q.options && q.options.length > 0 && (
                             <div className="mt-4 ml-6 flex flex-wrap gap-2">
                               {q.options.map((opt, oIdx) => {
-                                const cleanOpt = String(opt).replace(/\$\$/g, '$');
                                 return (
-                                  <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center">
-                                     <Latex>{cleanOpt}</Latex>
+                                  <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center min-w-[60px] text-center">
+                                     <Latex>{String(opt)}</Latex>
                                   </span>
                                 );
                               })}
@@ -711,7 +713,7 @@ export default function AIAssignmentsSandbox() {
                   </div>
                   
                   <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-teal-500 text-[#090b14] font-black text-lg py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95 border border-emerald-400/50">
-                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب للمعلم
+                    {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب
                   </button>
                 </div>
               </div>
