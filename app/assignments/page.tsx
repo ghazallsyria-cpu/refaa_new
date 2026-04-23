@@ -192,7 +192,6 @@ export default function AssignmentsPage() {
     setIsModalOpen(true);
   };
 
-  // 🚀 شاشات التحميل والحماية الملكية
   if (!mounted || authLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
@@ -559,15 +558,16 @@ export default function AssignmentsPage() {
                         />
                       </div>
                     
-                      <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner">
+                      <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner flex flex-col min-h-[300px]">
                         <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">الوصف والتعليمات التفصيلية</label>
-                        <div className="bg-[#02040a]/40 p-2 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner">
-<ForumEditor
-  content={currentAssignment.description || ''}
-  setContent={(content: any) => setCurrentAssignment({...currentAssignment, description: content})}
-  canUploadImage={true}
-  placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)"
-/>
+                        {/* 🚀 إزالة الخنق عن المحرر وتركه يتمدد براحة تامة */}
+                        <div className="bg-[#02040a]/40 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner flex-1 flex flex-col overflow-visible">
+                          <ForumEditor
+                            content={currentAssignment.description || ''}
+                            setContent={(content: any) => setCurrentAssignment({...currentAssignment, description: content})}
+                            canUploadImage={true}
+                            placeholder="اكتب تعليمات الواجب (مثال: قم بحل المسألة المرفقة وصور الحل...)"
+                          />
                         </div>
                       </div>
 
