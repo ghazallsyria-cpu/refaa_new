@@ -21,8 +21,14 @@ export const metadata: Metadata = {
   description: "نظام إدارة مدرسي رقمي متكامل وعصري",
 };
 
+// 🚀 تم دمج خصائص حماية الـ iOS Safari ومنع التكبير العشوائي هنا
 export const viewport: Viewport = {
   themeColor: "#02040a", // أسود ليلي فخم
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  interactiveWidget: 'resizes-visual',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
