@@ -438,22 +438,22 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-2" />
                </div>
 
-               {/* 🚀 المكون المعتمد (ForumEditor) بدون خصائص غير معرفة لكي لا يغضب الـ TypeScript */}
-               <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
-                 <form onSubmit={handleSendReply} className="flex flex-col lg:flex-row items-end gap-2 lg:gap-3 p-3 lg:p-4">
-                    <div className="flex-1 w-full bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner overflow-hidden flex flex-col justify-center max-h-[140px] overflow-y-auto custom-scrollbar">
-                       {/* تم إزالة placeholder و minHeight للالتزام بالـ Props الأصلية */}
-                       <ForumEditor 
-                         content={replyContent} 
-                         setContent={setReplyContent} 
-                         canUploadImage={true} 
-                       />
-                    </div>
-                    <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-full lg:w-[54px] lg:h-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
-                      {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
-                    </button>
-                 </form>
-               </div>
+{/* 🚀 المكون المعتمد (ForumEditor) مع تصحيح أبعاد الـ Flexbox */}
+                <div className="absolute bottom-0 left-0 right-0 bg-[#0f1423]/95 backdrop-blur-2xl border-t border-white/5 pb-[env(safe-area-inset-bottom)] z-30">
+                  <form onSubmit={handleSendReply} className="flex flex-col lg:flex-row items-end gap-2 lg:gap-3 p-3 lg:p-4">
+                     {/* 🚀 تم إزالة max-h و overflow-y-auto التي كانت تضغط المحرر */}
+                     <div className="flex-1 w-full bg-[#02040a]/60 rounded-[1.5rem] border border-white/5 shadow-inner flex flex-col justify-center min-h-[100px]">
+                        <ForumEditor 
+                          content={replyContent} 
+                          setContent={setReplyContent} 
+                          canUploadImage={true} 
+                        />
+                     </div>
+                     <button type="submit" disabled={isReplying || !replyContent.replace(/<[^>]*>?/gm, '').trim()} className={`h-[50px] w-full lg:w-[54px] lg:h-[54px] rounded-[1.2rem] bg-gradient-to-br from-${activeThread.type === 'group' ? 'indigo' : 'emerald'}-600 to-${activeThread.type === 'group' ? 'blue' : 'teal'}-600 text-white flex items-center justify-center shrink-0 hover:opacity-90 disabled:opacity-50 transition-all shadow-[0_0_15px_currentColor] border border-white/20 active:scale-95 mb-1`}>
+                       {isReplying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -ml-1 rtl:ml-0 rtl:-mr-1 rtl:rotate-180" />}
+                     </button>
+                  </form>
+                </div>
              </div>
            )}
         </div>
