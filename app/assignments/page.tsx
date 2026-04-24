@@ -1,7 +1,7 @@
 'use client';
 // @ts-nocheck
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon, Play, Loader2, ShieldAlert } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, FileText, Calendar, Clock, Link as LinkIcon, X, BookOpen, Users, AlertCircle, Eye, CheckCircle2, Filter, Layout, Image as ImageIcon, Play, Loader2, ShieldAlert, AlertTriangle } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion'; 
@@ -96,7 +96,6 @@ export default function AssignmentsPage() {
 
     const isEdit = !!currentAssignment.id;
 
-    // استخلاص معرف المعلم الأصلي بشكل قطعي
     let finalTeacherId = currentAssignment.teacher_id;
     if (finalTeacherId && typeof finalTeacherId === 'object') {
       finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
@@ -113,7 +112,6 @@ export default function AssignmentsPage() {
       return;
     }
 
-    // 🚀 نضمن تمرير teacher_id دائماً، لكي لا يستخدم الـ API معرف الأدمن
     const payload: any = {
       title: currentAssignment.title,
       description: currentAssignment.description,
@@ -121,7 +119,7 @@ export default function AssignmentsPage() {
       due_date: currentAssignment.due_date,
       file_url: currentAssignment.file_url,
       status: currentAssignment.status || 'draft',
-      teacher_id: finalTeacherId // ضروري لحماية السجل
+      teacher_id: finalTeacherId 
     };
 
     setIsSubmitting(true);
@@ -326,175 +324,238 @@ export default function AssignmentsPage() {
                {statusFilter === 'draft' ? 'لا يوجد مسودات مسجلة حالياً.' : 'قم بإضافة واجبات جديدة للطلاب للبدء.'}
             </p>
           </div>
-        ) : (
-          <div className={currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" : "flex flex-col gap-5 sm:gap-6"}>
+        ) : currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management' ? (
+          
+          /* 👨‍🏫 واجهة المعلم والإدارة (كما هي تماماً) */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {displayedAssignments.map((assignment, index) => {
+              const pendingGradesCount = (assignment.submission_count || 0) - (assignment.graded_count || 0);
+              const needsTeacherGrading = pendingGradesCount > 0;
+              const overdue = isOverdue(assignment.due_date!);
+              const dueDateObj = new Date(assignment.due_date!);
               
-              if (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') {
-                const pendingGradesCount = (assignment.submission_count || 0) - (assignment.graded_count || 0);
-                const needsTeacherGrading = pendingGradesCount > 0;
-                const overdue = isOverdue(assignment.due_date!);
-                const dueDateObj = new Date(assignment.due_date!);
+              let checkTeacherId = assignment.teacher_id;
+              if (checkTeacherId && typeof checkTeacherId === 'object') checkTeacherId = (checkTeacherId as any).id || (checkTeacherId as any).auth_id;
+              const canEdit = currentRole === 'admin' || currentRole === 'management' || checkTeacherId === user?.id;
+
+              return (
+                <div key={assignment.id} className="group glass-panel rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 hover:border-indigo-500/40 hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.3)] transition-all overflow-hidden flex flex-col bg-[#0f1423]/40 hover:bg-[#0f1423]/80">
+                  <div className="p-6 sm:p-8 flex-1 relative">
+                    <div className="flex items-start justify-between mb-6 sm:mb-8 gap-2 relative z-10">
+                      <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border whitespace-nowrap shadow-inner ${getStatusColor(assignment.status)}`}>
+                        {getStatusLabel(assignment.status)}
+                      </div>
+
+                      {needsTeacherGrading && (
+                        <div className="flex-1 flex justify-end">
+                          <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black border shadow-inner bg-amber-500/20 text-amber-400 border-amber-500/30 flex items-center gap-1 sm:gap-1.5 animate-pulse">
+                            <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <span>{pendingGradesCount} للتقييم</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-1.5 sm:gap-2 relative z-10">
+                        <Link 
+                           href={`/assignments/${assignment.id}`}
+                           className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/20 rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95"
+                           title="عرض التفاصيل"
+                        >
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </Link>
+                        {canEdit && (
+                          <button 
+                            onClick={() => openFullEditModal(assignment)}
+                            className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/20 rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95"
+                            title="تعديل الواجب بالكامل"
+                          >
+                            <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button 
+                            onClick={() => setAssignmentToDelete(assignment.id)}
+                            className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95"
+                            title="حذف الواجب"
+                          >
+                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4 group-hover:text-indigo-400 transition-colors tracking-tight leading-tight line-clamp-2 drop-shadow-sm relative z-10">
+                      {assignment.title}
+                    </h3>
+                    
+                    <p className="text-slate-400 font-bold line-clamp-2 mb-6 sm:mb-8 text-xs sm:text-sm leading-relaxed relative z-10">
+                      يرجى فتح الواجب لرؤية التعليمات التفصيلية للحل والتقييم...
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 relative z-10">
+                      <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-300 bg-[#02040a]/60 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner group-hover:border-indigo-500/20 transition-colors">
+                        <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20"><BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400" /></div>
+                        <span className="truncate">{assignment.subject_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-300 bg-[#02040a]/60 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner group-hover:border-emerald-500/20 transition-colors">
+                        <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/20"><Users className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" /></div>
+                        <span>{assignment.submission_count || 0} تسليم</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`px-6 sm:px-8 py-4 sm:py-5 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors ${overdue && assignment.status === 'published' ? 'bg-rose-950/40' : 'bg-[#02040a]/40 group-hover:bg-[#02040a]/80'}`}>
+                    <div className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black ${overdue && assignment.status === 'published' ? 'text-rose-400 drop-shadow-sm' : 'text-slate-400'}`}>
+                      <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto relative z-10">
+                      {assignment.file_url && (
+                        <a 
+                          href={assignment.file_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="h-9 sm:h-11 px-3 sm:px-4 rounded-lg sm:rounded-xl bg-[#0f1423] text-[10px] sm:text-xs font-black text-indigo-400 shadow-inner border border-indigo-500/20 hover:bg-indigo-500/20 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          <span>المرفق</span>
+                        </a>
+                      )}
+                      <Link 
+                        href={`/assignments/${assignment.id}`}
+                        className="h-9 sm:h-11 px-4 sm:px-6 rounded-lg sm:rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 text-xs sm:text-sm font-black shadow-[0_0_15px_rgba(79,70,229,0.4)] border border-indigo-400/50 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                      >
+                        <span>النتائج</span>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          
+          /* 👨‍🎓 واجهة الطالب المحسنة (المجمعة حسب المادة) */
+          <div className="space-y-10 sm:space-y-16 relative z-10">
+            {(() => {
+              // 1. تجميع الواجبات حسب المادة
+              const assignmentsBySubject = displayedAssignments.reduce((acc, curr) => {
+                const subjectName = curr.subject_name || 'مواد عامة';
+                if (!acc[subjectName]) acc[subjectName] = [];
+                acc[subjectName].push(curr);
+                return acc;
+              }, {} as Record<string, typeof displayedAssignments>);
+
+              // 2. رسم كل مادة على حدة
+              return Object.entries(assignmentsBySubject).map(([subject, assigns]) => {
                 
-                let checkTeacherId = assignment.teacher_id;
-                if (checkTeacherId && typeof checkTeacherId === 'object') checkTeacherId = (checkTeacherId as any).id || (checkTeacherId as any).auth_id;
-                const canEdit = currentRole === 'admin' || currentRole === 'management' || checkTeacherId === user?.id;
+                // 3. فرز الواجبات داخل المادة (نشط -> متأخر -> منتهي)
+                const sortedAssigns = [...assigns].sort((a, b) => {
+                  const getRank = (assign: any) => {
+                    const status = String((studentSubmissions[assign.id] as any)?.status || '');
+                    const isDone = ['submitted', 'graded'].includes(status);
+                    const overdue = isOverdue(assign.due_date!);
+                    if (isDone) return 3; // أدنى أولوية
+                    if (overdue) return 2; // أولوية متوسطة
+                    return 1; // أعلى أولوية (نشط)
+                  };
+                  return getRank(a) - getRank(b);
+                });
 
                 return (
-                  <div key={assignment.id} className="group glass-panel rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 hover:border-indigo-500/40 hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.3)] transition-all overflow-hidden flex flex-col bg-[#0f1423]/40 hover:bg-[#0f1423]/80">
-                    <div className="p-6 sm:p-8 flex-1 relative">
-                      <div className="flex items-start justify-between mb-6 sm:mb-8 gap-2 relative z-10">
-                        <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border whitespace-nowrap shadow-inner ${getStatusColor(assignment.status)}`}>
-                          {getStatusLabel(assignment.status)}
+                  <div key={subject} className="relative">
+                    {/* ترويسة المادة الفخمة */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8 border-b border-white/5 pb-4 sm:pb-6 relative z-10">
+                      <div className="flex items-center gap-3 sm:gap-5">
+                        <div className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.25rem] bg-gradient-to-br from-indigo-500/20 to-blue-600/20 border border-indigo-500/30 shadow-[0_0_25px_rgba(99,102,241,0.2)] shrink-0">
+                          <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-400 drop-shadow-md" />
                         </div>
+                        <div>
+                          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-sm">{subject}</h2>
+                          <p className="text-indigo-300/80 font-bold text-xs sm:text-sm mt-1">المهام والواجبات المرتبطة بهذه المادة</p>
+                        </div>
+                      </div>
+                      <div className="px-4 py-2 rounded-xl bg-[#02040a]/60 border border-white/5 font-black text-sm text-slate-300 shadow-inner inline-flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-slate-500" />
+                        {assigns.length} واجبات
+                      </div>
+                    </div>
 
-                        {needsTeacherGrading && (
-                          <div className="flex-1 flex justify-end">
-                            <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black border shadow-inner bg-amber-500/20 text-amber-400 border-amber-500/30 flex items-center gap-1 sm:gap-1.5 animate-pulse">
-                              <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                              <span>{pendingGradesCount} للتقييم</span>
+                    {/* شبكة الواجبات المرتبطة بالمادة */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 relative z-10">
+                      {sortedAssigns.map(assignment => {
+                        const statusStr = String((studentSubmissions[assignment.id] as any)?.status || '');
+                        const isStudentDone = ['submitted', 'graded'].includes(statusStr);
+                        const isGraded = statusStr === 'graded';
+                        const overdue = isOverdue(assignment.due_date!);
+                        const dueDateObj = new Date(assignment.due_date!);
+
+                        // تحديد ثيم البطاقة بناءً على حالتها
+                        let cardTheme = 'border-indigo-500/30 hover:border-indigo-400 bg-indigo-950/20 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)]';
+                        let iconTheme = 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40';
+                        let glowTheme = 'bg-indigo-500';
+                        let statusBadge = { text: 'مطلوب حله', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' };
+
+                        if (isStudentDone) {
+                          cardTheme = 'border-emerald-500/30 hover:border-emerald-400 bg-emerald-950/10 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] opacity-90 hover:opacity-100';
+                          iconTheme = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+                          glowTheme = 'bg-emerald-500';
+                          statusBadge = { text: isGraded ? 'تم التقييم' : 'تم التسليم', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
+                        } else if (overdue) {
+                          cardTheme = 'border-rose-500/30 hover:border-rose-400 bg-rose-950/10 hover:shadow-[0_0_30px_rgba(244,63,94,0.15)]';
+                          iconTheme = 'bg-rose-500/20 text-rose-400 border-rose-500/40';
+                          glowTheme = 'bg-rose-500';
+                          statusBadge = { text: 'متأخر', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30' };
+                        }
+
+                        return (
+                          <div key={assignment.id} className={`glass-panel rounded-[2rem] p-6 sm:p-8 border transition-all relative overflow-hidden group flex flex-col h-full ${cardTheme}`}>
+                            <div className={`absolute top-0 right-0 w-32 h-full opacity-0 group-hover:opacity-10 pointer-events-none transition-all duration-700 blur-3xl ${glowTheme}`}></div>
+                            
+                            <div className="flex-1">
+                              <div className="flex items-start justify-between gap-4 mb-5 relative z-10">
+                                 <div className={`p-3.5 sm:p-4 rounded-2xl shrink-0 border shadow-inner ${iconTheme}`}>
+                                   {isStudentDone ? <CheckCircle2 className="w-6 h-6 sm:w-7 sm:h-7 drop-shadow-sm" /> : overdue ? <AlertTriangle className="w-6 h-6 sm:w-7 sm:h-7 drop-shadow-sm" /> : <FileText className="w-6 h-6 sm:w-7 sm:h-7 drop-shadow-sm" />}
+                                 </div>
+                                 <div className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black border shadow-inner ${statusBadge.color}`}>
+                                   {statusBadge.text}
+                                 </div>
+                              </div>
+                              
+                              <div className="relative z-10 mb-6">
+                                <h3 className="text-lg sm:text-xl font-black text-white mb-3 leading-tight drop-shadow-sm line-clamp-2">{assignment.title}</h3>
+                                <div className="flex flex-wrap items-center gap-3">
+                                   <span className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold bg-[#02040a]/40 px-3 py-1.5 rounded-lg border border-white/5 shadow-inner ${overdue && !isStudentDone ? 'text-rose-400' : 'text-slate-400'}`}>
+                                     <Clock className="w-4 h-4"/> 
+                                     <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+                                   </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-auto pt-5 border-t border-white/5 relative z-10">
+                              <Link href={`/assignments/${assignment.id}`} className="block w-full">
+                                <button className={`w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl text-sm font-black shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                                  isStudentDone 
+                                    ? 'bg-[#02040a]/60 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 shadow-inner' 
+                                    : overdue
+                                      ? 'bg-rose-600/20 border border-rose-500/50 text-rose-300 hover:bg-rose-600 hover:text-white'
+                                      : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:opacity-90 shadow-[0_0_15px_rgba(59,130,246,0.4)] border border-indigo-400/50'
+                                }`}>
+                                    {isStudentDone ? <Eye className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5" />}
+                                    {isStudentDone ? 'عرض النتيجة والإجابة' : 'البدء في الحل'}
+                                </button>
+                              </Link>
                             </div>
                           </div>
-                        )}
-                        
-                        <div className="flex gap-1.5 sm:gap-2 relative z-10">
-                          <Link 
-                             href={`/assignments/${assignment.id}`}
-                             className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/20 rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95"
-                             title="عرض التفاصيل"
-                          >
-                            <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
-                          </Link>
-                          {canEdit && (
-                            <button 
-                              onClick={() => openFullEditModal(assignment)}
-                              className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/20 rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95"
-                              title="تعديل الواجب بالكامل"
-                            >
-                              <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </button>
-                          )}
-                          {canEdit && (
-                            <button 
-                              onClick={() => setAssignmentToDelete(assignment.id)}
-                              className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/20 rounded-xl transition-all shadow-inner bg-[#02040a]/60 border border-white/5 active:scale-95"
-                              title="حذف الواجب"
-                            >
-                              <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4 group-hover:text-indigo-400 transition-colors tracking-tight leading-tight line-clamp-2 drop-shadow-sm relative z-10">
-                        {assignment.title}
-                      </h3>
-                      
-                      <p className="text-slate-400 font-bold line-clamp-2 mb-6 sm:mb-8 text-xs sm:text-sm leading-relaxed relative z-10">
-                        يرجى فتح الواجب لرؤية التعليمات التفصيلية للحل والتقييم...
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-3 sm:gap-4 relative z-10">
-                        <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-300 bg-[#02040a]/60 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner group-hover:border-indigo-500/20 transition-colors">
-                          <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0 border border-indigo-500/20"><BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400" /></div>
-                          <span className="truncate">{assignment.subject_name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-300 bg-[#02040a]/60 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner group-hover:border-emerald-500/20 transition-colors">
-                          <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/20"><Users className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" /></div>
-                          <span>{assignment.submission_count || 0} تسليم</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={`px-6 sm:px-8 py-4 sm:py-5 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors ${overdue && assignment.status === 'published' ? 'bg-rose-950/40' : 'bg-[#02040a]/40 group-hover:bg-[#02040a]/80'}`}>
-                      <div className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black ${overdue && assignment.status === 'published' ? 'text-rose-400 drop-shadow-sm' : 'text-slate-400'}`}>
-                        <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-                        <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto relative z-10">
-                        {assignment.file_url && (
-                          <a 
-                            href={assignment.file_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="h-9 sm:h-11 px-3 sm:px-4 rounded-lg sm:rounded-xl bg-[#0f1423] text-[10px] sm:text-xs font-black text-indigo-400 shadow-inner border border-indigo-500/20 hover:bg-indigo-500/20 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
-                          >
-                            <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            <span>المرفق</span>
-                          </a>
-                        )}
-                        <Link 
-                          href={`/assignments/${assignment.id}`}
-                          className="h-9 sm:h-11 px-4 sm:px-6 rounded-lg sm:rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 text-xs sm:text-sm font-black shadow-[0_0_15px_rgba(79,70,229,0.4)] border border-indigo-400/50 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
-                        >
-                          <span>النتائج</span>
-                        </Link>
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
-              } 
-              
-              // 👨‍🎓 واجهة الطالب
-              else {
-                const statusStr = String((studentSubmissions[assignment.id] as any)?.status || '');
-                const isStudentDone = ['submitted', 'graded'].includes(statusStr);
-                const overdue = isOverdue(assignment.due_date!);
-                const dueDateObj = new Date(assignment.due_date!);
-                
-                return (
-                  <div key={assignment.id} className="w-full glass-panel rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 border border-white/5 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-5 sm:gap-6 group hover:border-indigo-500/40 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)] transition-all relative overflow-hidden bg-[#0f1423]/40">
-                     <div className={`absolute top-0 right-0 w-24 sm:w-32 h-full opacity-10 pointer-events-none transition-all duration-700 blur-3xl ${isStudentDone ? 'bg-emerald-500 group-hover:scale-[2]' : overdue ? 'bg-rose-500 group-hover:scale-[2]' : 'bg-indigo-500 group-hover:scale-[2]'}`}></div>
-
-                     <div className="flex items-center gap-4 sm:gap-5 w-full md:w-auto relative z-10">
-                        <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl shrink-0 border transition-all shadow-inner ${
-                          isStudentDone 
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:bg-emerald-500 group-hover:text-slate-950' 
-                            : overdue
-                              ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 group-hover:bg-rose-500 group-hover:text-white'
-                              : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 group-hover:bg-indigo-600 group-hover:text-white'
-                        }`}>
-                          <FileText className="h-6 w-6 sm:h-8 sm:w-8 drop-shadow-sm" />
-                        </div>
-                        <div className="text-right min-w-0 pr-1">
-                          <h3 className="text-lg sm:text-xl font-black text-white mb-1.5 sm:mb-2 group-hover:text-indigo-400 transition-colors leading-tight line-clamp-1 drop-shadow-sm">{assignment.title}</h3>
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold text-slate-400">
-                            <span className="flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg border border-white/5 shadow-inner"><BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5"/> {assignment.subject_name}</span>
-                            <span className={`flex items-center gap-1 sm:gap-1.5 ${overdue && !isStudentDone ? 'text-rose-400 animate-pulse drop-shadow-sm' : ''}`}>
-                              <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5"/> 
-                              <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
-                            </span>
-                          </div>
-                        </div>
-                     </div>
-                     
-                     <div className="flex flex-col md:flex-row items-center gap-3 sm:gap-4 w-full md:w-auto justify-end border-t md:border-0 border-white/5 pt-4 md:pt-0 mt-2 md:mt-0 relative z-10">
-                        {isStudentDone ? (
-                          <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border shadow-inner w-full md:w-auto text-center ${statusStr === 'graded' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
-                            {statusStr === 'graded' ? 'تم التقييم' : 'قيد المراجعة'}
-                          </div>
-                        ) : (
-                          <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border shadow-inner w-full md:w-auto text-center ${overdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
-                            {overdue ? 'متأخر' : 'مطلوب حله'}
-                          </div>
-                        )}
-                        
-                        <Link href={`/assignments/${assignment.id}`} className="w-full md:w-auto">
-                          <button className={`w-full md:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black shadow-md transition-all flex items-center justify-center gap-1.5 sm:gap-2 active:scale-95 ${
-                            isStudentDone 
-                              ? 'bg-[#02040a]/80 border border-white/5 text-white hover:bg-emerald-500 hover:text-slate-950 hover:border-emerald-400 shadow-inner' 
-                              : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:opacity-90 shadow-[0_0_15px_rgba(59,130,246,0.4)] border border-indigo-400/50'
-                          }`}>
-                              {isStudentDone ? <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                              {isStudentDone ? 'عرض النتيجة' : 'فتح الواجب'}
-                          </button>
-                        </Link>
-                     </div>
-                  </div>
-                );
-              }
-            })}
+              });
+            })()}
           </div>
         )}
 
@@ -630,7 +691,7 @@ export default function AssignmentsPage() {
                             <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">المعلم المسؤول <span className="text-rose-500">*</span></label>
                             <select 
                               required={!currentAssignment.id}
-                              disabled={!!currentAssignment.id} // 🚀 تعطيل الحقل إذا كان الواجب موجوداً مسبقاً
+                              disabled={!!currentAssignment.id}
                               className={`block w-full rounded-xl sm:rounded-2xl border-0 py-3.5 sm:py-4 px-4 sm:px-5 text-white bg-[#02040a]/60 focus:bg-[#02040a] ring-1 ring-inset ring-white/5 focus:ring-2 focus:ring-indigo-500/50 text-xs sm:text-sm transition-all font-bold appearance-none shadow-inner [&>option]:bg-[#0f1423] ${!!currentAssignment.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                               value={currentAssignment.teacher_id || ''}
                               onChange={(e) => setCurrentAssignment({...currentAssignment, teacher_id: e.target.value})}
