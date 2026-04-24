@@ -5,8 +5,27 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-import 'katex/dist/katex.min.css';
-import Latex from 'react-latex-next';
+// 🚀 محرك تنسيق المعادلات والجداول للطالب (النسخة المضيئة Light Theme)
+const renderContentWithMath = (content: string) => {
+   if (!content) return { __html: '' };
+   let html = String(content)
+     .replace(/\\n/g, '<br/>')
+     .replace(/\\r\\n/g, '<br/>')
+     .replace(/\n/g, '<br/>')
+     .replace(/\\\$/g, '$'); 
+     
+   // تلوين المعادلات
+   html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
+       return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+   });
+
+   // تنسيق الجداول المستخرجة من الذكاء الاصطناعي
+   html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-200"');
+   html = html.replace(/<th/g, '<th class="bg-indigo-50 p-3 border border-slate-200 font-black text-indigo-900 text-sm"');
+   html = html.replace(/<td/g, '<td class="p-3 border border-slate-200 bg-white text-slate-700 font-bold"');
+   
+   return { __html: html };
+};
 
 interface AssignmentFormProps {
   questions: any[];
@@ -32,6 +51,49 @@ export default function AssignmentForm({
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // 🚀 حقن مكتبة KaTeX لمعالجة المعادلات بامتياز
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const renderMath = () => {
+        if ((window as any).renderMathInElement) {
+          (window as any).renderMathInElement(document.body, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        }
+      };
+
+      if (!document.getElementById('katex-css-form')) {
+        const link = document.createElement('link');
+        link.id = 'katex-css-form';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+        document.head.appendChild(link);
+      }
+
+      if (!document.getElementById('katex-js-form')) {
+        const script = document.createElement('script');
+        script.id = 'katex-js-form';
+        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+        script.onload = () => {
+          const autoRender = document.createElement('script');
+          autoRender.id = 'katex-auto-render-form';
+          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+          autoRender.onload = () => setTimeout(renderMath, 100);
+          document.head.appendChild(autoRender);
+        };
+        document.head.appendChild(script);
+      } else {
+        setTimeout(renderMath, 500);
+      }
+    }
+  }, [questions]);
+
   useEffect(() => {
     if (initialAnswers && Object.keys(initialAnswers).length > 0) {
       const timer = setTimeout(() => {
@@ -49,12 +111,6 @@ export default function AssignmentForm({
       return newAnswers;
     });
     if (errors[questionId]) setErrors(prev => { const n = {...prev}; delete n[questionId]; return n; });
-  };
-
-  const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
-    if (readOnly) return;
-    const current = (answers[questionId] as string[]) || [];
-    handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
   };
 
   const validate = () => {
@@ -80,10 +136,13 @@ export default function AssignmentForm({
     const ans = answers[q.id];
 
     if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'radio') {
+      const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
+          ? q.options 
+          : (q.type === 'true_false' ? ['صح', 'خطأ'] : []);
+
       return (
         <div className="space-y-3 mt-4">
-          {q.options?.map((opt: any, idx: number) => {
-            // 🚀 التوافق مع الكائنات والنصوص (Backward Compatibility)
+          {safeOptions.map((opt: any, idx: number) => {
             const optContent = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
             const optId = typeof opt === 'string' ? opt : (opt.id || optContent);
             const isSelected = ans === optId || ans === optContent;
@@ -94,9 +153,7 @@ export default function AssignmentForm({
                    {isSelected && <Circle className="h-2.5 w-2.5 fill-current" />}
                 </div>
                 <input type="radio" className="hidden" disabled={readOnly} checked={isSelected} onChange={() => handleAnswerChange(q.id, optId)} />
-                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                   <Latex>{optContent}</Latex>
-                </span>
+                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'} w-full block`} dangerouslySetInnerHTML={renderContentWithMath(optContent)} />
               </label>
             );
           })}
@@ -106,10 +163,11 @@ export default function AssignmentForm({
 
     if (q.type === 'checkbox' || q.type === 'multi_select') {
       const selectedArray = Array.isArray(ans) ? ans : [];
+      const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
+
       return (
         <div className="space-y-3 mt-4">
-          {q.options?.map((opt: any, idx: number) => {
-            // 🚀 استخلاص النص بشكل ذكي
+          {safeOptions.map((opt: any, idx: number) => {
             const optContent = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
             const optId = typeof opt === 'string' ? opt : (opt.id || optContent);
             const isSelected = selectedArray.includes(optId) || selectedArray.includes(optContent);
@@ -124,9 +182,7 @@ export default function AssignmentForm({
                    const newArr = isSelected ? selectedArray.filter((i: string) => i !== optId && i !== optContent) : [...selectedArray, optId];
                    handleAnswerChange(q.id, newArr);
                 }} />
-                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
-                   <Latex>{optContent}</Latex>
-                </span>
+                <span className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'} w-full block`} dangerouslySetInnerHTML={renderContentWithMath(optContent)} />
               </label>
             );
           })}
@@ -156,9 +212,7 @@ export default function AssignmentForm({
       try {
         const optContent = typeof q.options[0] === 'string' ? q.options[0] : (q.options[0].content || q.options[0].text);
         tableData = JSON.parse(optContent);
-      } catch (e) {
-        console.error("Failed to parse table data", e);
-      }
+      } catch (e) {}
     }
 
     if (q.type === 'data_table' && tableData) {
@@ -172,7 +226,7 @@ export default function AssignmentForm({
                 <tr className="bg-indigo-50">
                   {tableData.headers?.map((h: string, i: number) => (
                     <th key={i} className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center last:border-l-0">
-                      <Latex>{h}</Latex>
+                      <div dangerouslySetInnerHTML={renderContentWithMath(h)} />
                     </th>
                   ))}
                 </tr>
@@ -183,7 +237,7 @@ export default function AssignmentForm({
                     {row.map((cell: string, cIdx: number) => (
                       <td key={cIdx} className={`p-4 border-b border-l border-slate-200 align-middle text-center last:border-l-0 ${cIdx === 0 ? 'bg-slate-50 font-bold text-slate-700' : ''}`}>
                         {cIdx === 0 ? (
-                          <div className="prose max-w-none text-slate-700 font-bold text-center"><Latex>{cell}</Latex></div>
+                          <div className="prose max-w-none text-slate-700 font-bold text-center" dangerouslySetInnerHTML={renderContentWithMath(cell)} />
                         ) : (
                           <textarea 
                             disabled={readOnly} 
@@ -211,12 +265,10 @@ export default function AssignmentForm({
     }
 
     if (q.type === 'comparison') {
-        // 🚀 معالجة خيارات المقارنة بذكاء سواء كانت نص أو كائن
         const getOptValue = (opt: any, fallback: string) => {
           if (!opt) return fallback;
           return typeof opt === 'string' ? opt : (opt.content || opt.text || fallback);
         };
-
         const aspects = q.options?.slice(2)?.map((o: any) => getOptValue(o, '')) || [];
         const party1 = getOptValue(q.options?.[0], 'الطرف الأول');
         const party2 = getOptValue(q.options?.[1], 'الطرف الثاني');
@@ -229,15 +281,15 @@ export default function AssignmentForm({
                 <thead>
                   <tr className="bg-indigo-50">
                     <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
-                    <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3"><Latex>{party1}</Latex></th>
-                    <th className="p-4 border-b border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3"><Latex>{party2}</Latex></th>
+                    <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(party1)} /></th>
+                    <th className="p-4 border-b border-slate-200 font-black text-indigo-900 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(party2)} /></th>
                   </tr>
                 </thead>
                 <tbody>
                   {aspects.map((aspect: string, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 border-b border-l border-slate-200 font-bold text-slate-700 bg-slate-50 align-top leading-relaxed">
-                         <div className="prose max-w-none text-slate-700 font-bold"><Latex>{aspect}</Latex></div>
+                         <div className="prose max-w-none text-slate-700 font-bold" dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                       </td>
                       <td className="p-4 border-b border-l border-slate-200 align-top">
                          <textarea disabled={readOnly} rows={2} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} onChange={(e) => { const newAns = [...parsedAns]; if (!newAns[idx]) newAns[idx] = ['', '']; newAns[idx][0] = e.target.value; handleAnswerChange(q.id, newAns); }} className="w-full bg-transparent border-0 focus:ring-0 p-0 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-300" />
@@ -284,13 +336,9 @@ export default function AssignmentForm({
         if (isHeader) {
           return (
             <div key={q.id} className="pt-8 pb-2 border-b-2 border-indigo-100">
-               <div className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed text-right">
-                  <Latex>{questionText}</Latex>
-               </div>
+               <div className="prose max-w-none text-2xl font-black text-indigo-900 leading-relaxed text-right" dangerouslySetInnerHTML={renderContentWithMath(questionText)} />
                {showModelAnswer && modelAnswerText && (
-                 <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold">
-                   <Latex>{modelAnswerText}</Latex>
-                 </div>
+                 <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                )}
                {q.media_url && <img src={q.media_url} className="mt-4 max-h-64 rounded-xl border border-slate-200 shadow-sm" alt="توضيح" />}
             </div>
@@ -305,16 +353,12 @@ export default function AssignmentForm({
                 </div>
                 <div className="flex-1 pt-2 text-right">
                    <div className="flex items-start gap-1">
-                     <div className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed w-full">
-                        <Latex>{questionText}</Latex>
-                     </div>
+                     <div className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed w-full" dangerouslySetInnerHTML={renderContentWithMath(questionText)} />
                      {q.is_required && <span className="text-rose-500 text-xl font-black mt-1 shrink-0">*</span>}
                    </div>
                    
                    {showModelAnswer && modelAnswerText && (
-                     <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold">
-                       <Latex>{modelAnswerText}</Latex>
-                     </div>
+                     <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                    )}
 
                    {q.media_url && <img src={q.media_url} className="mt-4 max-h-72 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
