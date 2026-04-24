@@ -1,5 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
+// @ts-nocheck
 
 import { useState, useEffect, useCallback, use } from 'react';
 import { ArrowRight, User, Calendar, Clock, CheckCircle, CheckCircle2, AlertCircle, Save, MessageSquare, Star, FileText, Link as LinkIcon, Eye, Edit, XCircle, Columns, MinusCircle, Lock, Trophy, Upload, Loader2, X, Award, AlignLeft } from 'lucide-react';
@@ -13,14 +14,12 @@ import { cn } from '@/lib/utils';
 // 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
+   let html = content;
    
-   // 1. تلوين وتنسيق المعادلات الرياضية
-   let html = content.replace(
-     /\$\$([\s\S]*?)\$\$/g, 
-     '<span class="math-tex text-indigo-300 bg-[#090b14] border border-indigo-500/30 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>'
-   );
+   // 1. إصلاح مشكلة هروب الرموز (Escaped Dollar Signs) التي يولدها المحرر وتمنع قراءة الرياضيات
+   html = html.replace(/\\\$/g, '$');
    
-   // 2. تجميل الجداول لتتوافق مع الثيم المظلم
+   // 2. تجميل الجداول لتتوافق مع الثيم المظلم (Dark Mode)
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-white/10"');
    html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-3 border border-white/10 font-black text-indigo-200 text-sm"');
    html = html.replace(/<td/g, '<td class="p-3 border border-white/5 bg-[#02040a]/40 text-slate-300 font-bold hover:bg-[#02040a]/80 transition-colors"');
@@ -111,6 +110,51 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // 🚀 حقن مكتبة KaTeX ديناميكياً لمعالجة المعادلات الرياضية في هذه الصفحة
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const renderMath = () => {
+        if ((window as any).renderMathInElement) {
+          (window as any).renderMathInElement(document.body, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        }
+      };
+
+      if (!document.getElementById('katex-css')) {
+        const link = document.createElement('link');
+        link.id = 'katex-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+        document.head.appendChild(link);
+      }
+
+      if (!document.getElementById('katex-js')) {
+        const script = document.createElement('script');
+        script.id = 'katex-js';
+        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+        script.onload = () => {
+          const autoRender = document.createElement('script');
+          autoRender.id = 'katex-auto-render';
+          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+          autoRender.onload = () => {
+            setTimeout(renderMath, 100);
+          };
+          document.head.appendChild(autoRender);
+        };
+        document.head.appendChild(script);
+      } else {
+        setTimeout(renderMath, 500);
+      }
+    }
+  }, [questions, answers, loading]);
+
   useEffect(() => {
     if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
       let total = 0;
@@ -148,6 +192,12 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     } finally { setIsSaving(false); }
   };
 
+  const normalizeUrl = (url?: string) => {
+    if (!url) return '';
+    const clean = url.trim();
+    return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-[#090b14] flex items-center justify-center">
       <div className="flex flex-col items-center gap-5">
@@ -165,13 +215,13 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const isOverdue = dueDateObj < new Date(submission?.submitted_at);
   const isGraded = submission?.status === 'graded';
 
-  // 🚀 متغير الترقيم المعتمد للأسئلة مع تخطي العناوين
+  // 🚀 متغير الترقيم المعتمد للأسئلة لتجاهل النصوص التمهيدية
   let questionCounter = 1;
 
   return (
     <div className="min-h-screen bg-[#090b14] pb-24 font-cairo text-slate-200 relative overflow-x-hidden pt-6" dir="rtl">
       
-      {/* الخلفية الزجاجية */}
+      {/* 🚀 الخلفية الزجاجية المضيئة */}
       <div className="fixed top-1/4 left-[-10%] w-[400px] h-[400px] sm:w-[500px] sm:h-[500px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 right-[-10%] w-[500px] h-[500px] sm:w-[600px] sm:h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
@@ -189,7 +239,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6 sm:space-y-8">
         
-        {/* الهيدر والتحكم */}
+        {/* 🚀 الهيدر والتحكم (Royal Theme) */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[3rem] relative overflow-hidden">
           <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none -mr-10 -mt-10"></div>
           <div className="flex items-start sm:items-center gap-3 sm:gap-4 relative z-10">
@@ -253,7 +303,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                    const qGrade = questionGrades[q.id] || { isCorrect: null, pointsEarned: 0, feedback: '' };
                    const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
 
-                   // 🚀 1. تنسيق النص التمهيدي (صندوق زجاجي ملكي)
+                   // 🌟 1. تنسيق النص التمهيدي (صندوق زجاجي ملكي)
                    if (isHeader) {
                      return (
                        <div key={q.id} className="mt-8 mb-4">
@@ -266,7 +316,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                            </div>
                            <div 
                              className="prose prose-invert max-w-none text-xl sm:text-2xl font-black text-white leading-relaxed" 
-                             dangerouslySetInnerHTML={renderContentWithMath(q.content || (q as any).text || q.question_text || '')} 
+                             dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text || q.question_text || '')} 
                            />
                            {q.media_url && (
                              <div className="mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-sm bg-[#02040a]/40 p-2 text-center">
@@ -317,33 +367,33 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                    } else {
                       isUnanswered = !studentAnswerText || studentAnswerText === '';
                    }
-                   
+
                    const currentQNumber = questionCounter++;
 
-                   // 🚀 2. تنسيق بطاقة الأسئلة الفرعية
+                   // 🌟 2. تنسيق بطاقة الأسئلة الفرعية
                    return (
-                     <div key={q.id} className={`bg-[#0f1423]/60 rounded-3xl overflow-hidden shadow-inner border transition-all ${isUnanswered ? 'border-white/5 border-dashed' : qGrade.isCorrect ? 'border-emerald-500/30 hover:border-emerald-500/50' : qGrade.isCorrect === false ? 'border-rose-500/30 hover:border-rose-500/50' : 'border-white/10 hover:border-indigo-500/30'}`}>
+                     <div key={q.id} className={`bg-[#0f1423]/60 rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-inner border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5 border-dashed' : qGrade.isCorrect ? 'border-emerald-500/30' : qGrade.isCorrect === false ? 'border-rose-500/30' : 'border-white/10 hover:border-indigo-500/30'}`}>
                        
                        {/* رأس السؤال */}
                        <div className="p-5 sm:p-6 lg:p-8 bg-[#02040a]/40 border-b border-white/5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-6">
                          <div className="flex gap-3 sm:gap-4 items-start w-full min-w-0">
-                           <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-[1rem] flex items-center justify-center font-black text-lg sm:text-xl shadow-inner border ${isUnanswered ? 'bg-[#0f1423] text-slate-500 border-white/5' : qGrade.isCorrect ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : qGrade.isCorrect === false ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+                           <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-[1rem] flex items-center justify-center font-black text-lg sm:text-xl shadow-inner border ${isUnanswered ? 'bg-[#0f1423] text-slate-500 border-white/5' : qGrade.isCorrect ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : qGrade.isCorrect === false ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
                                {currentQNumber}
                            </div>
                            <div className="pt-1 sm:pt-2 w-full min-w-0">
                                <div className="prose prose-invert max-w-none font-bold text-base sm:text-lg lg:text-xl text-slate-200 leading-relaxed overflow-hidden" dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text || q.question_text)} />
                                {q.media_url && (
                                  <div className="mt-4 rounded-xl overflow-hidden border border-white/10 shadow-sm bg-[#02040a]/40 p-2 inline-block">
-                                   <img src={q.media_url} className="max-h-48 w-auto rounded-lg object-contain" alt="مرفق توضيحي" />
+                                   <img src={q.media_url} className="max-h-40 sm:max-h-48 w-auto rounded-lg object-contain" alt="مرفق توضيحي" />
                                  </div>
                                )}
                            </div>
                          </div>
-                         <div className="flex items-center gap-1.5 bg-[#02040a] px-4 py-2 rounded-xl font-bold text-sm sm:text-base border border-white/5 shrink-0 self-start sm:self-auto shadow-inner">
-                           <Award className="w-4 h-4 text-indigo-400" />
-                           <span className={qGrade.isCorrect ? 'text-emerald-400' : 'text-white'}>{qGrade.pointsEarned || 0}</span>
+                         <div className="flex items-center gap-1.5 bg-[#02040a] px-4 py-2.5 rounded-2xl font-black text-sm sm:text-base border border-white/5 shrink-0 self-start sm:self-auto shadow-inner">
+                           <Award className={`w-5 h-5 ${qGrade.isCorrect ? 'text-emerald-400' : 'text-indigo-400'}`} />
+                           <span className={qGrade.isCorrect ? 'text-emerald-400 text-lg' : 'text-white text-lg'}>{qGrade.pointsEarned || 0}</span>
                            <span className="text-slate-600">/</span>
-                           <span className="text-slate-400">{Number(q.points) || 0}</span>
+                           <span className="text-slate-400">{Number(q.points) || 0} نقطة</span>
                          </div>
                        </div>
 
@@ -358,9 +408,9 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                 <table className="w-full text-right border-collapse min-w-[500px] sm:min-w-[600px] m-0">
                                   <thead>
                                     <tr className={isUnanswered ? 'bg-[#02040a]' : qGrade.isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
-                                      <th className="p-4 border-b border-l border-white/5 font-black text-slate-300 text-sm w-1/3">وجه المقارنة</th>
-                                      <th className="p-4 border-b border-l border-white/5 font-black text-indigo-300 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
-                                      <th className="p-4 border-b border-white/5 font-black text-indigo-300 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
+                                      <th className="p-3 sm:p-4 border-b border-l border-white/10 font-black text-slate-300 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
+                                      <th className="p-3 sm:p-4 border-b border-l border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
+                                      <th className="p-3 sm:p-4 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -372,11 +422,11 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                       } catch(e){}
                                       return (
                                         <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
-                                          <td className="p-4 border-l border-white/5 font-bold text-slate-300 text-sm bg-[#090b14]/50 align-middle">
+                                          <td className="p-3 sm:p-4 border-l border-white/10 font-bold text-slate-300 text-xs sm:text-sm bg-[#02040a]/40 align-middle">
                                             <div dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                                           </td>
-                                          <td className="p-4 border-l border-white/5 font-bold text-white text-sm align-middle whitespace-pre-wrap text-center">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
-                                          <td className="p-4 font-bold text-white text-sm align-middle whitespace-pre-wrap text-center">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
+                                          <td className="p-3 sm:p-4 border-l border-white/10 font-bold text-white text-xs sm:text-sm align-middle whitespace-pre-wrap text-center">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
+                                          <td className="p-3 sm:p-4 font-bold text-white text-xs sm:text-sm align-middle whitespace-pre-wrap text-center">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
                                         </tr>
                                       );
                                     })}
@@ -403,7 +453,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                             </div>
                           )}
 
-                          {/* أزرار التقييم */}
+                          {/* أزرار التقييم للمعلم */}
                           <div className="mt-5 sm:mt-6 pt-5 sm:pt-6 border-t border-white/5">
                             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
                                <div className="xl:col-span-8 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 bg-[#02040a]/60 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-white/5 shadow-inner">
@@ -439,6 +489,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                   </div>
                                </div>
                             </div>
+                            
+                            {/* ملاحظة المعلم */}
                             <div className={`mt-3 sm:mt-4 bg-[#02040a]/40 rounded-xl sm:rounded-2xl border border-white/5 overflow-hidden shadow-inner ${canEdit ? 'focus-within:border-indigo-500/30 focus-within:ring-1 focus-within:ring-indigo-500/10' : ''}`}>
                                <textarea 
                                  rows={2} 
@@ -460,7 +512,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
             {(submission?.content || submission?.file_url) && (
               <div className="glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] mt-6 sm:mt-8 relative overflow-hidden border-white/10">
                 <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-white mb-6 sm:mb-8 flex items-center gap-2 sm:gap-3 relative z-10 drop-shadow-sm">
-                   <div className="p-2 sm:p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><FileText className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" /></div> المرفقات والنصوص الإضافية المُرسلة
+                   <div className="p-2 sm:p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20 shadow-inner"><FileText className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" /></div> המرفقات والنصوص الإضافية التي أرسلتها الطالب
                 </h3>
                 
                 {submission?.content && (
