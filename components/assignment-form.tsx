@@ -5,7 +5,7 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-// 🚀 محرك تنسيق المعادلات والجداول للطالب (النسخة المضيئة Light Theme)
+// 🚀 محرك تنسيق المعادلات (تم التخلص من الصناديق البيضاء المزعجة، دمج سلس)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    let html = String(content)
@@ -14,12 +14,12 @@ const renderContentWithMath = (content: string) => {
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$'); 
      
-   // تلوين المعادلات
+   // 🚀 تلوين المعادلات بصورة متناغمة جداً مع النص بدون خلفيات
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
-       return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+       return `<span class="math-tex text-indigo-400 mx-1 inline-block max-w-full break-words" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // تنسيق الجداول المستخرجة من الذكاء الاصطناعي
+   // تنسيق الجداول المستخرجة
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-200"');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-3 border border-slate-200 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-3 border border-slate-200 bg-white text-slate-700 font-bold"');
@@ -51,7 +51,7 @@ export default function AssignmentForm({
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // 🚀 حقن مكتبة KaTeX لمعالجة المعادلات بامتياز
+  // حقن مكتبة KaTeX لمعالجة المعادلات
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const renderMath = () => {
