@@ -22,7 +22,7 @@ interface ExtractedQuestion {
   type: string;
   points: number;
   options?: string[] | any[]; 
-  table?: any; // 🚀 دعم الجدول في الواجهة
+  table?: any;
 }
 
 interface ExtractedAssignment {
@@ -165,10 +165,9 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت المحدث بقواعد صارمة جداً لدعم data_table
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
-🛑 1. هيكلية الأسئلة:
+🛑 1. هيكلية الأسئلة (مهم جداً):
 إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "اقرأ المسألة التالية:"، أو "بناءً على الشكل:").
 ضعه كعنصر مستقل في المصفوفة نوعه "section_header"، ثم الأسئلة تحته.
 
@@ -177,7 +176,10 @@ export default function AIAssignmentsSandbox() {
   ✔️ صحيح في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
 - أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط (مثال: "$2 \times 10^{-6} \text{T}$"). لا تستخدم $$ نهائياً.
 
-🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً وبدقة صارمة):
+🛑 3. التعامل الصارم مع الجداول والفراغات (حرج جداً جداً):
+- **الفراغات:** عبر عن أي فراغ مطلوب من الطالب تعبئته بـ 5 نقاط متتالية (.....).
+
+🛑 4. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
 - "essay": سؤال مقالي.
@@ -304,7 +306,7 @@ export default function AIAssignmentsSandbox() {
         type: qType,
         points: Number(q.points) || 1,
         options: parsedOptions,
-        table: q.table || undefined // 🚀 السطر السحري الجديد
+        table: q.table || undefined
       });
     });
 
@@ -382,7 +384,11 @@ export default function AIAssignmentsSandbox() {
       
       const formattedQuestions = result.questions.map((q, i) => {
         let finalOptions: any[] = q.options || [];
-        if (q.type === 'true_false' && finalOptions.length === 0) {
+        
+        if (q.type === 'data_table' && q.table) {
+           finalOptions = [{ id: crypto.randomUUID(), content: JSON.stringify(q.table), is_correct: false }];
+        } 
+        else if (q.type === 'true_false' && finalOptions.length === 0) {
            finalOptions = [{ id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }];
         } else {
            finalOptions = finalOptions.map((opt: any) => ({ id: crypto.randomUUID(), content: String(opt), is_correct: false }));
@@ -395,8 +401,7 @@ export default function AIAssignmentsSandbox() {
           points: q.points || 1, 
           isRequired: true, 
           order_index: i + 1, 
-          options: finalOptions,
-          table: q.table || null // 🚀 السطر السحري الجديد
+          options: finalOptions 
         };
       });
 
