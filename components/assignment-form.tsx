@@ -149,6 +149,56 @@ export default function AssignmentForm({
        );
     }
 
+    // 🚀 مكون الجدول الديناميكي للطالب
+    if (q.type === 'data_table' && q.table) {
+      const parsedAns = Array.isArray(ans) ? ans : [];
+
+      return (
+        <div className="mt-6 rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-right border-collapse min-w-[600px]">
+              <thead>
+                <tr className="bg-indigo-50">
+                  {q.table.headers.map((h: string, i: number) => (
+                    <th key={i} className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center last:border-l-0">
+                      <Latex>{h}</Latex>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {q.table.rows.map((row: string[], rIdx: number) => (
+                  <tr key={rIdx} className="hover:bg-slate-50 transition-colors">
+                    {row.map((cell: string, cIdx: number) => (
+                      <td key={cIdx} className={`p-4 border-b border-l border-slate-200 align-top last:border-l-0 ${cIdx === 0 ? 'bg-slate-50 font-bold text-slate-700' : ''}`}>
+                        {cIdx === 0 ? (
+                          <div className="prose max-w-none text-slate-700 font-bold text-center"><Latex>{cell}</Latex></div>
+                        ) : (
+                          <textarea 
+                            disabled={readOnly} 
+                            rows={1} 
+                            placeholder="..." 
+                            value={parsedAns[rIdx]?.[cIdx] || ''} 
+                            onChange={(e) => { 
+                              const newAns = [...parsedAns]; 
+                              if (!newAns[rIdx]) newAns[rIdx] = Array(q.table.headers.length).fill(''); 
+                              newAns[rIdx][cIdx] = e.target.value; 
+                              handleAnswerChange(q.id, newAns); 
+                            }} 
+                            className="w-full bg-transparent border-0 focus:ring-0 p-0 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-300 text-center" 
+                          />
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
     if (q.type === 'comparison') {
         const aspects = q.options?.slice(2) || [];
         const party1 = q.options?.[0] || 'الطرف الأول';
@@ -157,7 +207,7 @@ export default function AssignmentForm({
 
         return (
           <div className="mt-6 rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-right border-collapse min-w-[600px]">
                 <thead>
                   <tr className="bg-indigo-50">
