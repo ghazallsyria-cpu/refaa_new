@@ -116,7 +116,15 @@ export function useAssignmentsSystem() {
   }, []);
 
   const saveAssignment = useCallback(async (payload: Partial<Assignment>, assignmentId: string | null, questions: any[], sectionIds: string[], subjects: Subject[]): Promise<string> => {
-    const response = await fetch('/api/assignments/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload, assignmentId, questions, sectionIds, subjects, userId: user?.id }) });
+    // 🚀 الخدعة التكتيكية: نمرر معرف المعلم الأصلي كـ userId لكي يظن الـ API أن المعلم هو من يعدل وليس الأدمن
+    const targetUserId = payload.teacher_id || user?.id;
+    
+    const response = await fetch('/api/assignments/save', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ payload, assignmentId, questions, sectionIds, subjects, userId: targetUserId }) 
+    });
+    
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'فشل حفظ الواجب');
     await fetchAssignments();
@@ -124,9 +132,11 @@ export function useAssignmentsSystem() {
   }, [user, fetchAssignments]);
 
   const updateFullAssignment = useCallback(async (assignmentId: string, payload: Partial<Assignment>, questions: any[], sectionIds: string[], subjects: Subject[]): Promise<string> => {
+    const targetUserId = payload.teacher_id || user?.id;
+
     const response = await fetch('/api/assignments/save', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payload, assignmentId, questions, sectionIds, subjects, userId: payload.teacher_id || user?.id }),
+      body: JSON.stringify({ payload, assignmentId, questions, sectionIds, subjects, userId: targetUserId }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'فشل تحديث الواجب');
