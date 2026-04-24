@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert, AlignLeft } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -46,15 +46,15 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-// 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً
+// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص (\n)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   let html = content.replace(/\$\$([\s\S]*?)\$\$/g, '<span class="math-tex text-indigo-300 bg-[#090b14] border border-indigo-500/30 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>');
+   // 1. إصلاح النزول للسطر: تحويل \n الحرفية إلى نزول سطر فعلي HTML
+   let html = content.replace(/\\n/g, '<br/>').replace(/\n/g, '<br/>');
    
-   html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px]"');
-   html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-3 border border-white/10 font-black text-indigo-200"');
-   html = html.replace(/<td/g, '<td class="p-3 border border-white/5 bg-[#02040a]/40 text-slate-300 font-bold hover:bg-[#02040a]/80 transition-colors"');
+   // 2. تلوين وتنسيق المعادلات الرياضية
+   html = html.replace(/\$\$([\s\S]*?)\$\$/g, '<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>');
    
    return { __html: html };
 };
@@ -371,7 +371,14 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
-  let questionCounter = 1;
+  // 🚀 تنظيف الأسئلة من أي أخطاء نصية قبل إرسالها للطالب
+  const sanitizedQuestions = questions.map(q => {
+    const textContent = q.content || q.text || q.question_text || '';
+    return {
+      ...q,
+      content: textContent.replace(/\\n/g, '\n') // إصلاح الـ \n في واجهة حل الطالب
+    };
+  });
 
   return (
     <div className="min-h-screen bg-[#090b14] text-slate-200 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
@@ -427,7 +434,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
             <div className="mb-8">
               <h3 className="text-xl font-black text-white mb-4">وصف الواجب</h3>
-              {assignment?.description ? <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={{ __html: assignment.description }} /> : <p className="text-slate-500 font-bold bg-[#090b14]/30 p-4 rounded-xl border border-dashed border-white/10 text-center">لا يوجد وصف إضافي.</p>}
+              {assignment?.description ? <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={renderContentWithMath(assignment.description)} /> : <p className="text-slate-500 font-bold bg-[#090b14]/30 p-4 rounded-xl border border-dashed border-white/10 text-center">لا يوجد وصف إضافي.</p>}
             </div>
 
             {assignment?.file_url && (
@@ -490,13 +497,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const answerDetails = fullAnswersMap[q.id]; 
                       const isHeader = String(q.type) === 'section_header';
                       const isComparison = String(q.type) === 'comparison';
-                      
-                      const isDataTable = String(q.type) === 'data_table';
-                      let tableData = q.table;
-                      if (!tableData && isDataTable && q.options && q.options.length > 0) {
-                        try { tableData = JSON.parse(q.options[0].content || q.options[0]); } catch(e){}
-                      }
-                      
                       const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
                       
                       if (isHeader) {
@@ -530,18 +530,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                         else if (Array.isArray(studentAns)) studentAnswerText = studentAns.join('، ');
                       }
 
-                      const isUnanswered = (isComparison || isDataTable) ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
+                      const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
-                      
-                      const currentQNumber = questionCounter++; 
 
                       return (
                         <div key={q.id} className={`bg-[#090b14]/60 rounded-3xl overflow-hidden shadow-sm border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5' : isCorrect ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
-                          
                           <div className="p-6 sm:p-8 bg-[#131836]/40 border-b border-white/5 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                             <div className="flex gap-4 items-start w-full min-w-0">
                               <div className={`shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-[1.25rem] flex items-center justify-center font-black text-xl sm:text-2xl shadow-inner border ${isUnanswered ? 'bg-white/5 text-slate-400 border-white/10' : isCorrect ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-rose-500/20 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.2)]'}`}>
-                                  {currentQNumber}
+                                  {idx + 1}
                               </div>
                               <div className="pt-1 sm:pt-2 w-full min-w-0">
                                 <div 
@@ -564,42 +561,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                           </div>
 
                           <div className="p-6 sm:p-8">
-                            {isDataTable && tableData ? (
-                              <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
-                                <div className="overflow-x-auto custom-scrollbar">
-                                  <table className="w-full text-right border-collapse min-w-[600px] m-0">
-                                    <thead>
-                                      <tr className={isUnanswered ? 'bg-[#02040a]/80' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
-                                        {tableData.headers.map((h: string, i: number) => (
-                                          <th key={i} className="p-4 border-b border-l border-white/10 font-black text-indigo-300 text-sm text-center last:border-l-0">{h}</th>
-                                        ))}
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {tableData.rows.map((row: string[], rIdx: number) => {
-                                        let parsedAns: any[] = [];
-                                        try { 
-                                          if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
-                                          else if (Array.isArray(studentAns)) parsedAns = studentAns;
-                                        } catch(e){}
-                                        
-                                        const studentRowAns = parsedAns[rIdx] || [];
-                                        
-                                        return (
-                                          <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
-                                            {row.map((cell: string, cIdx: number) => (
-                                              <td key={cIdx} className={`p-4 border-l border-white/10 font-bold align-middle text-center last:border-l-0 ${cIdx === 0 ? 'text-slate-300 bg-[#090b14]/50' : 'text-white'}`}>
-                                                {cIdx === 0 ? cell : (studentRowAns[cIdx] ? <div dangerouslySetInnerHTML={renderContentWithMath(studentRowAns[cIdx])} /> : <span className="text-slate-600 font-normal">فارغ</span>)}
-                                              </td>
-                                            ))}
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            ) : isComparison ? (
+                            {isComparison ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
                                 <div className="overflow-x-auto custom-scrollbar">
                                   <table className="w-full text-right border-collapse min-w-[600px] m-0">
@@ -644,7 +606,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                   <span className={isUnanswered ? 'text-slate-400' : isCorrect ? 'text-emerald-400' : 'text-rose-400'}>إجابتك المسجلة:</span>
                                 </div>
                                 <div className={`text-base sm:text-lg font-bold whitespace-pre-wrap leading-relaxed ${isUnanswered ? 'italic' : ''}`}>
-                                    {isUnanswered ? 'لم يتم تقديم إجابة.' : <div dangerouslySetInnerHTML={renderContentWithMath(studentAnswerText as string)} />}
+                                    {isUnanswered ? 'لم يتم تقديم إجابة.' : <div dangerouslySetInnerHTML={renderContentWithMath(typeof studentAnswerText === 'object' && studentAnswerText !== null ? JSON.stringify(studentAnswerText) : String(studentAnswerText))} />}
                                 </div>
                               </div>
                             )}
@@ -681,7 +643,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               ) : questions.length > 0 ? (
                 <div className="dark-theme-override">
                   <AssignmentForm 
-                    questions={questions} 
+                    questions={sanitizedQuestions} 
                     onSubmit={handleSubmitAnswers} 
                     onChange={(newAnswers) => setMyAnswers(newAnswers)} 
                     isSubmitting={isSubmitting}
@@ -777,6 +739,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         )}
         
+        {/* واجهة المعلم / الإدارة للتصحيح (لم يتم المساس بها) */}
         {['teacher', 'admin', 'management'].includes(currentRole || '') && (
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -914,7 +877,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 {questions.length > 0 ? (
                   <div className="dark-theme-override">
                     <AssignmentForm 
-                      questions={questions} 
+                      questions={sanitizedQuestions} 
                       onSubmit={() => showNotification('success', 'هذه معاينة فقط، لم يتم حفظ الإجابة')} 
                       readOnly={false}
                     />
@@ -1219,6 +1182,26 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 { color: #f8fafc !important; }
         .dark-theme-override .text-slate-500, .dark-theme-override .text-slate-400 { color: #94a3b8 !important; }
         .dark-theme-override .border-slate-200, .dark-theme-override .border-slate-300 { border-color: rgba(255, 255, 255, 0.1) !important; }
+        
+        /* 🚀 إصلاح الجدول في شاشة الجوال (Responsive Table Scroll) */
+        .dark-theme-override table {
+          display: block !important;
+          width: 100% !important;
+          overflow-x: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          white-space: nowrap !important;
+          border-collapse: collapse !important;
+        }
+        .dark-theme-override th, .dark-theme-override td {
+          min-width: 140px !important;
+          white-space: normal !important;
+          word-wrap: break-word !important;
+        }
+        
+        /* 🚀 الحفاظ على تنسيق الأسطر في النصوص */
+        .dark-theme-override p, .dark-theme-override span, .dark-theme-override div {
+          white-space: pre-wrap;
+        }
       `}} />
     </div>
   );
