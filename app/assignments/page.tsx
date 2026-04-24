@@ -17,7 +17,6 @@ import { useAuth } from '@/context/auth-context';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
-// 🚀 الألوان الملكية لحالات الواجب
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'published': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]';
@@ -97,39 +96,33 @@ export default function AssignmentsPage() {
 
     const isEdit = !!currentAssignment.id;
 
-    // 🚀 1. تجهيز الـ Payload الصافي الذي لا يمس علاقات قاعدة البيانات المحمية (بدون teacher_id)
+    // استخلاص معرف المعلم الأصلي بشكل قطعي
+    let finalTeacherId = currentAssignment.teacher_id;
+    if (finalTeacherId && typeof finalTeacherId === 'object') {
+      finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
+    }
+    if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') {
+      finalTeacherId = currentAssignment.teacher.id;
+    }
+    if (!finalTeacherId && currentRole === 'teacher') {
+      finalTeacherId = user.id;
+    }
+
+    if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) {
+      showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
+      return;
+    }
+
+    // 🚀 نضمن تمرير teacher_id دائماً، لكي لا يستخدم الـ API معرف الأدمن
     const payload: any = {
       title: currentAssignment.title,
       description: currentAssignment.description,
       subject_id: currentAssignment.subject_id,
       due_date: currentAssignment.due_date,
       file_url: currentAssignment.file_url,
-      status: currentAssignment.status || 'draft'
+      status: currentAssignment.status || 'draft',
+      teacher_id: finalTeacherId // ضروري لحماية السجل
     };
-
-    // 🚀 2. حماية دفاعية: لا نرسل teacher_id إطلاقاً إلا إذا كان الواجب "جديداً"
-    if (!isEdit) {
-      let finalTeacherId = currentAssignment.teacher_id;
-      if (finalTeacherId && typeof finalTeacherId === 'object') {
-        finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
-      }
-      if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') {
-        finalTeacherId = currentAssignment.teacher.id;
-      }
-      if (!finalTeacherId && currentRole === 'teacher') {
-        finalTeacherId = user.id;
-      }
-
-      if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) {
-        showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
-        return;
-      }
-      
-      payload.teacher_id = finalTeacherId; // يضاف فقط في الـ Insert
-    } else {
-      // التأكيد القطعي على عدم وجود الحقل أثناء الـ Update لمنع الـ Foreign Key Constraint Error
-      delete payload.teacher_id;
-    }
 
     setIsSubmitting(true);
     try {
@@ -317,7 +310,7 @@ export default function AssignmentsPage() {
           </div>
         </div>
 
-        {/* 🚀 المحتوى (الواجبات) مع تفادي إعادة التحميل الكلي المزعج */}
+        {/* 🚀 المحتوى (الواجبات) */}
         {contentLoading && assignments.length === 0 ? (
           <div className="flex flex-col justify-center items-center py-20 sm:py-32 gap-5 relative z-10">
             <Loader2 className="animate-spin h-14 w-14 sm:h-16 sm:w-16 text-indigo-500 drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]" />
