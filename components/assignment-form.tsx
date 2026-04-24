@@ -15,7 +15,7 @@ interface AssignmentFormProps {
   isSubmitting?: boolean;
   initialAnswers?: Record<string, any>;
   readOnly?: boolean;
-  showModelAnswer?: boolean; // 🚀 أضفنا هذا الخيار لإظهار الإجابة للمعلم فقط أثناء التصحيح
+  showModelAnswer?: boolean; 
   children?: React.ReactNode;
 }
 
@@ -26,7 +26,7 @@ export default function AssignmentForm({
   isSubmitting, 
   initialAnswers = {}, 
   readOnly = false,
-  showModelAnswer = false, // افتراضياً مخفية عن الطلاب
+  showModelAnswer = false, 
   children 
 }: AssignmentFormProps) {
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
@@ -149,17 +149,27 @@ export default function AssignmentForm({
        );
     }
 
-    // 🚀 مكون الجدول الديناميكي للطالب
-    if (q.type === 'data_table' && q.table) {
+    // 🚀 مكون الجدول الديناميكي للطالب المحدث مع فك التشفير
+    let tableData = q.table;
+    if (!tableData && q.type === 'data_table' && q.options && q.options.length > 0) {
+      try {
+        const optContent = typeof q.options[0] === 'string' ? q.options[0] : (q.options[0].content || q.options[0].text);
+        tableData = JSON.parse(optContent);
+      } catch (e) {
+        console.error("Failed to parse table data", e);
+      }
+    }
+
+    if (q.type === 'data_table' && tableData) {
       const parsedAns = Array.isArray(ans) ? ans : [];
 
       return (
         <div className="mt-6 rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-right border-collapse min-w-[600px]">
+            <table className="w-full text-right border-collapse min-w-[600px] m-0">
               <thead>
                 <tr className="bg-indigo-50">
-                  {q.table.headers.map((h: string, i: number) => (
+                  {tableData.headers?.map((h: string, i: number) => (
                     <th key={i} className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm text-center last:border-l-0">
                       <Latex>{h}</Latex>
                     </th>
@@ -167,10 +177,10 @@ export default function AssignmentForm({
                 </tr>
               </thead>
               <tbody>
-                {q.table.rows.map((row: string[], rIdx: number) => (
+                {tableData.rows?.map((row: string[], rIdx: number) => (
                   <tr key={rIdx} className="hover:bg-slate-50 transition-colors">
                     {row.map((cell: string, cIdx: number) => (
-                      <td key={cIdx} className={`p-4 border-b border-l border-slate-200 align-top last:border-l-0 ${cIdx === 0 ? 'bg-slate-50 font-bold text-slate-700' : ''}`}>
+                      <td key={cIdx} className={`p-4 border-b border-l border-slate-200 align-middle text-center last:border-l-0 ${cIdx === 0 ? 'bg-slate-50 font-bold text-slate-700' : ''}`}>
                         {cIdx === 0 ? (
                           <div className="prose max-w-none text-slate-700 font-bold text-center"><Latex>{cell}</Latex></div>
                         ) : (
@@ -181,7 +191,7 @@ export default function AssignmentForm({
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
                               const newAns = [...parsedAns]; 
-                              if (!newAns[rIdx]) newAns[rIdx] = Array(q.table.headers.length).fill(''); 
+                              if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
                               handleAnswerChange(q.id, newAns); 
                             }} 
@@ -254,7 +264,6 @@ export default function AssignmentForm({
       {questions.map((q, idx) => {
         const isHeader = q.type === 'section_header';
         
-        // 🚀 خوارزمية فصل وإخفاء الإجابة النموذجية
         let rawContent = q.content || q.text || q.question_text || '';
         let questionText = rawContent;
         let modelAnswerText = '';
@@ -295,7 +304,6 @@ export default function AssignmentForm({
                      {q.is_required && <span className="text-rose-500 text-xl font-black mt-1 shrink-0">*</span>}
                    </div>
                    
-                   {/* 🚀 إظهار الإجابة النموذجية للمعلم فقط في وضع التصحيح */}
                    {showModelAnswer && modelAnswerText && (
                      <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold">
                        <Latex>{modelAnswerText}</Latex>
