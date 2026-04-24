@@ -83,8 +83,9 @@ export default function AssignmentForm({
       return (
         <div className="space-y-3 mt-4">
           {q.options?.map((opt: any, idx: number) => {
-            const optContent = opt.content || opt;
-            const optId = opt.id || optContent;
+            // 🚀 التوافق مع الكائنات والنصوص (Backward Compatibility)
+            const optContent = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
+            const optId = typeof opt === 'string' ? opt : (opt.id || optContent);
             const isSelected = ans === optId || ans === optContent;
             
             return (
@@ -108,8 +109,9 @@ export default function AssignmentForm({
       return (
         <div className="space-y-3 mt-4">
           {q.options?.map((opt: any, idx: number) => {
-            const optContent = opt.content || opt;
-            const optId = opt.id || optContent;
+            // 🚀 استخلاص النص بشكل ذكي
+            const optContent = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
+            const optId = typeof opt === 'string' ? opt : (opt.id || optContent);
             const isSelected = selectedArray.includes(optId) || selectedArray.includes(optContent);
             
             return (
@@ -149,7 +151,6 @@ export default function AssignmentForm({
        );
     }
 
-    // 🚀 مكون الجدول الديناميكي للطالب المحدث مع فك التشفير
     let tableData = q.table;
     if (!tableData && q.type === 'data_table' && q.options && q.options.length > 0) {
       try {
@@ -210,9 +211,15 @@ export default function AssignmentForm({
     }
 
     if (q.type === 'comparison') {
-        const aspects = q.options?.slice(2) || [];
-        const party1 = q.options?.[0] || 'الطرف الأول';
-        const party2 = q.options?.[1] || 'الطرف الثاني';
+        // 🚀 معالجة خيارات المقارنة بذكاء سواء كانت نص أو كائن
+        const getOptValue = (opt: any, fallback: string) => {
+          if (!opt) return fallback;
+          return typeof opt === 'string' ? opt : (opt.content || opt.text || fallback);
+        };
+
+        const aspects = q.options?.slice(2)?.map((o: any) => getOptValue(o, '')) || [];
+        const party1 = getOptValue(q.options?.[0], 'الطرف الأول');
+        const party2 = getOptValue(q.options?.[1], 'الطرف الثاني');
         const parsedAns = Array.isArray(ans) ? ans : [];
 
         return (
