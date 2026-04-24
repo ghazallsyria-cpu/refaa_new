@@ -5,21 +5,23 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-// 🚀 محرك تنسيق المعادلات (تم التخلص من الصناديق البيضاء المزعجة، دمج سلس)
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
+// 🚀 محرك تنسيق المعادلات والجداول للطالب
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
+   
    let html = String(content)
      .replace(/\\n/g, '<br/>')
      .replace(/\\r\\n/g, '<br/>')
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$'); 
      
-   // 🚀 تلوين المعادلات بصورة متناغمة جداً مع النص بدون خلفيات
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
-       return `<span class="math-tex text-indigo-400 mx-1 inline-block max-w-full break-words" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+       return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // تنسيق الجداول المستخرجة
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-200"');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-3 border border-slate-200 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-3 border border-slate-200 bg-white text-slate-700 font-bold"');
@@ -51,48 +53,45 @@ export default function AssignmentForm({
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // حقن مكتبة KaTeX لمعالجة المعادلات
+  // 🚀 1. حقن مكتبة KaTeX (تعمل مرة واحدة فقط عند فتح الصفحة)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const renderMath = () => {
-        if ((window as any).renderMathInElement) {
-          (window as any).renderMathInElement(document.body, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-          });
-        }
+    if (typeof window !== 'undefined' && !document.getElementById('katex-js-form')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css-form';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.id = 'katex-js-form';
+      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+      script.onload = () => {
+        const autoRender = document.createElement('script');
+        autoRender.id = 'katex-auto-render-form';
+        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+        document.head.appendChild(autoRender);
       };
-
-      if (!document.getElementById('katex-css-form')) {
-        const link = document.createElement('link');
-        link.id = 'katex-css-form';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-        document.head.appendChild(link);
-      }
-
-      if (!document.getElementById('katex-js-form')) {
-        const script = document.createElement('script');
-        script.id = 'katex-js-form';
-        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-        script.onload = () => {
-          const autoRender = document.createElement('script');
-          autoRender.id = 'katex-auto-render-form';
-          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-          autoRender.onload = () => setTimeout(renderMath, 100);
-          document.head.appendChild(autoRender);
-        };
-        document.head.appendChild(script);
-      } else {
-        setTimeout(renderMath, 500);
-      }
+      document.head.appendChild(script);
     }
-  }, [questions]);
+  }, []);
+
+  // 🚀 2. المشغل الديناميكي (يعيد بناء الكيمياء والرياضيات كلما نقر الطالب على إجابة)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
+        (window as any).renderMathInElement(document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false
+        });
+      }
+    }, 100); 
+    return () => clearTimeout(timer);
+  }, [questions, answers, errors]); // المراقبة الصارمة لإجابات الطالب
 
   useEffect(() => {
     if (initialAnswers && Object.keys(initialAnswers).length > 0) {
@@ -220,7 +219,7 @@ export default function AssignmentForm({
 
       return (
         <div className="mt-6 rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
-          <div className="overflow-x-auto custom-scrollbar">
+          <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar pb-2">
             <table className="w-full text-right border-collapse min-w-[600px] m-0">
               <thead>
                 <tr className="bg-indigo-50">
@@ -276,8 +275,8 @@ export default function AssignmentForm({
 
         return (
           <div className="mt-6 rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-right border-collapse min-w-[600px]">
+            <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar pb-2">
+              <table className="w-full text-right border-collapse min-w-[600px] m-0">
                 <thead>
                   <tr className="bg-indigo-50">
                     <th className="p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-sm w-1/3">وجه المقارنة</th>
@@ -351,7 +350,7 @@ export default function AssignmentForm({
                 <div className="shrink-0 w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-xl shadow-sm border border-indigo-100">
                    {idx + 1}
                 </div>
-                <div className="flex-1 pt-2 text-right">
+                <div className="flex-1 pt-2 text-right overflow-hidden">
                    <div className="flex items-start gap-1">
                      <div className="prose max-w-none text-xl font-bold text-slate-800 leading-relaxed w-full" dangerouslySetInnerHTML={renderContentWithMath(questionText)} />
                      {q.is_required && <span className="text-rose-500 text-xl font-black mt-1 shrink-0">*</span>}
@@ -361,7 +360,7 @@ export default function AssignmentForm({
                      <div className="mt-4 p-4 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-sm font-bold" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                    )}
 
-                   {q.media_url && <img src={q.media_url} className="mt-4 max-h-72 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" />}
+                   {q.media_url && <img src={q.media_url} className="mt-4 max-h-72 rounded-xl border border-slate-200 shadow-sm" alt="صورة توضيحية" /> }
                    
                    {renderQuestionInput(q)}
                 </div>
