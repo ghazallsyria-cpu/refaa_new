@@ -8,6 +8,7 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 
+// 🚀 استيراد مكتبة الرياضيات لعرض المعاينة بشكل صحيح
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -32,10 +33,13 @@ interface Teacher { id: string; full_name: string; }
 interface Subject { id: string; name: string; }
 interface Section { id: string; name: string; }
 
+// 🚀 الفلتر السحري: ينظف جميع أخطاء الذكاء الاصطناعي ويجهز المعادلات لـ KaTeX
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
+    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
     .replace(/\\\\([a-zA-Z])/g, '\\$1')
+    // 2. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
     .replace(/\$\$/g, '$');
 };
 
@@ -396,9 +400,10 @@ export default function AIAssignmentsSandbox() {
         };
       });
 
+      // 🚀 إصلاح الخطأ: وضعنا علامة التنصيص والفاصلة بشكل سليم
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات ايهاب جمال غزال
+        description: 'تم التوليد الذكي باستخدام خوارزميات إيهاب جمال غزال.', 
         subject_id: selectedSubject, 
         teacher_id: selectedTeacher, 
         due_date: dueDate.toISOString(), 
