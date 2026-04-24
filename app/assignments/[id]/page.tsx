@@ -495,6 +495,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const answerDetails = fullAnswersMap[q.id]; 
                       const isHeader = String(q.type) === 'section_header';
                       const isComparison = String(q.type) === 'comparison';
+                      const isDataTable = String(q.type) === 'data_table'; // 🚀 دعم الجدول في العرض
                       const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
                       
                       // 🌟 1. تنسيق النص التمهيدي (صندوق زجاجي ملكي)
@@ -530,7 +531,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                         else if (Array.isArray(studentAns)) studentAnswerText = studentAns.join('، ');
                       }
 
-                      const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
+                      const isUnanswered = (isComparison || isDataTable) ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
                       
                       const currentQNumber = questionCounter++; // استخدام العداد الحقيقي
@@ -567,7 +568,42 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
                           {/* منطقة الإجابة */}
                           <div className="p-6 sm:p-8">
-                            {isComparison ? (
+                            {isDataTable && q.table ? ( // 🚀 الجدول الديناميكي المضاف حديثاً
+                              <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
+                                <div className="overflow-x-auto custom-scrollbar">
+                                  <table className="w-full text-right border-collapse min-w-[600px] m-0">
+                                    <thead>
+                                      <tr className={isUnanswered ? 'bg-[#02040a]/80' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
+                                        {q.table.headers.map((h: string, i: number) => (
+                                          <th key={i} className="p-4 border-b border-l border-white/10 font-black text-indigo-300 text-sm text-center last:border-l-0"><div dangerouslySetInnerHTML={renderContentWithMath(h)} /></th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {q.table.rows.map((row: string[], rIdx: number) => {
+                                        let parsedAns: any[] = [];
+                                        try { 
+                                          if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
+                                          else if (Array.isArray(studentAns)) parsedAns = studentAns;
+                                        } catch(e){}
+                                        
+                                        const studentRowAns = parsedAns[rIdx] || [];
+                                        
+                                        return (
+                                          <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
+                                            {row.map((cell: string, cIdx: number) => (
+                                              <td key={cIdx} className={`p-4 border-l border-white/10 font-bold align-middle text-center last:border-l-0 ${cIdx === 0 ? 'text-slate-300 bg-[#090b14]/50' : 'text-white'}`}>
+                                                {cIdx === 0 ? <div dangerouslySetInnerHTML={renderContentWithMath(cell)} /> : (studentRowAns[cIdx] ? <div dangerouslySetInnerHTML={renderContentWithMath(studentRowAns[cIdx])} /> : <span className="text-slate-600 font-normal">فارغ</span>)}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ) : isComparison ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
                                 <div className="overflow-x-auto custom-scrollbar">
                                   <table className="w-full text-right border-collapse min-w-[600px] m-0">
