@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert, AlignLeft } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -371,15 +371,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
-  // 🚀 تنظيف الأسئلة من أي أخطاء نصية قبل إرسالها للطالب
-  const sanitizedQuestions = questions.map(q => {
-    const textContent = q.content || q.text || q.question_text || '';
-    return {
-      ...q,
-      content: textContent.replace(/\\n/g, '\n') // إصلاح الـ \n في واجهة حل الطالب
-    };
-  });
-
   return (
     <div className="min-h-screen bg-[#090b14] text-slate-200 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
       
@@ -434,7 +425,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
             <div className="mb-8">
               <h3 className="text-xl font-black text-white mb-4">وصف الواجب</h3>
-              {assignment?.description ? <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={renderContentWithMath(assignment.description)} /> : <p className="text-slate-500 font-bold bg-[#090b14]/30 p-4 rounded-xl border border-dashed border-white/10 text-center">لا يوجد وصف إضافي.</p>}
+              {assignment?.description ? <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={{ __html: assignment.description }} /> : <p className="text-slate-500 font-bold bg-[#090b14]/30 p-4 rounded-xl border border-dashed border-white/10 text-center">لا يوجد وصف إضافي.</p>}
             </div>
 
             {assignment?.file_url && (
@@ -453,6 +444,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
+        {/* 🚀 قسم الطالب والمراجعة التفصيلية (التصميم الجديد) */}
         {currentRole === 'student' && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 overflow-hidden relative">
             <div className="p-8 border-b border-white/5 bg-[#090b14]/30 relative z-10">
@@ -611,6 +603,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
+                            {/* التغذية الراجعة الخاصة بالسؤال */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 relative overflow-hidden shadow-inner">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"></div>
@@ -624,6 +617,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     })}
                   </div>
 
+                  {/* المرفقات والنصوص الإضافية */}
                   {(mySubmission?.content || mySubmission?.file_url) && (
                     <div className="mt-10 p-6 sm:p-8 rounded-[2rem] bg-[#090b14]/50 border border-white/10 shadow-inner">
                       <h3 className="text-lg sm:text-xl font-black text-white mb-6 flex items-center gap-2"><FileText className="h-6 w-6 text-indigo-400" /> مرفقات ونصوص إضافية مُرسلة</h3>
@@ -643,7 +637,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               ) : questions.length > 0 ? (
                 <div className="dark-theme-override">
                   <AssignmentForm 
-                    questions={sanitizedQuestions} 
+                    questions={questions} 
                     onSubmit={handleSubmitAnswers} 
                     onChange={(newAnswers) => setMyAnswers(newAnswers)} 
                     isSubmitting={isSubmitting}
@@ -739,7 +733,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         )}
         
-        {/* واجهة المعلم / الإدارة للتصحيح (لم يتم المساس بها) */}
+        {/* واجهة المعلم والإدارة للتصحيح */}
         {['teacher', 'admin', 'management'].includes(currentRole || '') && (
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -877,7 +871,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 {questions.length > 0 ? (
                   <div className="dark-theme-override">
                     <AssignmentForm 
-                      questions={sanitizedQuestions} 
+                      questions={questions} 
                       onSubmit={() => showNotification('success', 'هذه معاينة فقط، لم يتم حفظ الإجابة')} 
                       readOnly={false}
                     />
@@ -898,6 +892,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         )}
       </div>
 
+      {/* Delete Confirmation Modal */}
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -927,6 +922,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* Delete Submission Modal */}
       <Dialog.Root open={!!submissionToDelete} onOpenChange={(open) => !open && setSubmissionToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -956,6 +952,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* Edit Quick Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1016,6 +1013,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* Full Edit Modal */}
       <Dialog.Root open={isFullEditModalOpen} onOpenChange={setIsFullEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1045,6 +1043,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             <form onSubmit={handleSaveFullEdit} className="space-y-6 sm:space-y-10">
               <div className="space-y-6 sm:space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                  {/* Left Column Form */}
                   <div className="space-y-5 sm:space-y-6">
                     <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner">
                       <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">عنوان الواجب <span className="text-rose-500">*</span></label>
@@ -1130,6 +1129,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     </div>
                   </div>
 
+                  {/* Right Column: Question Builder */}
                   <div className="bg-[#02040a]/40 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 lg:p-8 border border-white/5 shadow-inner relative overflow-hidden h-fit">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
                     <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6 relative z-10">
@@ -1176,32 +1176,69 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 1px solid #02040a; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
-        .dark-theme-override input, .dark-theme-override textarea, .dark-theme-override select { background-color: rgba(2, 4, 10, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
+        
+        /* 🚀 إصلاح الجدول الجذري في شاشة الجوال (Responsive Table Scroll with alignment) */
+        .dark-theme-override table {
+          display: block !important;
+          max-width: 100% !important;
+          overflow-x: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          border-collapse: collapse !important;
+          border-radius: 1rem !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          margin-bottom: 1rem !important;
+        }
+        .dark-theme-override thead, .dark-theme-override tbody {
+          display: table !important;
+          width: 100% !important;
+          min-width: max-content !important;
+        }
+        .dark-theme-override tr {
+          display: table-row !important;
+        }
+        .dark-theme-override th, .dark-theme-override td {
+          display: table-cell !important;
+          min-width: 120px !important;
+          padding: 1rem !important;
+          text-align: center !important;
+          vertical-align: middle !important;
+          border: 1px solid rgba(255,255,255,0.05) !important;
+          white-space: normal !important;
+          word-wrap: break-word !important;
+        }
+        .dark-theme-override th {
+          background-color: rgba(99, 102, 241, 0.15) !important;
+          color: #a5b4fc !important; /* Indigo 300 */
+          font-weight: 900 !important;
+        }
+        .dark-theme-override td {
+          background-color: rgba(15, 20, 35, 0.4) !important;
+        }
+        
+        /* تحسين شكل حقول الإدخال داخل الجداول */
+        .dark-theme-override td input {
+          width: 100% !important;
+          min-width: 80px !important;
+          background-color: rgba(2, 4, 10, 0.8) !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          color: #34d399 !important; /* Emerald 400 */
+          font-weight: 900 !important;
+          text-align: center !important;
+          padding: 0.75rem !important;
+          border-radius: 0.75rem !important;
+        }
+        .dark-theme-override td input:focus {
+          border-color: rgba(52, 211, 153, 0.5) !important;
+          outline: none !important;
+          box-shadow: 0 0 15px rgba(52, 211, 153, 0.2) !important;
+        }
+
+        .dark-theme-override input:not(td input), .dark-theme-override textarea, .dark-theme-override select { background-color: rgba(2, 4, 10, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
         .dark-theme-override .bg-white { background-color: transparent !important; }
         .dark-theme-override .bg-slate-50 { background-color: rgba(15, 20, 35, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; }
         .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 { color: #f8fafc !important; }
         .dark-theme-override .text-slate-500, .dark-theme-override .text-slate-400 { color: #94a3b8 !important; }
         .dark-theme-override .border-slate-200, .dark-theme-override .border-slate-300 { border-color: rgba(255, 255, 255, 0.1) !important; }
-        
-        /* 🚀 إصلاح الجدول في شاشة الجوال (Responsive Table Scroll) */
-        .dark-theme-override table {
-          display: block !important;
-          width: 100% !important;
-          overflow-x: auto !important;
-          -webkit-overflow-scrolling: touch !important;
-          white-space: nowrap !important;
-          border-collapse: collapse !important;
-        }
-        .dark-theme-override th, .dark-theme-override td {
-          min-width: 140px !important;
-          white-space: normal !important;
-          word-wrap: break-word !important;
-        }
-        
-        /* 🚀 الحفاظ على تنسيق الأسطر في النصوص */
-        .dark-theme-override p, .dark-theme-override span, .dark-theme-override div {
-          white-space: pre-wrap;
-        }
       `}} />
     </div>
   );
