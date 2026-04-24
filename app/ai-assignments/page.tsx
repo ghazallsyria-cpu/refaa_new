@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp, ShieldCheck } from 'lucide-react';
+import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp, ShieldCheck, Columns } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
@@ -113,7 +113,6 @@ export default function AIAssignmentsSandbox() {
     fetchTeacherSubjects();
   }, [selectedTeacher]);
 
-  // 🚀 التعديل المطلوب: جلب أسماء الفصول بشكل سليم (عاشر - 3)
   useEffect(() => {
     const fetchTeacherSections = async () => {
       if (!selectedTeacher || !selectedSubject) { setSections([]); setSelectedSections([]); return; }
@@ -184,6 +183,7 @@ export default function AIAssignmentsSandbox() {
 - "true_false": صح أو خطأ.
 - "essay": سؤال مقالي.
 - "file": يتطلب رفع صورة/ملف.
+- "comparison": سؤال مقارنة (جدول). يجب أن تحتوي مصفوفة الـ options حصراً على: [اسم الطرف الأول، اسم الطرف الثاني، وجه المقارنة 1، وجه المقارنة 2، ...].
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
@@ -400,7 +400,7 @@ export default function AIAssignmentsSandbox() {
 
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات الذكاء الاصطناعي.', 
+        description: 'تم التوليد الذكي باستخدام خوارزميات ايهاب جمال غزال.', 
         subject_id: selectedSubject, 
         teacher_id: selectedTeacher, 
         due_date: dueDate.toISOString(), 
@@ -434,6 +434,7 @@ export default function AIAssignmentsSandbox() {
       case 'fill_in_blank': return 'إكمال الفراغ';
       case 'file': return 'رفع صورة / ملف';
       case 'section_header': return 'رأس مسألة / تعليمة عامة';
+      case 'comparison': return 'سؤال مقارنة (جدول)';
       default: return type;
     }
   };
