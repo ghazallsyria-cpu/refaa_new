@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert,AlignLeft } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -46,12 +46,15 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص (\n)
+// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   // 1. إصلاح النزول للسطر: تحويل \n الحرفية إلى نزول سطر فعلي HTML
-   let html = content.replace(/\\n/g, '<br/>').replace(/\n/g, '<br/>');
+   // 1. إصلاح النزول للسطر: استهداف كل أشكال \n (المخفية والصريحة)
+   let html = String(content)
+     .replace(/\\n/g, '<br/>')
+     .replace(/\\r\\n/g, '<br/>')
+     .replace(/\n/g, '<br/>');
    
    // 2. تلوين وتنسيق المعادلات الرياضية
    html = html.replace(/\$\$([\s\S]*?)\$\$/g, '<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>');
@@ -371,6 +374,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
+  // 🚀 تنظيف الأسئلة من أي أخطاء نصية قبل إرسالها للطالب
+  const sanitizedQuestions = questions.map(q => {
+    const textContent = q.content || q.text || q.question_text || '';
+    return {
+      ...q,
+      content: textContent.replace(/\\n/g, '\n') // هذا يضمن معالجة الأسطر بشكل سليم في الـ AssignmentForm
+    };
+  });
+
   return (
     <div className="min-h-screen bg-[#090b14] text-slate-200 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
       
@@ -444,7 +456,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        {/* 🚀 قسم الطالب والمراجعة التفصيلية (التصميم الجديد) */}
+        {/* 🚀 قسم الطالب والمراجعة التفصيلية */}
         {currentRole === 'student' && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 overflow-hidden relative">
             <div className="p-8 border-b border-white/5 bg-[#090b14]/30 relative z-10">
@@ -506,8 +518,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 dangerouslySetInnerHTML={renderContentWithMath(q.content || (q as any).text || '')} 
                               />
                               {q.media_url && (
-                                <div className="mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-sm bg-[#02040a]/40 p-2">
-                                  <img src={q.media_url} className="w-auto max-h-80 mx-auto rounded-xl object-contain" alt="مرفق تمهيدي" />
+                                <div className="mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-sm bg-[#02040a]/40 p-2 text-center">
+                                  <img src={q.media_url} className="w-auto max-h-80 mx-auto rounded-xl object-contain inline-block" alt="مرفق تمهيدي" />
                                 </div>
                               )}
                             </div>
@@ -526,7 +538,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
 
                       return (
-                        <div key={q.id} className={`bg-[#090b14]/60 rounded-3xl overflow-hidden shadow-sm border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5' : isCorrect ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
+                        <div key={q.id} className={`bg-[#090b14]/60 rounded-3xl overflow-hidden shadow-sm border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5 border-dashed' : isCorrect ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
                           <div className="p-6 sm:p-8 bg-[#131836]/40 border-b border-white/5 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                             <div className="flex gap-4 items-start w-full min-w-0">
                               <div className={`shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-[1.25rem] flex items-center justify-center font-black text-xl sm:text-2xl shadow-inner border ${isUnanswered ? 'bg-white/5 text-slate-400 border-white/10' : isCorrect ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-rose-500/20 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.2)]'}`}>
@@ -555,7 +567,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                           <div className="p-6 sm:p-8">
                             {isComparison ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
-                                <div className="overflow-x-auto custom-scrollbar">
+                                <div className="table-responsive-wrapper">
                                   <table className="w-full text-right border-collapse min-w-[600px] m-0">
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-[#02040a]/80' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
@@ -603,7 +615,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
-                            {/* التغذية الراجعة الخاصة بالسؤال */}
+                            {/* התغذية الراجعة */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 relative overflow-hidden shadow-inner">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"></div>
@@ -637,7 +649,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               ) : questions.length > 0 ? (
                 <div className="dark-theme-override">
                   <AssignmentForm 
-                    questions={questions} 
+                    questions={sanitizedQuestions} 
                     onSubmit={handleSubmitAnswers} 
                     onChange={(newAnswers) => setMyAnswers(newAnswers)} 
                     isSubmitting={isSubmitting}
@@ -733,7 +745,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         )}
         
-        {/* واجهة المعلم والإدارة للتصحيح */}
+        {/* واجهة المعلم / الإدارة للتصحيح */}
         {['teacher', 'admin', 'management'].includes(currentRole || '') && (
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -871,7 +883,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 {questions.length > 0 ? (
                   <div className="dark-theme-override">
                     <AssignmentForm 
-                      questions={questions} 
+                      questions={sanitizedQuestions} 
                       onSubmit={() => showNotification('success', 'هذه معاينة فقط، لم يتم حفظ الإجابة')} 
                       readOnly={false}
                     />
@@ -1177,28 +1189,21 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 1px solid #02040a; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
         
-        /* 🚀 إصلاح الجدول الجذري في شاشة الجوال (Responsive Table Scroll with alignment) */
-        .dark-theme-override table {
-          display: block !important;
-          max-width: 100% !important;
-          overflow-x: auto !important;
-          -webkit-overflow-scrolling: touch !important;
-          border-collapse: collapse !important;
-          border-radius: 1rem !important;
-          border: 1px solid rgba(255,255,255,0.1) !important;
-          margin-bottom: 1rem !important;
+        /* 🚀 التغليف الذكي للجدول (Table Wrapper) */
+        .table-responsive-wrapper {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 5px; /* لمنع إخفاء الـ scrollbar */
         }
-        .dark-theme-override thead, .dark-theme-override tbody {
-          display: table !important;
+        
+        .dark-theme-override table {
           width: 100% !important;
           min-width: max-content !important;
+          border-collapse: collapse !important;
         }
-        .dark-theme-override tr {
-          display: table-row !important;
-        }
+
         .dark-theme-override th, .dark-theme-override td {
-          display: table-cell !important;
-          min-width: 120px !important;
           padding: 1rem !important;
           text-align: center !important;
           vertical-align: middle !important;
@@ -1206,9 +1211,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           white-space: normal !important;
           word-wrap: break-word !important;
         }
+        
         .dark-theme-override th {
           background-color: rgba(99, 102, 241, 0.15) !important;
-          color: #a5b4fc !important; /* Indigo 300 */
+          color: #a5b4fc !important; 
           font-weight: 900 !important;
         }
         .dark-theme-override td {
@@ -1218,14 +1224,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         /* تحسين شكل حقول الإدخال داخل الجداول */
         .dark-theme-override td input {
           width: 100% !important;
-          min-width: 80px !important;
+          min-width: 120px !important;
           background-color: rgba(2, 4, 10, 0.8) !important;
           border: 1px solid rgba(255,255,255,0.1) !important;
-          color: #34d399 !important; /* Emerald 400 */
+          color: #34d399 !important; 
           font-weight: 900 !important;
           text-align: center !important;
           padding: 0.75rem !important;
           border-radius: 0.75rem !important;
+          transition: all 0.2s ease-in-out !important;
         }
         .dark-theme-override td input:focus {
           border-color: rgba(52, 211, 153, 0.5) !important;
