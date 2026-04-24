@@ -94,7 +94,20 @@ export default function AssignmentsPage() {
       showNotification('error', 'عذراً، يجب تحديد شعبة واحدة على الأقل لإرسال الواجب إليها');
       return;
     }
-    if ((currentRole === 'admin' || currentRole === 'management') && !currentAssignment.teacher_id) {
+
+    // 🚀 فلتر تنظيف المعرف (ID Stripper) - يستخلص الـ ID الصافي ويمنع صراع الـ Foreign Key
+    let finalTeacherId = currentAssignment.teacher_id;
+    if (finalTeacherId && typeof finalTeacherId === 'object') {
+      finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
+    }
+    if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') {
+      finalTeacherId = currentAssignment.teacher.id;
+    }
+    if (!finalTeacherId && currentRole === 'teacher') {
+      finalTeacherId = user.id;
+    }
+
+    if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) {
       showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
       return;
     }
@@ -105,7 +118,7 @@ export default function AssignmentsPage() {
         title: currentAssignment.title,
         description: currentAssignment.description,
         subject_id: currentAssignment.subject_id,
-        teacher_id: currentRole === 'teacher' ? user.id : currentAssignment.teacher_id,
+        teacher_id: finalTeacherId, // 👈 هنا نمرر الـ String النقي فقط
         due_date: currentAssignment.due_date,
         file_url: currentAssignment.file_url,
         status: currentAssignment.status || 'draft'
@@ -162,9 +175,20 @@ export default function AssignmentsPage() {
     setEditingAssignment(assignment);
     const dateObj = new Date(assignment.due_date);
     const formattedDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+    
+    // 🚀 الفلتر السحري: كسر الكائن واستخراج المعرف الصافي عند فتح التعديل لكي يقرأه الـ Dropdown
+    let pureTeacherId = assignment.teacher_id;
+    if (pureTeacherId && typeof pureTeacherId === 'object') {
+      pureTeacherId = pureTeacherId.id || pureTeacherId.auth_id;
+    }
+    if (!pureTeacherId && assignment.teacher && typeof assignment.teacher === 'object') {
+      pureTeacherId = assignment.teacher.id;
+    }
+
     setCurrentAssignment({
       ...assignment,
       due_date: formattedDate,
+      teacher_id: pureTeacherId, // 👈 تمرير المعرف النقي
       section_ids: assignment.assignment_sections?.map((as: any) => as.section_id) || assignment.section_ids || []
     });
     const qData = await fetchAssignmentQuestions(assignment.id);
@@ -311,7 +335,9 @@ export default function AssignmentsPage() {
                 const overdue = isOverdue(assignment.due_date!);
                 const dueDateObj = new Date(assignment.due_date!);
                 
-                const canEdit = currentRole === 'admin' || currentRole === 'management' || assignment.teacher_id === user?.id;
+                let checkTeacherId = assignment.teacher_id;
+                if (checkTeacherId && typeof checkTeacherId === 'object') checkTeacherId = (checkTeacherId as any).id || (checkTeacherId as any).auth_id;
+                const canEdit = currentRole === 'admin' || currentRole === 'management' || checkTeacherId === user?.id;
 
                 return (
                   <div key={assignment.id} className="group glass-panel rounded-[2rem] sm:rounded-[2.5rem] border border-white/5 hover:border-indigo-500/40 hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.3)] transition-all overflow-hidden flex flex-col bg-[#0f1423]/40 hover:bg-[#0f1423]/80">
@@ -471,7 +497,7 @@ export default function AssignmentsPage() {
           </div>
         )}
 
-        {/* 🚀 Delete Confirmation Modal (Royal Theme) */}
+        {/* 🚀 Delete Confirmation Modal */}
         <Dialog.Root open={!!assignmentToDelete} onOpenChange={(open) => !open && setAssignmentToDelete(null)}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -501,7 +527,7 @@ export default function AssignmentsPage() {
           </Dialog.Portal>
         </Dialog.Root>
 
-        {/* 🚀 Add/Edit Assignment Full Modal (Royal Theme) */}
+        {/* 🚀 Add/Edit Assignment Full Modal */}
         <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-40 animate-in fade-in duration-300" />
