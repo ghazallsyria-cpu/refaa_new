@@ -22,7 +22,6 @@ interface ExtractedQuestion {
   type: string;
   points: number;
   options?: string[] | any[]; 
-  table?: any;
 }
 
 interface ExtractedAssignment {
@@ -165,6 +164,7 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
+  // 🚀 البرومبت المحدث بقواعد صارمة جداً للكيمياء وإصلاح الأسطر
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
 🛑 1. هيكلية الأسئلة (مهم جداً):
@@ -174,24 +174,33 @@ export default function AIAssignmentsSandbox() {
 🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
 - اكتب أوامر LaTeX مع وضع شرطة مائلة إضافية للهروب البرمجي (Escaping) الخاص بـ JSON.
   ✔️ صحيح في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
-- أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط (مثال: "$2 \times 10^{-6} \text{T}$"). لا تستخدم $$ نهائياً.
+- أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط.
 
-🛑 3. التعامل الصارم مع الجداول والفراغات (حرج جداً جداً):
-- **الفراغات:** عبر عن أي فراغ مطلوب من الطالب تعبئته بـ 5 نقاط متتالية (.....).
+🛑 3. التعامل الصارم مع الجداول، الأسطر، والفراغات (حرج جداً):
+- **الأسطر الجديدة:** ❌ يُمنع منعاً باتاً استخدام "\n" أو "\\n" للنزول لسطر جديد. ✔️ يجب استخدام الوسم <br/> حصراً لأي سطر جديد داخل الـ content.
+- **الجداول:** يجب إخراجه بصيغة HTML حصراً داخل الـ content (مثل: <table><tr><td></td></tr></table>). ❌ يُمنع استخدام صيغة Markdown (مثل |---|---|).
+- **الفراغات:** عبر عن أي فراغ بـ 5 نقاط متتالية (.....).
 
-🛑 4. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
+🛑 4. الكيمياء العضوية والصيغ البنائية (هام جداً):
+- إذا احتوت الورقة على "صيغة بنائية متفرعة" (مثل الكحولات أو المركبات العضوية التي تحتوي على روابط للأعلى أو للأسفل)، ❌ يُمنع محاولة رسمها كـ (ASCII Art) باستخدام المسافات أو الخطوط.
+- ✔️ يجب تحويلها فوراً إلى "صيغة خطية مكثفة" (Condensed Formula) داخل أوامر LaTeX. 
+- أمثلة للتحويل الصحيح:
+  * مركب به تفرع ميثيل وهيدروكسيل يكتب هكذا: "$CH_3-C(CH_3)(OH)-C_2H_5$"
+  * حمض أو كحول: "$CH_3-CH_2-OH$" أو "$CH_3COOH$"
+  * استخدم الأقواس () للدلالة على التفرعات الجانبية من ذرة الكربون.
+
+🛑 5. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
-- "essay": سؤال مقالي.
+- "essay": سؤال مقالي (استخدمه للأسئلة النصية، المسائل، وأسئلة إكمال الجداول).
 - "file": يتطلب رفع صورة/ملف.
-- "comparison": سؤال مقارنة. الـ options حصراً: [الطرف1، الطرف2، وجه1، وجه2...].
-- "data_table": جدول بيانات تفاعلي (مثل جداول الكيمياء/الفيزياء). يجب أن يحتوي حصراً على كائن "table" بالصيغة التالية: {"headers": ["العمود1", "العمود2"], "rows": [["الصف1", "", ""], ["الصف2", "", ""]]}. الخلية الأولى من كل صف هي العنوان، والباقي نصوص فارغة "" ليعبئها الطالب.
+- "comparison": سؤال مقارنة (جدول). يجب أن تحتوي مصفوفة الـ options حصراً على: [اسم الطرف الأول، اسم الطرف الثاني، وجه المقارنة 1، وجه المقارنة 2، ...].
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
-    // الأسئلة هنا (مع تضمين كائن "table" إذا كان النوع data_table). الإجابة النموذجية في نهاية الـ content داخل: [الإجابة النموذجية: الحل]
+    // الأسئلة هنا. الإجابة النموذجية في نهاية الـ content داخل: [الإجابة النموذجية: الحل]
   ]
 }`;
 
@@ -305,8 +314,7 @@ export default function AIAssignmentsSandbox() {
         content: cleanMathLatex(q.content || q.question_text || q.text || q.question || 'سؤال بدون نص'),
         type: qType,
         points: Number(q.points) || 1,
-        options: parsedOptions,
-        table: q.table || undefined
+        options: parsedOptions
       });
     });
 
@@ -384,11 +392,7 @@ export default function AIAssignmentsSandbox() {
       
       const formattedQuestions = result.questions.map((q, i) => {
         let finalOptions: any[] = q.options || [];
-        
-        if (q.type === 'data_table' && q.table) {
-           finalOptions = [{ id: crypto.randomUUID(), content: JSON.stringify(q.table), is_correct: false }];
-        } 
-        else if (q.type === 'true_false' && finalOptions.length === 0) {
+        if (q.type === 'true_false' && finalOptions.length === 0) {
            finalOptions = [{ id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }];
         } else {
            finalOptions = finalOptions.map((opt: any) => ({ id: crypto.randomUUID(), content: String(opt), is_correct: false }));
@@ -437,12 +441,11 @@ export default function AIAssignmentsSandbox() {
       case 'multiple_choice': return 'اختيار من متعدد';
       case 'true_false': return 'صح أو خطأ';
       case 'multi_select': return 'اختيار متعدد';
-      case 'essay': return 'سؤال مقالي';
+      case 'essay': return 'سؤال مقالي (أو جدول)';
       case 'fill_in_blank': return 'إكمال الفراغ';
       case 'file': return 'رفع صورة / ملف';
       case 'section_header': return 'رأس مسألة / تعليمة عامة';
       case 'comparison': return 'سؤال مقارنة (جدول)';
-      case 'data_table': return 'جدول بيانات تفاعلي';
       default: return type;
     }
   };
