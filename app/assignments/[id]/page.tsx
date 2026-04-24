@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert ,AlignLeft} from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert,AlignLeft } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -45,7 +45,7 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة (Dark Theme)
+// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة (Dark Theme الملكي للطلاب)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
@@ -55,8 +55,9 @@ const renderContentWithMath = (content: string) => {
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$');
    
+   // 🚀 تلوين المعادلات بصورة متناغمة جداً مع النص المظلم
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
-       return `<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+       return `<span class="math-tex text-indigo-300 mx-1 inline-block max-w-full break-words" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-white/10"');
@@ -110,49 +111,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
-
-  // 🚀 حقن KaTeX في المنظومة كاملة لتعمل بشكل ذاتي
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const renderMath = () => {
-        if ((window as any).renderMathInElement) {
-          (window as any).renderMathInElement(document.body, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-          });
-        }
-      };
-
-      if (!document.getElementById('katex-css-main')) {
-        const link = document.createElement('link');
-        link.id = 'katex-css-main';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-        document.head.appendChild(link);
-      }
-
-      if (!document.getElementById('katex-js-main')) {
-        const script = document.createElement('script');
-        script.id = 'katex-js-main';
-        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-        script.onload = () => {
-          const autoRender = document.createElement('script');
-          autoRender.id = 'katex-auto-render-main';
-          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-          autoRender.onload = () => setTimeout(renderMath, 100);
-          document.head.appendChild(autoRender);
-        };
-        document.head.appendChild(script);
-      } else {
-        setTimeout(renderMath, 500);
-      }
-    }
-  }, [questions, activeTab, assignment]);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });    
@@ -265,6 +223,49 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // حقن KaTeX في المنظومة
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const renderMath = () => {
+        if ((window as any).renderMathInElement) {
+          (window as any).renderMathInElement(document.body, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        }
+      };
+
+      if (!document.getElementById('katex-css-main')) {
+        const link = document.createElement('link');
+        link.id = 'katex-css-main';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+        document.head.appendChild(link);
+      }
+
+      if (!document.getElementById('katex-js-main')) {
+        const script = document.createElement('script');
+        script.id = 'katex-js-main';
+        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+        script.onload = () => {
+          const autoRender = document.createElement('script');
+          autoRender.id = 'katex-auto-render-main';
+          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+          autoRender.onload = () => setTimeout(renderMath, 100);
+          document.head.appendChild(autoRender);
+        };
+        document.head.appendChild(script);
+      } else {
+        setTimeout(renderMath, 500);
+      }
+    }
+  }, [questions, activeTab, assignment]);
+
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
       const draftData = { answers: myAnswers, content, fileUrl };
@@ -323,18 +324,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setEditQuestions(questions); setIsFullEditModalOpen(true);
   };
 
-  // 🚀 منع خطأ Foreign Key نهائياً بإزالة الـ teacher_id من التحديث
   const handleSaveFullEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editData.title || !editData.due_date) return;
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
+      const finalTeacherId = typeof editData.teacher_id === 'object' 
+        ? (editData as any).teacher_id?.id || (editData as any).teacher_id?.auth_id 
+        : editData.teacher_id;
+
       const payload: any = { 
         title: editData.title, 
         description: editDescription, 
         due_date: new Date(editData.due_date).toISOString(), 
-        file_url: editFileUrl
+        file_url: editFileUrl,
+        teacher_id: finalTeacherId
       };
       
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
@@ -420,7 +425,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const sanitizedQuestions = questions.map(q => {
     const textContent = q.content || q.text || q.question_text || '';
     
-    // 🚀 معالجة خيارات صح/خطأ للظهور دائماً
     const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
        ? q.options 
        : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
@@ -550,10 +554,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const answerDetails = fullAnswersMap[q.id]; 
                       const isHeader = String(q.type) === 'section_header';
                       const isComparison = String(q.type) === 'comparison';
-                      
-                      const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
-                          ? q.options 
-                          : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
+                      const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
                       
                       if (isHeader) {
                         return (
@@ -619,7 +620,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                           <div className="p-6 sm:p-8">
                             {isComparison ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
-                                <div className="table-responsive-wrapper">
+                                <div className="overflow-x-auto custom-scrollbar">
                                   <table className="w-full text-right border-collapse min-w-[600px] m-0">
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-[#02040a]/80' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
@@ -649,17 +650,15 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 </div>
                               </div>
                             ) : q.type === 'file_upload' && !isUnanswered ? (
-                              <div className="mt-2 p-2 sm:p-3 bg-[#02040a]/60 rounded-xl sm:rounded-2xl border border-white/5 inline-block shadow-inner">
+                              <div className="p-3 bg-[#02040a] rounded-2xl border border-white/10 inline-block shadow-inner">
                                 {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
-                                   <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-white/5" />
+                                  <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-96 w-auto object-contain rounded-xl border border-white/5" />
                                 ) : (
-                                   <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-500/10 rounded-xl">
-                                      <FileText className="w-4 h-4 sm:w-5 sm:h-5" /> تحميل إجابة الطالب المرفقة
-                                   </a>
+                                  <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 font-black hover:underline px-4 py-2 bg-indigo-500/10 rounded-xl"><FileText className="w-5 h-5" /> تحميل الملف المرفق</a>
                                 )}
                               </div>
                             ) : (
-                              <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border mb-3 sm:mb-4 shadow-inner ${isUnanswered ? 'bg-[#02040a]/40 border-white/5 border-dashed text-slate-500 italic' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-white' : 'bg-rose-500/10 border-rose-500/20 text-white'}`}>
+                              <div className={`p-5 sm:p-6 rounded-[1.5rem] border shadow-inner ${isUnanswered ? 'bg-[#131836]/30 border-white/5 border-dashed text-slate-500' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-white' : 'bg-rose-500/10 border-rose-500/20 text-white'}`}>
                                 <div className="text-xs sm:text-sm font-black mb-3 flex items-center gap-2">
                                   {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-500" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-400"/> : <XCircle className="w-5 h-5 text-rose-400"/>}
                                   <span className={isUnanswered ? 'text-slate-400' : isCorrect ? 'text-emerald-400' : 'text-rose-400'}>إجابتك المسجلة:</span>
@@ -670,7 +669,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
-                            {/* التغذية الراجعة */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 relative overflow-hidden shadow-inner">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"></div>
@@ -684,7 +682,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     })}
                   </div>
 
-                  {/* المرفقات والنصوص الإضافية */}
                   {(mySubmission?.content || mySubmission?.file_url) && (
                     <div className="mt-10 p-6 sm:p-8 rounded-[2rem] bg-[#090b14]/50 border border-white/10 shadow-inner">
                       <h3 className="text-lg sm:text-xl font-black text-white mb-6 flex items-center gap-2"><FileText className="h-6 w-6 text-indigo-400" /> مرفقات ونصوص إضافية مُرسلة</h3>
@@ -1169,138 +1166,4 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                   setEditSectionIds(newSectionIds);
                                 }}
                               />
-                              <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-[0.4rem] border flex items-center justify-center shrink-0 transition-colors shadow-inner ${editSectionIds.includes(s.id) ? 'bg-amber-500 border-amber-400' : 'border-slate-600 bg-[#02040a]'}`}>
-                                 {editSectionIds.includes(s.id) && <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-900" />}
-                              </div>
-                              <span className="text-xs sm:text-sm font-bold truncate">
-                                {cName ? `${cName} - ${s.name}` : s.name}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner">
-                      <label className="flex items-center gap-2 text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-3 sm:mb-4">
-                        <ImageIcon className="w-4 h-4 text-amber-400" />
-                        المرفق الحالي / تعديل
-                      </label>
-                      <div className="bg-[#02040a]/60 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 border border-white/5 shadow-inner">
-                        <ImageUpload
-                          initialImageUrl={editFileUrl}
-                          onUploadSuccess={(url) => setEditFileUrl(url || '')}
-                          label="تغيير المرفق"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column: Question Builder */}
-                  <div className="bg-[#02040a]/40 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 lg:p-8 border border-white/5 shadow-inner relative overflow-hidden h-fit">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
-                    <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6 relative z-10">
-                      <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg sm:rounded-xl shadow-inner shrink-0">
-                         <Layout className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 drop-shadow-sm" />
-                      </div>
-                      <h4 className="text-base sm:text-lg font-black text-white drop-shadow-sm">بناء الأسئلة التفاعلية</h4>
-                    </div>
-                    <div className="relative z-10">
-                      <AssignmentBuilder questions={editQuestions} onChange={setEditQuestions} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4 pt-6 sm:pt-8 border-t border-white/5">
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-[#02040a]/80 border border-white/5 px-6 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-400 hover:bg-white/5 hover:text-white transition-all active:scale-95 shadow-inner"
-                  >
-                    إلغاء الأمر
-                  </button>
-                </Dialog.Close>
-                <button
-                  type="submit"
-                  disabled={isSubmittingEdit}
-                  className="w-full sm:w-auto rounded-xl sm:rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-600 border border-amber-400/50 px-6 sm:px-10 py-3.5 sm:py-4 text-xs sm:text-sm font-black text-slate-900 shadow-[0_0_20px_rgba(245,158,11,0.4)] hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSubmittingEdit ? (
-                    <><div className="h-4 w-4 sm:h-5 sm:w-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" /> جاري الحفظ...</>
-                  ) : (
-                    <><CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" /> اعتماد التعديلات الشاملة</>
-                  )}
-                </button>
-              </div>
-            </form>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 12px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 1px solid #02040a; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
-        
-        /* 🚀 التغليف الذكي للجدول (Table Wrapper) */
-        .table-responsive-wrapper {
-          width: 100%;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 5px;
-        }
-        
-        .dark-theme-override table {
-          min-width: max-content !important;
-          border-collapse: collapse !important;
-        }
-
-        .dark-theme-override th, .dark-theme-override td {
-          padding: 1rem !important;
-          text-align: center !important;
-          vertical-align: middle !important;
-          border: 1px solid rgba(255,255,255,0.05) !important;
-          white-space: normal !important;
-          word-wrap: break-word !important;
-        }
-        
-        .dark-theme-override th {
-          background-color: rgba(99, 102, 241, 0.15) !important;
-          color: #a5b4fc !important; 
-          font-weight: 900 !important;
-        }
-        .dark-theme-override td {
-          background-color: rgba(15, 20, 35, 0.4) !important;
-        }
-        
-        /* تحسين شكل حقول الإدخال داخل الجداول في الموبايل */
-        .dark-theme-override td input, .dark-theme-override td textarea {
-          width: 100% !important;
-          min-width: 120px !important;
-          background-color: rgba(2, 4, 10, 0.8) !important;
-          border: 1px solid rgba(255,255,255,0.1) !important;
-          color: #34d399 !important; 
-          font-weight: 900 !important;
-          text-align: center !important;
-          padding: 0.75rem !important;
-          border-radius: 0.75rem !important;
-          transition: all 0.2s ease-in-out !important;
-        }
-        .dark-theme-override td input:focus, .dark-theme-override td textarea:focus {
-          border-color: rgba(52, 211, 153, 0.5) !important;
-          outline: none !important;
-          box-shadow: 0 0 15px rgba(52, 211, 153, 0.2) !important;
-        }
-
-        .dark-theme-override input:not(td input), .dark-theme-override textarea:not(td textarea), .dark-theme-override select { background-color: rgba(2, 4, 10, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
-        .dark-theme-override .bg-white { background-color: transparent !important; }
-        .dark-theme-override .bg-slate-50 { background-color: rgba(15, 20, 35, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; }
-        .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 { color: #f8fafc !important; }
-        .dark-theme-override .text-slate-500, .dark-theme-override .text-slate-400 { color: #94a3b8 !important; }
-        .dark-theme-override .border-slate-200, .dark-theme-override .border-slate-300 { border-color: rgba(255, 255, 255, 0.1) !important; }
-      `}} />
-    </div>
-  );
-}
+                              <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-[0.4rem] border flex items-center justify-center shrink-0
