@@ -95,38 +95,47 @@ export default function AssignmentsPage() {
       return;
     }
 
-    // 🚀 فلتر تنظيف المعرف (ID Stripper) - يستخلص الـ ID الصافي ويمنع صراع الـ Foreign Key
-    let finalTeacherId = currentAssignment.teacher_id;
-    if (finalTeacherId && typeof finalTeacherId === 'object') {
-      finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
-    }
-    if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') {
-      finalTeacherId = currentAssignment.teacher.id;
-    }
-    if (!finalTeacherId && currentRole === 'teacher') {
-      finalTeacherId = user.id;
-    }
+    const isEdit = !!currentAssignment.id;
 
-    if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) {
-      showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
-      return;
+    // 🚀 1. تجهيز الـ Payload الصافي الذي لا يمس علاقات قاعدة البيانات المحمية (بدون teacher_id)
+    const payload: any = {
+      title: currentAssignment.title,
+      description: currentAssignment.description,
+      subject_id: currentAssignment.subject_id,
+      due_date: currentAssignment.due_date,
+      file_url: currentAssignment.file_url,
+      status: currentAssignment.status || 'draft'
+    };
+
+    // 🚀 2. حماية دفاعية: لا نرسل teacher_id إطلاقاً إلا إذا كان الواجب "جديداً"
+    if (!isEdit) {
+      let finalTeacherId = currentAssignment.teacher_id;
+      if (finalTeacherId && typeof finalTeacherId === 'object') {
+        finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
+      }
+      if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') {
+        finalTeacherId = currentAssignment.teacher.id;
+      }
+      if (!finalTeacherId && currentRole === 'teacher') {
+        finalTeacherId = user.id;
+      }
+
+      if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) {
+        showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
+        return;
+      }
+      
+      payload.teacher_id = finalTeacherId; // يضاف فقط في الـ Insert
+    } else {
+      // التأكيد القطعي على عدم وجود الحقل أثناء الـ Update لمنع الـ Foreign Key Constraint Error
+      delete payload.teacher_id;
     }
 
     setIsSubmitting(true);
     try {
-      const payload = {
-        title: currentAssignment.title,
-        description: currentAssignment.description,
-        subject_id: currentAssignment.subject_id,
-        teacher_id: finalTeacherId, // 👈 هنا نمرر الـ String النقي فقط
-        due_date: currentAssignment.due_date,
-        file_url: currentAssignment.file_url,
-        status: currentAssignment.status || 'draft'
-      };
-
       await saveAssignment(payload, currentAssignment.id || null, questions, currentAssignment.section_ids, subjects);
 
-      showNotification('success', currentAssignment.id ? 'تم تحديث الواجب بنجاح' : 'تم إضافة الواجب بنجاح');
+      showNotification('success', isEdit ? 'تم تحديث الواجب بنجاح' : 'تم إضافة الواجب بنجاح');
       setIsModalOpen(false);
       if (refresh) refresh();
     } catch (error: any) {
@@ -176,7 +185,6 @@ export default function AssignmentsPage() {
     const dateObj = new Date(assignment.due_date);
     const formattedDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
     
-    // 🚀 الفلتر السحري: كسر الكائن واستخراج المعرف الصافي عند فتح التعديل لكي يقرأه الـ Dropdown
     let pureTeacherId = assignment.teacher_id;
     if (pureTeacherId && typeof pureTeacherId === 'object') {
       pureTeacherId = pureTeacherId.id || pureTeacherId.auth_id;
@@ -188,7 +196,7 @@ export default function AssignmentsPage() {
     setCurrentAssignment({
       ...assignment,
       due_date: formattedDate,
-      teacher_id: pureTeacherId, // 👈 تمرير المعرف النقي
+      teacher_id: pureTeacherId, 
       section_ids: assignment.assignment_sections?.map((as: any) => as.section_id) || assignment.section_ids || []
     });
     const qData = await fetchAssignmentQuestions(assignment.id);
@@ -435,7 +443,7 @@ export default function AssignmentsPage() {
                 );
               } 
               
-              // 👨‍🎓 واجهة الطالب الفخمة
+              // 👨‍🎓 واجهة الطالب
               else {
                 const statusStr = String((studentSubmissions[assignment.id] as any)?.status || '');
                 const isStudentDone = ['submitted', 'graded'].includes(statusStr);
@@ -628,8 +636,9 @@ export default function AssignmentsPage() {
                           <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner sm:col-span-2">
                             <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">المعلم المسؤول <span className="text-rose-500">*</span></label>
                             <select 
-                              required
-                              className="block w-full rounded-xl sm:rounded-2xl border-0 py-3.5 sm:py-4 px-4 sm:px-5 text-white bg-[#02040a]/60 focus:bg-[#02040a] ring-1 ring-inset ring-white/5 focus:ring-2 focus:ring-indigo-500/50 text-xs sm:text-sm transition-all font-bold appearance-none cursor-pointer shadow-inner [&>option]:bg-[#0f1423]"
+                              required={!currentAssignment.id}
+                              disabled={!!currentAssignment.id} // 🚀 تعطيل الحقل إذا كان الواجب موجوداً مسبقاً
+                              className={`block w-full rounded-xl sm:rounded-2xl border-0 py-3.5 sm:py-4 px-4 sm:px-5 text-white bg-[#02040a]/60 focus:bg-[#02040a] ring-1 ring-inset ring-white/5 focus:ring-2 focus:ring-indigo-500/50 text-xs sm:text-sm transition-all font-bold appearance-none shadow-inner [&>option]:bg-[#0f1423] ${!!currentAssignment.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                               value={currentAssignment.teacher_id || ''}
                               onChange={(e) => setCurrentAssignment({...currentAssignment, teacher_id: e.target.value})}
                             >
@@ -638,6 +647,9 @@ export default function AssignmentsPage() {
                                 <option key={t.id} value={t.id}>{t.user?.full_name || 'معلم'}</option>
                               ))}
                             </select>
+                            {!!currentAssignment.id && (
+                               <p className="text-[10px] text-amber-400 mt-2 font-bold">لا يمكن تغيير المعلم المسؤول بعد إنشاء الواجب حفاظاً على السجلات.</p>
+                            )}
                           </div>
                         )}
                       </div>
