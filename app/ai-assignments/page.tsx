@@ -8,7 +8,6 @@ import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 
-// 🚀 استيراد مكتبة الرياضيات لعرض المعاينة بشكل صحيح
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -33,13 +32,10 @@ interface Teacher { id: string; full_name: string; }
 interface Subject { id: string; name: string; }
 interface Section { id: string; name: string; }
 
-// 🚀 الفلتر السحري: ينظف جميع أخطاء الذكاء الاصطناعي ويجهز المعادلات لـ KaTeX
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
-    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
     .replace(/\\\\([a-zA-Z])/g, '\\$1')
-    // 2. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
     .replace(/\$\$/g, '$');
 };
 
@@ -164,6 +160,7 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
+  // 🚀 البرومبت المحدث بقواعد صارمة جداً للجداول والفراغات
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
 🛑 1. هيكلية الأسئلة (مهم جداً):
@@ -173,15 +170,16 @@ export default function AIAssignmentsSandbox() {
 🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
 - اكتب أوامر LaTeX مع وضع شرطة مائلة إضافية للهروب البرمجي (Escaping) الخاص بـ JSON.
   ✔️ صحيح في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
-  ❌ خاطئ: "\frac" أو "\\\\frac"
 - أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط (مثال: "$2 \times 10^{-6} \text{T}$"). لا تستخدم $$ نهائياً.
-- ⚠️ دعم الرياضيات العربية: إذا كانت المعادلة تحتوي على متغيرات عربية (مثل س، ص)، يجب وضع الحرف العربي داخل أمر \text{} ليعمل بشكل صحيح.
-  ✔️ مثال صحيح للمعادلة: "$(\text{س} + 2)^2 + (\text{ص} - 3)^2 = 9$"
 
-🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
+🛑 3. التعامل الصارم مع الجداول والفراغات (حرج جداً جداً):
+- **الجداول:** إذا احتوت الصورة على جدول (فارغ أو ممتلئ للتكملة)، **يجب** إخراجه بصيغة HTML حصراً داخل الـ content (مثل: <table border="1"><tr><th>العنصر</th><th>C</th></tr><tr><td>الكتلة</td><td></td></tr></table>). ❌ يُمنع منعاً باتاً استخدام صيغة Markdown (مثل |---|---|).
+- **الفراغات:** عبر عن أي فراغ مطلوب من الطالب تعبئته بـ 5 نقاط متتالية (.....).
+
+🛑 4. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
-- "essay": سؤال مقالي.
+- "essay": سؤال مقالي (استخدمه للأسئلة النصية، المسائل، وأسئلة إكمال الجداول).
 - "file": يتطلب رفع صورة/ملف.
 - "comparison": سؤال مقارنة (جدول). يجب أن تحتوي مصفوفة الـ options حصراً على: [اسم الطرف الأول، اسم الطرف الثاني، وجه المقارنة 1، وجه المقارنة 2، ...].
 
@@ -400,7 +398,7 @@ export default function AIAssignmentsSandbox() {
 
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
-        description: 'تم التوليد الذكي باستخدام خوارزميات ايهاب جمال غزال.', 
+        description: 'تم التوليد الذكي باستخدام خوارزميات ايهاب جمال غزال
         subject_id: selectedSubject, 
         teacher_id: selectedTeacher, 
         due_date: dueDate.toISOString(), 
@@ -430,7 +428,7 @@ export default function AIAssignmentsSandbox() {
       case 'multiple_choice': return 'اختيار من متعدد';
       case 'true_false': return 'صح أو خطأ';
       case 'multi_select': return 'اختيار متعدد';
-      case 'essay': return 'سؤال مقالي';
+      case 'essay': return 'سؤال مقالي (أو جدول)';
       case 'fill_in_blank': return 'إكمال الفراغ';
       case 'file': return 'رفع صورة / ملف';
       case 'section_header': return 'رأس مسألة / تعليمة عامة';
