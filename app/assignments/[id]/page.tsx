@@ -17,7 +17,6 @@ import AssignmentForm from '@/components/assignment-form';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
 import ForumEditorOriginal from '@/components/ForumEditor';
-// 🪄 الحيلة السحرية لإسكات TypeScript
 const ForumEditor = ForumEditorOriginal as any;
 import * as XLSX from 'xlsx';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
@@ -50,19 +49,16 @@ const getStatusLabel = (status: string) => {
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   // 1. إصلاح النزول للسطر: استهداف كل أشكال \n (المخفية والصريحة)
    let html = String(content)
      .replace(/\\n/g, '<br/>')
      .replace(/\\r\\n/g, '<br/>')
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$');
    
-   // 2. تلوين وتنسيق المعادلات الرياضية
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // 3. تنسيق الجداول المستخرجة من الذكاء الاصطناعي
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-white/10"');
    html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-3 border border-white/10 font-black text-indigo-200 text-sm"');
    html = html.replace(/<td/g, '<td class="p-3 border border-white/5 bg-[#02040a]/40 text-slate-300 font-bold hover:bg-[#02040a]/80 transition-colors"');
@@ -226,48 +222,45 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 حقن مكتبة KaTeX لتعمل بشكل ذاتي في صفحة الواجب والمعاينة
+  // 🚀 1. حقن مكتبة KaTeX (مرة واحدة فقط) للصفحة الأساسية والمعاينة
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const renderMath = () => {
-        if ((window as any).renderMathInElement) {
-          (window as any).renderMathInElement(document.body, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-          });
-        }
+    if (typeof window !== 'undefined' && !document.getElementById('katex-js-main')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css-main';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.id = 'katex-js-main';
+      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+      script.onload = () => {
+        const autoRender = document.createElement('script');
+        autoRender.id = 'katex-auto-render-main';
+        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+        document.head.appendChild(autoRender);
       };
-
-      if (!document.getElementById('katex-css-main')) {
-        const link = document.createElement('link');
-        link.id = 'katex-css-main';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-        document.head.appendChild(link);
-      }
-
-      if (!document.getElementById('katex-js-main')) {
-        const script = document.createElement('script');
-        script.id = 'katex-js-main';
-        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-        script.onload = () => {
-          const autoRender = document.createElement('script');
-          autoRender.id = 'katex-auto-render-main';
-          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-          autoRender.onload = () => setTimeout(renderMath, 100);
-          document.head.appendChild(autoRender);
-        };
-        document.head.appendChild(script);
-      } else {
-        setTimeout(renderMath, 500);
-      }
+      document.head.appendChild(script);
     }
-  }, [questions, activeTab, assignment]);
+  }, []);
+
+  // 🚀 2. المشغل الديناميكي لمسح التغيرات في واجهة الطالب / المعاينة
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
+        (window as any).renderMathInElement(document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [questions, activeTab, assignment, myAnswers]);
 
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
@@ -327,18 +320,22 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setEditQuestions(questions); setIsFullEditModalOpen(true);
   };
 
-  // 🚀 التحديث لمنع خطأ الـ Foreign Key Constraint
   const handleSaveFullEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editData.title || !editData.due_date) return;
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
+      const finalTeacherId = typeof editData.teacher_id === 'object' 
+        ? (editData as any).teacher_id?.id || (editData as any).teacher_id?.auth_id 
+        : editData.teacher_id;
+
       const payload: any = { 
         title: editData.title, 
         description: editDescription, 
         due_date: new Date(editData.due_date).toISOString(), 
-        file_url: editFileUrl
+        file_url: editFileUrl,
+        teacher_id: finalTeacherId
       };
       
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
@@ -421,7 +418,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
-  // 🚀 تنظيف الأسئلة لضمان عمل \n وتمرير الخيارات بأمان للمكون الجاهز
   const sanitizedQuestions = questions.map(q => {
     const textContent = q.content || q.text || q.question_text || '';
     const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
@@ -678,6 +674,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
+                            {/* التغذية الراجعة */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 relative overflow-hidden shadow-inner">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"></div>
