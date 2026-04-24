@@ -22,6 +22,7 @@ interface ExtractedQuestion {
   type: string;
   points: number;
   options?: string[] | any[]; 
+  table?: any; // 🚀 دعم الجدول في الواجهة
 }
 
 interface ExtractedAssignment {
@@ -164,10 +165,10 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت المحدث بقواعد صارمة جداً للجداول والفراغات
+  // 🚀 البرومبت المحدث بقواعد صارمة جداً لدعم data_table
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
-🛑 1. هيكلية الأسئلة (مهم جداً):
+🛑 1. هيكلية الأسئلة:
 إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "اقرأ المسألة التالية:"، أو "بناءً على الشكل:").
 ضعه كعنصر مستقل في المصفوفة نوعه "section_header"، ثم الأسئلة تحته.
 
@@ -176,22 +177,19 @@ export default function AIAssignmentsSandbox() {
   ✔️ صحيح في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
 - أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط (مثال: "$2 \times 10^{-6} \text{T}$"). لا تستخدم $$ نهائياً.
 
-🛑 3. التعامل الصارم مع الجداول والفراغات (حرج جداً جداً):
-- **الجداول:** إذا احتوت الصورة على جدول (فارغ أو ممتلئ للتكملة)، **يجب** إخراجه بصيغة HTML حصراً داخل الـ content (مثل: <table border="1"><tr><th>العنصر</th><th>C</th></tr><tr><td>الكتلة</td><td></td></tr></table>). ❌ يُمنع منعاً باتاً استخدام صيغة Markdown (مثل |---|---|).
-- **الفراغات:** عبر عن أي فراغ مطلوب من الطالب تعبئته بـ 5 نقاط متتالية (.....).
-
-🛑 4. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
+🛑 3. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً وبدقة صارمة):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
-- "essay": سؤال مقالي (استخدمه للأسئلة النصية، المسائل، وأسئلة إكمال الجداول).
+- "essay": سؤال مقالي.
 - "file": يتطلب رفع صورة/ملف.
-- "comparison": سؤال مقارنة (جدول). يجب أن تحتوي مصفوفة الـ options حصراً على: [اسم الطرف الأول، اسم الطرف الثاني، وجه المقارنة 1، وجه المقارنة 2، ...].
+- "comparison": سؤال مقارنة. الـ options حصراً: [الطرف1، الطرف2، وجه1، وجه2...].
+- "data_table": جدول بيانات تفاعلي (مثل جداول الكيمياء/الفيزياء). يجب أن يحتوي حصراً على كائن "table" بالصيغة التالية: {"headers": ["العمود1", "العمود2"], "rows": [["الصف1", "", ""], ["الصف2", "", ""]]}. الخلية الأولى من كل صف هي العنوان، والباقي نصوص فارغة "" ليعبئها الطالب.
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
   "title": "عنوان الواجب",
   "questions": [
-    // الأسئلة هنا. الإجابة النموذجية في نهاية الـ content داخل: [الإجابة النموذجية: الحل]
+    // الأسئلة هنا (مع تضمين كائن "table" إذا كان النوع data_table). الإجابة النموذجية في نهاية الـ content داخل: [الإجابة النموذجية: الحل]
   ]
 }`;
 
@@ -305,7 +303,8 @@ export default function AIAssignmentsSandbox() {
         content: cleanMathLatex(q.content || q.question_text || q.text || q.question || 'سؤال بدون نص'),
         type: qType,
         points: Number(q.points) || 1,
-        options: parsedOptions
+        options: parsedOptions,
+        table: q.table || undefined // 🚀 السطر السحري الجديد
       });
     });
 
@@ -396,11 +395,11 @@ export default function AIAssignmentsSandbox() {
           points: q.points || 1, 
           isRequired: true, 
           order_index: i + 1, 
-          options: finalOptions 
+          options: finalOptions,
+          table: q.table || null // 🚀 السطر السحري الجديد
         };
       });
 
-      // 🚀 إصلاح الخطأ: وضعنا علامة التنصيص والفاصلة بشكل سليم
       const payloadData = { 
         title: result.title || 'واجب تفاعلي ذكي', 
         description: 'تم التوليد الذكي باستخدام خوارزميات إيهاب جمال غزال.', 
@@ -433,11 +432,12 @@ export default function AIAssignmentsSandbox() {
       case 'multiple_choice': return 'اختيار من متعدد';
       case 'true_false': return 'صح أو خطأ';
       case 'multi_select': return 'اختيار متعدد';
-      case 'essay': return 'سؤال مقالي (أو جدول)';
+      case 'essay': return 'سؤال مقالي';
       case 'fill_in_blank': return 'إكمال الفراغ';
       case 'file': return 'رفع صورة / ملف';
       case 'section_header': return 'رأس مسألة / تعليمة عامة';
       case 'comparison': return 'سؤال مقارنة (جدول)';
+      case 'data_table': return 'جدول بيانات تفاعلي';
       default: return type;
     }
   };
