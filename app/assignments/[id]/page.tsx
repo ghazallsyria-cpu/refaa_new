@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert,AlignLeft } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -17,7 +17,6 @@ import AssignmentForm from '@/components/assignment-form';
 import AssignmentBuilder from '@/components/assignment-builder';
 import ImageUpload from '@/components/ImageUpload';
 import ForumEditorOriginal from '@/components/ForumEditor';
-// 🪄 الحيلة السحرية لإسكات TypeScript
 const ForumEditor = ForumEditorOriginal as any;
 import * as XLSX from 'xlsx';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
@@ -46,18 +45,23 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة
+// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة (Dark Theme)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   // 1. إصلاح النزول للسطر: استهداف كل أشكال \n (المخفية والصريحة)
    let html = String(content)
      .replace(/\\n/g, '<br/>')
      .replace(/\\r\\n/g, '<br/>')
-     .replace(/\n/g, '<br/>');
+     .replace(/\n/g, '<br/>')
+     .replace(/\\\$/g, '$');
    
-   // 2. تلوين وتنسيق المعادلات الرياضية
-   html = html.replace(/\$\$([\s\S]*?)\$\$/g, '<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>');
+   html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
+       return `<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded-md font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+   });
+
+   html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-white/10"');
+   html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-3 border border-white/10 font-black text-indigo-200 text-sm"');
+   html = html.replace(/<td/g, '<td class="p-3 border border-white/5 bg-[#02040a]/40 text-slate-300 font-bold hover:bg-[#02040a]/80 transition-colors"');
    
    return { __html: html };
 };
@@ -106,6 +110,49 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // 🚀 حقن KaTeX في المنظومة كاملة لتعمل بشكل ذاتي
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const renderMath = () => {
+        if ((window as any).renderMathInElement) {
+          (window as any).renderMathInElement(document.body, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        }
+      };
+
+      if (!document.getElementById('katex-css-main')) {
+        const link = document.createElement('link');
+        link.id = 'katex-css-main';
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+        document.head.appendChild(link);
+      }
+
+      if (!document.getElementById('katex-js-main')) {
+        const script = document.createElement('script');
+        script.id = 'katex-js-main';
+        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+        script.onload = () => {
+          const autoRender = document.createElement('script');
+          autoRender.id = 'katex-auto-render-main';
+          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+          autoRender.onload = () => setTimeout(renderMath, 100);
+          document.head.appendChild(autoRender);
+        };
+        document.head.appendChild(script);
+      } else {
+        setTimeout(renderMath, 500);
+      }
+    }
+  }, [questions, activeTab, assignment]);
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });    
@@ -276,22 +323,18 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setEditQuestions(questions); setIsFullEditModalOpen(true);
   };
 
+  // 🚀 منع خطأ Foreign Key نهائياً بإزالة الـ teacher_id من التحديث
   const handleSaveFullEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editData.title || !editData.due_date) return;
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
-      const finalTeacherId = typeof editData.teacher_id === 'object' 
-        ? (editData as any).teacher_id?.id || (editData as any).teacher_id?.auth_id 
-        : editData.teacher_id;
-
       const payload: any = { 
         title: editData.title, 
         description: editDescription, 
         due_date: new Date(editData.due_date).toISOString(), 
-        file_url: editFileUrl,
-        teacher_id: finalTeacherId
+        file_url: editFileUrl
       };
       
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
@@ -374,12 +417,18 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
-  // 🚀 تنظيف الأسئلة من أي أخطاء نصية قبل إرسالها للطالب
   const sanitizedQuestions = questions.map(q => {
     const textContent = q.content || q.text || q.question_text || '';
+    
+    // 🚀 معالجة خيارات صح/خطأ للظهور دائماً
+    const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
+       ? q.options 
+       : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
+
     return {
       ...q,
-      content: textContent.replace(/\\n/g, '\n') // هذا يضمن معالجة الأسطر بشكل سليم في الـ AssignmentForm
+      options: safeOptions,
+      content: textContent
     };
   });
 
@@ -437,7 +486,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
             <div className="mb-8">
               <h3 className="text-xl font-black text-white mb-4">وصف الواجب</h3>
-              {assignment?.description ? <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={{ __html: assignment.description }} /> : <p className="text-slate-500 font-bold bg-[#090b14]/30 p-4 rounded-xl border border-dashed border-white/10 text-center">لا يوجد وصف إضافي.</p>}
+              {assignment?.description ? <div className="prose prose-invert max-w-none text-slate-300 leading-relaxed text-base sm:text-lg font-medium" dangerouslySetInnerHTML={renderContentWithMath(assignment.description)} /> : <p className="text-slate-500 font-bold bg-[#090b14]/30 p-4 rounded-xl border border-dashed border-white/10 text-center">لا يوجد وصف إضافي.</p>}
             </div>
 
             {assignment?.file_url && (
@@ -501,7 +550,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const answerDetails = fullAnswersMap[q.id]; 
                       const isHeader = String(q.type) === 'section_header';
                       const isComparison = String(q.type) === 'comparison';
-                      const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
+                      
+                      const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
+                          ? q.options 
+                          : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
                       
                       if (isHeader) {
                         return (
@@ -572,12 +624,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-[#02040a]/80' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
                                         <th className="p-5 border-b border-l border-white/10 font-black text-slate-300 text-sm w-1/3">وجه المقارنة</th>
-                                        <th className="p-5 border-b border-l border-white/10 font-black text-indigo-300 text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
-                                        <th className="p-5 border-b border-white/10 font-black text-indigo-300 text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
+                                        <th className="p-5 border-b border-l border-white/10 font-black text-indigo-300 text-sm text-center w-1/3">{safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول'}</th>
+                                        <th className="p-5 border-b border-white/10 font-black text-indigo-300 text-sm text-center w-1/3">{safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني'}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
+                                      {safeOptions.slice(2).map((opt: any, rIdx: number) => {
+                                        const aspect = opt.content || opt || '';
                                         let parsedAns: any[] = [];
                                         try { 
                                           if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
@@ -596,15 +649,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 </div>
                               </div>
                             ) : q.type === 'file_upload' && !isUnanswered ? (
-                              <div className="p-3 bg-[#02040a] rounded-2xl border border-white/10 inline-block shadow-inner">
+                              <div className="mt-2 p-2 sm:p-3 bg-[#02040a]/60 rounded-xl sm:rounded-2xl border border-white/5 inline-block shadow-inner">
                                 {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
-                                  <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-96 w-auto object-contain rounded-xl border border-white/5" />
+                                   <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-white/5" />
                                 ) : (
-                                  <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 font-black hover:underline px-4 py-2 bg-indigo-500/10 rounded-xl"><FileText className="w-5 h-5" /> تحميل الملف المرفق</a>
+                                   <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-400 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-500/10 rounded-xl">
+                                      <FileText className="w-4 h-4 sm:w-5 sm:h-5" /> تحميل إجابة الطالب المرفقة
+                                   </a>
                                 )}
                               </div>
                             ) : (
-                              <div className={`p-5 sm:p-6 rounded-[1.5rem] border shadow-inner ${isUnanswered ? 'bg-[#131836]/30 border-white/5 border-dashed text-slate-500' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-white' : 'bg-rose-500/10 border-rose-500/20 text-white'}`}>
+                              <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border mb-3 sm:mb-4 shadow-inner ${isUnanswered ? 'bg-[#02040a]/40 border-white/5 border-dashed text-slate-500 italic' : isCorrect ? 'bg-emerald-500/10 border-emerald-500/20 text-white' : 'bg-rose-500/10 border-rose-500/20 text-white'}`}>
                                 <div className="text-xs sm:text-sm font-black mb-3 flex items-center gap-2">
                                   {isUnanswered ? <MinusCircle className="w-5 h-5 text-slate-500" /> : isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-400"/> : <XCircle className="w-5 h-5 text-rose-400"/>}
                                   <span className={isUnanswered ? 'text-slate-400' : isCorrect ? 'text-emerald-400' : 'text-rose-400'}>إجابتك المسجلة:</span>
@@ -615,7 +670,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
-                            {/* התغذية الراجعة */}
+                            {/* التغذية الراجعة */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 relative overflow-hidden shadow-inner">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"></div>
@@ -1194,11 +1249,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           width: 100%;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          padding-bottom: 5px; /* لمنع إخفاء الـ scrollbar */
+          padding-bottom: 5px;
         }
         
         .dark-theme-override table {
-          width: 100% !important;
           min-width: max-content !important;
           border-collapse: collapse !important;
         }
@@ -1221,8 +1275,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           background-color: rgba(15, 20, 35, 0.4) !important;
         }
         
-        /* تحسين شكل حقول الإدخال داخل الجداول */
-        .dark-theme-override td input {
+        /* تحسين شكل حقول الإدخال داخل الجداول في الموبايل */
+        .dark-theme-override td input, .dark-theme-override td textarea {
           width: 100% !important;
           min-width: 120px !important;
           background-color: rgba(2, 4, 10, 0.8) !important;
@@ -1234,13 +1288,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           border-radius: 0.75rem !important;
           transition: all 0.2s ease-in-out !important;
         }
-        .dark-theme-override td input:focus {
+        .dark-theme-override td input:focus, .dark-theme-override td textarea:focus {
           border-color: rgba(52, 211, 153, 0.5) !important;
           outline: none !important;
           box-shadow: 0 0 15px rgba(52, 211, 153, 0.2) !important;
         }
 
-        .dark-theme-override input:not(td input), .dark-theme-override textarea, .dark-theme-override select { background-color: rgba(2, 4, 10, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
+        .dark-theme-override input:not(td input), .dark-theme-override textarea:not(td textarea), .dark-theme-override select { background-color: rgba(2, 4, 10, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
         .dark-theme-override .bg-white { background-color: transparent !important; }
         .dark-theme-override .bg-slate-50 { background-color: rgba(15, 20, 35, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; }
         .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 { color: #f8fafc !important; }
