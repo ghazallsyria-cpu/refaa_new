@@ -50,10 +50,8 @@ const getStatusLabel = (status: string) => {
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   // 1. تلوين وتنسيق المعادلات الرياضية
    let html = content.replace(/\$\$([\s\S]*?)\$\$/g, '<span class="math-tex text-indigo-300 bg-[#090b14] border border-indigo-500/30 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">$1</span>');
    
-   // 2. تجميل الجداول لتتوافق مع الثيم المظلم
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px]"');
    html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-3 border border-white/10 font-black text-indigo-200"');
    html = html.replace(/<td/g, '<td class="p-3 border border-white/5 bg-[#02040a]/40 text-slate-300 font-bold hover:bg-[#02040a]/80 transition-colors"');
@@ -373,7 +371,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
-  // متغير للترقيم التسلسلي يتجاهل النصوص التمهيدية
   let questionCounter = 1;
 
   return (
@@ -449,7 +446,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        {/* 🚀 قسم الطالب والمراجعة التفصيلية (تم التعديل البصري الشامل هنا) */}
         {currentRole === 'student' && (
           <div className="bg-[#131836]/60 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 overflow-hidden relative">
             <div className="p-8 border-b border-white/5 bg-[#090b14]/30 relative z-10">
@@ -488,17 +484,21 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 <div className="space-y-6">
                   <h3 className="text-lg sm:text-xl font-black text-white mb-6 flex items-center gap-2 px-2"><Target className="h-6 w-6 text-indigo-400" /> المراجعة التفصيلية لأسئلة الواجب</h3>
                   
-                  {/* 🚀 مساحة عرض الأسئلة المحسنة بصرياً وفق دستور الرفعة */}
                   <div className="flex flex-col gap-6">
                     {questions.map((q: any, idx: number) => {
                       const studentAns = myAnswers[q.id];
                       const answerDetails = fullAnswersMap[q.id]; 
                       const isHeader = String(q.type) === 'section_header';
                       const isComparison = String(q.type) === 'comparison';
-                      const isDataTable = String(q.type) === 'data_table'; // 🚀 دعم الجدول في العرض
+                      
+                      const isDataTable = String(q.type) === 'data_table';
+                      let tableData = q.table;
+                      if (!tableData && isDataTable && q.options && q.options.length > 0) {
+                        try { tableData = JSON.parse(q.options[0].content || q.options[0]); } catch(e){}
+                      }
+                      
                       const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
                       
-                      // 🌟 1. تنسيق النص التمهيدي (صندوق زجاجي ملكي)
                       if (isHeader) {
                         return (
                           <div key={q.id} className="mt-8 mb-4">
@@ -523,7 +523,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                         );
                       }
 
-                      // تجهيز إجابة الطالب
                       let studentAnswerText = studentAns;
                       if ((q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'checkbox') && safeOptions.length > 0) {
                         const selectedOpt = safeOptions.find((o: any) => o.id === studentAns || o.content === studentAns || o === studentAns);
@@ -534,13 +533,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const isUnanswered = (isComparison || isDataTable) ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
                       
-                      const currentQNumber = questionCounter++; // استخدام العداد الحقيقي
+                      const currentQNumber = questionCounter++; 
 
-                      // 🌟 2. تنسيق بطاقة الأسئلة الفرعية
                       return (
                         <div key={q.id} className={`bg-[#090b14]/60 rounded-3xl overflow-hidden shadow-sm border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5' : isCorrect ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
                           
-                          {/* رأس السؤال */}
                           <div className="p-6 sm:p-8 bg-[#131836]/40 border-b border-white/5 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                             <div className="flex gap-4 items-start w-full min-w-0">
                               <div className={`shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-[1.25rem] flex items-center justify-center font-black text-xl sm:text-2xl shadow-inner border ${isUnanswered ? 'bg-white/5 text-slate-400 border-white/10' : isCorrect ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-rose-500/20 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.2)]'}`}>
@@ -566,21 +563,20 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                             </div>
                           </div>
 
-                          {/* منطقة الإجابة */}
                           <div className="p-6 sm:p-8">
-                            {isDataTable && q.table ? ( // 🚀 الجدول الديناميكي المضاف حديثاً
+                            {isDataTable && tableData ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#131836]/30' : isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
                                 <div className="overflow-x-auto custom-scrollbar">
                                   <table className="w-full text-right border-collapse min-w-[600px] m-0">
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-[#02040a]/80' : isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
-                                        {q.table.headers.map((h: string, i: number) => (
-                                          <th key={i} className="p-4 border-b border-l border-white/10 font-black text-indigo-300 text-sm text-center last:border-l-0"><div dangerouslySetInnerHTML={renderContentWithMath(h)} /></th>
+                                        {tableData.headers.map((h: string, i: number) => (
+                                          <th key={i} className="p-4 border-b border-l border-white/10 font-black text-indigo-300 text-sm text-center last:border-l-0">{h}</th>
                                         ))}
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {q.table.rows.map((row: string[], rIdx: number) => {
+                                      {tableData.rows.map((row: string[], rIdx: number) => {
                                         let parsedAns: any[] = [];
                                         try { 
                                           if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
@@ -593,7 +589,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                           <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
                                             {row.map((cell: string, cIdx: number) => (
                                               <td key={cIdx} className={`p-4 border-l border-white/10 font-bold align-middle text-center last:border-l-0 ${cIdx === 0 ? 'text-slate-300 bg-[#090b14]/50' : 'text-white'}`}>
-                                                {cIdx === 0 ? <div dangerouslySetInnerHTML={renderContentWithMath(cell)} /> : (studentRowAns[cIdx] ? <div dangerouslySetInnerHTML={renderContentWithMath(studentRowAns[cIdx])} /> : <span className="text-slate-600 font-normal">فارغ</span>)}
+                                                {cIdx === 0 ? cell : (studentRowAns[cIdx] ? <div dangerouslySetInnerHTML={renderContentWithMath(studentRowAns[cIdx])} /> : <span className="text-slate-600 font-normal">فارغ</span>)}
                                               </td>
                                             ))}
                                           </tr>
@@ -653,7 +649,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
-                            {/* التغذية الراجعة الخاصة بالسؤال */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 relative overflow-hidden shadow-inner">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.8)]"></div>
@@ -667,7 +662,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     })}
                   </div>
 
-                  {/* المرفقات والنصوص الإضافية */}
                   {(mySubmission?.content || mySubmission?.file_url) && (
                     <div className="mt-10 p-6 sm:p-8 rounded-[2rem] bg-[#090b14]/50 border border-white/10 shadow-inner">
                       <h3 className="text-lg sm:text-xl font-black text-white mb-6 flex items-center gap-2"><FileText className="h-6 w-6 text-indigo-400" /> مرفقات ونصوص إضافية مُرسلة</h3>
@@ -783,7 +777,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
           </div>
         )}
         
-        {/* 👨‍🏫 واجهة المعلم / الإدارة للتصحيح */}
         {['teacher', 'admin', 'management'].includes(currentRole || '') && (
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
@@ -942,7 +935,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         )}
       </div>
 
-      {/* 🚀 Delete Confirmation Modal */}
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -972,7 +964,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* 🚀 Delete Submission Modal */}
       <Dialog.Root open={!!submissionToDelete} onOpenChange={(open) => !open && setSubmissionToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/80 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1002,7 +993,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* 🚀 Edit Quick Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1063,7 +1053,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* 🚀 Full Edit Modal */}
       <Dialog.Root open={isFullEditModalOpen} onOpenChange={setIsFullEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-[#02040a]/90 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1093,7 +1082,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             <form onSubmit={handleSaveFullEdit} className="space-y-6 sm:space-y-10">
               <div className="space-y-6 sm:space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-                  {/* Left Column Form */}
                   <div className="space-y-5 sm:space-y-6">
                     <div className="glass-panel p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border-white/5 shadow-inner">
                       <label className="block text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">عنوان الواجب <span className="text-rose-500">*</span></label>
@@ -1179,7 +1167,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     </div>
                   </div>
 
-                  {/* Right Column: Question Builder */}
                   <div className="bg-[#02040a]/40 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 lg:p-8 border border-white/5 shadow-inner relative overflow-hidden h-fit">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
                     <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6 relative z-10">
