@@ -356,7 +356,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     <div className="flex items-center gap-4 bg-[#090b14]/50 px-4 py-3 rounded-xl border border-white/5 shadow-inner">
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-black text-slate-400 uppercase">النقاط:</span>
-                        <input type="number" min="0" className="w-16 rounded-xl border border-white/10 py-1.5 px-2 text-white bg-[#0f1423] outline-none text-xs font-black text-center shadow-inner" value={question.points} onChange={(e) => updateQuestion(question.id, { points: parseInt(e.target.value) || 0 })} />
+<input type="number" step="any" min="0" className="w-16 rounded-xl border border-white/10 py-1.5 px-2 text-white bg-[#0f1423] outline-none text-xs font-black text-center shadow-inner" value={question.points} onChange={(e) => updateQuestion(question.id, { points: parseFloat(e.target.value) || 0 })} />
+
                       </div>
                     </div>
                   ) : <div></div>}
