@@ -1,6 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
-// @ts-nocheck
 
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp, ShieldCheck, Columns } from 'lucide-react';
@@ -34,11 +33,13 @@ interface Teacher { id: string; full_name: string; }
 interface Subject { id: string; name: string; }
 interface Section { id: string; name: string; }
 
-// 🚀 الفلتر السحري
+// 🚀 الفلتر السحري: ينظف جميع أخطاء الذكاء الاصطناعي ويجهز المعادلات لـ KaTeX
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
+    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
     .replace(/\\\\([a-zA-Z])/g, '\\$1')
+    // 2. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
     .replace(/\$\$/g, '$');
 };
 
@@ -163,6 +164,7 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
+  // 🚀 البرومبت المحدث بقواعد الجداول الديناميكية والكيمياء العضوية
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
 🛑 1. هيكلية الأسئلة (مهم جداً):
@@ -176,22 +178,34 @@ export default function AIAssignmentsSandbox() {
 
 🛑 3. التعامل الصارم مع الجداول، الأسطر، والفراغات (حرج جداً):
 - **الأسطر الجديدة:** ❌ يُمنع منعاً باتاً استخدام "\n" أو "\\n" للنزول لسطر جديد. ✔️ يجب استخدام الوسم <br/> حصراً لأي سطر جديد داخل الـ content.
-- **الجداول:** يجب إخراجه بصيغة HTML حصراً داخل الـ content (مثل: <table><tr><td></td></tr></table>). ❌ يُمنع استخدام صيغة Markdown (مثل |---|---|).
 - **الفراغات:** عبر عن أي فراغ بـ 5 نقاط متتالية (.....).
+- **الجداول العادية:** ❌ يُمنع إخراج أي جدول بصيغة HTML أو Markdown داخل الـ content. ✔️ يجب أن يكون نوع السؤال "data_table" وتستخدم خاصية "table" (التفاصيل في النقطة 5).
 
 🛑 4. الكيمياء العضوية والصيغ البنائية المتفرعة (الروابط العلوية والسفلية):
 - ❌ يُمنع محاولة رسم الروابط الكيميائية العمودية بالمسافات العادية.
 - ✔️ لرسم الروابط الكيميائية المتفرعة للأعلى والأسفل تماماً كما في الورقة، **يجب استخدام بيئة المصفوفة \begin{array}{c}** داخل أوامر LaTeX.
 - 💡 **مثال إجباري لمركب بتفرع علوي وسفلي (مثل الكحول الثالثي):**
   "$\\begin{array}{c} CH_3 \\\\ | \\\\ C_2H_5 - C - OH \\\\ | \\\\ CH_3 \\end{array}$"
-- لاحظ: استخدمنا الحرف | كرمز للرابطة العمودية، واستخدمنا \\\\ للنزول للسطر داخل المصفوفة الكيميائية.
 
 🛑 5. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
-- "essay": سؤال مقالي (استخدمه للأسئلة النصية، المسائل، وأسئلة إكمال الجداول).
+- "essay": سؤال مقالي أو مسألة رياضية عادية.
 - "file": يتطلب رفع صورة/ملف.
 - "comparison": سؤال مقارنة (جدول). يجب أن تحتوي مصفوفة الـ options حصراً على: [اسم الطرف الأول، اسم الطرف الثاني، وجه المقارنة 1، وجه المقارنة 2، ...].
+- "data_table": سؤال الجداول (أسئلة إكمال البيانات في الجداول). 🛑 يجب إضافة كائن "table" داخل السؤال يحتوي على "headers" و "rows".
+  💡 **مثال على إخراج سؤال جدول:**
+  {
+    "type": "data_table",
+    "content": "أكمل الجدول التالي:",
+    "table": {
+      "headers": ["العناصر", "C", "H", "Cl"],
+      "rows": [
+        ["الكتل بالجرام", "0.24", "0.04", "1.42"],
+        ["كتلة المول M.wt", "12", "1", "35.5"]
+      ]
+    }
+  }
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
@@ -307,12 +321,19 @@ export default function AIAssignmentsSandbox() {
         }).filter(Boolean);
       }
 
-      normalizedQuestions.push({
+      let questionObj: any = {
         content: cleanMathLatex(q.content || q.question_text || q.text || q.question || 'سؤال بدون نص'),
         type: qType,
         points: Number(q.points) || 1,
         options: parsedOptions
-      });
+      };
+
+      // تمرير كائن الجدول إذا كان من نوع data_table
+      if (qType === 'data_table' && q.table) {
+        questionObj.table = q.table;
+      }
+
+      normalizedQuestions.push(questionObj);
     });
 
     return normalizedQuestions;
@@ -387,12 +408,17 @@ export default function AIAssignmentsSandbox() {
     try {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
       
-      const formattedQuestions = result.questions.map((q, i) => {
+      const formattedQuestions = result.questions.map((q: any, i) => {
         let finalOptions: any[] = q.options || [];
         if (q.type === 'true_false' && finalOptions.length === 0) {
            finalOptions = [{ id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false }];
         } else {
            finalOptions = finalOptions.map((opt: any) => ({ id: crypto.randomUUID(), content: String(opt), is_correct: false }));
+        }
+
+        // 🚀 حفظ كائن الـ Table مباشرة داخل الخيارات إذا كان السؤال data_table
+        if (q.type === 'data_table' && q.table) {
+          finalOptions = [{ id: crypto.randomUUID(), content: JSON.stringify(q.table), is_correct: false }];
         }
 
         return {
@@ -438,11 +464,12 @@ export default function AIAssignmentsSandbox() {
       case 'multiple_choice': return 'اختيار من متعدد';
       case 'true_false': return 'صح أو خطأ';
       case 'multi_select': return 'اختيار متعدد';
-      case 'essay': return 'سؤال مقالي (أو جدول)';
+      case 'essay': return 'سؤال مقالي (نصي)';
       case 'fill_in_blank': return 'إكمال الفراغ';
       case 'file': return 'رفع صورة / ملف';
       case 'section_header': return 'رأس مسألة / تعليمة عامة';
       case 'comparison': return 'سؤال مقارنة (جدول)';
+      case 'data_table': return 'سؤال جدول تفاعلي';
       default: return type;
     }
   };
