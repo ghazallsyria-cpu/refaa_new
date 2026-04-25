@@ -9,7 +9,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
-  Loader2, Search, Filter, AlertTriangle, CheckSquare, Info
+  Loader2, Search, Filter, AlertTriangle, CheckSquare,
+  Download, Printer // 🚀 استيراد أيقونات الطباعة والتنزيل
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
@@ -22,10 +23,7 @@ export default function AdminExcusesPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'inquiry'>('pending');
   const [selectedExcuse, setSelectedExcuse] = useState<any>(null);
   const [selectedDatesToApprove, setSelectedDatesToApprove] = useState<string[]>([]);
-  
-  // 🚀 حالة تجاوز الإدارة لأخطاء الطالب
   const [overridePeriods, setOverridePeriods] = useState<boolean>(true);
-  
   const [rejectNote, setRejectNote] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
 
@@ -39,10 +37,102 @@ export default function AdminExcusesPage() {
     }
   }, [activeTab, isChecking, fetchExcuses]);
 
+  // 🚀 دالة طباعة تقرير الأعذار المعتمدة للإدارة (PDF)
+  const exportApprovedToPDF = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('يرجى السماح بالنوافذ المنبثقة (Pop-ups) لفتح التقرير.');
+      return;
+    }
+
+    const approvedExcuses = excuses.filter(e => e.status === 'approved');
+
+    if (approvedExcuses.length === 0) {
+      alert('لا توجد أعذار معتمدة لتصديرها.');
+      printWindow.close();
+      return;
+    }
+
+    const tableRows = approvedExcuses.map((exc, index) => {
+      const studentName = Array.isArray(exc.students?.users) ? exc.students.users[0]?.full_name : exc.students?.users?.full_name;
+      const className = Array.isArray(exc.students?.sections?.classes) ? exc.students.sections.classes[0]?.name : exc.students?.sections?.classes?.name;
+      const sectionName = exc.students?.sections?.name;
+      const classFull = `${className?.replace('الصف', '') || ''} - ${sectionName || ''}`;
+      
+      const dates = exc.absent_dates && exc.absent_dates.length > 0 ? exc.absent_dates.join(' ، ') : exc.excuse_date;
+      const duration = exc.duration_type === 'full_day' ? 'يوم كامل' : `استئذان (حصص: ${exc.target_periods?.join(',')})`;
+
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td><strong>${studentName || 'مجهول'}</strong></td>
+          <td>${classFull}</td>
+          <td dir="ltr" style="text-align: center;">${dates}</td>
+          <td style="text-align: center;">${duration}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const htmlContent = `
+      <html dir="rtl" lang="ar">
+        <head>
+          <title>تقرير تبريرات الغياب المعتمدة</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
+            body { font-family: 'Cairo', sans-serif; padding: 40px; color: #1e293b; background: #fff; line-height: 1.6; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+            .header h1 { color: #0f1423; margin: 0 0 10px 0; font-size: 28px; }
+            .header h2 { color: #475569; margin: 0 0 5px 0; font-size: 18px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #0f1423; color: white; padding: 12px; text-align: right; border: 1px solid #cbd5e1; font-size: 14px;}
+            td { padding: 12px; border: 1px solid #cbd5e1; font-size: 14px; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 40px; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px;}
+            @media print {
+              body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              th { background-color: #e2e8f0 !important; color: #000 !important; }
+              table, th, td { border: 1px solid #000; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>📄 تقرير غيابات الطلاب المبررة (المعتمدة)</h1>
+            <h2>مدرسة الرفعة النموذجية - قسم شؤون الطلاب</h2>
+            <p>تاريخ إصدار التقرير: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th width="5%">#</th>
+                <th width="30%">اسم الطالب</th>
+                <th width="20%">الصف والشعبة</th>
+                <th width="30%" style="text-align: center;">أيام الغياب المبررة</th>
+                <th width="15%" style="text-align: center;">نوع الدوام</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+          <div class="footer">
+            تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.
+          </div>
+          <script>
+            window.onload = () => { setTimeout(() => window.print(), 800); }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   const openExcuseModal = (excuse: any) => {
     setSelectedExcuse(excuse);
     setRejectNote('');
-    setOverridePeriods(true); // تفعيل تجاوز الحصص الخاطئة افتراضياً
+    setOverridePeriods(true);
     const dates = excuse.absent_dates && excuse.absent_dates.length > 0 
        ? excuse.absent_dates 
        : (excuse.excuse_date ? [excuse.excuse_date] : []);
@@ -62,7 +152,6 @@ export default function AdminExcusesPage() {
     if (!confirm(`هل أنت متأكد من اعتماد العذر لـ (${selectedDatesToApprove.length}) أيام؟`)) return;
     
     setIsActionLoading(true);
-    // 🚀 تمرير حالة التجاوز للهوك
     const result = await approveExcuse(excuse, user.id, selectedDatesToApprove, overridePeriods);
     if (result.success) {
       alert('تم اعتماد العذر وتعديل السجلات بنجاح!');
@@ -200,11 +289,26 @@ export default function AdminExcusesPage() {
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white drop-shadow-md tracking-tight">إدارة الأعذار وسجلات الغياب</h1>
             </div>
             
-            <div className="flex flex-wrap justify-center bg-[#090b14]/80 p-1.5 rounded-2xl border border-white/5 w-full xl:w-auto">
-              <button onClick={() => setActiveTab('pending')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'pending' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>طلبات معلقة</button>
-              <button onClick={() => setActiveTab('approved')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>معتمدة</button>
-              <button onClick={() => setActiveTab('rejected')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'rejected' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>مرفوضة</button>
-              <button onClick={() => setActiveTab('inquiry')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'inquiry' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-400 hover:text-indigo-300'}`}><Search className="w-4 h-4"/> استعلام شامل</button>
+            <div className="flex flex-col items-center xl:items-end gap-4 w-full xl:w-auto">
+              {/* 🚀 زر الطباعة والتصدير يظهر فقط في التبويب المعتمد */}
+              <AnimatePresence>
+                {activeTab === 'approved' && (
+                  <motion.button 
+                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                    onClick={exportApprovedToPDF} 
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 w-full sm:w-auto"
+                  >
+                    <Printer className="w-4 h-4" /> تصدير تقرير للإدارة المدرسية (PDF)
+                  </motion.button>
+                )}
+              </AnimatePresence>
+
+              <div className="flex flex-wrap justify-center bg-[#090b14]/80 p-1.5 rounded-2xl border border-white/5 w-full">
+                <button onClick={() => setActiveTab('pending')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'pending' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>طلبات معلقة</button>
+                <button onClick={() => setActiveTab('approved')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>معتمدة</button>
+                <button onClick={() => setActiveTab('rejected')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'rejected' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>مرفوضة</button>
+                <button onClick={() => setActiveTab('inquiry')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'inquiry' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-400 hover:text-indigo-300'}`}><Search className="w-4 h-4"/> استعلام شامل</button>
+              </div>
             </div>
           </div>
         </div>
@@ -350,7 +454,7 @@ export default function AdminExcusesPage() {
                       </div>
 
                       <button onClick={() => openExcuseModal(excuse)} className="w-full py-3 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl border border-white/10 transition-all flex items-center justify-center gap-2 text-sm">
-                        <FileText className="w-4 h-4" /> مراجعة واستعلام
+                        <FileText className="w-4 h-4" /> مراجعة واعتماد
                       </button>
                     </motion.div>
                   );
@@ -366,11 +470,11 @@ export default function AdminExcusesPage() {
           <Dialog.Root open={!!selectedExcuse} onOpenChange={(open) => !open && setSelectedExcuse(null)}>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-xl z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-4xl max-h-[85vh] overflow-y-auto custom-scrollbar shadow-[0_0_60px_rgba(0,0,0,0.9)] z-50 flex flex-col md:flex-row" dir="rtl">
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-5xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_60px_rgba(0,0,0,0.9)] z-50 flex flex-col lg:flex-row" dir="rtl">
                 
-                <div className="md:w-1/2 bg-[#090b14] p-6 flex flex-col border-b md:border-b-0 md:border-l border-white/5 shrink-0">
+                <div className="lg:w-1/2 bg-[#090b14] p-6 flex flex-col border-b lg:border-b-0 lg:border-l border-white/5 shrink-0">
                   <h3 className="font-black text-white mb-4 flex items-center gap-2"><ImageIcon className="w-5 h-5 text-emerald-400"/> المرفق الطبي</h3>
-                  <div className="flex-1 bg-[#131836]/50 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden min-h-[250px] md:min-h-[300px] relative">
+                  <div className="flex-1 bg-[#131836]/50 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden min-h-[250px] lg:min-h-[400px] relative">
                     {selectedExcuse.attachment_url ? (
                       <img src={selectedExcuse.attachment_url} alt="Medical Report" className="w-full h-full object-contain" />
                     ) : (
@@ -379,9 +483,9 @@ export default function AdminExcusesPage() {
                   </div>
                 </div>
 
-                <div className="md:w-1/2 p-6 sm:p-8 flex flex-col bg-[#131836]">
+                <div className="lg:w-1/2 p-6 sm:p-8 flex flex-col bg-[#131836]">
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl sm:text-2xl font-black text-white">تفاصيل واستعلام العذر</h2>
+                    <h2 className="text-xl sm:text-2xl font-black text-white">تفاصيل واعتماد العذر</h2>
                     <Dialog.Close className="p-2 bg-white/5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-full transition-colors"><XCircle className="w-6 h-6" /></Dialog.Close>
                   </div>
 
@@ -406,7 +510,6 @@ export default function AdminExcusesPage() {
                             </label>
                           ))}
                           
-                          {/* 🚀 خيار التجاوز (تجاهل حصص الطالب الخاطئة) */}
                           <label className="flex items-start gap-2 mt-3 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 cursor-pointer">
                             <input 
                               type="checkbox" 
