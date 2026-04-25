@@ -8,7 +8,7 @@ import {
   TrendingUp, AlertCircle, Bell, ChevronLeft,
   Award, Target, BarChart2, Lock, Star, ChevronRight, Play,
   AlertTriangle, ShieldAlert, Calculator, Loader2, UserCircle, Users,
-  Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus
+  Siren, Info, MessageSquare, Sparkles, Stethoscope, UploadCloud, X, Plus, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -64,8 +64,11 @@ export default function StudentDashboard() {
   const [isExcuseModalOpen, setIsExcuseModalOpen] = useState(false);
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
+  
+  // 🚀 التعديل الجوهري: إضافة absent_dates لدعم الأيام المتعددة
+  const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [excuseForm, setExcuseForm] = useState({
-    excuse_date: format(new Date(), 'yyyy-MM-dd'),
+    absent_dates: [format(new Date(), 'yyyy-MM-dd')], // مصفوفة التواريخ
     duration_type: 'full_day',
     target_periods: [] as number[],
     reason: '',
@@ -99,7 +102,6 @@ export default function StudentDashboard() {
         try {
             const studentId = data.student?.id;
             if (studentId) {
-                // 🚀 تمت إضافة استعلام الأعذار الطبية (absence_excuses) في نفس الـ Promise.all لضمان السرعة
                 const [
                   { data: badgesData },
                   { data: dbGrades },
@@ -154,8 +156,28 @@ export default function StudentDashboard() {
   }, [fetchStudentDashboardData, user, authRole]);
 
   // ==========================================
-  // 🚀 دوال محرك الأعذار الطبية (للطالب)
+  // 🚀 دوال محرك الأعذار الطبية المتعددة
   // ==========================================
+  
+  const handleAddDate = () => {
+    if (!currentDateInput) return;
+    if (excuseForm.absent_dates.includes(currentDateInput)) {
+      alert('هذا التاريخ مضاف مسبقاً.');
+      return;
+    }
+    setExcuseForm(prev => ({
+      ...prev,
+      absent_dates: [...prev.absent_dates, currentDateInput].sort()
+    }));
+  };
+
+  const handleRemoveDate = (dateToRemove: string) => {
+    setExcuseForm(prev => ({
+      ...prev,
+      absent_dates: prev.absent_dates.filter(d => d !== dateToRemove)
+    }));
+  };
+
   const handleReportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -184,6 +206,9 @@ export default function StudentDashboard() {
   };
 
   const handleSubmitExcuse = async () => {
+    if (excuseForm.absent_dates.length === 0) {
+      alert('يرجى تحديد يوم غياب واحد على الأقل.'); return;
+    }
     if (!excuseForm.attachment_url) {
       alert('يرجى إرفاق التقرير الطبي أو الإثبات أولاً.'); return;
     }
@@ -196,8 +221,9 @@ export default function StudentDashboard() {
       const payload = {
         student_id: studentData.id,
         submitted_by: user.id,
-        submitter_role: 'student', // 👈 تحديد أن الطالب هو من رفع العذر
-        excuse_date: excuseForm.excuse_date,
+        submitter_role: 'student',
+        excuse_date: excuseForm.absent_dates[0], // للاستخدام القديم (إن وجد)
+        absent_dates: excuseForm.absent_dates,   // المصفوفة الجديدة لدعم الأيام المتعددة
         duration_type: excuseForm.duration_type,
         target_periods: excuseForm.duration_type === 'partial_day' ? excuseForm.target_periods : [],
         reason: excuseForm.reason,
@@ -211,8 +237,11 @@ export default function StudentDashboard() {
 
       alert('تم تقديم العذر بنجاح! نتمى لك دوام الصحة والعافية. طلبك الآن قيد المراجعة.');
       setIsExcuseModalOpen(false);
-      setExcuseForm({ excuse_date: format(new Date(), 'yyyy-MM-dd'), duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' });
-      fetchData(); // تحديث السجل
+      setExcuseForm({ 
+        absent_dates: [format(new Date(), 'yyyy-MM-dd')], 
+        duration_type: 'full_day', target_periods: [], reason: '', attachment_url: '', cloudinary_public_id: '' 
+      });
+      fetchData();
     } catch (error: any) {
       alert('حدث خطأ أثناء التقديم: ' + error.message);
     } finally {
@@ -663,7 +692,7 @@ export default function StudentDashboard() {
           <div className="space-y-6 lg:space-y-8 w-full">
             <AnnouncementsWidget authRole="student" />
 
-            {/* 🩺 سجل الغياب والأعذار الطبية (الميزة الجديدة) */}
+            {/* 🩺 سجل الغياب والأعذار الطبية */}
             <div className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] relative overflow-hidden flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-[60px] pointer-events-none"></div>
               <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-[#02040a]/40 gap-4">
@@ -678,13 +707,17 @@ export default function StudentDashboard() {
                 </button>
               </div>
 
-              
               <div className="divide-y divide-white/5 bg-transparent p-2 sm:p-3 max-h-[300px] overflow-y-auto custom-scrollbar">
                 {excuses.length > 0 ? (
                   excuses.map(exc => (
                     <div key={exc.id} className="p-3 sm:p-4 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 bg-[#0f1423]/60 flex flex-col gap-2 mb-2 shadow-inner">
                       <div className="flex justify-between items-center">
-                        <span className="text-white font-black text-sm">{safeFormat(exc.excuse_date, 'dd MMMM yyyy')}</span>
+                        {/* 🚀 إظهار أول تاريخ إذا كانت تواريخ متعددة */}
+                        <span className="text-white font-black text-sm">
+                          {exc.absent_dates && exc.absent_dates.length > 0 
+                            ? `${safeFormat(exc.absent_dates[0], 'dd MMM yyyy')} ${exc.absent_dates.length > 1 ? `(+${exc.absent_dates.length - 1} أيام)` : ''}`
+                            : safeFormat(exc.excuse_date, 'dd MMM yyyy')}
+                        </span>
                         <span className={`text-[9px] sm:text-[10px] font-black px-2 py-1 rounded-md border ${
                           exc.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                           exc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
@@ -810,7 +843,7 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🚀 نافذة (Modal) تقديم العذر الطبي */}
+      {/* 🚀 نافذة (Modal) تقديم العذر الطبي المحدثة (تدعم تواريخ متعددة) */}
       <AnimatePresence>
         {isExcuseModalOpen && (
           <Dialog.Root open={isExcuseModalOpen} onOpenChange={setIsExcuseModalOpen}>
@@ -828,19 +861,44 @@ export default function StudentDashboard() {
 
                 <div className="space-y-6">
                   
-                  {/* التاريخ ونوع الغياب */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-300 uppercase tracking-widest">تاريخ الغياب</label>
-                      <input type="date" value={excuseForm.excuse_date} onChange={(e) => setExcuseForm({...excuseForm, excuse_date: e.target.value})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-sm font-bold text-white outline-none focus:border-amber-500/50" style={{ colorScheme: 'dark' }} />
+                  {/* 🚀 اختيار التواريخ المتعددة للغياب */}
+                  <div className="space-y-3 bg-[#090b14]/50 p-5 rounded-2xl border border-white/5 shadow-inner">
+                    <label className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+                      <Calendar className="w-4 h-4" /> أيام الغياب المراد تبريرها
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="date" 
+                        value={currentDateInput} 
+                        onChange={(e) => setCurrentDateInput(e.target.value)} 
+                        className="flex-1 bg-[#131836] border border-white/10 rounded-xl p-3 text-sm font-bold text-white outline-none focus:border-amber-500/50" 
+                        style={{ colorScheme: 'dark' }} 
+                      />
+                      <button type="button" onClick={handleAddDate} className="bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-900 rounded-xl px-4 py-3 font-black text-sm transition-all shadow-sm">
+                        إضافة
+                      </button>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
-                      <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
-                        <option value="full_day">غياب يوم كامل</option>
-                        <option value="partial_day">غياب جزئي (استئذان حصص)</option>
-                      </select>
-                    </div>
+
+                    {excuseForm.absent_dates.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-white/5">
+                        {excuseForm.absent_dates.map(date => (
+                          <div key={date} className="flex items-center gap-2 bg-[#02040a]/80 px-3 py-1.5 rounded-lg border border-white/10 shadow-inner">
+                            <span className="text-xs font-bold text-slate-200" dir="ltr">{date}</span>
+                            <button type="button" onClick={() => handleRemoveDate(date)} className="text-rose-400 hover:text-rose-300">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-300 uppercase tracking-widest">نوع الدوام</label>
+                    <select value={excuseForm.duration_type} onChange={(e) => setExcuseForm({...excuseForm, duration_type: e.target.value, target_periods: []})} className="w-full bg-[#090b14] border border-white/10 rounded-xl p-3.5 text-sm font-bold text-white outline-none focus:border-amber-500/50 appearance-none [&>option]:bg-[#131836]">
+                      <option value="full_day">غياب يوم كامل (لكل الأيام المحددة)</option>
+                      <option value="partial_day">غياب جزئي (استئذان حصص)</option>
+                    </select>
                   </div>
 
                   {/* اختيار الحصص (يظهر فقط إذا كان الغياب جزئياً) */}
