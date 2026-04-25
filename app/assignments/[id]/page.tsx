@@ -403,25 +403,109 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     } catch (error: any) { showNotification('error', error.message || 'خطأ أثناء الحفظ'); } finally { setIsSubmittingEdit(false); }
   };
 
-  const handleDeleteAssignmentAction = async () => {
+const handleDeleteAssignmentAction = async () => {
+    setIsDeletingSubmission(true); // نستخدم حالة التحميل الموجودة لتجميد الزر
     try {
-      if (assignment?.file_url) await deleteFromCloudinary(assignment.file_url);
+      showNotification('success', 'جاري فحص المرفقات ومسحها من السحابة...');
+      
+      const urlsToDelete: string[] = [];
+
+      // 1. جمع رابط المرفق الرئيسي للواجب
+      if (assignment?.file_url) {
+        urlsToDelete.push(assignment.file_url);
+      }
+
+      // 2. جمع روابط الصور المرفقة داخل الأسئلة التفاعلية (إن وجدت)
+      questions.forEach((q: any) => {
+        if (q.media_url) {
+          urlsToDelete.push(q.media_url);
+        }
+      });
+
+      // 3. جمع روابط المرفقات التي رفعها الطلاب في إجاباتهم (إن وجدت)
+      submissions.forEach((sub: any) => {
+        if (sub.file_url) {
+          urlsToDelete.push(sub.file_url);
+        }
+        // إذا كان هناك صور داخل نظام تسليم المشاريع الجديد
+        if (sub.content && sub.content.includes('cloudinary')) {
+          try {
+             // محاولة استخراج أي روابط كلاوديناري من داخل إجابة الطالب (JSON)
+             const parsedAns = JSON.parse(sub.content);
+             if (parsedAns.images && Array.isArray(parsedAns.images)) {
+                urlsToDelete.push(...parsedAns.images);
+             }
+          } catch(e) {
+             // تجاهل الخطأ إذا لم يكن المحتوى بصيغة JSON
+          }
+        }
+      });
+
+      // 4. إرسال أمر الحذف إلى Cloudinary لكل الروابط المجمعة
+      // ملاحظة: يُفضل استخدام Promise.all لحذفها دفعة واحدة وتسريع العملية
+      if (urlsToDelete.length > 0) {
+        // تصفية الروابط لضمان أنها تابعة لكلاوديناري فقط
+        const validCloudinaryUrls = urlsToDelete.filter(url => url.includes('cloudinary.com'));
+        await Promise.all(validCloudinaryUrls.map(url => deleteFromCloudinary(url)));
+      }
+
+      // 5. أخيراً، حذف الواجب من قاعدة البيانات (وهو سيقوم بحذف الأسئلة والتسليمات تلقائياً إذا كان الـ Cascade مفعلاً في Supabase)
       await deleteAssignment(assignmentId);
+      
+      // تنظيف الكاش والعودة للصفحة الرئيسية
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
       router.push('/assignments');
-    } catch (error: any) { showNotification('error', 'خطأ في الحذف: ' + error.message); }
+      
+    } catch (error: any) { 
+      showNotification('error', 'خطأ أثناء عملية الحذف الشامل: ' + error.message); 
+    } finally {
+      setIsDeletingSubmission(false);
+    }
   };
 
-  const handleDeleteSubmissionAction = async () => {
+const handleDeleteSubmissionAction = async () => {
     if (!submissionToDelete) return;
     setIsDeletingSubmission(true);
     try {
+      // 1. البحث عن التسليم المراد حذفه لجلب الروابط الخاصة به
+      const subToDel = submissions.find(s => s.id === submissionToDelete);
+      
+      if (subToDel) {
+        const urlsToDelete: string[] = [];
+        
+        // استخراج المرفق الأساسي للطالب
+        if (subToDel.file_url && subToDel.file_url.includes('cloudinary.com')) {
+          urlsToDelete.push(subToDel.file_url);
+        }
+
+        // استخراج صور المشروع العلمي (الميزة الجديدة) إن وجدت
+        if (subToDel.content && subToDel.content.includes('cloudinary')) {
+          try {
+             const parsedAns = JSON.parse((subToDel as any).content);
+             if (parsedAns.images && Array.isArray(parsedAns.images)) {
+                urlsToDelete.push(...parsedAns.images.filter((url:string) => url.includes('cloudinary.com')));
+             }
+          } catch(e) {}
+        }
+
+        // 2. حذف الملفات من Cloudinary
+        if (urlsToDelete.length > 0) {
+           await Promise.all(urlsToDelete.map(url => deleteFromCloudinary(url)));
+        }
+      }
+
+      // 3. حذف التسليم من قاعدة البيانات
       await deleteSubmission(submissionToDelete);
+      
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
-      showNotification('success', 'تم حذف تسليم الطالب بنجاح');
+      showNotification('success', 'تم إلغاء تسليم الطالب ومسح مرفقاته بنجاح');
       setSubmissionToDelete(null);
       await fetchData();
-    } catch (error: any) { showNotification('error', 'خطأ في الحذف: ' + error.message); } finally { setIsDeletingSubmission(false); }
+    } catch (error: any) { 
+      showNotification('error', 'خطأ في الحذف: ' + error.message); 
+    } finally { 
+      setIsDeletingSubmission(false); 
+    }
   };
 
   const copyAssignmentLink = () => { navigator.clipboard.writeText(window.location.href); showNotification('success', 'تم نسخ رابط الواجب'); };
