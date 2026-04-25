@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square, X, Loader2, Image as ImageIcon, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
-
-// 🚀 استيراد محرك ضغط الصور الموفر للميزانية (موجود مسبقاً في الباكج الخاص بك)
 import imageCompression from 'browser-image-compression';
 
 import 'katex/dist/katex.min.css';
@@ -35,7 +33,7 @@ const renderContentWithMath = (content: string) => {
 };
 
 // =========================================================================
-// 🚀 المكون الداخلي الجديد: تسليم المشاريع العلمية (توفير 95% من المساحة)
+// 🚀 المكون الداخلي: تسليم المشاريع العلمية
 // =========================================================================
 interface ProjectSubmissionProps {
   initialData?: { text: string; images: string[] };
@@ -67,15 +65,13 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
 
     try {
       for (const file of files) {
-        // 🚀 السحر الاقتصادي هنا: ضغط الصورة محلياً في جهاز الطالب!
         const options = {
-          maxSizeMB: 0.2, // أقصى حجم 200 كيلوبايت
+          maxSizeMB: 0.2, 
           maxWidthOrHeight: 1280,
           useWebWorker: true,
         };
         const compressedFile = await imageCompression(file, options);
 
-        // رفع الصورة المضغوطة جداً إلى Cloudinary
         const formData = new FormData();
         formData.append('file', compressedFile);
         formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
@@ -112,7 +108,6 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
   return (
     <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mt-5">
       <div className="space-y-6">
-        {/* قسم الكتابة النصية للمشروع */}
         <div>
           <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
             <FileText className="w-5 h-5 text-indigo-500" /> وصف المشروع، أبحاثك، والملاحظات (اختياري)
@@ -127,7 +122,6 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
           />
         </div>
 
-        {/* قسم رفع صور المشروع (الحد الأقصى 8 صور) */}
         <div>
           <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
             <ImageIcon className="w-5 h-5 text-indigo-500" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
@@ -161,13 +155,14 @@ function ProjectSubmissionComponent({ initialData, onChange, readOnly }: Project
           </div>
           <p className="text-xs font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl border border-emerald-100 inline-flex items-center gap-2 w-full shadow-sm">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
-            النظام يدعم ضغط الصور تلقائياً للحفاظ على باقة الإنترنت لديك وتخفيف العبء عن الأجهزة.
+            النظام يدعم ضغط الصور تلقائياً للحفاظ على باقة الإنترنت لديك.
           </p>
         </div>
       </div>
     </div>
   );
 }
+
 // =========================================================================
 
 interface AssignmentFormProps {
@@ -215,7 +210,6 @@ export default function AssignmentForm({
     }
   }, []);
 
-  // 🚀 منع الانهيار بحصر KaTeX في الحاوية فقط
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -280,10 +274,37 @@ export default function AssignmentForm({
     if (!readOnly && validate()) onSubmit(answers);
   };
 
+  // 🚀 العارض الذكي للمرفقات (يفرق بين الـ PDF والصور)
+  const renderSmartMedia = (url: string) => {
+    if (!url) return null;
+    const isPdf = url.toLowerCase().includes('.pdf');
+
+    if (isPdf) {
+      return (
+        <div className="mt-6 rounded-3xl border border-slate-200 overflow-hidden shadow-sm bg-white">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 border-b border-slate-100 bg-slate-50 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-100 text-rose-600 rounded-xl shrink-0"><FileText className="w-6 h-6" /></div>
+              <div>
+                <p className="font-black text-slate-800 text-base">ملف PDF مرفق من المعلم</p>
+                <p className="text-xs font-bold text-slate-500 mt-1">يحتوي على تعليمات المشروع أو المسألة</p>
+              </div>
+            </div>
+            <a href={url} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto text-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl transition-all shadow-sm active:scale-95 shrink-0">
+              فتح الملف للتنزيل
+            </a>
+          </div>
+          <iframe src={url} className="w-full h-[600px] border-none bg-slate-100" title="مرفق PDF" />
+        </div>
+      );
+    }
+
+    return <img src={url} className="mt-6 max-h-[500px] w-auto rounded-2xl border border-slate-200 shadow-md object-contain" alt="توضيح المرفق" />;
+  };
+
   const renderQuestionInput = (q: any) => {
     const ans = answers[q.id];
 
-    // 🚀 1. نظام تسليم المشروع العلمي (الميزة الجديدة)
     if (q.type === 'project_submission') {
       let projectData = { text: '', images: [] };
       if (ans && typeof ans === 'string') {
@@ -297,14 +318,12 @@ export default function AssignmentForm({
           initialData={projectData}
           readOnly={readOnly}
           onChange={(data) => {
-            // يتم التخزين كـ JSON String في قاعدة البيانات لتوفير الأعمدة
             handleAnswerChange(q.id, JSON.stringify(data));
           }}
         />
       );
     }
 
-    // 2. الاختيارات المتعددة والـ Radio
     if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'radio') {
       const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
           ? q.options 
@@ -331,7 +350,6 @@ export default function AssignmentForm({
       );
     }
 
-    // 3. مربعات الاختيار المتعددة Checkboxes
     if (q.type === 'checkbox' || q.type === 'multi_select') {
       const selectedArray = Array.isArray(ans) ? ans : [];
       const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
@@ -361,7 +379,6 @@ export default function AssignmentForm({
       );
     }
 
-    // 4. رفع صورة واحدة (النظام القديم)
     if (q.type === 'file_upload') {
        return (
          <div className="mt-5 bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm">
@@ -379,7 +396,6 @@ export default function AssignmentForm({
        );
     }
 
-    // 5. الجداول التفاعلية (Data Tables)
     let tableData = q.table;
     if (!tableData && q.type === 'data_table' && q.options && q.options.length > 0) {
       try {
@@ -437,7 +453,6 @@ export default function AssignmentForm({
       );
     }
 
-    // 6. أسئلة المقارنات
     if (q.type === 'comparison') {
         const getOptValue = (opt: any, fallback: string) => {
           if (!opt) return fallback;
@@ -498,7 +513,6 @@ export default function AssignmentForm({
         );
     }
 
-    // 7. الأسئلة المقالية الافتراضية
     return (
       <textarea
         disabled={readOnly}
@@ -540,7 +554,8 @@ export default function AssignmentForm({
                {showModelAnswer && modelAnswerText && (
                  <div className="mt-4 p-5 bg-emerald-50/80 text-emerald-900 rounded-2xl border border-emerald-200 text-base font-bold shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                )}
-               {q.media_url && <img src={q.media_url} className="mt-6 max-h-72 rounded-2xl border border-slate-200 shadow-md" alt="توضيح" />}
+               {/* 🚀 هنا السحر: استدعاء العارض الذكي للمرفقات (صور أو PDF) */}
+               {renderSmartMedia(q.media_url)}
             </div>
           );
         }
@@ -561,7 +576,8 @@ export default function AssignmentForm({
                      <div className="mt-5 p-5 bg-emerald-50/80 text-emerald-900 rounded-2xl border border-emerald-200 text-base font-bold shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                    )}
 
-                   {q.media_url && <img src={q.media_url} className="mt-5 max-h-80 rounded-2xl border border-slate-200 shadow-md" alt="صورة توضيحية" /> }
+                   {/* 🚀 استدعاء العارض الذكي في جسم السؤال أيضاً */}
+                   {renderSmartMedia(q.media_url)}
                    
                    {renderQuestionInput(q)}
                 </div>
