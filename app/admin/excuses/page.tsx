@@ -26,7 +26,7 @@ export default function AdminExcusesPage() {
   const [overridePeriods, setOverridePeriods] = useState<boolean>(true);
   const [rejectNote, setRejectNote] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [isExportingPDF, setIsExportingPDF] = useState(false); // 🚀 حالة تصدير الـ PDF
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -38,7 +38,7 @@ export default function AdminExcusesPage() {
     }
   }, [activeTab, isChecking, fetchExcuses]);
 
-  // 🚀 دالة تصدير الـ PDF الموثوقة 100% باستخدام html2pdf.js
+  // 🚀 دالة تصدير الـ PDF باستخدام المكتبات المتوفرة لديك مسبقاً (html2canvas & jspdf)
   const exportApprovedToPDF = async () => {
     const approvedExcuses = excuses.filter(e => e.status === 'approved');
 
@@ -50,10 +50,11 @@ export default function AdminExcusesPage() {
     setIsExportingPDF(true);
 
     try {
-      // 1. استيراد المكتبة بشكل ديناميكي (لكي لا تعطل بناء السيرفر SSR في Next.js)
-      const html2pdf = (await import('html2pdf.js')).default;
+      // 1. استيراد المكتبات الموجودة لديك بالفعل في package.json
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
 
-      // 2. بناء هيكل الـ HTML للتقرير
+      // 2. بناء هيكل الـ HTML
       const tableRows = approvedExcuses.map((exc, index) => {
         const studentName = Array.isArray(exc.students?.users) ? exc.students.users[0]?.full_name : exc.students?.users?.full_name;
         const className = Array.isArray(exc.students?.sections?.classes) ? exc.students.sections.classes[0]?.name : exc.students?.sections?.classes?.name;
@@ -65,53 +66,67 @@ export default function AdminExcusesPage() {
 
         return `
           <tr>
-            <td style="text-align: center;">${index + 1}</td>
-            <td style="font-weight: bold;">${studentName || 'مجهول'}</td>
-            <td>${classFull}</td>
-            <td dir="ltr" style="text-align: center;">${dates}</td>
-            <td style="text-align: center;">${duration}</td>
+            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${index + 1}</td>
+            <td style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: right;">${studentName || 'مجهول'}</td>
+            <td style="border: 1px solid #000; padding: 10px; text-align: right;">${classFull}</td>
+            <td dir="ltr" style="border: 1px solid #000; padding: 10px; text-align: center;">${dates}</td>
+            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${duration}</td>
           </tr>
         `;
       }).join('');
 
+      // 3. إنشاء عنصر مؤقت ومخفي لتصويره
       const element = document.createElement('div');
+      element.style.width = '800px';
+      element.style.padding = '40px';
+      element.style.backgroundColor = '#ffffff';
+      element.style.direction = 'rtl';
+      element.style.fontFamily = 'Arial, sans-serif';
+      element.style.color = '#000000';
+      element.style.position = 'absolute';
+      element.style.top = '-10000px'; // إخفاء العنصر عن المستخدم
+      element.style.left = '-10000px';
+
       element.innerHTML = `
-        <div style="font-family: Arial, sans-serif; padding: 30px; color: #000; direction: rtl; text-align: right;">
-          <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
-            <h2 style="margin: 5px 0; color: #111;">مدرسة الرفعة النموذجية</h2>
-            <h3 style="margin: 5px 0; color: #333;">تقرير الأعذار الطبية المعتمدة (تبرير الغياب)</h3>
-            <p style="font-size: 14px; color: #555;">تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
-          </div>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-            <thead>
-              <tr style="background-color: #f0f0f0;">
-                <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="5%">#</th>
-                <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="30%">اسم الطالب</th>
-                <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="20%">الصف والشعبة</th>
-                <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="30%">أيام الغياب المبررة</th>
-                <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="15%">الدوام</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
-          <div style="margin-top: 40px; font-size: 12px; text-align: center; border-top: 1px solid #000; padding-top: 10px; color: #555;">
-            <p>تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.</p>
-          </div>
+        <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
+          <h2 style="margin: 5px 0; color: #111;">مدرسة الرفعة النموذجية</h2>
+          <h3 style="margin: 5px 0; color: #333;">تقرير الأعذار الطبية المعتمدة (تبرير الغياب)</h3>
+          <p style="font-size: 14px; color: #555;">تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+          <thead>
+            <tr style="background-color: #f0f0f0;">
+              <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="5%">#</th>
+              <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="30%">اسم الطالب</th>
+              <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="20%">الصف والشعبة</th>
+              <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="30%">أيام الغياب المبررة</th>
+              <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="15%">الدوام</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <div style="margin-top: 40px; font-size: 12px; text-align: center; border-top: 1px solid #000; padding-top: 10px; color: #555;">
+          <p>تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.</p>
         </div>
       `;
 
-      // 3. إعدادات التصدير وتوليد الملف
-      const opt = {
-        margin:       0.5,
-        filename:     `تقرير_الأعذار_المعتمدة_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
-      };
+      document.body.appendChild(element);
 
-      await html2pdf().from(element).set(opt).save();
+      // 4. تصوير العنصر وتحويله لـ PDF
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`تقرير_الأعذار_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+
+      // تنظيف الذاكرة
+      document.body.removeChild(element);
 
     } catch (err) {
       console.error('Error generating PDF:', err);
@@ -282,7 +297,6 @@ export default function AdminExcusesPage() {
             </div>
             
             <div className="flex flex-col items-center xl:items-end gap-4 w-full xl:w-auto">
-              {/* 🚀 زر الطباعة المباشرة الذي يعمل على الموبايل 100% */}
               <AnimatePresence>
                 {activeTab === 'approved' && (
                   <motion.button 
