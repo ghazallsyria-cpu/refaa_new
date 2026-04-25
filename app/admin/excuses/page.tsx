@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useAdminExcuses } from '@/hooks/useAdminExcuses';
-import { supabase } from '@/lib/supabase'; // 🚀 استيراد قاعدة البيانات للاستعلام
+import { supabase } from '@/lib/supabase'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldAlert, CheckCircle2, XCircle, Clock, 
@@ -19,14 +19,12 @@ export default function AdminExcusesPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const { excuses, loading, fetchExcuses, approveExcuse, rejectExcuse } = useAdminExcuses();
   
-  // 🚀 إضافة تبويب الاستعلام 'inquiry'
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'inquiry'>('pending');
   const [selectedExcuse, setSelectedExcuse] = useState<any>(null);
   const [selectedDatesToApprove, setSelectedDatesToApprove] = useState<string[]>([]);
   const [rejectNote, setRejectNote] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
 
-  // 🚀 متغيرات محرك الاستعلام الذكي
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{studentName: string, records: any[]}[] | null>(null);
@@ -83,14 +81,12 @@ export default function AdminExcusesPage() {
     setIsActionLoading(false);
   };
 
-  // 🚀 المحرك السحري للبحث عن سجلات أي طالب
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
     try {
-      // 1. البحث عن الطلاب بالاسم
       const { data: matchedUsers, error: userErr } = await supabase
         .from('users')
         .select('id, full_name')
@@ -108,17 +104,15 @@ export default function AdminExcusesPage() {
       const userIds = matchedUsers.map(u => u.id);
       const userMap = matchedUsers.reduce((acc: any, u) => ({...acc, [u.id]: u.full_name}), {});
 
-      // 2. جلب سجلات الغياب، الاستئذان، والتأخير
       const { data: records, error: recErr } = await supabase
         .from('attendance_records')
         .select('id, date, period, status, student_id, subjects(name)')
         .in('student_id', userIds)
-        .neq('status', 'present') // استبعاد الحضور العادي
+        .neq('status', 'present') 
         .order('date', { ascending: false });
 
       if (recErr) throw recErr;
 
-      // 3. تجميع السجلات حسب الطالب
       const grouped: Record<string, any[]> = {};
       records?.forEach(rec => {
          const sId = rec.student_id;
@@ -141,18 +135,47 @@ export default function AdminExcusesPage() {
     }
   };
 
+  // 🚀 المحرك السحري الجديد: تعديل حالة السجل فوراً من الواجهة
+  const handleUpdateRecordStatus = async (recordId: string, newStatus: string) => {
+    try {
+      // 1. التعديل في قاعدة البيانات فوراً
+      const { error } = await supabase
+        .from('attendance_records')
+        .update({ status: newStatus })
+        .eq('id', recordId);
+
+      if (error) throw error;
+
+      // 2. تحديث الواجهة محلياً دون الحاجة لإعادة البحث
+      setSearchResults(prev => {
+        if (!prev) return prev;
+        return prev.map(student => ({
+          ...student,
+          records: student.records.map(rec => 
+            rec.id === recordId ? { ...rec, status: newStatus } : rec
+          )
+        }));
+      });
+
+    } catch (err: any) {
+      alert('حدث خطأ أثناء تحديث الحالة: ' + err.message);
+    }
+  };
+
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr) return fallback;
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } 
     catch (e) { return fallback; }
   };
 
+  // 🚀 تلوين الحالات لتناسب القائمة المنسدلة
   const translateStatus = (status: string) => {
     switch(status) {
-      case 'absent': return { text: 'غياب بدون عذر', color: 'bg-rose-500/20 text-rose-400 border-rose-500/30' };
-      case 'excused': return { text: 'مستأذن (بعذر)', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' };
-      case 'late': return { text: 'تأخير', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' };
-      default: return { text: status, color: 'bg-slate-500/20 text-slate-400' };
+      case 'absent': return { text: 'غياب بدون عذر', color: 'bg-rose-500/10 text-rose-400 border-rose-500/30 focus:ring-rose-500/20' };
+      case 'excused': return { text: 'مستأذن (بعذر)', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 focus:ring-indigo-500/20' };
+      case 'late': return { text: 'تأخير', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30 focus:ring-amber-500/20' };
+      case 'present': return { text: 'حاضر', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 focus:ring-emerald-500/20' };
+      default: return { text: status, color: 'bg-slate-500/10 text-slate-400 border-slate-500/30' };
     }
   };
 
@@ -180,21 +203,20 @@ export default function AdminExcusesPage() {
               <button onClick={() => setActiveTab('pending')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'pending' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>طلبات معلقة</button>
               <button onClick={() => setActiveTab('approved')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>معتمدة</button>
               <button onClick={() => setActiveTab('rejected')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'rejected' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>مرفوضة</button>
-              {/* 🚀 زر الاستعلام الجديد */}
               <button onClick={() => setActiveTab('inquiry')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'inquiry' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-400 hover:text-indigo-300'}`}><Search className="w-4 h-4"/> استعلام شامل</button>
             </div>
           </div>
         </div>
 
-        {/* 🚀 قسم الاستعلام الشامل (Inquiry Section) */}
+        {/* قسم الاستعلام الشامل */}
         {activeTab === 'inquiry' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-indigo-500/20 shadow-lg">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/30"><Search className="w-6 h-6 text-indigo-400" /></div>
                   <div>
-                     <h2 className="text-2xl font-black text-white">استعلام عن سجلات طالب</h2>
-                     <p className="text-sm font-bold text-slate-400 mt-1">ابحث بالاسم لعرض (الغيابات، التأخير، الاستئذان) مع التواريخ وأرقام الحصص.</p>
+                     <h2 className="text-2xl font-black text-white">استعلام عن سجلات طالب وتعديلها</h2>
+                     <p className="text-sm font-bold text-slate-400 mt-1">ابحث بالاسم وعدّل حالة الغياب يدوياً للحالات الطارئة.</p>
                   </div>
                 </div>
 
@@ -212,7 +234,6 @@ export default function AdminExcusesPage() {
                 </form>
              </div>
 
-             {/* عرض النتائج */}
              {searchResults !== null && (
                <div>
                   {searchResults.length === 0 ? (
@@ -242,9 +263,19 @@ export default function AdminExcusesPage() {
                                  <div key={rec.id} className="bg-[#090b14]/80 p-4 rounded-2xl border border-white/5 flex flex-col justify-between shadow-inner hover:border-indigo-500/30 transition-colors">
                                    <div className="flex justify-between items-start mb-4">
                                      <div className="font-black text-lg text-white" dir="ltr">{safeFormat(rec.date, 'dd MMM yyyy')}</div>
-                                     <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black border ${statusInfo.color}`}>
-                                       {statusInfo.text}
-                                     </span>
+                                     
+                                     {/* 🚀 القائمة المنسدلة التفاعلية لتغيير الحالة فوراً */}
+                                     <select 
+                                       value={rec.status}
+                                       onChange={(e) => handleUpdateRecordStatus(rec.id, e.target.value)}
+                                       className={`px-3 py-1.5 rounded-lg text-xs font-black border outline-none cursor-pointer appearance-none text-center shadow-sm focus:ring-2 transition-all ${statusInfo.color}`}
+                                     >
+                                       <option value="absent" className="bg-[#090b14] text-rose-400">غياب</option>
+                                       <option value="excused" className="bg-[#090b14] text-indigo-400">مستأذن</option>
+                                       <option value="late" className="bg-[#090b14] text-amber-400">تأخير</option>
+                                       <option value="present" className="bg-[#090b14] text-emerald-400">حاضر</option>
+                                     </select>
+
                                    </div>
                                    <div className="flex justify-between items-end text-sm font-bold text-slate-400">
                                      <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> الحصة {rec.period}</span>
@@ -321,7 +352,7 @@ export default function AdminExcusesPage() {
                       </div>
 
                       <button onClick={() => openExcuseModal(excuse)} className="w-full py-3 bg-white/5 hover:bg-white/10 text-white font-black rounded-xl border border-white/10 transition-all flex items-center justify-center gap-2 text-sm">
-                        <FileText className="w-4 h-4" /> مراجعة واعتماد
+                        <FileText className="w-4 h-4" /> مراجعة واستعلام
                       </button>
                     </motion.div>
                   );
@@ -338,12 +369,11 @@ export default function AdminExcusesPage() {
           <Dialog.Root open={!!selectedExcuse} onOpenChange={(open) => !open && setSelectedExcuse(null)}>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 bg-[#090b14]/90 backdrop-blur-xl z-50" />
-              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-5xl max-h-[90vh] overflow-y-auto custom-scrollbar shadow-[0_0_60px_rgba(0,0,0,0.9)] z-50 flex flex-col lg:flex-row" dir="rtl">
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#131836] border border-white/10 rounded-[2.5rem] w-[95%] max-w-4xl max-h-[85vh] overflow-y-auto custom-scrollbar shadow-[0_0_60px_rgba(0,0,0,0.9)] z-50 flex flex-col md:flex-row" dir="rtl">
                 
-                {/* قسم عرض المرفق (الصورة/PDF) */}
-                <div className="lg:w-1/2 bg-[#090b14] p-6 flex flex-col border-b lg:border-b-0 lg:border-l border-white/5 shrink-0">
+                <div className="md:w-1/2 bg-[#090b14] p-6 flex flex-col border-b md:border-b-0 md:border-l border-white/5 shrink-0">
                   <h3 className="font-black text-white mb-4 flex items-center gap-2"><ImageIcon className="w-5 h-5 text-emerald-400"/> المرفق الطبي</h3>
-                  <div className="flex-1 bg-[#131836]/50 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden min-h-[250px] lg:min-h-[400px] relative">
+                  <div className="flex-1 bg-[#131836]/50 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden min-h-[250px] md:min-h-[300px] relative">
                     {selectedExcuse.attachment_url ? (
                       <img src={selectedExcuse.attachment_url} alt="Medical Report" className="w-full h-full object-contain" />
                     ) : (
@@ -352,16 +382,14 @@ export default function AdminExcusesPage() {
                   </div>
                 </div>
 
-                {/* قسم تفاصيل الطلب والقرار */}
-                <div className="lg:w-1/2 p-6 sm:p-8 flex flex-col bg-[#131836]">
+                <div className="md:w-1/2 p-6 sm:p-8 flex flex-col bg-[#131836]">
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl sm:text-2xl font-black text-white">تفاصيل واعتماد العذر</h2>
+                    <h2 className="text-xl sm:text-2xl font-black text-white">تفاصيل واستعلام العذر</h2>
                     <Dialog.Close className="p-2 bg-white/5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-full transition-colors"><XCircle className="w-6 h-6" /></Dialog.Close>
                   </div>
 
                   <div className="space-y-6 flex-1">
                     
-                    {/* 🚀 قسم مربعات الاختيار لاعتماد التواريخ */}
                     <div className="bg-indigo-500/10 p-5 rounded-2xl border border-indigo-500/20 shadow-inner">
                       <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                         <CheckSquare className="w-4 h-4"/> حدد التواريخ للموافقة عليها وتعديلها:
