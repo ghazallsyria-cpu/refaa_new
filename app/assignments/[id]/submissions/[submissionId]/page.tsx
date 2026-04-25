@@ -11,15 +11,20 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-// 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً
+// 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً للمعلم
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
-   let html = content;
+   let html = String(content);
    
-   // 1. إصلاح مشكلة هروب الرموز (Escaped Dollar Signs) التي يولدها المحرر وتمنع قراءة الرياضيات
-   html = html.replace(/\\\$/g, '$');
+   // 1. إصلاح النزول للسطر (تحويل \n إلى <br/>)
+   html = html.replace(/\\n/g, '<br/>').replace(/\\r\\n/g, '<br/>').replace(/\n/g, '<br/>').replace(/\\\$/g, '$');
    
-   // 2. تجميل الجداول لتتوافق مع الثيم المظلم (Dark Mode)
+   // 2. تلوين المعادلات الرياضية
+   html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
+       return `<span class="math-tex text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-inner inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+   });
+
+   // 3. تنسيق الجداول المستخرجة من الذكاء الاصطناعي
    html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-white/10"');
    html = html.replace(/<th/g, '<th class="bg-indigo-500/10 p-3 border border-white/10 font-black text-indigo-200 text-sm"');
    html = html.replace(/<td/g, '<td class="p-3 border border-white/5 bg-[#02040a]/40 text-slate-300 font-bold hover:bg-[#02040a]/80 transition-colors"');
@@ -110,50 +115,45 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 حقن مكتبة KaTeX ديناميكياً لمعالجة المعادلات الرياضية في هذه الصفحة
+  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة لمنع تكرار التحميل والانهيار
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const renderMath = () => {
-        if ((window as any).renderMathInElement) {
-          (window as any).renderMathInElement(document.body, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-          });
-        }
+    if (typeof window !== 'undefined' && !document.getElementById('katex-js-grading')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css-grading';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.id = 'katex-js-grading';
+      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+      script.onload = () => {
+        const autoRender = document.createElement('script');
+        autoRender.id = 'katex-auto-render-grading';
+        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+        document.head.appendChild(autoRender);
       };
-
-      if (!document.getElementById('katex-css')) {
-        const link = document.createElement('link');
-        link.id = 'katex-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-        document.head.appendChild(link);
-      }
-
-      if (!document.getElementById('katex-js')) {
-        const script = document.createElement('script');
-        script.id = 'katex-js';
-        script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-        script.onload = () => {
-          const autoRender = document.createElement('script');
-          autoRender.id = 'katex-auto-render';
-          autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-          autoRender.onload = () => {
-            setTimeout(renderMath, 100);
-          };
-          document.head.appendChild(autoRender);
-        };
-        document.head.appendChild(script);
-      } else {
-        setTimeout(renderMath, 500);
-      }
+      document.head.appendChild(script);
     }
-  }, [questions, answers, loading]);
+  }, []);
+
+  // 🚀 2. إعادة رسم المعادلات كلما تفاعل المعلم (تغيير الدرجة أو النقر)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
+        (window as any).renderMathInElement(document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false
+        });
+      }
+    }, 100); 
+    return () => clearTimeout(timer);
+  }, [questions, answers, questionGrades, loading]); 
 
   useEffect(() => {
     if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
@@ -192,12 +192,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     } finally { setIsSaving(false); }
   };
 
-  const normalizeUrl = (url?: string) => {
-    if (!url) return '';
-    const clean = url.trim();
-    return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
-  };
-
   if (loading) return (
     <div className="min-h-screen bg-[#090b14] flex items-center justify-center">
       <div className="flex flex-col items-center gap-5">
@@ -215,13 +209,13 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const isOverdue = dueDateObj < new Date(submission?.submitted_at);
   const isGraded = submission?.status === 'graded';
 
-  // 🚀 متغير الترقيم المعتمد للأسئلة لتجاهل النصوص التمهيدية
+  // 🚀 متغير الترقيم المعتمد للأسئلة
   let questionCounter = 1;
 
   return (
     <div className="min-h-screen bg-[#090b14] pb-24 font-cairo text-slate-200 relative overflow-x-hidden pt-6" dir="rtl">
       
-      {/* 🚀 الخلفية الزجاجية المضيئة */}
+      {/* الخلفية الزجاجية المضيئة */}
       <div className="fixed top-1/4 left-[-10%] w-[400px] h-[400px] sm:w-[500px] sm:h-[500px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-0 right-[-10%] w-[500px] h-[500px] sm:w-[600px] sm:h-[600px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
@@ -239,7 +233,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-6 sm:space-y-8">
         
-        {/* 🚀 الهيدر والتحكم (Royal Theme) */}
+        {/* الهيدر والتحكم */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-6 glass-panel p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[3rem] relative overflow-hidden">
           <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none -mr-10 -mt-10"></div>
           <div className="flex items-start sm:items-center gap-3 sm:gap-4 relative z-10">
@@ -303,7 +297,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                    const qGrade = questionGrades[q.id] || { isCorrect: null, pointsEarned: 0, feedback: '' };
                    const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
 
-                   // 🌟 1. تنسيق النص التمهيدي (صندوق زجاجي ملكي)
                    if (isHeader) {
                      return (
                        <div key={q.id} className="mt-8 mb-4">
@@ -316,7 +309,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                            </div>
                            <div 
                              className="prose prose-invert max-w-none text-xl sm:text-2xl font-black text-white leading-relaxed" 
-                             dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text || q.question_text || '')} 
+                             dangerouslySetInnerHTML={renderContentWithMath(q.content || (q as any).text || q.question_text || '')} 
                            />
                            {q.media_url && (
                              <div className="mt-6 rounded-2xl overflow-hidden border border-white/10 shadow-sm bg-[#02040a]/40 p-2 text-center">
@@ -370,14 +363,13 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
                    const currentQNumber = questionCounter++;
 
-                   // 🌟 2. تنسيق بطاقة الأسئلة الفرعية
                    return (
-                     <div key={q.id} className={`bg-[#0f1423]/60 rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-inner border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5 border-dashed' : qGrade.isCorrect ? 'border-emerald-500/30' : qGrade.isCorrect === false ? 'border-rose-500/30' : 'border-white/10 hover:border-indigo-500/30'}`}>
+                     <div key={q.id} className={`bg-[#0f1423]/60 rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden shadow-inner border transition-all hover:border-white/20 ${isUnanswered ? 'border-white/5 border-dashed' : qGrade.isCorrect ? 'border-emerald-500/30 hover:border-emerald-500/50' : qGrade.isCorrect === false ? 'border-rose-500/30 hover:border-rose-500/50' : 'border-white/10 hover:border-indigo-500/30'}`}>
                        
                        {/* رأس السؤال */}
                        <div className="p-5 sm:p-6 lg:p-8 bg-[#02040a]/40 border-b border-white/5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 sm:gap-6">
                          <div className="flex gap-3 sm:gap-4 items-start w-full min-w-0">
-                           <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-[1rem] flex items-center justify-center font-black text-lg sm:text-xl shadow-inner border ${isUnanswered ? 'bg-[#0f1423] text-slate-500 border-white/5' : qGrade.isCorrect ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : qGrade.isCorrect === false ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+                           <div className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-[1rem] flex items-center justify-center font-black text-lg sm:text-xl shadow-inner border ${isUnanswered ? 'bg-[#0f1423] text-slate-500 border-white/5' : qGrade.isCorrect ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : qGrade.isCorrect === false ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
                                {currentQNumber}
                            </div>
                            <div className="pt-1 sm:pt-2 w-full min-w-0">
@@ -404,17 +396,18 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                           {/* الجداول المحسنة */}
                           {isComparison ? (
                             <div className={`rounded-xl sm:rounded-2xl border overflow-hidden shadow-inner ${isUnanswered ? 'border-white/5 bg-[#02040a]/40' : qGrade.isCorrect ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-rose-500/20 bg-rose-500/5'}`}>
-                              <div className="overflow-x-auto custom-scrollbar">
+                              <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar pb-2">
                                 <table className="w-full text-right border-collapse min-w-[500px] sm:min-w-[600px] m-0">
                                   <thead>
                                     <tr className={isUnanswered ? 'bg-[#02040a]' : qGrade.isCorrect ? 'bg-emerald-500/10' : 'bg-rose-500/10'}>
                                       <th className="p-3 sm:p-4 border-b border-l border-white/10 font-black text-slate-300 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
-                                      <th className="p-3 sm:p-4 border-b border-l border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[0] || 'الطرف الأول'}</th>
-                                      <th className="p-3 sm:p-4 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[1] || 'الطرف الثاني'}</th>
+                                      <th className="p-3 sm:p-4 border-b border-l border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول'}</th>
+                                      <th className="p-3 sm:p-4 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3">{safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني'}</th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {safeOptions.slice(2).map((aspect: string, rIdx: number) => {
+                                    {safeOptions.slice(2).map((opt: any, rIdx: number) => {
+                                      const aspect = opt.content || opt || '';
                                       let parsedAns: any[] = [];
                                       try { 
                                         if (typeof studentAns === 'string') parsedAns = JSON.parse(studentAns || '[]'); 
@@ -422,7 +415,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                       } catch(e){}
                                       return (
                                         <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
-                                          <td className="p-3 sm:p-4 border-l border-white/10 font-bold text-slate-300 text-xs sm:text-sm bg-[#02040a]/40 align-middle">
+                                          <td className="p-3 sm:p-4 border-l border-white/10 font-bold text-slate-300 text-xs sm:text-sm bg-[#090b14]/50 align-middle">
                                             <div dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                                           </td>
                                           <td className="p-3 sm:p-4 border-l border-white/10 font-bold text-white text-xs sm:text-sm align-middle whitespace-pre-wrap text-center">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-600 font-normal">فارغ</span>}</td>
@@ -490,7 +483,6 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                </div>
                             </div>
                             
-                            {/* ملاحظة المعلم */}
                             <div className={`mt-3 sm:mt-4 bg-[#02040a]/40 rounded-xl sm:rounded-2xl border border-white/5 overflow-hidden shadow-inner ${canEdit ? 'focus-within:border-indigo-500/30 focus-within:ring-1 focus-within:ring-indigo-500/10' : ''}`}>
                                <textarea 
                                  rows={2} 
@@ -598,6 +590,63 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; border-radius: 12px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 1px solid #02040a; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+        
+        /* 🚀 التغليف الذكي للجدول في واجهة المعلم */
+        .table-responsive-wrapper {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 5px;
+        }
+        
+        .dark-theme-override table {
+          min-width: max-content !important;
+          border-collapse: collapse !important;
+        }
+
+        .dark-theme-override th, .dark-theme-override td {
+          padding: 1rem !important;
+          text-align: center !important;
+          vertical-align: middle !important;
+          border: 1px solid rgba(255,255,255,0.05) !important;
+          white-space: normal !important;
+          word-wrap: break-word !important;
+        }
+        
+        .dark-theme-override th {
+          background-color: rgba(99, 102, 241, 0.15) !important;
+          color: #a5b4fc !important; 
+          font-weight: 900 !important;
+        }
+        .dark-theme-override td {
+          background-color: rgba(15, 20, 35, 0.4) !important;
+        }
+        
+        /* تحسين الإدخال المتجاوب */
+        .dark-theme-override td input, .dark-theme-override td textarea {
+          width: 100% !important;
+          min-width: 120px !important;
+          background-color: rgba(2, 4, 10, 0.8) !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          color: #34d399 !important; 
+          font-weight: 900 !important;
+          text-align: center !important;
+          padding: 0.75rem !important;
+          border-radius: 0.75rem !important;
+          transition: all 0.2s ease-in-out !important;
+        }
+        .dark-theme-override td input:focus, .dark-theme-override td textarea:focus {
+          border-color: rgba(52, 211, 153, 0.5) !important;
+          outline: none !important;
+          box-shadow: 0 0 15px rgba(52, 211, 153, 0.2) !important;
+        }
+
+        .dark-theme-override input:not(td input), .dark-theme-override textarea:not(td textarea), .dark-theme-override select { background-color: rgba(2, 4, 10, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; color: white !important; }
+        .dark-theme-override .bg-white { background-color: transparent !important; }
+        .dark-theme-override .bg-slate-50 { background-color: rgba(15, 20, 35, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; }
+        .dark-theme-override .text-slate-900, .dark-theme-override .text-slate-800, .dark-theme-override .text-slate-700 { color: #f8fafc !important; }
+        .dark-theme-override .text-slate-500, .dark-theme-override .text-slate-400 { color: #94a3b8 !important; }
+        .dark-theme-override .border-slate-200, .dark-theme-override .border-slate-300 { border-color: rgba(255, 255, 255, 0.1) !important; }
       `}} />
     </div>
   );
