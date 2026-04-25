@@ -481,19 +481,29 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     : assignment?.file_url;
 
   return (
-    /* 🚀 2. هذا هو الزر بعد التعديل */
-    <a 
-      href={downloadUrl} 
-      download 
-      target="_blank" 
-      rel="noopener noreferrer" 
+{(() => {
+  // 1. السحر: إجبار كلاوديناري على إرسال الملف للتحميل
+  const downloadUrl = (assignment?.file_url && assignment.file_url.includes('cloudinary.com') && assignment.file_url.includes('/upload/'))
+    ? assignment.file_url.replace('/upload/', '/upload/fl_attachment/')
+    : assignment?.file_url;
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // 2. إجبار الموبايل على التحميل في نفس الصفحة لتجنب الشاشة البيضاء
+    window.location.href = downloadUrl;
+  };
+
+  return (
+    <button 
+      onClick={handleDownload}
       className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"
     >
       <LinkIcon className="h-5 w-5" /> 
       <span>تحميل المرفق</span>
-    </a>
+    </button>
   );
 })()}
+
 
                   </div>
                 )}
