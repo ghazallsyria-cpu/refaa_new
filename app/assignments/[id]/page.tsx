@@ -27,21 +27,25 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة (Academic Light Theme)
+// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة قاهرة
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
+   // القضاء التام على جميع أشكال النزول للسطر العالقة
    let html = String(content)
-     .replace(/\\n/g, '<br/>')
+     .replace(/\\\\n/g, '<br/>') // يزيل \\n المزدوجة
+     .replace(/\\n/g, '<br/>')   // يزيل \n العادية
      .replace(/\\r\\n/g, '<br/>')
-     .replace(/\n/g, '<br/>')
+     .replace(/\n/g, '<br/>')    // يزيل النزول الفعلي
      .replace(/\\\$/g, '$');
    
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   // تغليف جداول الذكاء الاصطناعي بحاوية سحب
+   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
    
@@ -204,7 +208,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 1. حقن مكتبة KaTeX (مرة واحدة فقط) للصفحة الأساسية والمعاينة
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-main')) {
       const link = document.createElement('link');
@@ -226,7 +229,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     }
   }, []);
 
-  // 🚀 2. المشغل الديناميكي لمسح التغيرات
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -302,7 +304,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     setEditQuestions(questions); setIsFullEditModalOpen(true);
   };
 
-  // 🚀 التحديث لمنع خطأ الـ Foreign Key Constraint
   const handleSaveFullEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editData.title || !editData.due_date) return;
@@ -395,21 +396,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
-
-  const sanitizedQuestions = questions.map(q => {
-    const textContent = q.content || q.text || q.question_text || '';
-    const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
-       ? q.options 
-       : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
-       
-    return {
-      ...q,
-      options: safeOptions,
-      content: String(textContent).replace(/\\n/g, '\n')
-    };
-  });
-
-  let questionCounter = 1;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
@@ -564,14 +550,14 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
                       
-                      const currentQNumber = questionCounter++;
+                      let questionCounter = 1;
 
                       return (
                         <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200 border-dashed' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
                           <div className="p-6 sm:p-8 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                             <div className="flex gap-4 items-start w-full min-w-0">
                               <div className={`shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-[1.25rem] flex items-center justify-center font-black text-xl sm:text-2xl shadow-sm border ${isUnanswered ? 'bg-white text-slate-500 border-slate-200' : isCorrect ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>
-                                  {currentQNumber}
+                                  {idx + 1}
                               </div>
                               <div className="pt-1 sm:pt-2 w-full min-w-0">
                                 <div 
@@ -601,8 +587,8 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-slate-100' : isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
                                         <th className="p-5 border-b border-l border-slate-200 font-black text-slate-700 text-sm w-1/3">وجه المقارنة</th>
-                                        <th className="p-5 border-b border-l border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3">{safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول'}</th>
-                                        <th className="p-5 border-b border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3">{safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني'}</th>
+                                        <th className="p-5 border-b border-l border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
+                                        <th className="p-5 border-b border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -628,9 +614,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                             ) : q.type === 'file_upload' && !isUnanswered ? (
                               <div className="mt-2 p-2 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 inline-block shadow-sm">
                                 {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
-                                   <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-slate-200" />
+                                   <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-slate-200 bg-white p-1" />
                                 ) : (
-                                   <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-50 rounded-xl">
+                                   <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
                                       <FileText className="w-4 h-4 sm:w-5 sm:h-5" /> تحميل إجابة الطالب المرفقة
                                    </a>
                                 )}
@@ -647,7 +633,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               </div>
                             )}
 
-                            {/* התغذية الراجعة */}
+                            {/* التغذية الراجعة */}
                             {answerDetails?.feedback && (
                               <div className="mt-5 p-5 rounded-2xl bg-indigo-50 border border-indigo-200 relative overflow-hidden shadow-sm">
                                 <div className="absolute right-0 top-0 w-1.5 h-full bg-indigo-500"></div>
@@ -936,7 +922,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
       <Dialog.Root open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -966,7 +951,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Delete Submission Modal */}
       <Dialog.Root open={!!submissionToDelete} onOpenChange={(open) => !open && setSubmissionToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -996,7 +980,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Edit Quick Modal */}
       <Dialog.Root open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1056,7 +1039,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Full Edit Modal */}
       <Dialog.Root open={isFullEditModalOpen} onOpenChange={setIsFullEditModalOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
@@ -1214,16 +1196,33 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       </Dialog.Root>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 1px solid #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .custom-scrollbar-light::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar-light::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
+        .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
+        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
+        /* 🚀 الحل الجذري للجداول في الجوال */
         .table-responsive-wrapper {
           width: 100%;
+          max-width: 100vw;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          padding-bottom: 5px;
+          padding-bottom: 8px;
+          margin-bottom: 1rem;
+          display: block;
+        }
+        
+        .table-responsive-wrapper table {
+          width: 100% !important;
+          min-width: 600px !important;
+          border-collapse: collapse !important;
+          table-layout: auto !important;
+        }
+
+        .table-responsive-wrapper th, .table-responsive-wrapper td {
+          white-space: normal !important;
+          word-wrap: break-word !important;
+          padding: 1rem !important;
         }
       `}} />
     </div>
