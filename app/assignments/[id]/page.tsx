@@ -637,7 +637,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 )}
                               </div>
                             ) : q.type === 'project_submission' && !isUnanswered ? (
-                               <ProjectSubmissionComponent 
+                               <ProjectSubmission 
                                   initialData={typeof studentAns === 'string' ? JSON.parse(studentAns) : studentAns as any}
                                   readOnly={true}
                                   onChange={() => {}}
