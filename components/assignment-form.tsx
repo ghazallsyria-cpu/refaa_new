@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square, X, Loader2, Image as ImageIcon, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
+
+// 🚀 استيراد محرك ضغط الصور الموفر للميزانية (موجود مسبقاً في الباكج الخاص بك)
+import imageCompression from 'browser-image-compression';
 
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
@@ -30,6 +33,142 @@ const renderContentWithMath = (content: string) => {
    
    return { __html: html };
 };
+
+// =========================================================================
+// 🚀 المكون الداخلي الجديد: تسليم المشاريع العلمية (توفير 95% من المساحة)
+// =========================================================================
+interface ProjectSubmissionProps {
+  initialData?: { text: string; images: string[] };
+  onChange: (data: { text: string; images: string[] }) => void;
+  readOnly?: boolean;
+}
+
+function ProjectSubmissionComponent({ initialData, onChange, readOnly }: ProjectSubmissionProps) {
+  const [text, setText] = useState(initialData?.text || '');
+  const [images, setImages] = useState<string[]>(initialData?.images || []);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    onChange({ text: e.target.value, images });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    if (images.length + files.length > 8) {
+      alert('عذراً، الحد الأقصى المسموح به هو 8 صور للمشروع الواحد.');
+      return;
+    }
+
+    setIsUploading(true);
+    const uploadedUrls: string[] = [];
+
+    try {
+      for (const file of files) {
+        // 🚀 السحر الاقتصادي هنا: ضغط الصورة محلياً في جهاز الطالب!
+        const options = {
+          maxSizeMB: 0.2, // أقصى حجم 200 كيلوبايت
+          maxWidthOrHeight: 1280,
+          useWebWorker: true,
+        };
+        const compressedFile = await imageCompression(file, options);
+
+        // رفع الصورة المضغوطة جداً إلى Cloudinary
+        const formData = new FormData();
+        formData.append('file', compressedFile);
+        formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (data.secure_url) {
+          uploadedUrls.push(data.secure_url);
+        }
+      }
+
+      const newImages = [...images, ...uploadedUrls];
+      setImages(newImages);
+      onChange({ text, images: newImages });
+
+    } catch (error) {
+      alert('حدث خطأ أثناء ضغط أو رفع الصور. تأكد من اتصالك بالإنترنت.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    if (readOnly) return;
+    const newImages = images.filter((_, i) => i !== index);
+    setImages(newImages);
+    onChange({ text, images: newImages });
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mt-5">
+      <div className="space-y-6">
+        {/* قسم الكتابة النصية للمشروع */}
+        <div>
+          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-500" /> وصف المشروع، أبحاثك، والملاحظات (اختياري)
+          </label>
+          <textarea
+            disabled={readOnly}
+            rows={4}
+            value={text}
+            onChange={handleTextChange}
+            placeholder="اكتب تفاصيل بحثك، أو إجاباتك النظرية هنا..."
+            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-xl p-4 text-slate-800 font-bold outline-none resize-none shadow-inner transition-all disabled:opacity-70"
+          />
+        </div>
+
+        {/* قسم رفع صور المشروع (الحد الأقصى 8 صور) */}
+        <div>
+          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-indigo-500" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
+          </label>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            {images.map((img, idx) => (
+              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm group bg-slate-50">
+                <img src={img} alt={`مرفق ${idx + 1}`} className="w-full h-full object-cover" />
+                {!readOnly && (
+                  <button type="button" onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600 shadow-md">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {!readOnly && images.length < 8 && (
+              <label className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${isUploading ? "border-indigo-300 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                {isUploading ? (
+                  <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                ) : (
+                  <>
+                    <UploadCloud className="w-8 h-8 text-slate-400 mb-2" />
+                    <span className="text-xs font-bold text-slate-500 text-center px-2">إضافة صور<br/>({8 - images.length} متبقية)</span>
+                  </>
+                )}
+              </label>
+            )}
+          </div>
+          <p className="text-xs font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl border border-emerald-100 inline-flex items-center gap-2 w-full shadow-sm">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            النظام يدعم ضغط الصور تلقائياً للحفاظ على باقة الإنترنت لديك وتخفيف العبء عن الأجهزة.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+// =========================================================================
 
 interface AssignmentFormProps {
   questions: any[];
@@ -127,7 +266,7 @@ export default function AssignmentForm({
     questions.forEach(q => {
       if (q.isRequired && q.type !== 'section_header') {
         const ans = answers[q.id];
-        if (!ans || (Array.isArray(ans) && ans.length === 0) || (q.type === 'comparison' && ans === '[]')) {
+        if (!ans || (Array.isArray(ans) && ans.length === 0) || (q.type === 'comparison' && ans === '[]') || (q.type === 'project_submission' && !ans)) {
           newErrors[q.id] = 'هذا السؤال مطلوب للإرسال';
         }
       }
@@ -144,6 +283,28 @@ export default function AssignmentForm({
   const renderQuestionInput = (q: any) => {
     const ans = answers[q.id];
 
+    // 🚀 1. نظام تسليم المشروع العلمي (الميزة الجديدة)
+    if (q.type === 'project_submission') {
+      let projectData = { text: '', images: [] };
+      if (ans && typeof ans === 'string') {
+        try { projectData = JSON.parse(ans); } catch(e) { projectData.text = ans; }
+      } else if (ans && typeof ans === 'object') {
+        projectData = ans;
+      }
+
+      return (
+        <ProjectSubmissionComponent 
+          initialData={projectData}
+          readOnly={readOnly}
+          onChange={(data) => {
+            // يتم التخزين كـ JSON String في قاعدة البيانات لتوفير الأعمدة
+            handleAnswerChange(q.id, JSON.stringify(data));
+          }}
+        />
+      );
+    }
+
+    // 2. الاختيارات المتعددة والـ Radio
     if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'radio') {
       const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
           ? q.options 
@@ -170,6 +331,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 3. مربعات الاختيار المتعددة Checkboxes
     if (q.type === 'checkbox' || q.type === 'multi_select') {
       const selectedArray = Array.isArray(ans) ? ans : [];
       const safeOptions = q.options && Array.isArray(q.options) ? q.options : [];
@@ -199,6 +361,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 4. رفع صورة واحدة (النظام القديم)
     if (q.type === 'file_upload') {
        return (
          <div className="mt-5 bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm">
@@ -216,6 +379,7 @@ export default function AssignmentForm({
        );
     }
 
+    // 5. الجداول التفاعلية (Data Tables)
     let tableData = q.table;
     if (!tableData && q.type === 'data_table' && q.options && q.options.length > 0) {
       try {
@@ -254,7 +418,6 @@ export default function AssignmentForm({
                             placeholder="..." 
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
-                              // 🚀 النسخ العميق (Deep Clone) لضمان التفاعل
                               const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : Array(tableData.headers.length).fill('')); 
                               if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
@@ -274,6 +437,7 @@ export default function AssignmentForm({
       );
     }
 
+    // 6. أسئلة المقارنات
     if (q.type === 'comparison') {
         const getOptValue = (opt: any, fallback: string) => {
           if (!opt) return fallback;
@@ -305,7 +469,6 @@ export default function AssignmentForm({
                          <textarea 
                            disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} 
                            onChange={(e) => { 
-                             // 🚀 النسخ العميق (Deep Clone) لضمان عمل الكتابة بسلاسة
                              const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : ['', '']); 
                              if (!newAns[idx]) newAns[idx] = ['', '']; 
                              newAns[idx][0] = e.target.value; 
@@ -335,6 +498,7 @@ export default function AssignmentForm({
         );
     }
 
+    // 7. الأسئلة المقالية الافتراضية
     return (
       <textarea
         disabled={readOnly}
