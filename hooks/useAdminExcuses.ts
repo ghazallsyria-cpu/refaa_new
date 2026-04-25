@@ -5,7 +5,7 @@ export function useAdminExcuses() {
   const [loading, setLoading] = useState(false);
   const [excuses, setExcuses] = useState<any[]>([]);
 
-  // 1. جلب الأعذار حسب الحالة (قيد المراجعة، مقبولة، مرفوضة)
+  // 1. جلب الأعذار حسب الحالة
   const fetchExcuses = useCallback(async (statusFilter: string = 'pending') => {
     setLoading(true);
     try {
@@ -32,7 +32,7 @@ export function useAdminExcuses() {
     }
   }, []);
 
-  // 2. المحرك السحري: اعتماد العذر وتعديل الغياب
+  // 2. المحرك السحري المحدث: اعتماد العذر للغياب الجزئي والكامل وتواريخ متعددة
   const approveExcuse = async (excuse: any, adminId: string) => {
     setLoading(true);
     try {
@@ -44,15 +44,27 @@ export function useAdminExcuses() {
 
       if (updateError) throw updateError;
 
-      // ب: البحث والتعديل في سجلات الغياب الأصلية
+      // ب: استخراج التواريخ المحددة (لدعم التواريخ المتعددة الجديدة والأنظمة القديمة)
+      let targetDates: string[] = [];
+      if (Array.isArray(excuse.absent_dates) && excuse.absent_dates.length > 0) {
+        targetDates = excuse.absent_dates;
+      } else if (excuse.excuse_date) {
+        targetDates = [excuse.excuse_date]; 
+      }
+
+      if (targetDates.length === 0) {
+         throw new Error("لم يتم تحديد تواريخ غياب صالحة لربطها بهذا العذر.");
+      }
+
+      // ج: البحث والتعديل في سجلات الغياب الأصلية للتواريخ المحددة
       let query = supabase
         .from('attendance_records')
-        .update({ status: 'excused' }) // تحويل الحالة إلى مستأذن
+        .update({ status: 'excused' }) 
         .eq('student_id', excuse.student_id)
-        .eq('date', excuse.excuse_date)
-        .eq('status', 'absent'); // نعدل فقط الحصص التي سُجلت كغياب (لا نلمس الحضور)
+        .in('date', targetDates) 
+        .eq('status', 'absent'); 
 
-      // ج: إذا كان الغياب جزئياً، نعدل فقط الحصص المحددة
+      // د: إذا كان الغياب جزئياً، نعدل فقط الحصص المحددة
       if (excuse.duration_type === 'partial_day' && excuse.target_periods && excuse.target_periods.length > 0) {
         query = query.in('period', excuse.target_periods);
       }
