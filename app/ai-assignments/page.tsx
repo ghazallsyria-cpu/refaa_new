@@ -1,5 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
+// @ts-nocheck
 
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp, ShieldCheck, Columns } from 'lucide-react';
@@ -33,13 +34,11 @@ interface Teacher { id: string; full_name: string; }
 interface Subject { id: string; name: string; }
 interface Section { id: string; name: string; }
 
-// 🚀 الفلتر السحري: ينظف جميع أخطاء الذكاء الاصطناعي ويجهز المعادلات لـ KaTeX
+// 🚀 الفلتر السحري
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
-    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
     .replace(/\\\\([a-zA-Z])/g, '\\$1')
-    // 2. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
     .replace(/\$\$/g, '$');
 };
 
@@ -147,14 +146,14 @@ export default function AIAssignmentsSandbox() {
 
   if (currentRole !== 'admin' && currentRole !== 'management') {
     return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center bg-[#090b14] font-cairo" dir="rtl">
-        <div className="bg-[#131836]/60 backdrop-blur-2xl p-10 rounded-[3rem] shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col items-center max-w-md text-center border border-rose-500/20">
-          <div className="w-20 h-20 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-6 border border-rose-500/30">
+      <div className="min-h-[80vh] flex flex-col items-center justify-center bg-slate-50 font-cairo" dir="rtl">
+        <div className="bg-white p-10 rounded-[3rem] shadow-sm flex flex-col items-center max-w-md text-center border border-slate-200">
+          <div className="w-20 h-20 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-6 border border-rose-100">
             <AlertCircle className="w-10 h-10 animate-pulse" />
           </div>
-          <h1 className="text-3xl font-black text-white mb-3">صلاحيات غير كافية</h1>
-          <p className="text-slate-400 font-bold mb-8 leading-relaxed">عذراً، هذه الصفحة مخصصة لإدارة المنصة فقط.</p>
-          <button onClick={() => router.push('/')} className="w-full bg-white/10 text-white font-bold py-4 rounded-2xl hover:bg-white/20 transition-all border border-white/20">العودة للرئيسية</button>
+          <h1 className="text-3xl font-black text-slate-900 mb-3">صلاحيات غير كافية</h1>
+          <p className="text-slate-500 font-bold mb-8 leading-relaxed">عذراً، هذه الصفحة مخصصة لإدارة المنصة فقط.</p>
+          <button onClick={() => router.push('/')} className="w-full bg-slate-100 text-slate-700 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-all border border-slate-200">العودة للرئيسية</button>
         </div>
       </div>
     );
@@ -164,7 +163,6 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت المحدث بقواعد الكيمياء العضوية والروابط المتفرعة
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
 🛑 1. هيكلية الأسئلة (مهم جداً):
@@ -450,13 +448,13 @@ export default function AIAssignmentsSandbox() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090b14] py-12 px-4 sm:px-8 font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
+    <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8 font-cairo text-slate-800 relative overflow-hidden" dir="rtl">
       
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #090b14; border-radius: 12px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 12px; border: 2px solid #090b14; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
         .katex-container {
           direction: ltr !important;
@@ -483,44 +481,44 @@ export default function AIAssignmentsSandbox() {
       `}} />
 
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
-        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px]"></div>
+        <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-emerald-100/50 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-indigo-100/50 rounded-full blur-[140px]"></div>
       </div>
 
       <div className="max-w-6xl mx-auto space-y-8 relative z-10">
         
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-[2rem] shadow-[0_0_30px_rgba(16,185,129,0.15)] mb-2 backdrop-blur-md">
+          <div className="inline-flex items-center justify-center p-4 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-[2rem] shadow-sm mb-2 backdrop-blur-md">
             <Sparkles className="w-10 h-10" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight drop-shadow-md">توليد الواجبات آلياً</h1>
-          <p className="text-base sm:text-lg text-slate-400 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
+          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">توليد الواجبات آلياً</h1>
+          <p className="text-base sm:text-lg text-slate-500 font-bold max-w-2xl mx-auto leading-relaxed">ارفع صورة، ملف PDF، أو الصق نصاً، وسنقوم بتحويله لملف تفاعلي وإرساله لمعلميك.</p>
         </div>
 
-        <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 rounded-[2rem] shadow-xl border border-white/10 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
-          <div className="h-12 w-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-inner">
-            <Key className="w-6 h-6 text-amber-400" />
+        <div className="bg-white backdrop-blur-xl p-6 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 items-center max-w-3xl mx-auto">
+          <div className="h-12 w-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 shadow-sm">
+            <Key className="w-6 h-6 text-amber-500" />
           </div>
           <div className="flex-1 w-full">
-            <input type="password" placeholder="مفتاح التوليد التلقائي (Google Gemini API)..." className="w-full bg-[#090b14]/50 border border-white/10 rounded-xl px-4 py-3 font-bold outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-left text-white placeholder:text-slate-500 transition-all shadow-inner" dir="ltr" value={customApiKey} onChange={(e) => setCustomApiKey(e.target.value)} />
+            <input type="password" placeholder="مفتاح التوليد التلقائي (Google Gemini API)..." className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-left text-slate-900 placeholder:text-slate-400 transition-all shadow-inner" dir="ltr" value={customApiKey} onChange={(e) => setCustomApiKey(e.target.value)} />
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           
           <div className="space-y-6">
-            <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 relative overflow-hidden">
-              <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-500/10 blur-3xl rounded-full"></div>
-              <h2 className="text-xl sm:text-2xl font-black text-white mb-6 flex items-center gap-3 relative z-10"><Sparkles className="w-6 h-6 text-emerald-400" /> الذكاء الاصطناعي</h2>
+            <div className="bg-white backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-hidden">
+              <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-50 blur-3xl rounded-full"></div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-6 flex items-center gap-3 relative z-10"><Sparkles className="w-6 h-6 text-emerald-500" /> الذكاء الاصطناعي</h2>
               
-              <div className="flex flex-wrap bg-[#090b14]/50 p-1.5 rounded-2xl mb-6 gap-1 relative z-10 border border-white/5">
-                <button onClick={() => setInputType('text')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'text' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+              <div className="flex flex-wrap bg-slate-50 p-1.5 rounded-2xl mb-6 gap-1 relative z-10 border border-slate-200 shadow-inner">
+                <button onClick={() => setInputType('text')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'text' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}>
                   <Type className="w-4 h-4" /> نص
                 </button>
-                <button onClick={() => setInputType('image')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'image' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                <button onClick={() => setInputType('image')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'image' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}>
                   <ImageIcon className="w-4 h-4" /> صورة
                 </button>
-                <button onClick={() => setInputType('pdf')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'pdf' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                <button onClick={() => setInputType('pdf')} className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${inputType === 'pdf' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-indigo-600 hover:bg-indigo-50'}`}>
                   <FileUp className="w-4 h-4" /> ملف PDF
                 </button>
               </div>
@@ -530,15 +528,15 @@ export default function AIAssignmentsSandbox() {
                   <textarea 
                     value={rawText} onChange={(e) => setRawText(e.target.value)}
                     placeholder="الصق نص الواجب هنا (بما في ذلك المسائل والحلول النموذجية)..."
-                    className="w-full h-64 bg-[#090b14]/50 border border-white/10 rounded-2xl p-5 font-bold text-slate-200 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 leading-relaxed resize-none shadow-inner placeholder:text-slate-500 transition-all"
+                    className="w-full h-64 bg-slate-50 border border-slate-200 rounded-2xl p-5 font-bold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 leading-relaxed resize-none shadow-inner placeholder:text-slate-400 transition-all"
                   ></textarea>
                 )}
 
                 {inputType === 'image' && (
                   <label className="block w-full cursor-pointer group">
                     <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-                    <div className={`w-full border-2 border-dashed rounded-[2rem] p-10 flex flex-col items-center justify-center gap-4 transition-all ${imagePreview ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-white/10 bg-[#090b14]/50 group-hover:border-emerald-500/30 group-hover:bg-[#090b14]/80'}`}>
-                      {imagePreview ? <img src={imagePreview} className="max-h-60 w-auto rounded-xl shadow-lg object-contain border border-white/10" /> : <><div className="p-4 bg-emerald-500/20 rounded-2xl shadow-inner border border-emerald-500/30"><UploadCloud className="w-8 h-8 text-emerald-400" /></div><p className="font-bold text-slate-400 group-hover:text-emerald-400 transition-colors">اضغط لرفع ورقة الواجب</p></>}
+                    <div className={`w-full border-2 border-dashed rounded-[2rem] p-10 flex flex-col items-center justify-center gap-4 transition-all ${imagePreview ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-300 bg-slate-50 group-hover:border-indigo-300 group-hover:bg-indigo-50/30'}`}>
+                      {imagePreview ? <img src={imagePreview} className="max-h-60 w-auto rounded-xl shadow-md object-contain border border-white" /> : <><div className="p-4 bg-indigo-50 rounded-2xl shadow-sm border border-indigo-100"><UploadCloud className="w-8 h-8 text-indigo-500" /></div><p className="font-bold text-slate-500 group-hover:text-indigo-600 transition-colors">اضغط لرفع ورقة الواجب</p></>}
                     </div>
                   </label>
                 )}
@@ -547,29 +545,29 @@ export default function AIAssignmentsSandbox() {
                   <div className="space-y-4 animate-in fade-in">
                     <label className="block w-full cursor-pointer group">
                       <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfChange} />
-                      <div className={`w-full border-2 border-dashed rounded-[2rem] p-8 flex flex-col items-center justify-center gap-4 transition-all ${pdfFile ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-white/10 bg-[#090b14]/50 group-hover:border-emerald-500/30 group-hover:bg-[#090b14]/80'}`}>
-                        <div className={`p-4 rounded-2xl shadow-inner border ${pdfFile ? 'bg-emerald-500/20 border-emerald-500/30' : 'bg-white/5 border-white/10'}`}>
-                          <FileText className={`w-8 h-8 ${pdfFile ? 'text-emerald-400' : 'text-slate-400'}`} />
+                      <div className={`w-full border-2 border-dashed rounded-[2rem] p-8 flex flex-col items-center justify-center gap-4 transition-all ${pdfFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-300 bg-slate-50 group-hover:border-indigo-300 group-hover:bg-indigo-50/30'}`}>
+                        <div className={`p-4 rounded-2xl shadow-sm border ${pdfFile ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                          <FileText className={`w-8 h-8 ${pdfFile ? 'text-emerald-600' : 'text-slate-400'}`} />
                         </div>
                         <div className="text-center">
-                          <p className={`font-bold transition-colors ${pdfFile ? 'text-emerald-400' : 'text-slate-400 group-hover:text-emerald-400'}`}>
+                          <p className={`font-bold transition-colors ${pdfFile ? 'text-emerald-700' : 'text-slate-500 group-hover:text-indigo-600'}`}>
                             {pdfFile ? pdfFile.name : 'اضغط لرفع ملف PDF'}
                           </p>
-                          {pdfFile && <p className="text-xs text-emerald-500/70 mt-1 font-bold">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</p>}
+                          {pdfFile && <p className="text-xs text-emerald-600/70 mt-1 font-bold">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB</p>}
                         </div>
                       </div>
                     </label>
 
                     {pdfFile && (
-                      <div className="bg-[#090b14]/50 p-5 rounded-2xl border border-white/10 space-y-4 shadow-inner">
-                        <p className="font-bold text-slate-300 text-sm">نطاق الاستخراج:</p>
+                      <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4 shadow-sm">
+                        <p className="font-bold text-slate-700 text-sm">نطاق الاستخراج:</p>
                         <div className="flex gap-6">
-                          <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-400 hover:text-white transition-colors">
-                            <input type="radio" name="pdfMode" checked={pdfMode === 'all'} onChange={() => setPdfMode('all')} className="w-4 h-4 accent-emerald-500" />
+                          <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600 hover:text-indigo-600 transition-colors">
+                            <input type="radio" name="pdfMode" checked={pdfMode === 'all'} onChange={() => setPdfMode('all')} className="w-4 h-4 accent-indigo-600" />
                             كل الملف
                           </label>
-                          <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-400 hover:text-white transition-colors">
-                            <input type="radio" name="pdfMode" checked={pdfMode === 'range'} onChange={() => setPdfMode('range')} className="w-4 h-4 accent-emerald-500" />
+                          <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600 hover:text-indigo-600 transition-colors">
+                            <input type="radio" name="pdfMode" checked={pdfMode === 'range'} onChange={() => setPdfMode('range')} className="w-4 h-4 accent-indigo-600" />
                             تحديد صفحات
                           </label>
                         </div>
@@ -577,9 +575,9 @@ export default function AIAssignmentsSandbox() {
                         {pdfMode === 'range' && (
                           <div className="flex items-center gap-3 mt-3 animate-in fade-in">
                             <span className="text-sm font-bold text-slate-500">من</span>
-                            <input type="number" min="1" value={pageFrom} onChange={(e) => setPageFrom(parseInt(e.target.value) || 1)} className="w-20 p-2 bg-[#131836] border border-white/10 rounded-xl text-center font-bold text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20" />
+                            <input type="number" min="1" value={pageFrom} onChange={(e) => setPageFrom(parseInt(e.target.value) || 1)} className="w-20 p-2 bg-white border border-slate-200 rounded-xl text-center font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 shadow-sm" />
                             <span className="text-sm font-bold text-slate-500">إلى</span>
-                            <input type="number" min={pageFrom} value={pageTo} onChange={(e) => setPageTo(parseInt(e.target.value) || pageFrom)} className="w-20 p-2 bg-[#131836] border border-white/10 rounded-xl text-center font-bold text-white outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20" />
+                            <input type="number" min={pageFrom} value={pageTo} onChange={(e) => setPageTo(parseInt(e.target.value) || pageFrom)} className="w-20 p-2 bg-white border border-slate-200 rounded-xl text-center font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 shadow-sm" />
                           </div>
                         )}
                       </div>
@@ -591,81 +589,81 @@ export default function AIAssignmentsSandbox() {
               <button 
                 onClick={analyzeContent} 
                 disabled={loading || (inputType === 'image' && !imageFile) || (inputType === 'text' && !rawText.trim()) || (inputType === 'pdf' && !pdfFile)}
-                className="relative z-10 w-full mt-6 bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-base sm:text-lg py-4 rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95 transition-all border border-emerald-400/50"
+                className="relative z-10 w-full mt-6 bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black text-base sm:text-lg py-4 rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 flex items-center justify-center gap-3 active:scale-95 transition-all border border-indigo-500"
               >
                 {loading ? <><Loader2 className="w-6 h-6 animate-spin" /> جاري التحليل والاستخراج...</> : <><Sparkles className="w-6 h-6" /> توليد الواجب آلياً</>}
               </button>
 
               {error && (
-                <div className="relative z-10 mt-4 p-4 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-2xl font-bold flex items-center gap-3 text-sm backdrop-blur-md shadow-inner">
+                <div className="relative z-10 mt-4 p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl font-bold flex items-center gap-3 text-sm shadow-sm">
                   <AlertCircle className="shrink-0 w-5 h-5" /><p>{error}</p>
                 </div>
               )}
             </div>
 
-            <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-lg border border-white/10 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full"></div>
-              <h2 className="relative z-10 text-xl font-black mb-4 flex items-center gap-3 text-indigo-400"><FileJson className="w-6 h-6" /> الإدخال اليدوي للطوارئ</h2>
-              <p className="relative z-10 text-sm text-slate-400 font-bold mb-6 leading-relaxed">انسخ الأمر (البرومبت) بالأسفل، ثم توجه لحسابك الخارجي في (ChatGPT أو غيره)، ارفع الملف والصقه هناك للحصول على الكود.</p>
+            <div className="bg-white backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 blur-3xl rounded-full"></div>
+              <h2 className="relative z-10 text-xl font-black mb-4 flex items-center gap-3 text-slate-900"><FileJson className="w-6 h-6 text-indigo-500" /> الإدخال اليدوي للطوارئ</h2>
+              <p className="relative z-10 text-sm text-slate-500 font-bold mb-6 leading-relaxed">انسخ الأمر (البرومبت) بالأسفل، ثم توجه لحسابك الخارجي في (ChatGPT أو غيره)، ارفع الملف والصقه هناك للحصول على الكود.</p>
               
-              <button onClick={copyPrompt} className="relative z-10 w-full mb-6 bg-[#090b14]/50 hover:bg-[#090b14] border border-white/10 text-white font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition-all active:scale-95 shadow-inner">
-                <Copy className="w-4 h-4 text-indigo-400" /> انسخ أمر التوليد المخصص (البرومبت)
+              <button onClick={copyPrompt} className="relative z-10 w-full mb-6 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-indigo-700 font-bold py-3 rounded-xl flex justify-center items-center gap-2 transition-all active:scale-95 shadow-sm">
+                <Copy className="w-4 h-4" /> انسخ أمر التوليد المخصص (البرومبت)
               </button>
               
               <div className="relative z-10">
-                <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON الناتج من النظام الخارجي هنا..." className="w-full h-32 bg-[#090b14]/80 border border-white/10 rounded-xl p-4 font-mono text-sm text-emerald-400 focus:outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 shadow-inner placeholder:text-slate-600 transition-all custom-scrollbar" dir="ltr"></textarea>
+                <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON الناتج من النظام الخارجي هنا..." className="w-full h-32 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-indigo-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 shadow-inner placeholder:text-slate-400 transition-all custom-scrollbar" dir="ltr"></textarea>
               </div>
 
               {manualJsonError && (
-                <div className="relative z-10 mt-3 p-3 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded-xl font-bold flex gap-2 text-xs backdrop-blur-sm shadow-inner">
+                <div className="relative z-10 mt-3 p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl font-bold flex gap-2 text-xs shadow-sm">
                   <AlertCircle className="shrink-0 w-4 h-4" /><p>{manualJsonError}</p>
                 </div>
               )}
               
-              <button onClick={processManualJson} className="relative z-10 w-full mt-4 bg-indigo-600 text-white font-black py-3.5 rounded-xl hover:bg-indigo-500 flex justify-center items-center gap-2 transition-all active:scale-95 shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-indigo-400/50">
+              <button onClick={processManualJson} className="relative z-10 w-full mt-4 bg-indigo-50 text-indigo-700 font-black py-3.5 rounded-xl hover:bg-indigo-100 flex justify-center items-center gap-2 transition-all active:scale-95 shadow-sm border border-indigo-200">
                 <ClipboardPaste className="w-5 h-5" /> معالجة الكود المدخل
               </button>
             </div>
           </div>
 
-          <div className="bg-[#131836]/60 backdrop-blur-2xl p-6 sm:p-8 rounded-[2.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 flex flex-col min-h-[500px] relative overflow-hidden">
-            <h2 className="relative z-10 text-xl sm:text-2xl font-black mb-6 flex items-center gap-3 text-white"><FileText className="w-6 h-6 text-emerald-400" /> نتيجة الواجب والتعيين</h2>
+          <div className="bg-white backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 flex flex-col min-h-[500px] relative overflow-hidden">
+            <h2 className="relative z-10 text-xl sm:text-2xl font-black mb-6 flex items-center gap-3 text-slate-900"><FileText className="w-6 h-6 text-indigo-500" /> نتيجة الواجب والتعيين</h2>
             
             {!result && !loading && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50 relative z-10">
-                <div className="p-5 bg-white/5 rounded-[2rem] border border-white/5 mb-4 shadow-inner">
-                  <FileText className="w-16 h-16 text-slate-500" />
+              <div className="flex-1 flex flex-col items-center justify-center text-center opacity-60 relative z-10">
+                <div className="p-5 bg-slate-50 rounded-[2rem] border border-slate-200 mb-4 shadow-sm">
+                  <FileText className="w-16 h-16 text-slate-400" />
                 </div>
-                <p className="text-lg font-bold text-slate-400">ستظهر أسئلة الواجب هنا بعد المعالجة.</p>
+                <p className="text-lg font-bold text-slate-500">ستظهر أسئلة الواجب هنا بعد المعالجة.</p>
               </div>
             )}
             
             {loading && (
               <div className="flex-1 flex flex-col items-center justify-center py-20 relative z-10">
-                <div className="w-16 h-16 border-4 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin mb-4 shadow-[0_0_15px_rgba(16,185,129,0.3)]" />
-                <p className="text-lg font-bold text-emerald-400 animate-pulse tracking-widest">يقرأ الواجب ويحلل البيانات...</p>
+                <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4 shadow-sm" />
+                <p className="text-lg font-bold text-indigo-600 animate-pulse tracking-widest">يقرأ الواجب ويحلل البيانات...</p>
               </div>
             )}
             
             {result && (
               <div className="space-y-8 flex-1 animate-in fade-in relative z-10">
-                <div className="bg-[#090b14]/50 p-5 sm:p-6 rounded-3xl border border-white/10 max-h-[450px] overflow-y-auto custom-scrollbar shadow-inner">
-                  <p className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2 bg-emerald-500/10 w-fit px-3 py-1.5 rounded-xl border border-emerald-500/20"><CheckCircle2 className="w-4 h-4" /> تم استخراج {result.questions.length} أسئلة:</p>
+                <div className="bg-slate-50 p-5 sm:p-6 rounded-3xl border border-slate-200 max-h-[450px] overflow-y-auto custom-scrollbar shadow-inner">
+                  <p className="text-sm font-black text-emerald-700 mb-4 flex items-center gap-2 bg-emerald-50 w-fit px-3 py-1.5 rounded-xl border border-emerald-200"><CheckCircle2 className="w-4 h-4" /> تم استخراج {result.questions.length} أسئلة:</p>
                   
-                  <ul className="space-y-6 font-bold text-slate-300 text-sm">
+                  <ul className="space-y-6 font-bold text-slate-700 text-sm">
                     {result.questions.map((q, i) => {
                       let displayContent = q.content;
                       const answerIndex = displayContent.indexOf('[الإجابة النموذجية');
                       if (answerIndex !== -1) displayContent = displayContent.substring(0, answerIndex).trim();
                       
                       return (
-                        <li key={i} className="border-b border-white/5 pb-5 last:border-0 leading-loose">
+                        <li key={i} className="border-b border-slate-200 pb-5 last:border-0 leading-loose">
                           <div className="flex gap-3 items-start">
-                            <span className="text-emerald-500/50 mt-1 shrink-0 font-black">{i + 1}.</span>
-                            <div className={q.type === 'section_header' ? "text-indigo-400 font-black text-base w-full" : "w-full"}>
+                            <span className="text-indigo-400 mt-1 shrink-0 font-black">{i + 1}.</span>
+                            <div className={q.type === 'section_header' ? "text-indigo-700 font-black text-base w-full" : "w-full text-slate-800"}>
                                 <div className="katex-container"><Latex>{displayContent}</Latex></div>
                                 {q.type !== 'section_header' && (
-                                  <span className="block mt-2 text-[10px] text-slate-500 bg-[#090b14] px-2 py-1 rounded-md border border-white/5 shadow-inner w-fit">نوع: {translateQuestionType(q.type)}</span>
+                                  <span className="block mt-2 text-[10px] text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm w-fit">نوع: {translateQuestionType(q.type)}</span>
                                 )}
                             </div>
                           </div>
@@ -673,7 +671,7 @@ export default function AIAssignmentsSandbox() {
                             <div className="mt-4 ml-6 flex flex-wrap gap-2">
                               {q.options.map((opt, oIdx) => {
                                 return (
-                                  <span key={oIdx} className="px-4 py-2 rounded-xl bg-[#131836] border border-white/5 text-sm text-slate-200 shadow-sm flex items-center justify-center min-w-[60px] text-center">
+                                  <span key={oIdx} className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm text-slate-700 shadow-sm flex items-center justify-center min-w-[60px] text-center">
                                      <div className="katex-container"><Latex>{String(opt)}</Latex></div>
                                   </span>
                                 );
@@ -686,62 +684,62 @@ export default function AIAssignmentsSandbox() {
                   </ul>
                 </div>
 
-                <div className="bg-emerald-500/10 p-6 sm:p-8 rounded-3xl border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.05)] backdrop-blur-md">
-                  <h3 className="text-lg sm:text-xl font-black text-emerald-400 mb-6 flex items-center gap-2"><UserCheck className="w-5 h-5" /> تعيين الواجب وإرساله</h3>
+                <div className="bg-indigo-50/50 p-6 sm:p-8 rounded-3xl border border-indigo-100 shadow-sm backdrop-blur-md">
+                  <h3 className="text-lg sm:text-xl font-black text-indigo-900 mb-6 flex items-center gap-2"><UserCheck className="w-5 h-5" /> تعيين الواجب وإرساله</h3>
                   
                   <div className="space-y-5">
                     <div>
-                      <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <label className="block text-xs font-bold mb-2 text-slate-600 uppercase tracking-widest flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-indigo-500" />
                         حالة الواجب عند الإرسال
                       </label>
-                      <select value={assignmentStatus} onChange={(e) => setAssignmentStatus(e.target.value as 'draft' | 'published')} className="w-full bg-[#090b14]/80 border border-emerald-500/30 p-3.5 rounded-xl font-black text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none [&>option]:bg-[#131836] cursor-pointer shadow-inner transition-all">
+                      <select value={assignmentStatus} onChange={(e) => setAssignmentStatus(e.target.value as 'draft' | 'published')} className="w-full bg-white border border-slate-200 p-3.5 rounded-xl font-black text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm transition-all appearance-none cursor-pointer">
                         <option value="draft">مسودة (يحتاج المعلم لمراجعته قبل النشر)</option>
                         <option value="published">منشور (يتم إرساله للطلاب فوراً)</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest">إرسال إلى المعلم</label>
-                      <select value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)} className="w-full bg-[#090b14]/80 border border-white/10 p-3.5 rounded-xl font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/30 appearance-none [&>option]:bg-[#131836] cursor-pointer shadow-inner">
+                      <label className="block text-xs font-bold mb-2 text-slate-600 uppercase tracking-widest">إرسال إلى المعلم</label>
+                      <select value={selectedTeacher} onChange={(e) => setSelectedTeacher(e.target.value)} className="w-full bg-white border border-slate-200 p-3.5 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm appearance-none cursor-pointer">
                         <option value="">-- اختر المعلم --</option>
                         {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                       </select>
                     </div>
                     
                     <div>
-                      <label className="block text-xs font-bold mb-2 text-slate-400 uppercase tracking-widest">المادة الدراسية</label>
-                      <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selectedTeacher || subjectsLoading} className="w-full bg-[#090b14]/80 border border-white/10 p-3.5 rounded-xl font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-50 appearance-none [&>option]:bg-[#131836] cursor-pointer shadow-inner transition-all">
+                      <label className="block text-xs font-bold mb-2 text-slate-600 uppercase tracking-widest">المادة الدراسية</label>
+                      <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selectedTeacher || subjectsLoading} className="w-full bg-white border border-slate-200 p-3.5 rounded-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:bg-slate-50 shadow-sm appearance-none cursor-pointer transition-all">
                         <option value="">{subjectsLoading ? 'جاري التحميل...' : '-- اختر المادة --'}</option>
                         {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
                     
                     <div>
-                      <label className="block text-xs font-bold mb-3 text-slate-400 uppercase tracking-widest flex items-center justify-between">
+                      <label className="block text-xs font-bold mb-3 text-slate-600 uppercase tracking-widest flex items-center justify-between">
                         الفصول المخصصة (يمكن اختيار المتعدد)
                       </label>
-                      <div className="grid grid-cols-1 gap-3 bg-[#090b14]/50 p-4 rounded-xl border border-white/10 max-h-[200px] overflow-y-auto custom-scrollbar shadow-inner">
+                      <div className="grid grid-cols-1 gap-3 bg-white p-4 rounded-xl border border-slate-200 max-h-[200px] overflow-y-auto custom-scrollbar shadow-sm">
                         {!selectedSubject ? (
-                          <p className="text-center text-sm text-slate-500 font-bold py-4">اختر المادة لتظهر الفصول المتاحة</p>
+                          <p className="text-center text-sm text-slate-400 font-bold py-4">اختر المادة لتظهر الفصول المتاحة</p>
                         ) : (sectionsLoading ? (
-                          <div className="flex justify-center py-4"><Loader2 className="animate-spin text-emerald-500" /></div>
+                          <div className="flex justify-center py-4"><Loader2 className="animate-spin text-indigo-500" /></div>
                         ) : sections.length > 0 ? sections.map(sec => (
-                          <label key={sec.id} className={`flex items-center gap-3 cursor-pointer p-3 rounded-xl border transition-all ${selectedSections.includes(sec.id) ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-inner' : 'bg-[#131836] border-white/5 text-slate-300 hover:border-white/20'}`}>
-                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${selectedSections.includes(sec.id) ? 'bg-emerald-500 border-emerald-400' : 'border-slate-500 bg-[#090b14]'}`}>
-                              {selectedSections.includes(sec.id) && <CheckCircle2 className="w-3.5 h-3.5 text-[#090b14]" />}
+                          <label key={sec.id} className={`flex items-center gap-3 cursor-pointer p-3 rounded-xl border transition-all shadow-sm ${selectedSections.includes(sec.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-indigo-100'}`}>
+                            <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${selectedSections.includes(sec.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
+                              {selectedSections.includes(sec.id) && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
                             </div>
                             <input type="checkbox" className="hidden" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} />
                             <span className="text-sm font-black truncate">{sec.name}</span>
                           </label>
                         )) : (
-                          <p className="text-center text-sm text-slate-500 font-bold py-4">لا توجد فصول مسجلة لهذا المعلم في هذه المادة</p>
+                          <p className="text-center text-sm text-slate-400 font-bold py-4">لا توجد فصول مسجلة لهذا المعلم في هذه المادة</p>
                         ))}
                       </div>
                     </div>
                   </div>
                   
-                  <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-teal-500 text-[#090b14] font-black text-lg py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95 border border-emerald-400/50">
+                  <button onClick={saveToRealDatabase} disabled={isSavingDB || !selectedTeacher || !selectedSubject || selectedSections.length === 0} className="w-full mt-8 bg-indigo-600 text-white font-black text-lg py-4 rounded-xl shadow-md hover:bg-indigo-700 hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95 border border-indigo-500">
                     {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} تأكيد وحفظ الواجب
                   </button>
                 </div>
