@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
-import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Play, Send, AlertTriangle, Filter, Loader2, Layout, ShieldAlert, AlignLeft,UploadCloud } from 'lucide-react';
+import { FileText, Clock, Link as LinkIcon, Users, User, CheckCircle2, AlertCircle, ArrowRight, Upload, Edit2, Trash2, Share2, Eye, X, Calendar, Download, FileSpreadsheet, Trophy, ImageIcon, MessageSquare, Award, MinusCircle, XCircle, Target, Send, Filter, Loader2, Layout, ShieldAlert, AlignLeft } from 'lucide-react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -26,11 +26,17 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import ProjectSubmission from '@/components/ProjectSubmission';
-// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص
+import imageCompression from 'browser-image-compression';
+
+// 🚀 تنظيف رابط الـ PDF من أي إضافات تسبب مشكلة الصفر بايت
+const cleanPdfUrl = (url: string) => {
+  if (!url) return '';
+  return url.replace(/\/fl_attachment\//g, '/').replace(/fl_attachment,/g, '');
+};
+
+// محرك تنسيق المعادلات
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
-   
    let html = String(content)
      .replace(/\\\\n/g, '<br/>')
      .replace(/\\n/g, '<br/>')
@@ -46,9 +52,109 @@ const renderContentWithMath = (content: string) => {
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
-   
    return { __html: html };
 };
+
+// =========================================================================
+// المكون الداخلي: تسليم المشاريع العلمية
+// =========================================================================
+interface ProjectSubmissionProps {
+  initialData?: { text: string; images: string[] };
+  onChange: (data: { text: string; images: string[] }) => void;
+  readOnly?: boolean;
+}
+
+function ProjectSubmissionComponent({ initialData, onChange, readOnly }: ProjectSubmissionProps) {
+  const [text, setText] = useState(initialData?.text || '');
+  const [images, setImages] = useState<string[]>(initialData?.images || []);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    onChange({ text: e.target.value, images });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (images.length + files.length > 8) {
+      alert('عذراً، الحد الأقصى المسموح به هو 8 صور للمشروع الواحد.');
+      return;
+    }
+    setIsUploading(true);
+    const uploadedUrls: string[] = [];
+    try {
+      for (const file of files) {
+        const options = { maxSizeMB: 0.2, maxWidthOrHeight: 1280, useWebWorker: true };
+        const compressedFile = await imageCompression(file, options);
+        const formData = new FormData();
+        formData.append('file', compressedFile);
+        formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST', body: formData,
+        });
+        const data = await res.json();
+        if (data.secure_url) uploadedUrls.push(data.secure_url);
+      }
+      const newImages = [...images, ...uploadedUrls];
+      setImages(newImages);
+      onChange({ text, images: newImages });
+    } catch (error) {
+      alert('حدث خطأ أثناء ضغط أو رفع الصور. تأكد من اتصالك بالإنترنت.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    if (readOnly) return;
+    const newImages = images.filter((_, i) => i !== index);
+    setImages(newImages);
+    onChange({ text, images: newImages });
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mt-5">
+      <div className="space-y-6">
+        <div>
+          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-500" /> وصف المشروع (اختياري)
+          </label>
+          <textarea
+            disabled={readOnly} rows={4} value={text} onChange={handleTextChange} placeholder="اكتب تفاصيل بحثك..."
+            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-xl p-4 text-slate-800 font-bold outline-none resize-none shadow-inner transition-all disabled:opacity-70"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-indigo-500" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            {images.map((img, idx) => (
+              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm group bg-slate-50">
+                <img src={img} alt={`مرفق ${idx + 1}`} className="w-full h-full object-cover" />
+                {!readOnly && (
+                  <button type="button" onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600 shadow-md">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {!readOnly && images.length < 8 && (
+              <label className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${isUploading ? "border-indigo-300 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                {isUploading ? <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /> : <><UploadCloud className="w-8 h-8 text-slate-400 mb-2" /><span className="text-xs font-bold text-slate-500 text-center px-2">إضافة صور<br/>({8 - images.length} متبقية)</span></>}
+              </label>
+            )}
+          </div>
+          <p className="text-xs font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl border border-emerald-100 inline-flex items-center gap-2 w-full shadow-sm">
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> النظام يدعم ضغط الصور تلقائياً للحفاظ على الباقة.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -61,7 +167,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const { data: formData } = useSchoolFormData();
   const subjects = formData?.subjects || [];
   const sections = formData?.sections || [];
-  const teachers = formData?.teachers || [];
   
   const [assignment, setAssignment] = useState<AssignmentWithMeta | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -70,7 +175,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const [myAnswers, setMyAnswers] = useState<Record<string, string | string[] | null>>({});
   const [fullAnswersMap, setFullAnswersMap] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [studentId, setStudentId] = useState<string | null>(null);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isFullEditModalOpen, setIsFullEditModalOpen] = useState(false);
@@ -98,53 +202,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });    
     setTimeout(() => setNotification(null), 5000);
-  };
-
-  // 🚀 محرك التحميل الإجباري الآمن (يمنع الشاشة البيضاء ويضمن الملف الكامل)
-  const forceDownloadFile = async (url: string, filename: string = 'مرفق_الواجب.pdf') => {
-    if (!url) return;
-    
-    // 1. تنظيف قاهر: إزالة خدعة Cloudinary التي أتلفت الـ PDF وجعلته 0 بايت
-    const cleanUrl = url.replace(/\/fl_attachment\//g, '/').replace(/fl_attachment,/g, '');
-    
-    try {
-      showNotification('success', 'جاري تحضير الملف للتحميل...');
-      
-      const response = await fetch(cleanUrl);
-      if (!response.ok) throw new Error('Network Error');
-      
-      const blob = await response.blob();
-      
-      // 2. حماية: إذا رجع كلاوديناري ملفاً 0 بايت بسبب حظر الـ API، نستخدم الملاذ الآمن
-      if (blob.size === 0) {
-          throw new Error('Zero byte file');
-      }
-
-      // 3. إنشاء رابط محلي داخل الجوال وتنزيل الملف فوراً
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.style.display = 'none';
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      
-      // تنظيف الذاكرة بعد التحميل
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-      }, 1000);
-      
-    } catch (error) {
-      // الملاذ الأخير: في حال منعت متصفحات الـ iPhone السحب عبر Fetch
-      const link = document.createElement('a');
-      link.href = cleanUrl;
-      link.target = '_blank';
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
   };
 
   const getStudentSectionName = (studentObj: any) => {
@@ -200,7 +257,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (cachedData) {
       try {
         const parsed = JSON.parse(cachedData);
-        if (currentRole === 'student') setStudentId(user.id);
         setAssignment(parsed.assignment); setEditData(parsed.assignment);
         if (parsed.questions) setQuestions(parsed.questions);
 
@@ -219,7 +275,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     } else setLoading(true); 
 
     try {
-      if (currentRole === 'student') setStudentId(user.id);
       const details = await fetchAssignmentDetails(assignmentId);
       sessionStorage.setItem(cacheKey, JSON.stringify(details));
       setAssignment(details.assignment); setEditData(details.assignment);
@@ -256,18 +311,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-main')) {
       const link = document.createElement('link');
-      link.id = 'katex-css-main';
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+      link.id = 'katex-css-main'; link.rel = 'stylesheet'; link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
       document.head.appendChild(link);
-
       const script = document.createElement('script');
-      script.id = 'katex-js-main';
-      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+      script.id = 'katex-js-main'; script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
       script.onload = () => {
         const autoRender = document.createElement('script');
-        autoRender.id = 'katex-auto-render-main';
-        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+        autoRender.id = 'katex-auto-render-main'; autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
         document.head.appendChild(autoRender);
       };
       document.head.appendChild(script);
@@ -278,12 +328,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
         (window as any).renderMathInElement(document.body, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-          ],
+          delimiters: [ { left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }, { left: '\\(', right: '\\)', display: false }, { left: '\\[', right: '\\]', display: true } ],
           throwOnError: false
         });
       }
@@ -398,9 +443,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const sanitizedQuestions = questions.map(q => {
     const textContent = q.content || q.text || q.question_text || '';
-    const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
-       ? q.options 
-       : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
+    const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 ? q.options : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
     return { ...q, options: safeOptions, content: String(textContent).replace(/\\n/g, '\n') };
   });
 
@@ -462,21 +505,30 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
               <div className="mt-8">
                 <h3 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2"><FileText className="h-5 w-5 text-indigo-600" /> المرفقات</h3>
                 {assignment.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || (assignment.file_url.includes('cloudinary.com/image') && !assignment.file_url.includes('.pdf')) ? (
-                  <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2"><img src={assignment.file_url} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl" /></div>
+                  <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2"><img src={cleanPdfUrl(assignment.file_url)} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl" /></div>
                 ) : (
                   <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                     <div className="flex items-center gap-4">
                       <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50"><FileText className="h-7 w-7 text-indigo-600" /></div>
-                      <div><h4 className="font-black text-slate-900">ملف مرفق (PDF)</h4><p className="text-sm text-slate-500">انقر للتحميل والقراءة</p></div>
+                      <div><h4 className="font-black text-slate-900">ملف مرفق (PDF)</h4><p className="text-sm text-slate-500">اختر العرض أو التحميل المباشر</p></div>
                     </div>
-                    {/* 🚀 الزر المصحح والخالي من الأخطاء لمعلم المادة */}
-                    <button 
-                      onClick={(e) => { e.preventDefault(); forceDownloadFile(assignment?.file_url || '', 'تعليمات_الواجب.pdf'); }}
-                      className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"
-                    >
-                      <Download className="h-5 w-5" /> 
-                      <span>تحميل المرفق</span>
-                    </button>
+                    {/* 🚀 أزرار العارض الذكي والتحميل الآمن */}
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <a 
+                          href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(assignment.file_url))}&embedded=true`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="flex-1 sm:flex-none h-12 px-6 rounded-2xl bg-white text-indigo-700 font-black hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 shadow-sm border border-indigo-200 active:scale-95"
+                        >
+                          <Eye className="h-5 w-5" /> عرض الملف
+                        </a>
+                        <a 
+                          href={cleanPdfUrl(assignment.file_url)}
+                          target="_blank" rel="noopener noreferrer" download
+                          className="flex-1 sm:flex-none h-12 px-6 rounded-2xl bg-indigo-600 text-white font-black hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-md border border-indigo-500 active:scale-95"
+                        >
+                          <Download className="h-5 w-5" /> تحميل الملف
+                        </a>
+                    </div>
                   </div>
                 )}
               </div>
@@ -549,7 +601,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                               />
                               {q.media_url && (
                                 <div className="mt-6 rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white p-2 text-center">
-                                  <img src={q.media_url} className="w-auto max-h-80 mx-auto rounded-xl object-contain inline-block" alt="مرفق تمهيدي" />
+                                  <img src={cleanPdfUrl(q.media_url)} className="w-auto max-h-80 mx-auto rounded-xl object-contain inline-block" alt="مرفق تمهيدي" />
                                 </div>
                               )}
                             </div>
@@ -581,7 +633,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 />
                                 {q.media_url && (
                                   <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-white p-2 inline-block">
-                                    <img src={q.media_url} className="max-h-48 w-auto rounded-lg object-contain" alt="مرفق توضيحي" />
+                                    <img src={cleanPdfUrl(q.media_url)} className="max-h-48 w-auto rounded-lg object-contain" alt="مرفق توضيحي" />
                                   </div>
                                 )}
                               </div>
@@ -629,15 +681,20 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                             ) : q.type === 'file_upload' && !isUnanswered ? (
                               <div className="mt-2 p-2 sm:p-3 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-200 inline-block shadow-sm">
                                 {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || (String(studentAnswerText).includes('cloudinary') && !String(studentAnswerText).includes('.pdf')) ? (
-                                   <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-slate-200 bg-white p-1" />
+                                   <img src={cleanPdfUrl(String(studentAnswerText))} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-slate-200 bg-white p-1" />
                                 ) : (
-                                   <button onClick={(e) => { e.preventDefault(); forceDownloadFile(String(studentAnswerText), 'إجابة_الطالب_المرفقة.pdf'); }} className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
-                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" /> تحميل إجابة الطالب
-                                   </button>
+                                   <div className="flex items-center gap-2">
+                                     <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(String(studentAnswerText)))}&embedded=true`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 py-2 bg-white rounded-xl border border-indigo-200 shadow-sm">
+                                       <Eye className="w-4 h-4" /> عرض الملف
+                                     </a>
+                                     <a href={cleanPdfUrl(String(studentAnswerText))} target="_blank" rel="noopener noreferrer" download className="flex items-center gap-2 text-white font-black text-xs sm:text-sm px-3 py-2 bg-indigo-600 rounded-xl border border-indigo-700 shadow-sm hover:bg-indigo-700 transition-colors">
+                                       <Download className="w-4 h-4" /> تحميل
+                                     </a>
+                                   </div>
                                 )}
                               </div>
                             ) : q.type === 'project_submission' && !isUnanswered ? (
-                               <ProjectSubmission 
+                               <ProjectSubmissionComponent 
                                   initialData={typeof studentAns === 'string' ? JSON.parse(studentAns) : studentAns as any}
                                   readOnly={true}
                                   onChange={() => {}}
@@ -680,11 +737,20 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       {mySubmission?.file_url && (
                         <div className="relative w-full min-h-[300px] bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4 shadow-sm">
                           {mySubmission.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) || (mySubmission.file_url.includes('cloudinary.com/image') && !mySubmission.file_url.includes('.pdf')) ? (
-                            <img src={mySubmission.file_url} alt="إجابة إضافية" className="max-h-[500px] w-auto object-contain rounded-xl" />
+                            <img src={cleanPdfUrl(mySubmission.file_url)} alt="إجابة إضافية" className="max-h-[500px] w-auto object-contain rounded-xl" />
                           ) : (
-                            <button onClick={(e) => { e.preventDefault(); forceDownloadFile(mySubmission.file_url!, 'إجابة_الطالب_الإضافية.pdf'); }} className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-lg px-6 py-3 bg-indigo-50 rounded-xl border border-indigo-100">
-                               <Download className="w-6 h-6" /> تحميل المرفق الإضافي للطالب
-                            </button>
+                             <div className="flex flex-col items-center gap-4 bg-indigo-50 p-6 rounded-2xl border border-indigo-100 w-full max-w-sm">
+                                <FileText className="w-12 h-12 text-indigo-500" />
+                                <p className="font-black text-indigo-900">ملف إضافي للطالب</p>
+                                <div className="flex items-center gap-2 w-full mt-2">
+                                  <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(cleanPdfUrl(mySubmission.file_url))}&embedded=true`} target="_blank" rel="noopener noreferrer" className="flex-1 flex justify-center items-center gap-2 text-indigo-700 font-black text-sm px-4 py-3 bg-white rounded-xl border border-indigo-200 shadow-sm active:scale-95 transition-all">
+                                    <Eye className="w-4 h-4" /> عرض
+                                  </a>
+                                  <a href={cleanPdfUrl(mySubmission.file_url)} target="_blank" rel="noopener noreferrer" download className="flex-1 flex justify-center items-center gap-2 text-white font-black text-sm px-4 py-3 bg-indigo-600 rounded-xl border border-indigo-700 shadow-sm hover:bg-indigo-700 active:scale-95 transition-all">
+                                    <Download className="w-4 h-4" /> تحميل
+                                  </a>
+                                </div>
+                             </div>
                           )}
                         </div>
                       )}
@@ -725,7 +791,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       ) : (
                         fileUrl && (
                           <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            <img src={fileUrl} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
+                            <img src={cleanPdfUrl(fileUrl)} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
                           </div>
                         )
                       )}
@@ -761,7 +827,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       ) : (
                         fileUrl && (
                           <div className="relative w-full h-64 mt-2 bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center shadow-sm">
-                            <img src={fileUrl} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
+                            <img src={cleanPdfUrl(fileUrl)} alt="إجابة الطالب" className="max-h-full w-auto object-contain rounded-xl" />
                           </div>
                         )
                       )}
