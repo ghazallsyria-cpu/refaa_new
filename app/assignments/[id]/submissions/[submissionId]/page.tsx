@@ -11,21 +11,26 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-// 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً للمعلم (Light Theme)
+// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة قاهرة (Light Theme)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
-   let html = String(content);
    
-   // 1. إصلاح النزول للسطر (تحويل \n إلى <br/>)
-   html = html.replace(/\\n/g, '<br/>').replace(/\\r\\n/g, '<br/>').replace(/\n/g, '<br/>').replace(/\\\$/g, '$');
+   // القضاء التام على جميع أشكال النزول للسطر العالقة
+   let html = String(content)
+     .replace(/\\\\n/g, '<br/>')
+     .replace(/\\n/g, '<br/>')
+     .replace(/\\r\\n/g, '<br/>')
+     .replace(/\n/g, '<br/>')
+     .replace(/\\\$/g, '$');
    
-   // 2. تلوين المعادلات الرياضية للثيم الفاتح
+   // تلوين المعادلات الرياضية للثيم الفاتح
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50/80 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // 3. تنسيق الجداول للثيم الفاتح
-   html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   // تغليف الجداول بحاوية سحب
+   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
    
@@ -115,7 +120,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة لمنع تكرار التحميل والانهيار
+  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-grading')) {
       const link = document.createElement('link');
@@ -137,7 +142,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     }
   }, []);
 
-  // 🚀 2. إعادة رسم المعادلات كلما تفاعل المعلم (تغيير الدرجة أو النقر)
+  // 🚀 2. إعادة رسم المعادلات كلما تفاعل المعلم
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -397,7 +402,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                        <div className="p-5 sm:p-6 lg:p-8 bg-transparent">
                           <div className="text-xs sm:text-sm font-black text-slate-500 mb-4 flex items-center gap-1.5 sm:gap-2"><User className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> إجابة الطالب:</div>
                           
-                          {/* الجداول */}
+                          {/* الجداول المحسنة */}
                           {isComparison ? (
                             <div className={`rounded-xl sm:rounded-2xl border overflow-hidden shadow-sm ${isUnanswered ? 'border-slate-200 bg-slate-50' : qGrade.isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50'}`}>
                               <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
@@ -406,7 +411,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                     <tr className={isUnanswered ? 'bg-slate-100' : qGrade.isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
                                       <th className="p-3 sm:p-4 border-b border-l border-slate-200 font-black text-slate-700 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
                                       <th className="p-3 sm:p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
-                                      <th className="p-3 sm:p-4 border-b border-slate-200 font-black text-indigo-900 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
+                                      <th className="p-3 sm:p-4 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -418,7 +423,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                         else if (Array.isArray(studentAns)) parsedAns = studentAns;
                                       } catch(e){}
                                       return (
-                                        <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors border-b border-slate-200 last:border-0">
+                                        <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
                                           <td className="p-3 sm:p-4 border-l border-slate-200 font-bold text-slate-800 bg-slate-50/80 align-middle">
                                             <div dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                                           </td>
@@ -511,7 +516,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
             {(submission?.content || submission?.file_url) && (
               <div className="bg-white/90 backdrop-blur-xl p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] mt-6 sm:mt-8 relative overflow-hidden border border-slate-200 shadow-sm">
                 <h3 className="text-lg sm:text-xl lg:text-2xl font-black text-slate-900 mb-6 sm:mb-8 flex items-center gap-2 sm:gap-3 relative z-10">
-                   <div className="p-2 sm:p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm"><FileText className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" /></div> المرفقات والنصوص الإضافية
+                   <div className="p-2 sm:p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm"><FileText className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" /></div> המرفقات والنصوص الإضافية التي أرسلتها الطالب
                 </h3>
                 
                 {submission?.content && (
@@ -598,11 +603,28 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
         .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
         .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
+        /* 🚀 الحل الجذري للجداول في الجوال (تصحيح المعلم) */
         .table-responsive-wrapper {
           width: 100%;
+          max-width: 100vw;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          padding-bottom: 5px;
+          padding-bottom: 8px;
+          margin-bottom: 1rem;
+          display: block;
+        }
+        
+        .table-responsive-wrapper table {
+          width: 100% !important;
+          min-width: 600px !important;
+          border-collapse: collapse !important;
+          table-layout: auto !important;
+        }
+
+        .table-responsive-wrapper th, .table-responsive-wrapper td {
+          white-space: normal !important;
+          word-wrap: break-word !important;
+          padding: 1rem !important;
         }
       `}} />
     </div>
