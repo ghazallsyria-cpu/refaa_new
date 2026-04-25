@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square, X, Loader2, Image as ImageIcon, FileText } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square, X, Loader2, Image as ImageIcon, FileText, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 import imageCompression from 'browser-image-compression';
@@ -274,27 +274,29 @@ export default function AssignmentForm({
     if (!readOnly && validate()) onSubmit(answers);
   };
 
-  // 🚀 العارض الذكي للمرفقات (يفرق بين الـ PDF والصور)
+  // 🚀 العارض الذكي الجديد: إجبار التحميل لملفات الـ PDF (يحل مشكلة الشاشة البيضاء)
   const renderSmartMedia = (url: string) => {
     if (!url) return null;
     const isPdf = url.toLowerCase().includes('.pdf');
 
     if (isPdf) {
+      // سحر كلاوديناري: إضافة fl_attachment لإجبار المتصفح على التحميل المباشر
+      const downloadUrl = (url.includes('cloudinary.com') && url.includes('/upload/'))
+        ? url.replace('/upload/', '/upload/fl_attachment/')
+        : url;
+
       return (
-        <div className="mt-6 rounded-3xl border border-slate-200 overflow-hidden shadow-sm bg-white">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 border-b border-slate-100 bg-slate-50 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 text-rose-600 rounded-xl shrink-0"><FileText className="w-6 h-6" /></div>
-              <div>
-                <p className="font-black text-slate-800 text-base">ملف PDF مرفق من المعلم</p>
-                <p className="text-xs font-bold text-slate-500 mt-1">يحتوي على تعليمات المشروع أو المسألة</p>
-              </div>
-            </div>
-            <a href={url} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto text-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-xl transition-all shadow-sm active:scale-95 shrink-0">
-              فتح الملف للتنزيل
-            </a>
+        <div className="mt-6 rounded-[2rem] border border-indigo-100 overflow-hidden shadow-sm bg-indigo-50/50 p-8 flex flex-col items-center justify-center text-center gap-4">
+          <div className="p-5 bg-white text-indigo-600 rounded-full shadow-sm border border-indigo-100">
+            <FileText className="w-12 h-12" />
           </div>
-          <iframe src={url} className="w-full h-[600px] border-none bg-slate-100" title="مرفق PDF" />
+          <div>
+            <p className="font-black text-indigo-900 text-xl">ملف تعليمات المشروع (PDF)</p>
+            <p className="text-sm font-bold text-slate-500 mt-2 max-w-sm mx-auto">انقر على الزر أدناه لتنزيل الملف مباشرة إلى جهازك وقراءته بوضوح.</p>
+          </div>
+          <a href={downloadUrl} download target="_blank" rel="noopener noreferrer" className="mt-4 px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-2xl transition-all shadow-[0_10px_20px_rgba(79,70,229,0.3)] active:scale-95 flex items-center gap-3">
+            <Download className="w-5 h-5 animate-bounce" /> تحميل الملف الآن
+          </a>
         </div>
       );
     }
@@ -554,7 +556,7 @@ export default function AssignmentForm({
                {showModelAnswer && modelAnswerText && (
                  <div className="mt-4 p-5 bg-emerald-50/80 text-emerald-900 rounded-2xl border border-emerald-200 text-base font-bold shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                )}
-               {/* 🚀 هنا السحر: استدعاء العارض الذكي للمرفقات (صور أو PDF) */}
+               {/* 🚀 السحر يعمل هنا للمرفقات العامة بالترويسة */}
                {renderSmartMedia(q.media_url)}
             </div>
           );
@@ -576,7 +578,7 @@ export default function AssignmentForm({
                      <div className="mt-5 p-5 bg-emerald-50/80 text-emerald-900 rounded-2xl border border-emerald-200 text-base font-bold shadow-sm" dangerouslySetInnerHTML={renderContentWithMath(modelAnswerText)} />
                    )}
 
-                   {/* 🚀 استدعاء العارض الذكي في جسم السؤال أيضاً */}
+                   {/* 🚀 السحر يعمل هنا للمرفقات داخل الأسئلة والمشاريع */}
                    {renderSmartMedia(q.media_url)}
                    
                    {renderQuestionInput(q)}
