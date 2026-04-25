@@ -76,6 +76,7 @@ export default function AssignmentForm({
     }
   }, []);
 
+  // 🚀 منع الانهيار بحصر KaTeX في الحاوية فقط
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -253,7 +254,7 @@ export default function AssignmentForm({
                             placeholder="..." 
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
-                              // 🚀 النسخ العميق (Deep Clone) لضمان عمل الكتابة
+                              // 🚀 النسخ العميق (Deep Clone) لضمان التفاعل
                               const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : Array(tableData.headers.length).fill('')); 
                               if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
@@ -304,7 +305,7 @@ export default function AssignmentForm({
                          <textarea 
                            disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} 
                            onChange={(e) => { 
-                             // 🚀 النسخ العميق (Deep Clone) لضمان عمل الكتابة
+                             // 🚀 النسخ العميق (Deep Clone) لضمان عمل الكتابة بسلاسة
                              const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : ['', '']); 
                              if (!newAns[idx]) newAns[idx] = ['', '']; 
                              newAns[idx][0] = e.target.value; 
