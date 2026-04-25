@@ -26,12 +26,12 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import imageCompression from 'browser-image-compression';
 
 // 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة قاهرة
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   // القضاء التام على جميع أشكال النزول للسطر العالقة
    let html = String(content)
      .replace(/\\\\n/g, '<br/>')
      .replace(/\\n/g, '<br/>')
@@ -43,7 +43,6 @@ const renderContentWithMath = (content: string) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // تغليف جداول الذكاء الاصطناعي بحاوية سحب
    html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
@@ -51,6 +50,111 @@ const renderContentWithMath = (content: string) => {
    
    return { __html: html };
 };
+
+// =========================================================================
+// 🚀 المكون الداخلي: تسليم المشاريع العلمية
+// =========================================================================
+interface ProjectSubmissionProps {
+  initialData?: { text: string; images: string[] };
+  onChange: (data: { text: string; images: string[] }) => void;
+  readOnly?: boolean;
+}
+
+function ProjectSubmissionComponent({ initialData, onChange, readOnly }: ProjectSubmissionProps) {
+  const [text, setText] = useState(initialData?.text || '');
+  const [images, setImages] = useState<string[]>(initialData?.images || []);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    onChange({ text: e.target.value, images });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    if (images.length + files.length > 8) {
+      alert('عذراً، الحد الأقصى المسموح به هو 8 صور للمشروع الواحد.');
+      return;
+    }
+
+    setIsUploading(true);
+    const uploadedUrls: string[] = [];
+
+    try {
+      for (const file of files) {
+        const options = { maxSizeMB: 0.2, maxWidthOrHeight: 1280, useWebWorker: true };
+        const compressedFile = await imageCompression(file, options);
+        const formData = new FormData();
+        formData.append('file', compressedFile);
+        formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'default_preset');
+
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST', body: formData,
+        });
+        const data = await res.json();
+        if (data.secure_url) uploadedUrls.push(data.secure_url);
+      }
+      const newImages = [...images, ...uploadedUrls];
+      setImages(newImages);
+      onChange({ text, images: newImages });
+    } catch (error) {
+      alert('حدث خطأ أثناء ضغط أو رفع الصور. تأكد من اتصالك بالإنترنت.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    if (readOnly) return;
+    const newImages = images.filter((_, i) => i !== index);
+    setImages(newImages);
+    onChange({ text, images: newImages });
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm mt-5">
+      <div className="space-y-6">
+        <div>
+          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-500" /> وصف المشروع (اختياري)
+          </label>
+          <textarea
+            disabled={readOnly} rows={4} value={text} onChange={handleTextChange} placeholder="اكتب تفاصيل بحثك..."
+            className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 rounded-xl p-4 text-slate-800 font-bold outline-none resize-none shadow-inner transition-all disabled:opacity-70"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-black text-indigo-900 mb-3 flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-indigo-500" /> مرفقات المشروع المرئية (حد أقصى 8 صور)
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            {images.map((img, idx) => (
+              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm group bg-slate-50">
+                <img src={img} alt={`مرفق ${idx + 1}`} className="w-full h-full object-cover" />
+                {!readOnly && (
+                  <button type="button" onClick={() => removeImage(idx)} className="absolute top-2 right-2 p-1.5 bg-rose-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600 shadow-md">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {!readOnly && images.length < 8 && (
+              <label className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${isUploading ? "border-indigo-300 bg-indigo-50" : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                {isUploading ? <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /> : <><UploadCloud className="w-8 h-8 text-slate-400 mb-2" /><span className="text-xs font-bold text-slate-500 text-center px-2">إضافة صور<br/>({8 - images.length} متبقية)</span></>}
+              </label>
+            )}
+          </div>
+          <p className="text-xs font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl border border-emerald-100 inline-flex items-center gap-2 w-full shadow-sm">
+            <CheckCircle2 className="w-4 h-4 shrink-0" /> النظام يدعم ضغط الصور تلقائياً.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AssignmentDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -208,53 +312,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة لمنع الانهيار
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !document.getElementById('katex-js-main')) {
-      const link = document.createElement('link');
-      link.id = 'katex-css-main';
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-      document.head.appendChild(link);
-
-      const script = document.createElement('script');
-      script.id = 'katex-js-main';
-      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-      script.onload = () => {
-        const autoRender = document.createElement('script');
-        autoRender.id = 'katex-auto-render-main';
-        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-        document.head.appendChild(autoRender);
-      };
-      document.head.appendChild(script);
-    }
-  }, []);
-
-  // 🚀 2. المشغل الديناميكي المحمي
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
-        (window as any).renderMathInElement(document.body, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-          ],
-          throwOnError: false
-        });
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [questions, activeTab, assignment, myAnswers]);
-
-  useEffect(() => {
-    if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
-      const draftData = { answers: myAnswers, content, fileUrl };
-      if (Object.keys(myAnswers).length > 0 || content || fileUrl) localStorage.setItem(`draft_assign_${assignmentId}_${user.id}`, JSON.stringify(draftData));
-    }
-  }, [myAnswers, content, fileUrl, currentRole, mySubmission, assignmentId, user?.id]);
-
   const handleSubmitAnswers = async (answers: Record<string, string | string[] | null>) => {
     setIsSubmitting(true);
     try {
@@ -291,16 +348,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const openFullEditModal = async () => {
     if (!assignment) return;
     const dateObj = new Date(assignment.due_date);
-    
     const originalTeacherId = typeof assignment.teacher_id === 'object' 
-      ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id 
-      : assignment.teacher_id;
-
-    setEditData({ 
-      ...assignment, 
-      due_date: new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16), 
-      teacher_id: originalTeacherId 
-    });
+      ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment.teacher_id;
+    setEditData({ ...assignment, due_date: new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16), teacher_id: originalTeacherId });
     setEditDescription(assignment.description || ''); setEditFileUrl(assignment.file_url || '');
     setEditSectionIds(assignment.assignment_sections?.map((as: any) => as.section_id) || (assignment as any).section_ids || []);
     setEditQuestions(questions); setIsFullEditModalOpen(true);
@@ -312,16 +362,9 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
-      const payload: any = { 
-        title: editData.title, 
-        description: editDescription, 
-        due_date: new Date(editData.due_date).toISOString(), 
-        file_url: editFileUrl
-      };
-      
+      const payload: any = { title: editData.title, description: editDescription, due_date: new Date(editData.due_date).toISOString(), file_url: editFileUrl };
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
       else await saveAssignment(payload, assignmentId, editQuestions, editSectionIds, subjects);
-      
       sessionStorage.removeItem(`assign_cache_${assignmentId}_${user?.id}_${currentRole}`);
       showNotification('success', 'تم حفظ التعديلات بنجاح');
       setIsFullEditModalOpen(false);
@@ -352,40 +395,35 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   const copyAssignmentLink = () => { navigator.clipboard.writeText(window.location.href); showNotification('success', 'تم نسخ رابط الواجب'); };
 
-  if (!mounted || authLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 font-cairo text-slate-800">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق من الصلاحيات...</p>
-        </div>
-      </div>
-    );
-  }
+  // 🚀 السحر الحقيقي لتنزيل ملفات الـ PDF على המوبايل
+  const forceDownloadFile = async (url: string, filename: string = 'مرفق_الواجب.pdf') => {
+    if (!url) return;
+    
+    // إزالة fl_attachment لأنها سببت خطأ 0KB في Cloudinary
+    const cleanUrl = url.replace('/fl_attachment/', '/');
+    
+    try {
+      showNotification('success', 'جاري تحضير الملف للتحميل...');
+      const response = await fetch(cleanUrl);
+      if (!response.ok) throw new Error('Network Error');
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      // الملاذ الأخير إذا فشل الـ Fetch بسبب الحماية
+      window.location.href = cleanUrl;
+    }
+  };
 
-  if (loading && !assignment) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 font-cairo text-slate-800">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب بيانات الواجب...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!assignment && !loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-800 font-cairo px-4">
-        <div className="bg-white p-10 rounded-[3rem] border border-slate-200 text-center shadow-lg max-w-md w-full">
-          <AlertCircle className="w-16 h-16 text-rose-600 mx-auto mb-4" />
-          <h3 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">الواجب غير موجود</h3>
-          <p className="text-slate-500 font-bold">ربما تم حذفه أو أن الرابط غير صحيح.</p>
-          <Link href="/assignments" className="mt-8 inline-block px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition-all border border-indigo-200">العودة للواجبات</Link>
-        </div>
-      </div>
-    );
-  }
+  if (!mounted || authLoading) return (<div className="flex h-screen items-center justify-center bg-slate-50 font-cairo text-slate-800"><div className="flex flex-col items-center gap-4"><Loader2 className="w-14 h-14 text-indigo-600 animate-spin" /><p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق من الصلاحيات...</p></div></div>);
+  if (loading && !assignment) return (<div className="flex h-screen items-center justify-center bg-slate-50 font-cairo text-slate-800"><div className="flex flex-col items-center gap-4"><Loader2 className="w-14 h-14 text-indigo-600 animate-spin" /><p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري سحب بيانات الواجب...</p></div></div>);
+  if (!assignment && !loading) return (<div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-800 font-cairo px-4"><div className="bg-white p-10 rounded-[3rem] border border-slate-200 text-center shadow-lg max-w-md w-full"><AlertCircle className="w-16 h-16 text-rose-600 mx-auto mb-4" /><h3 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">الواجب غير موجود</h3><p className="text-slate-500 font-bold">ربما تم حذفه أو أن الرابط غير صحيح.</p><Link href="/assignments" className="mt-8 inline-block px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition-all border border-indigo-200">العودة للواجبات</Link></div></div>);
 
   const dueDateObj = new Date(assignment?.due_date || '');
   const isOverdue = dueDateObj < new Date();
@@ -395,7 +433,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   const sectionName = firstSection?.name || '';
   const fullSectionName = className ? `${className} - ${sectionName}` : sectionName;
   const isGraded = mySubmission?.status === 'graded';
-  
   const assignmentTeacherId = typeof assignment?.teacher_id === 'object' ? (assignment as any).teacher_id?.id || (assignment as any).teacher_id?.auth_id : assignment?.teacher_id;
   const canEdit = currentRole === 'admin' || currentRole === 'management' || assignmentTeacherId === user?.id;
 
@@ -404,12 +441,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
        ? q.options 
        : (q.type === 'true_false' ? [{id: 'صح', content: 'صح'}, {id: 'خطأ', content: 'خطأ'}] : []);
-       
-    return {
-      ...q,
-      options: safeOptions,
-      content: String(textContent).replace(/\\n/g, '\n')
-    };
+    return { ...q, options: safeOptions, content: String(textContent).replace(/\\n/g, '\n') };
   });
 
   return (
@@ -469,33 +501,21 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             {assignment?.file_url && (
               <div className="mt-8">
                 <h3 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2"><FileText className="h-5 w-5 text-indigo-600" /> المرفقات</h3>
-                {assignment.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || assignment.file_url.includes('cloudinary.com/image') ? (
+                {assignment.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null || (assignment.file_url.includes('cloudinary.com/image') && !assignment.file_url.includes('.pdf')) ? (
                   <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2"><img src={assignment.file_url} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl" /></div>
                 ) : (
                   <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                     <div className="flex items-center gap-4">
-                      <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50">
-                        <FileText className="h-7 w-7 text-indigo-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-black text-slate-900">ملف مرفق</h4>
-                        <p className="text-sm text-slate-500">انقر للتحميل</p>
-                      </div>
+                      <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50"><FileText className="h-7 w-7 text-indigo-600" /></div>
+                      <div><h4 className="font-black text-slate-900">ملف مرفق</h4><p className="text-sm text-slate-500">انقر للتحميل</p></div>
                     </div>
-                    {/* 🚀 الزر المصحح والخالي من الأخطاء */}
+                    {/* 🚀 الزر الخالي من الأخطاء والذي يُجبر الجوال على التنزيل محلياً */}
                     <button 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const url = assignment?.file_url || '';
-                        const downloadUrl = (url.includes('cloudinary.com') && url.includes('/upload/'))
-                          ? url.replace('/upload/', '/upload/fl_attachment/')
-                          : url;
-                        window.location.href = downloadUrl;
-                      }}
+                      type="button"
+                      onClick={(e) => forceDownloadFile(assignment?.file_url || '')}
                       className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"
                     >
-                      <LinkIcon className="h-5 w-5" /> 
-                      <span>تحميل المرفق</span>
+                      <Download className="h-5 w-5" /> <span>تحميل المرفق</span>
                     </button>
                   </div>
                 )}
@@ -586,8 +606,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
                       const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
-                      
-                      let questionCounter = 1;
 
                       return (
                         <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200 border-dashed' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
@@ -653,11 +671,17 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                 {String(studentAnswerText).match(/\.(jpeg|jpg|gif|png|webp)$/i) || String(studentAnswerText).includes('cloudinary') ? (
                                    <img src={String(studentAnswerText)} alt="إجابة الطالب المرفقة" className="max-h-64 sm:max-h-96 w-auto object-contain rounded-lg sm:rounded-xl border border-slate-200 bg-white p-1" />
                                 ) : (
-                                   <a href={String(studentAnswerText)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
-                                      <FileText className="w-4 h-4 sm:w-5 sm:h-5" /> تحميل إجابة الطالب المرفقة
-                                   </a>
+                                   <button onClick={(e) => forceDownloadFile(String(studentAnswerText))} className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-xs sm:text-sm px-3 sm:px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
+                                      <Download className="w-4 h-4 sm:w-5 sm:h-5" /> تحميل إجابة الطالب
+                                   </button>
                                 )}
                               </div>
+                            ) : q.type === 'project_submission' && !isUnanswered ? (
+                               <ProjectSubmissionComponent 
+                                  initialData={typeof studentAns === 'string' ? JSON.parse(studentAns) : studentAns as any}
+                                  readOnly={true}
+                                  onChange={() => {}}
+                               />
                             ) : (
                               <div className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border mb-3 sm:mb-4 shadow-sm ${isUnanswered ? 'bg-slate-50 border-slate-200 border-dashed text-slate-500 italic' : isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
                                 <div className="text-xs sm:text-sm font-black mb-3 flex items-center gap-2">
@@ -695,7 +719,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       )}
                       {mySubmission?.file_url && (
                         <div className="relative w-full min-h-[300px] bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center p-4 shadow-sm">
-                          <img src={mySubmission.file_url} alt="إجابة إضافية" className="max-h-[500px] w-auto object-contain rounded-xl" />
+                          {mySubmission.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i) || (mySubmission.file_url.includes('cloudinary.com/image') && !mySubmission.file_url.includes('.pdf')) ? (
+                            <img src={mySubmission.file_url} alt="إجابة إضافية" className="max-h-[500px] w-auto object-contain rounded-xl" />
+                          ) : (
+                            <button onClick={(e) => forceDownloadFile(mySubmission.file_url!)} className="flex items-center gap-2 text-indigo-600 font-black hover:underline text-lg px-6 py-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                               <Download className="w-6 h-6" /> تحميل المرفق الإضافي للطالب
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
