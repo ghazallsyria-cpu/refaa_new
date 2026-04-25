@@ -26,7 +26,7 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-
+import ProjectSubmission from '@/components/ProjectSubmission';
 // 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
