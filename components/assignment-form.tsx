@@ -5,13 +5,11 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-import 'katex/dist/katex.min.css';
-import Latex from 'react-latex-next';
-
-// 🚀 محرك تنسيق المعادلات والجداول للطالب
+// 🚀 محرك تنسيق المعادلات والجداول للطالب مع المعالجة الصارمة لأسطر \n
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
+   // 1. معالجة صارمة للنزول للسطر (تحويل \n إلى <br/>)
    let html = String(content)
      .replace(/\\\\n/g, '<br/>')
      .replace(/\\n/g, '<br/>')
@@ -19,10 +17,12 @@ const renderContentWithMath = (content: string) => {
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$'); 
      
+   // 2. تلوين المعادلات (النسخة المضيئة للطالب)
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
+   // 3. تنسيق الجداول وحمايتها بحاوية السحب
    html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
@@ -55,6 +55,7 @@ export default function AssignmentForm({
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // 🚀 حقن مكتبة KaTeX لمعالجة المعادلات بامتياز
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-form')) {
       const link = document.createElement('link');
@@ -76,18 +77,22 @@ export default function AssignmentForm({
     }
   }, []);
 
+  // 🚀 المشغل الديناميكي محمي الآن بحاوية (assignment-form-container) لمنع الانهيار
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
-        (window as any).renderMathInElement(document.body, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-          ],
-          throwOnError: false
-        });
+        const container = document.getElementById('assignment-form-container');
+        if (container) {
+          (window as any).renderMathInElement(container, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        }
       }
     }, 100); 
     return () => clearTimeout(timer);
@@ -149,8 +154,8 @@ export default function AssignmentForm({
         <div className="space-y-3 mt-5">
           {safeOptions.map((opt: any, idx: number) => {
             const optContent = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
-            const optId = typeof opt === 'string' ? opt : (opt.id || optContent);
-            const isSelected = ans === optId || ans === optContent;
+            const optId = typeof opt === 'string' ? opt : String(opt.id || optContent);
+            const isSelected = String(ans) === optId || String(ans) === optContent;
             
             return (
               <label key={idx} className={`flex items-center gap-4 p-5 rounded-2xl cursor-pointer transition-all duration-200 border-2 shadow-sm ${isSelected ? 'border-indigo-500 bg-indigo-50/80 shadow-indigo-100' : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'}`}>
@@ -174,7 +179,7 @@ export default function AssignmentForm({
         <div className="space-y-3 mt-5">
           {safeOptions.map((opt: any, idx: number) => {
             const optContent = typeof opt === 'string' ? opt : (opt.content || opt.text || '');
-            const optId = typeof opt === 'string' ? opt : (opt.id || optContent);
+            const optId = typeof opt === 'string' ? opt : String(opt.id || optContent);
             const isSelected = selectedArray.includes(optId) || selectedArray.includes(optContent);
             
             return (
@@ -225,7 +230,7 @@ export default function AssignmentForm({
 
       return (
         <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
-          <div className="table-responsive-wrapper">
+          <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
             <table className="w-full text-right border-collapse min-w-[600px] m-0">
               <thead>
                 <tr className="bg-indigo-50/80 border-b border-slate-200">
@@ -250,7 +255,6 @@ export default function AssignmentForm({
                             placeholder="..." 
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
-                              // 🚀 تفعيل النسخ العميق Deep Clone لحل مشكلة عدم القدرة على الكتابة
                               const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : Array(tableData.headers.length).fill('')); 
                               if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
@@ -282,7 +286,7 @@ export default function AssignmentForm({
 
         return (
           <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
-            <div className="table-responsive-wrapper">
+            <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
               <table className="w-full text-right border-collapse min-w-[600px] m-0">
                 <thead>
                   <tr className="bg-indigo-50/80 border-b border-slate-200">
@@ -301,7 +305,6 @@ export default function AssignmentForm({
                          <textarea 
                            disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} 
                            onChange={(e) => { 
-                             // 🚀 النسخ العميق
                              const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : ['', '']); 
                              if (!newAns[idx]) newAns[idx] = ['', '']; 
                              newAns[idx][0] = e.target.value; 
@@ -344,7 +347,14 @@ export default function AssignmentForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8" dir="rtl">
+    <form id="assignment-form-container" onSubmit={handleSubmit} className="space-y-8" dir="rtl">
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar-light::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar-light::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
+        .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
+        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      `}} />
+
       {questions.map((q, idx) => {
         const isHeader = q.type === 'section_header';
         
