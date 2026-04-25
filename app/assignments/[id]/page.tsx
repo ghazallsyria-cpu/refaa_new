@@ -208,6 +208,46 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة لمنع الانهيار
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !document.getElementById('katex-js-main')) {
+      const link = document.createElement('link');
+      link.id = 'katex-css-main';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.id = 'katex-js-main';
+      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
+      script.onload = () => {
+        const autoRender = document.createElement('script');
+        autoRender.id = 'katex-auto-render-main';
+        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
+        document.head.appendChild(autoRender);
+      };
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  // 🚀 2. المشغل الديناميكي المحمي
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
+        (window as any).renderMathInElement(document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          throwOnError: false
+        });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [questions, activeTab, assignment, myAnswers]);
+
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
       const draftData = { answers: myAnswers, content, fileUrl };
@@ -272,16 +312,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
-      const finalTeacherId = typeof editData.teacher_id === 'object' 
-        ? (editData as any).teacher_id?.id || (editData as any).teacher_id?.auth_id 
-        : editData.teacher_id;
-
       const payload: any = { 
         title: editData.title, 
         description: editDescription, 
         due_date: new Date(editData.due_date).toISOString(), 
-        file_url: editFileUrl,
-        teacher_id: finalTeacherId
+        file_url: editFileUrl
       };
       
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
@@ -562,13 +597,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                           <div className="p-6 sm:p-8">
                             {isComparison ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-sm ${isUnanswered ? 'border-slate-200 bg-slate-50' : isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50'}`}>
-                                <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
-                                  <table className="w-full text-right border-collapse min-w-[500px] sm:min-w-[600px] m-0">
+                                <div className="table-responsive-wrapper">
+                                  <table className="w-full text-right border-collapse min-w-[600px] m-0">
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-slate-100' : isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
-                                        <th className="p-3 sm:p-4 border-b border-l border-slate-200 font-black text-slate-700 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
-                                        <th className="p-3 sm:p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
-                                        <th className="p-3 sm:p-4 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
+                                        <th className="p-5 border-b border-l border-slate-200 font-black text-slate-700 text-sm w-1/3">وجه المقارنة</th>
+                                        <th className="p-5 border-b border-l border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
+                                        <th className="p-5 border-b border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -580,12 +615,10 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                           else if (Array.isArray(studentAns)) parsedAns = studentAns;
                                         } catch(e){}
                                         return (
-                                          <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors border-b border-slate-200 last:border-0">
-                                            <td className="p-3 sm:p-4 border-l border-slate-200 font-bold text-slate-800 bg-slate-50/80 align-middle">
-                                              <div dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
-                                            </td>
-                                            <td className="p-3 sm:p-4 border-l border-slate-200 font-bold text-slate-900 text-xs sm:text-sm align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
-                                            <td className="p-3 sm:p-4 font-bold text-slate-900 text-xs sm:text-sm align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
+                                          <tr key={rIdx} className="hover:bg-slate-50 transition-colors border-b border-slate-200 last:border-0">
+                                            <td className="p-5 border-l border-slate-200 font-bold text-slate-800 bg-white align-middle"><div dangerouslySetInnerHTML={renderContentWithMath(aspect)} /></td>
+                                            <td className="p-5 border-l border-slate-200 font-bold text-slate-900 align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
+                                            <td className="p-5 font-bold text-slate-900 align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
                                           </tr>
                                         );
                                       })}
@@ -881,7 +914,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   هذه معاينة لما يراه الطالب في صفحة التسليم. لن يتم حفظ أي إجابات تقوم بإدخالها هنا.
                 </div>
                 {questions.length > 0 ? (
-                  <div className="light-theme-override">
+                  <div id="assignment-form-container" className="light-theme-override">
                     <AssignmentForm 
                       questions={sanitizedQuestions} 
                       onSubmit={() => showNotification('success', 'هذه معاينة فقط، لم يتم حفظ الإجابة')} 
@@ -1050,7 +1083,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             <form onSubmit={handleSaveFullEdit} className="space-y-6 sm:space-y-10">
               <div className="space-y-6 sm:space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-                  {/* Left Column Form */}
                   <div className="space-y-5 sm:space-y-6">
                     <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
                       <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">عنوان الواجب <span className="text-rose-500">*</span></label>
