@@ -8,23 +8,23 @@ import ImageUpload from '@/components/ImageUpload';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
-// 🚀 محرك التنسيق بالثيم المضيء (Academic Light Theme)
+// 🚀 محرك تنسيق المعادلات والجداول للطالب
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
    let html = String(content)
+     .replace(/\\\\n/g, '<br/>')
      .replace(/\\n/g, '<br/>')
      .replace(/\\r\\n/g, '<br/>')
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$'); 
      
-   // تلوين المعادلات بألوان هادئة ومريحة
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
-       return `<span class="math-tex text-indigo-700 bg-indigo-50/80 border border-indigo-200 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
+       return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // تنسيق الجداول بخلفيات فاتحة وحواف واضحة
-   html = html.replace(/<table/g, '<table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
    
@@ -112,6 +112,12 @@ export default function AssignmentForm({
     if (errors[questionId]) setErrors(prev => { const n = {...prev}; delete n[questionId]; return n; });
   };
 
+  const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
+    if (readOnly) return;
+    const current = (answers[questionId] as string[]) || [];
+    handleAnswerChange(questionId, checked ? [...current, option] : current.filter(a => a !== option));
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     questions.forEach(q => {
@@ -134,7 +140,6 @@ export default function AssignmentForm({
   const renderQuestionInput = (q: any) => {
     const ans = answers[q.id];
 
-    // 🚀 تصميم الخيارات المتعددة وصح/خطأ (بطاقات زجاجية تفاعلية)
     if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'radio') {
       const safeOptions = q.options && Array.isArray(q.options) && q.options.length > 0 
           ? q.options 
@@ -215,13 +220,12 @@ export default function AssignmentForm({
       } catch (e) {}
     }
 
-    // 🚀 تصميم الجداول المضيئة
     if (q.type === 'data_table' && tableData) {
       const parsedAns = Array.isArray(ans) ? ans : [];
 
       return (
         <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
-          <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
+          <div className="table-responsive-wrapper">
             <table className="w-full text-right border-collapse min-w-[600px] m-0">
               <thead>
                 <tr className="bg-indigo-50/80 border-b border-slate-200">
@@ -246,7 +250,8 @@ export default function AssignmentForm({
                             placeholder="..." 
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
-                              const newAns = [...parsedAns]; 
+                              // 🚀 تفعيل النسخ العميق Deep Clone لحل مشكلة عدم القدرة على الكتابة
+                              const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : Array(tableData.headers.length).fill('')); 
                               if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
                               handleAnswerChange(q.id, newAns); 
@@ -277,7 +282,7 @@ export default function AssignmentForm({
 
         return (
           <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
-            <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
+            <div className="table-responsive-wrapper">
               <table className="w-full text-right border-collapse min-w-[600px] m-0">
                 <thead>
                   <tr className="bg-indigo-50/80 border-b border-slate-200">
@@ -293,10 +298,29 @@ export default function AssignmentForm({
                          <div className="prose max-w-none text-slate-800 font-bold" dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                       </td>
                       <td className="p-5 border-l border-slate-200 align-top bg-white">
-                         <textarea disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} onChange={(e) => { const newAns = [...parsedAns]; if (!newAns[idx]) newAns[idx] = ['', '']; newAns[idx][0] = e.target.value; handleAnswerChange(q.id, newAns); }} className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-400 transition-all shadow-inner" />
+                         <textarea 
+                           disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} 
+                           onChange={(e) => { 
+                             // 🚀 النسخ العميق
+                             const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : ['', '']); 
+                             if (!newAns[idx]) newAns[idx] = ['', '']; 
+                             newAns[idx][0] = e.target.value; 
+                             handleAnswerChange(q.id, newAns); 
+                           }} 
+                           className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-400 transition-all shadow-inner" 
+                         />
                       </td>
                       <td className="p-5 align-top bg-white">
-                         <textarea disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[1] || ''} onChange={(e) => { const newAns = [...parsedAns]; if (!newAns[idx]) newAns[idx] = ['', '']; newAns[idx][1] = e.target.value; handleAnswerChange(q.id, newAns); }} className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-400 transition-all shadow-inner" />
+                         <textarea 
+                           disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[1] || ''} 
+                           onChange={(e) => { 
+                             const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : ['', '']); 
+                             if (!newAns[idx]) newAns[idx] = ['', '']; 
+                             newAns[idx][1] = e.target.value; 
+                             handleAnswerChange(q.id, newAns); 
+                           }} 
+                           className="w-full bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3 text-slate-900 font-bold resize-none outline-none placeholder:text-slate-400 transition-all shadow-inner" 
+                         />
                       </td>
                     </tr>
                   ))}
@@ -307,7 +331,6 @@ export default function AssignmentForm({
         );
     }
 
-    // 🚀 تصميم مربعات النص المفتوح
     return (
       <textarea
         disabled={readOnly}
@@ -322,13 +345,6 @@ export default function AssignmentForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8" dir="rtl">
-      <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar-light::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar-light::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
-        .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
-        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-      `}} />
-
       {questions.map((q, idx) => {
         const isHeader = q.type === 'section_header';
         
@@ -354,7 +370,6 @@ export default function AssignmentForm({
           );
         }
 
-        // 🚀 البطاقة الزجاجية المضيئة الفخمة (Glass Card)
         return (
           <div key={q.id} className="bg-white/95 backdrop-blur-xl p-6 sm:p-8 rounded-[2.5rem] border border-slate-200 shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_12px_40px_rgba(99,102,241,0.08)] hover:border-indigo-100">
              <div className="flex flex-col sm:flex-row gap-5 items-start">
