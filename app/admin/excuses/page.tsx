@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
-  Loader2, Search, Filter, AlertTriangle, CheckSquare
+  Loader2, Search, Filter, AlertTriangle, CheckSquare, Info
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
@@ -22,6 +22,10 @@ export default function AdminExcusesPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'inquiry'>('pending');
   const [selectedExcuse, setSelectedExcuse] = useState<any>(null);
   const [selectedDatesToApprove, setSelectedDatesToApprove] = useState<string[]>([]);
+  
+  // 🚀 حالة تجاوز الإدارة لأخطاء الطالب
+  const [overridePeriods, setOverridePeriods] = useState<boolean>(true);
+  
   const [rejectNote, setRejectNote] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
 
@@ -38,6 +42,7 @@ export default function AdminExcusesPage() {
   const openExcuseModal = (excuse: any) => {
     setSelectedExcuse(excuse);
     setRejectNote('');
+    setOverridePeriods(true); // تفعيل تجاوز الحصص الخاطئة افتراضياً
     const dates = excuse.absent_dates && excuse.absent_dates.length > 0 
        ? excuse.absent_dates 
        : (excuse.excuse_date ? [excuse.excuse_date] : []);
@@ -54,12 +59,13 @@ export default function AdminExcusesPage() {
     if (selectedDatesToApprove.length === 0) {
       alert('يرجى تحديد تاريخ واحد على الأقل ليتم اعتماده.'); return;
     }
-    if (!confirm(`هل أنت متأكد من اعتماد العذر لـ (${selectedDatesToApprove.length}) أيام؟ سيتم تعديل سجلات الغياب لهذه الأيام فقط.`)) return;
+    if (!confirm(`هل أنت متأكد من اعتماد العذر لـ (${selectedDatesToApprove.length}) أيام؟`)) return;
     
     setIsActionLoading(true);
-    const result = await approveExcuse(excuse, user.id, selectedDatesToApprove);
+    // 🚀 تمرير حالة التجاوز للهوك
+    const result = await approveExcuse(excuse, user.id, selectedDatesToApprove, overridePeriods);
     if (result.success) {
-      alert('تم اعتماد العذر وتعديل السجلات بنجاح وإرسال التأكيد للطالب!');
+      alert('تم اعتماد العذر وتعديل السجلات بنجاح!');
       fetchExcuses(activeTab);
       setSelectedExcuse(null);
     } else {
@@ -135,10 +141,8 @@ export default function AdminExcusesPage() {
     }
   };
 
-  // 🚀 المحرك السحري الجديد: تعديل حالة السجل فوراً من الواجهة
   const handleUpdateRecordStatus = async (recordId: string, newStatus: string) => {
     try {
-      // 1. التعديل في قاعدة البيانات فوراً
       const { error } = await supabase
         .from('attendance_records')
         .update({ status: newStatus })
@@ -146,7 +150,6 @@ export default function AdminExcusesPage() {
 
       if (error) throw error;
 
-      // 2. تحديث الواجهة محلياً دون الحاجة لإعادة البحث
       setSearchResults(prev => {
         if (!prev) return prev;
         return prev.map(student => ({
@@ -168,7 +171,6 @@ export default function AdminExcusesPage() {
     catch (e) { return fallback; }
   };
 
-  // 🚀 تلوين الحالات لتناسب القائمة المنسدلة
   const translateStatus = (status: string) => {
     switch(status) {
       case 'absent': return { text: 'غياب بدون عذر', color: 'bg-rose-500/10 text-rose-400 border-rose-500/30 focus:ring-rose-500/20' };
@@ -189,7 +191,6 @@ export default function AdminExcusesPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 relative z-10 space-y-8">
         
-        {/* الترويسة والتبويبات */}
         <div className="bg-[#131836]/60 backdrop-blur-2xl p-8 sm:p-10 rounded-[3rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
           <div className="flex flex-col xl:flex-row items-center justify-between gap-6">
             <div className="text-center xl:text-right w-full xl:w-auto">
@@ -208,7 +209,6 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* قسم الاستعلام الشامل */}
         {activeTab === 'inquiry' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-indigo-500/20 shadow-lg">
@@ -264,7 +264,6 @@ export default function AdminExcusesPage() {
                                    <div className="flex justify-between items-start mb-4">
                                      <div className="font-black text-lg text-white" dir="ltr">{safeFormat(rec.date, 'dd MMM yyyy')}</div>
                                      
-                                     {/* 🚀 القائمة المنسدلة التفاعلية لتغيير الحالة فوراً */}
                                      <select 
                                        value={rec.status}
                                        onChange={(e) => handleUpdateRecordStatus(rec.id, e.target.value)}
@@ -293,7 +292,6 @@ export default function AdminExcusesPage() {
              )}
           </div>
         ) : (
-          /* 🚀 قائمة الأعذار (التبويبات الأخرى) */
           <>
             {loading ? (
               <div className="flex justify-center py-20"><Loader2 className="w-12 h-12 animate-spin text-emerald-500" /></div>
@@ -334,7 +332,7 @@ export default function AdminExcusesPage() {
 
                         <div className="space-y-3 bg-[#090b14]/50 p-4 rounded-2xl border border-white/5 mb-4 shadow-inner">
                           <div className="flex items-start gap-2 text-sm font-bold text-slate-300">
-                            <Calendar className="w-4 h-4 text-emerald-400 mt-1" /> 
+                            <Calendar className="w-4 h-4 text-emerald-400 mt-1 shrink-0" />
                             <div>
                               <span className="block text-[10px] text-slate-400">أيام الغياب المطلوبة:</span>
                               <span className="text-white font-black text-xs" dir="ltr">{allDates.length > 2 ? `${allDates[0]} (+${allDates.length-1})` : allDates.join(' ، ')}</span>
@@ -342,11 +340,11 @@ export default function AdminExcusesPage() {
                           </div>
                           {excuse.duration_type === 'partial_day' && (
                             <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
-                              <Clock className="w-4 h-4 text-amber-400" /> الحصص: <span className="text-white font-black" dir="ltr">{excuse.target_periods?.join(', ')}</span>
+                              <Clock className="w-4 h-4 text-amber-400 shrink-0" /> الحصص: <span className="text-white font-black truncate" dir="ltr">{excuse.target_periods?.join(', ')}</span>
                             </div>
                           )}
                           <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                            <User className="w-3.5 h-3.5" /> المُقدم: {excuse.users?.full_name} ({excuse.submitter_role === 'student' ? 'الطالب' : 'ولي الأمر'})
+                            <User className="w-3.5 h-3.5 shrink-0" /> المُقدم: {excuse.users?.full_name} ({excuse.submitter_role === 'student' ? 'الطالب' : 'ولي الأمر'})
                           </div>
                         </div>
                       </div>
@@ -363,7 +361,6 @@ export default function AdminExcusesPage() {
         )}
       </div>
 
-      {/* 🚀 نافذة مراجعة العذر (Modal) */}
       <AnimatePresence>
         {selectedExcuse && (
           <Dialog.Root open={!!selectedExcuse} onOpenChange={(open) => !open && setSelectedExcuse(null)}>
@@ -408,7 +405,19 @@ export default function AdminExcusesPage() {
                               <span className={`font-bold text-sm ${selectedDatesToApprove.includes(date) ? 'text-white' : 'text-slate-400'}`} dir="ltr">{date}</span>
                             </label>
                           ))}
-                          <p className="text-[10px] text-indigo-300/70 mt-2 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> التواريخ غير المحددة لن يتم تعديل الغياب فيها.</p>
+                          
+                          {/* 🚀 خيار التجاوز (تجاهل حصص الطالب الخاطئة) */}
+                          <label className="flex items-start gap-2 mt-3 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={overridePeriods} 
+                              onChange={(e) => setOverridePeriods(e.target.checked)} 
+                              className="w-4 h-4 accent-amber-500 rounded mt-0.5" 
+                            />
+                            <span className="text-[10px] sm:text-xs font-bold text-amber-400 leading-tight">
+                              تجاهل الحصص التي اختارها الطالب (خاطئة)، وتحويل <strong className="font-black">كافة غيابات</strong> هذه الأيام المحددة إلى مستأذن. (موصى به).
+                            </span>
+                          </label>
                         </div>
                       ) : (
                         <div className="font-black text-white leading-relaxed text-sm mt-2" dir="ltr">
