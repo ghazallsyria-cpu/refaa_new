@@ -11,6 +11,8 @@ import {
   Loader2, Search, Filter, AlertTriangle
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { format } from 'date-fns';
+import { arSA } from 'date-fns/locale';
 
 export default function AdminExcusesPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
@@ -28,7 +30,7 @@ export default function AdminExcusesPage() {
   }, [activeTab, isChecking, fetchExcuses]);
 
   const handleApprove = async (excuse: any) => {
-    if (!confirm('هل أنت متأكد من اعتماد العذر؟ سيتم تعديل سجل غياب الطالب تلقائياً.')) return;
+    if (!confirm('هل أنت متأكد من اعتماد العذر؟ سيتم تعديل سجل غياب الطالب تلقائياً في التواريخ المحددة.')) return;
     setIsActionLoading(true);
     const result = await approveExcuse(excuse, user.id);
     if (result.success) {
@@ -57,6 +59,13 @@ export default function AdminExcusesPage() {
       alert('حدث خطأ: ' + result.error);
     }
     setIsActionLoading(false);
+  };
+
+  const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
+    if (!dateStr) return fallback;
+    try {
+      return format(new Date(dateStr), formatStr, { locale: arSA });
+    } catch (e) { return fallback; }
   };
 
   if (isChecking) return <div className="min-h-screen flex items-center justify-center bg-[#090b14]"><Loader2 className="w-12 h-12 animate-spin text-emerald-500" /></div>;
@@ -112,7 +121,7 @@ export default function AdminExcusesPage() {
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-[#090b14] rounded-2xl flex items-center justify-center text-xl font-black text-emerald-400 border border-white/5">
-                          {studentName?.charAt(0)}
+                          {studentName?.charAt(0) || 'ط'}
                         </div>
                         <div>
                           <h3 className="font-black text-white truncate max-w-[150px]">{studentName}</h3>
@@ -127,8 +136,16 @@ export default function AdminExcusesPage() {
                     </div>
 
                     <div className="space-y-3 bg-[#090b14]/50 p-4 rounded-2xl border border-white/5 mb-4">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
-                        <Calendar className="w-4 h-4 text-emerald-400" /> تاريخ الغياب: <span className="text-white font-black">{excuse.excuse_date}</span>
+                      <div className="flex items-start gap-2 text-sm font-bold text-slate-300">
+                        <Calendar className="w-4 h-4 text-emerald-400 mt-1 shrink-0" />
+                        <div>
+                          <span className="block text-[10px] text-slate-400">أيام الغياب المحددة:</span>
+                          <span className="text-white font-black leading-tight" dir="ltr">
+                            {excuse.absent_dates && excuse.absent_dates.length > 0 
+                               ? `${safeFormat(excuse.absent_dates[0], 'dd MMM')} ${excuse.absent_dates.length > 1 ? `(+${excuse.absent_dates.length - 1} أيام)` : ''}`
+                               : safeFormat(excuse.excuse_date, 'dd MMM')}
+                          </span>
+                        </div>
                       </div>
                       {excuse.duration_type === 'partial_day' && (
                         <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
@@ -175,13 +192,23 @@ export default function AdminExcusesPage() {
                 <div className="md:w-1/2 p-8 flex flex-col bg-[#131836] overflow-y-auto custom-scrollbar">
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-black text-white">تفاصيل العذر</h2>
-                    <Dialog.Close className="p-2 bg-white/5 text-slate-400 hover:text-white rounded-full"><XCircle className="w-6 h-6" /></Dialog.Close>
+                    <Dialog.Close className="p-2 bg-white/5 text-slate-400 hover:text-white rounded-full transition-colors"><XCircle className="w-6 h-6" /></Dialog.Close>
                   </div>
 
                   <div className="space-y-6 flex-1">
+                    
+                    <div className="bg-indigo-500/10 p-5 rounded-2xl border border-indigo-500/20">
+                      <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-1 flex items-center gap-1.5"><Calendar className="w-4 h-4"/> التواريخ المراد تبريرها:</p>
+                      <div className="font-black text-white leading-relaxed text-lg mt-2" dir="ltr">
+                        {selectedExcuse.absent_dates && selectedExcuse.absent_dates.length > 0 
+                           ? selectedExcuse.absent_dates.join(' | ') 
+                           : selectedExcuse.excuse_date || 'غير محدد'}
+                      </div>
+                    </div>
+
                     <div className="bg-[#090b14]/50 p-5 rounded-2xl border border-white/5">
-                      <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">سبب الغياب المكتوب:</p>
-                      <p className="font-bold text-white leading-relaxed">{selectedExcuse.reason || 'لم يتم كتابة سبب تفصيلي، الاكتفاء بالمرفق.'}</p>
+                      <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">تفاصيل إضافية من الطالب:</p>
+                      <p className="font-bold text-white leading-relaxed">{selectedExcuse.reason || 'لم يتم كتابة تفاصيل إضافية.'}</p>
                     </div>
 
                     {selectedExcuse.status === 'pending' && (
@@ -199,7 +226,7 @@ export default function AdminExcusesPage() {
                         <div className="flex gap-3">
                           <button disabled={isActionLoading} onClick={() => handleReject(selectedExcuse)} className="flex-1 py-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-sm transition-all disabled:opacity-50">رفض العذر</button>
                           <button disabled={isActionLoading} onClick={() => handleApprove(selectedExcuse)} className="flex-[2] py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black text-sm transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] disabled:opacity-50 flex items-center justify-center gap-2">
-                            {isActionLoading && <Loader2 className="w-4 h-4 animate-spin" />} اعتماد وتحويل السجل
+                            {isActionLoading && <Loader2 className="w-4 h-4 animate-spin" />} اعتماد العذر
                           </button>
                         </div>
                       </div>
@@ -209,7 +236,7 @@ export default function AdminExcusesPage() {
                       <div className={`p-5 rounded-2xl border flex items-center gap-3 ${selectedExcuse.status === 'approved' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'}`}>
                         {selectedExcuse.status === 'approved' ? <CheckCircle2 className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
                         <div>
-                          <h4 className="font-black">{selectedExcuse.status === 'approved' ? 'العذر معتمد' : 'العذر مرفوض'}</h4>
+                          <h4 className="font-black">{selectedExcuse.status === 'approved' ? 'العذر معتمد وتم تحديث السجل' : 'العذر مرفوض'}</h4>
                           {selectedExcuse.admin_note && <p className="text-xs font-bold mt-1 text-slate-300">ملاحظة الإدارة: {selectedExcuse.admin_note}</p>}
                         </div>
                       </div>
