@@ -11,25 +11,21 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
-// 🚀 محرك تنسيق المعادلات وإصلاح تشوه النصوص بقوة قاهرة (Light Theme)
+// 🚀 محرك تنسيق المعادلات والجداول المُحسّن بصرياً للمعلم (Light Theme)
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
+   let html = String(content);
    
-   // القضاء التام على جميع أشكال النزول للسطر العالقة
-   let html = String(content)
-     .replace(/\\\\n/g, '<br/>')
-     .replace(/\\n/g, '<br/>')
-     .replace(/\\r\\n/g, '<br/>')
-     .replace(/\n/g, '<br/>')
-     .replace(/\\\$/g, '$');
+   // 1. إصلاح النزول للسطر (تحويل \n إلى <br/>)
+   html = html.replace(/\\\\n/g, '<br/>').replace(/\\n/g, '<br/>').replace(/\\r\\n/g, '<br/>').replace(/\n/g, '<br/>').replace(/\\\$/g, '$');
    
-   // تلوين المعادلات الرياضية للثيم الفاتح
+   // 2. تلوين المعادلات الرياضية للثيم الفاتح
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50/80 border border-indigo-200 px-2.5 py-1 rounded-lg font-mono font-bold mx-1 shadow-sm inline-block max-w-full break-words whitespace-pre-wrap" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // تغليف الجداول بحاوية سحب
-   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
+   // 3. تنسيق الجداول للثيم الفاتح وحمايتها بـ Wrapper
+   html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[500px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
    html = html.replace(/<td/g, '<td class="p-4 border border-slate-300 bg-white text-slate-700 font-bold"');
@@ -120,7 +116,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة
+  // 🚀 1. تحميل مكتبة KaTeX مرة واحدة لمنع تكرار التحميل والانهيار
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-grading')) {
       const link = document.createElement('link');
@@ -142,7 +138,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     }
   }, []);
 
-  // 🚀 2. إعادة رسم المعادلات كلما تفاعل المعلم
+  // 🚀 2. إعادة رسم المعادلات كلما تفاعل المعلم (تغيير الدرجة أو النقر)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -164,7 +160,8 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
     if (questions.length > 0 && Object.keys(questionGrades).length > 0) {
       let total = 0;
       Object.values(questionGrades).forEach(g => { total += (Number(g.pointsEarned) || 0); });
-      setGrade(total.toString());
+      // 🚀 التأكد من عدم وجود أصفار زائدة في المجموع العشري
+      setGrade(parseFloat(total.toFixed(2)).toString());
     }
   }, [questionGrades, questions.length]);
 
@@ -220,6 +217,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
   const isOverdue = dueDateObj < new Date(submission?.submitted_at);
   const isGraded = submission?.status === 'graded';
 
+  // 🚀 متغير الترقيم المعتمد للأسئلة
   let questionCounter = 1;
 
   return (
@@ -317,7 +315,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                            </div>
                            <div 
                              className="prose max-w-none text-xl sm:text-2xl font-black text-slate-900 leading-relaxed" 
-                             dangerouslySetInnerHTML={renderContentWithMath(q.content || q.text || q.question_text || '')} 
+                             dangerouslySetInnerHTML={renderContentWithMath(q.content || (q as any).text || q.question_text || '')} 
                            />
                            {q.media_url && (
                              <div className="mt-6 rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white p-2 text-center">
@@ -423,7 +421,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                         else if (Array.isArray(studentAns)) parsedAns = studentAns;
                                       } catch(e){}
                                       return (
-                                        <tr key={rIdx} className="hover:bg-white/[0.02] transition-colors border-b border-white/5 last:border-0">
+                                        <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors border-b border-slate-200 last:border-0">
                                           <td className="p-3 sm:p-4 border-l border-slate-200 font-bold text-slate-800 bg-slate-50/80 align-middle">
                                             <div dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
                                           </td>
@@ -458,7 +456,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                             </div>
                           )}
 
-                          {/* أزرار التقييم للمعلم */}
+                          {/* 🚀 أزرار التقييم للمعلم مع دعم الدرجات العشرية */}
                           <div className="mt-6 pt-6 border-t border-slate-200">
                             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-6">
                                <div className="xl:col-span-8 flex flex-col sm:flex-row items-center gap-2 sm:gap-3 bg-slate-50 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-inner">
@@ -482,6 +480,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                                   <div className="flex items-center gap-1.5 sm:gap-2">
                                     <input 
                                       type="number" 
+                                      step="any"  // 🚀 السحر هنا: هذا يتيح كتابة الكسور العشرية كالأرباع والأنصاف
                                       min="0" 
                                       max={q.points} 
                                       disabled={!canEdit}
@@ -555,6 +554,7 @@ export default function GradingPage({ params }: { params: Promise<{ id: string, 
                   <div className="relative z-10 flex items-center gap-3 sm:gap-4">
                     <input 
                       type="number" 
+                      step="any" // 🚀 لتقبل النتيجة الإجمالية كسوراً عشرية
                       disabled={!canEdit}
                       className={`block w-full rounded-xl sm:rounded-2xl border border-slate-300 py-4 sm:py-5 px-3 sm:px-4 text-indigo-700 text-3xl sm:text-4xl font-black text-center outline-none bg-white shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 ${!canEdit ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''}`} 
                       value={grade} 
