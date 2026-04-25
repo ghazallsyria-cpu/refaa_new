@@ -5,11 +5,13 @@ import { CheckCircle2, AlertCircle, Send, Columns, UploadCloud, Circle, Square }
 import { motion } from 'framer-motion';
 import ImageUpload from '@/components/ImageUpload';
 
-// 🚀 محرك تنسيق المعادلات والجداول للطالب مع المعالجة الصارمة لأسطر \n
+import 'katex/dist/katex.min.css';
+import Latex from 'react-latex-next';
+
+// 🚀 محرك تنسيق المعادلات والجداول للطالب
 const renderContentWithMath = (content: string) => {
    if (!content) return { __html: '' };
    
-   // 1. معالجة صارمة للنزول للسطر (تحويل \n إلى <br/>)
    let html = String(content)
      .replace(/\\\\n/g, '<br/>')
      .replace(/\\n/g, '<br/>')
@@ -17,12 +19,10 @@ const renderContentWithMath = (content: string) => {
      .replace(/\n/g, '<br/>')
      .replace(/\\\$/g, '$'); 
      
-   // 2. تلوين المعادلات (النسخة المضيئة للطالب)
    html = html.replace(/\$\$?([\s\S]*?)\$\$?/g, (match, mathContent) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // 3. تنسيق الجداول وحمايتها بحاوية السحب
    html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
@@ -55,7 +55,6 @@ export default function AssignmentForm({
   const [answers, setAnswers] = useState<Record<string, any>>(initialAnswers);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // 🚀 حقن مكتبة KaTeX لمعالجة المعادلات بامتياز
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('katex-js-form')) {
       const link = document.createElement('link');
@@ -77,7 +76,6 @@ export default function AssignmentForm({
     }
   }, []);
 
-  // 🚀 المشغل الديناميكي محمي الآن بحاوية (assignment-form-container) لمنع الانهيار
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
@@ -230,7 +228,7 @@ export default function AssignmentForm({
 
       return (
         <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
-          <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
+          <div className="table-responsive-wrapper">
             <table className="w-full text-right border-collapse min-w-[600px] m-0">
               <thead>
                 <tr className="bg-indigo-50/80 border-b border-slate-200">
@@ -255,6 +253,7 @@ export default function AssignmentForm({
                             placeholder="..." 
                             value={parsedAns[rIdx]?.[cIdx] || ''} 
                             onChange={(e) => { 
+                              // 🚀 النسخ العميق (Deep Clone) لضمان عمل الكتابة
                               const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : Array(tableData.headers.length).fill('')); 
                               if (!newAns[rIdx]) newAns[rIdx] = Array(tableData.headers.length).fill(''); 
                               newAns[rIdx][cIdx] = e.target.value; 
@@ -286,12 +285,12 @@ export default function AssignmentForm({
 
         return (
           <div className="mt-6 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm bg-white">
-            <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
+            <div className="table-responsive-wrapper">
               <table className="w-full text-right border-collapse min-w-[600px] m-0">
                 <thead>
                   <tr className="bg-indigo-50/80 border-b border-slate-200">
                     <th className="p-5 border-l border-slate-200 font-black text-indigo-950 text-base w-1/3">وجه المقارنة</th>
-                    <th className="p-5 border-l border-slate-200 font-black text-indigo-950 text-base text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(party1)} /></th>
+                    <th className="p-5 border-b border-l border-slate-200 font-black text-indigo-950 text-base text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(party1)} /></th>
                     <th className="p-5 font-black text-indigo-950 text-base text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(party2)} /></th>
                   </tr>
                 </thead>
@@ -305,6 +304,7 @@ export default function AssignmentForm({
                          <textarea 
                            disabled={readOnly} rows={3} placeholder="أدخل إجابتك..." value={parsedAns[idx]?.[0] || ''} 
                            onChange={(e) => { 
+                             // 🚀 النسخ العميق (Deep Clone) لضمان عمل الكتابة
                              const newAns = parsedAns.map(arr => Array.isArray(arr) ? [...arr] : ['', '']); 
                              if (!newAns[idx]) newAns[idx] = ['', '']; 
                              newAns[idx][0] = e.target.value; 
