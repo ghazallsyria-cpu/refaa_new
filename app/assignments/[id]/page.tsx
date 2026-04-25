@@ -474,7 +474,27 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                 ) : (
                   <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
                     <div className="flex items-center gap-4"><div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50"><FileText className="h-7 w-7 text-indigo-600" /></div><div><h4 className="font-black text-slate-900">ملف مرفق</h4><p className="text-sm text-slate-500">انقر للتحميل</p></div></div>
-                    <a href={assignment.file_url} target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"><LinkIcon className="h-5 w-5" /> <span>تحميل المرفق</span></a>
+{/* 🚀 1. قم بتعريف هذا المتغير قبل الزر مباشرة (أو في أعلى الدالة) ليعالج الرابط */}
+{(() => {
+  const downloadUrl = (assignment?.file_url && assignment.file_url.includes('cloudinary.com') && assignment.file_url.includes('/upload/'))
+    ? assignment.file_url.replace('/upload/', '/upload/fl_attachment/')
+    : assignment?.file_url;
+
+  return (
+    /* 🚀 2. هذا هو الزر بعد التعديل */
+    <a 
+      href={downloadUrl} 
+      download 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"
+    >
+      <LinkIcon className="h-5 w-5" /> 
+      <span>تحميل المرفق</span>
+    </a>
+  );
+})()}
+
                   </div>
                 )}
               </div>
