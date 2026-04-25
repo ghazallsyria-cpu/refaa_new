@@ -43,7 +43,7 @@ const renderContentWithMath = (content: string) => {
        return `<span class="math-tex text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md font-mono font-bold mx-1 inline-block max-w-full break-words whitespace-pre-wrap shadow-sm" dir="ltr" style="word-break: break-word; overflow-wrap: anywhere;">\\(${mathContent}\\)</span>`;
    });
 
-   // تغليف الجداول بحاوية سحب
+   // تغليف جداول الذكاء الاصطناعي بحاوية سحب
    html = html.replace(/<table/g, '<div class="table-responsive-wrapper"><table class="w-full text-right border-collapse my-4 min-w-[600px] border border-slate-300 rounded-xl overflow-hidden shadow-sm"');
    html = html.replace(/<\/table>/g, '</table></div>');
    html = html.replace(/<th/g, '<th class="bg-indigo-50 p-4 border border-slate-300 font-black text-indigo-900 text-sm"');
@@ -208,49 +208,6 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 1. حقن مكتبة KaTeX (مرة واحدة فقط) للصفحة الأساسية والمعاينة
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !document.getElementById('katex-js-main')) {
-      const link = document.createElement('link');
-      link.id = 'katex-css-main';
-      link.rel = 'stylesheet';
-      link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css';
-      document.head.appendChild(link);
-
-      const script = document.createElement('script');
-      script.id = 'katex-js-main';
-      script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js';
-      script.onload = () => {
-        const autoRender = document.createElement('script');
-        autoRender.id = 'katex-auto-render-main';
-        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js';
-        document.head.appendChild(autoRender);
-      };
-      document.head.appendChild(script);
-    }
-  }, []);
-
-  // 🚀 2. المشغل الديناميكي محمي في حاوية الصفحة
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (typeof window !== 'undefined' && (window as any).renderMathInElement) {
-        const container = document.getElementById('assignment-page-container');
-        if (container) {
-          (window as any).renderMathInElement(container, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-          });
-        }
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [questions, activeTab, assignment, myAnswers]);
-
   useEffect(() => {
     if (currentRole === 'student' && !mySubmission && assignmentId && user?.id) {
       const draftData = { answers: myAnswers, content, fileUrl };
@@ -315,11 +272,16 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
     if (!editSectionIds || editSectionIds.length === 0) { showNotification('error', 'حدد شعبة واحدة على الأقل'); return; }
     setIsSubmittingEdit(true);
     try {
+      const finalTeacherId = typeof editData.teacher_id === 'object' 
+        ? (editData as any).teacher_id?.id || (editData as any).teacher_id?.auth_id 
+        : editData.teacher_id;
+
       const payload: any = { 
         title: editData.title, 
         description: editDescription, 
         due_date: new Date(editData.due_date).toISOString(), 
-        file_url: editFileUrl
+        file_url: editFileUrl,
+        teacher_id: finalTeacherId
       };
       
       if (updateFullAssignment) await updateFullAssignment(assignmentId, payload, editQuestions, editSectionIds, subjects);
@@ -416,7 +378,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
   });
 
   return (
-    <div id="assignment-page-container" className="min-h-screen bg-slate-50 text-slate-800 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-cairo pb-24 relative overflow-x-hidden pt-6" dir="rtl">
       
       <div className="space-y-8 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-8">
         <AnimatePresence>
@@ -568,14 +530,14 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                       const isUnanswered = isComparison ? !studentAnswerText || studentAnswerText === '[]' : !studentAnswerText;
                       const isCorrect = answerDetails?.is_correct || Number(answerDetails?.points_earned) > 0;
                       
-                      const currentQNumber = questionCounter++;
+                      let questionCounter = 1;
 
                       return (
                         <div key={q.id} className={`bg-white rounded-3xl overflow-hidden shadow-sm border transition-all hover:shadow-md ${isUnanswered ? 'border-slate-200 border-dashed' : isCorrect ? 'border-emerald-200' : 'border-rose-200'}`}>
                           <div className="p-6 sm:p-8 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row sm:items-start justify-between gap-6">
                             <div className="flex gap-4 items-start w-full min-w-0">
                               <div className={`shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-[1.25rem] flex items-center justify-center font-black text-xl sm:text-2xl shadow-sm border ${isUnanswered ? 'bg-white text-slate-500 border-slate-200' : isCorrect ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>
-                                  {currentQNumber}
+                                  {idx + 1}
                               </div>
                               <div className="pt-1 sm:pt-2 w-full min-w-0">
                                 <div 
@@ -600,13 +562,13 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                           <div className="p-6 sm:p-8">
                             {isComparison ? (
                               <div className={`rounded-[1.5rem] border overflow-hidden shadow-sm ${isUnanswered ? 'border-slate-200 bg-slate-50' : isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50/50'}`}>
-                                <div className="table-responsive-wrapper">
-                                  <table className="w-full text-right border-collapse min-w-[600px] m-0">
+                                <div className="table-responsive-wrapper overflow-x-auto custom-scrollbar-light pb-2">
+                                  <table className="w-full text-right border-collapse min-w-[500px] sm:min-w-[600px] m-0">
                                     <thead>
                                       <tr className={isUnanswered ? 'bg-slate-100' : isCorrect ? 'bg-emerald-100/50' : 'bg-rose-100/50'}>
-                                        <th className="p-5 border-b border-l border-slate-200 font-black text-slate-700 text-sm w-1/3">وجه المقارنة</th>
-                                        <th className="p-5 border-b border-l border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
-                                        <th className="p-5 border-b border-slate-200 font-black text-indigo-800 text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
+                                        <th className="p-3 sm:p-4 border-b border-l border-slate-200 font-black text-slate-700 text-xs sm:text-sm w-1/3">وجه المقارنة</th>
+                                        <th className="p-3 sm:p-4 border-b border-l border-slate-200 font-black text-indigo-900 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[0]?.content || safeOptions[0] || 'الطرف الأول')} /></th>
+                                        <th className="p-3 sm:p-4 border-b border-white/10 font-black text-indigo-300 text-xs sm:text-sm text-center w-1/3"><div dangerouslySetInnerHTML={renderContentWithMath(safeOptions[1]?.content || safeOptions[1] || 'الطرف الثاني')} /></th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -619,9 +581,11 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                                         } catch(e){}
                                         return (
                                           <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors border-b border-slate-200 last:border-0">
-                                            <td className="p-5 border-l border-slate-200 font-bold text-slate-800 bg-white align-middle"><div dangerouslySetInnerHTML={renderContentWithMath(aspect)} /></td>
-                                            <td className="p-5 border-l border-slate-200 font-bold text-slate-900 align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
-                                            <td className="p-5 font-bold text-slate-900 align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
+                                            <td className="p-3 sm:p-4 border-l border-slate-200 font-bold text-slate-800 bg-slate-50/80 align-middle">
+                                              <div dangerouslySetInnerHTML={renderContentWithMath(aspect)} />
+                                            </td>
+                                            <td className="p-3 sm:p-4 border-l border-slate-200 font-bold text-slate-900 text-xs sm:text-sm align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[0] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][0])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
+                                            <td className="p-3 sm:p-4 font-bold text-slate-900 text-xs sm:text-sm align-middle whitespace-pre-wrap text-center bg-white">{parsedAns[rIdx]?.[1] ? <div dangerouslySetInnerHTML={renderContentWithMath(parsedAns[rIdx][1])} /> : <span className="text-slate-400 font-normal">فارغ</span>}</td>
                                           </tr>
                                         );
                                       })}
@@ -917,7 +881,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   هذه معاينة لما يراه الطالب في صفحة التسليم. لن يتم حفظ أي إجابات تقوم بإدخالها هنا.
                 </div>
                 {questions.length > 0 ? (
-                  <div id="assignment-form-container" className="light-theme-override">
+                  <div className="light-theme-override">
                     <AssignmentForm 
                       questions={sanitizedQuestions} 
                       onSubmit={() => showNotification('success', 'هذه معاينة فقط، لم يتم حفظ الإجابة')} 
@@ -1086,6 +1050,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
             <form onSubmit={handleSaveFullEdit} className="space-y-6 sm:space-y-10">
               <div className="space-y-6 sm:space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                  {/* Left Column Form */}
                   <div className="space-y-5 sm:space-y-6">
                     <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl sm:rounded-[1.5rem] border border-slate-200 shadow-sm">
                       <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">عنوان الواجب <span className="text-rose-500">*</span></label>
@@ -1170,6 +1135,7 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                     </div>
                   </div>
 
+                  {/* Right Column: Question Builder */}
                   <div className="bg-slate-50 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 lg:p-8 border border-slate-200 shadow-sm relative overflow-hidden h-fit">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-[60px] pointer-events-none"></div>
                     <div className="flex items-center gap-2 sm:gap-3 mb-5 sm:mb-6 relative z-10">
@@ -1212,11 +1178,12 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
       </Dialog.Root>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 1px solid #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .custom-scrollbar-light::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar-light::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
+        .custom-scrollbar-light::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 2px solid #f1f5f9; }
+        .custom-scrollbar-light::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
+        /* 🚀 الحل الجذري للجداول في الجوال */
         .table-responsive-wrapper {
           width: 100%;
           max-width: 100vw;
