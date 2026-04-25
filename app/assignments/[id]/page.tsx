@@ -473,38 +473,30 @@ export default function AssignmentDetailsPage({ params }: { params: Promise<{ id
                   <div className="relative w-full max-w-2xl h-auto min-h-[300px] bg-slate-50 rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm flex items-center justify-center p-2"><img src={assignment.file_url} alt="مرفق الواجب" className="max-h-[500px] w-auto object-contain rounded-xl" /></div>
                 ) : (
                   <div className="p-6 rounded-3xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-                    <div className="flex items-center gap-4"><div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50"><FileText className="h-7 w-7 text-indigo-600" /></div><div><h4 className="font-black text-slate-900">ملف مرفق</h4><p className="text-sm text-slate-500">انقر للتحميل</p></div></div>
-{/* 🚀 1. قم بتعريف هذا المتغير قبل الزر مباشرة (أو في أعلى الدالة) ليعالج الرابط */}
-{(() => {
-  const downloadUrl = (assignment?.file_url && assignment.file_url.includes('cloudinary.com') && assignment.file_url.includes('/upload/'))
-    ? assignment.file_url.replace('/upload/', '/upload/fl_attachment/')
-    : assignment?.file_url;
-
-  return (
-{(() => {
-  // 1. السحر: إجبار كلاوديناري على إرسال الملف للتحميل
-  const downloadUrl = (assignment?.file_url && assignment.file_url.includes('cloudinary.com') && assignment.file_url.includes('/upload/'))
-    ? assignment.file_url.replace('/upload/', '/upload/fl_attachment/')
-    : assignment?.file_url;
-
-  const handleDownload = (e: React.MouseEvent) => {
-    e.preventDefault();
-    // 2. إجبار الموبايل على التحميل في نفس الصفحة لتجنب الشاشة البيضاء
-    window.location.href = downloadUrl;
-  };
-
-  return (
-    <button 
-      onClick={handleDownload}
-      className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"
-    >
-      <LinkIcon className="h-5 w-5" /> 
-      <span>تحميل المرفق</span>
-    </button>
-  );
-})()}
-
-
+                    <div className="flex items-center gap-4">
+                      <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-indigo-50">
+                        <FileText className="h-7 w-7 text-indigo-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900">ملف مرفق</h4>
+                        <p className="text-sm text-slate-500">انقر للتحميل</p>
+                      </div>
+                    </div>
+                    {/* 🚀 الزر المصحح والخالي من الأخطاء */}
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const url = assignment?.file_url || '';
+                        const downloadUrl = (url.includes('cloudinary.com') && url.includes('/upload/'))
+                          ? url.replace('/upload/', '/upload/fl_attachment/')
+                          : url;
+                        window.location.href = downloadUrl;
+                      }}
+                      className="w-full sm:w-auto h-12 px-8 rounded-2xl bg-indigo-600 text-sm font-black text-white shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95 border border-indigo-500"
+                    >
+                      <LinkIcon className="h-5 w-5" /> 
+                      <span>تحميل المرفق</span>
+                    </button>
                   </div>
                 )}
               </div>
