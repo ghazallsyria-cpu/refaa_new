@@ -5,7 +5,6 @@ export function useAdminExcuses() {
   const [loading, setLoading] = useState(false);
   const [excuses, setExcuses] = useState<any[]>([]);
 
-  // 1. جلب الأعذار حسب الحالة
   const fetchExcuses = useCallback(async (statusFilter: string = 'pending') => {
     setLoading(true);
     try {
@@ -32,18 +31,19 @@ export function useAdminExcuses() {
     }
   }, []);
 
-  // 2. المحرك السحري المحدث: يستقبل 3 متغيرات (العذر، الآي دي، التواريخ المعتمدة)
-  const approveExcuse = async (excuse: any, adminId: string, verifiedDates: string[]) => {
+  // 🚀 المحرك السحري يستقبل الآن أمر التجاوز (overridePeriods)
+  const approveExcuse = async (excuse: any, adminId: string, verifiedDates: string[], overridePeriods: boolean) => {
     setLoading(true);
     try {
       if (!verifiedDates || verifiedDates.length === 0) {
         throw new Error("لم يتم تحديد تواريخ لاعتمادها.");
       }
 
-      // 🚀 إنشاء رسالة تأكيد آلية تظهر للطالب وتوثق العملية
-      const autoNote = `تم مراجعة الطلب، واعتماد العذر الطبي وتحويل سجل الغياب إلى (مستأذن) للأيام التالية: ${verifiedDates.join(' ، ')}.`;
+      const autoNote = overridePeriods 
+        ? `تم مراجعة الطلب، واعتماد العذر الطبي وتحويل كافة سجلات الغياب إلى (مستأذن) للأيام: ${verifiedDates.join(' ، ')}.`
+        : `تم مراجعة الطلب، واعتماد العذر الطبي للغياب الجزئي (حصص محددة) للأيام: ${verifiedDates.join(' ، ')}.`;
 
-      // أ: تحديث حالة الطلب إلى "مقبول" مع إضافة الملاحظة الآلية
+      // 1. تحديث حالة العذر
       const { error: updateError } = await supabase
         .from('absence_excuses')
         .update({ 
@@ -55,7 +55,7 @@ export function useAdminExcuses() {
 
       if (updateError) throw updateError;
 
-      // ب: البحث والتعديل في سجلات الغياب الأصلية للتواريخ المحددة فقط!
+      // 2. تحديث سجلات الغياب (المنطق الجديد)
       let query = supabase
         .from('attendance_records')
         .update({ status: 'excused' }) 
@@ -63,8 +63,9 @@ export function useAdminExcuses() {
         .in('date', verifiedDates) 
         .eq('status', 'absent'); 
 
-      // ج: إذا كان الغياب جزئياً، نعدل فقط الحصص المحددة
-      if (excuse.duration_type === 'partial_day' && excuse.target_periods && excuse.target_periods.length > 0) {
+      // 🚀 إذا كان الغياب جزئياً والإدارة لم تطلب التجاوز، نلتزم بحصص الطالب
+      // أما إذا طلب التجاوز، سيقوم النظام بتحويل كل غيابات هذه الأيام لمستأذن متجاهلاً خطأ الطالب!
+      if (!overridePeriods && excuse.duration_type === 'partial_day' && excuse.target_periods && excuse.target_periods.length > 0) {
         query = query.in('period', excuse.target_periods);
       }
 
@@ -79,7 +80,6 @@ export function useAdminExcuses() {
     }
   };
 
-  // 3. رفض العذر
   const rejectExcuse = async (excuseId: string, adminNote: string, adminId: string) => {
     setLoading(true);
     try {
