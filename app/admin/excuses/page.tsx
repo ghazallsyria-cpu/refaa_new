@@ -10,7 +10,7 @@ import {
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
   Loader2, Search, Filter, AlertTriangle, CheckSquare,
-  Download, Printer // 🚀 استيراد أيقونات الطباعة والتنزيل
+  Printer
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
@@ -26,6 +26,7 @@ export default function AdminExcusesPage() {
   const [overridePeriods, setOverridePeriods] = useState<boolean>(true);
   const [rejectNote, setRejectNote] = useState('');
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false); // 🚀 حالة تصدير الـ PDF
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -37,96 +38,87 @@ export default function AdminExcusesPage() {
     }
   }, [activeTab, isChecking, fetchExcuses]);
 
-  // 🚀 دالة طباعة تقرير الأعذار المعتمدة للإدارة (PDF)
-  const exportApprovedToPDF = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('يرجى السماح بالنوافذ المنبثقة (Pop-ups) لفتح التقرير.');
-      return;
-    }
-
+  // 🚀 دالة تصدير الـ PDF الموثوقة 100% باستخدام html2pdf.js
+  const exportApprovedToPDF = async () => {
     const approvedExcuses = excuses.filter(e => e.status === 'approved');
 
     if (approvedExcuses.length === 0) {
       alert('لا توجد أعذار معتمدة لتصديرها.');
-      printWindow.close();
       return;
     }
 
-    const tableRows = approvedExcuses.map((exc, index) => {
-      const studentName = Array.isArray(exc.students?.users) ? exc.students.users[0]?.full_name : exc.students?.users?.full_name;
-      const className = Array.isArray(exc.students?.sections?.classes) ? exc.students.sections.classes[0]?.name : exc.students?.sections?.classes?.name;
-      const sectionName = exc.students?.sections?.name;
-      const classFull = `${className?.replace('الصف', '') || ''} - ${sectionName || ''}`;
-      
-      const dates = exc.absent_dates && exc.absent_dates.length > 0 ? exc.absent_dates.join(' ، ') : exc.excuse_date;
-      const duration = exc.duration_type === 'full_day' ? 'يوم كامل' : `استئذان (حصص: ${exc.target_periods?.join(',')})`;
+    setIsExportingPDF(true);
 
-      return `
-        <tr>
-          <td>${index + 1}</td>
-          <td><strong>${studentName || 'مجهول'}</strong></td>
-          <td>${classFull}</td>
-          <td dir="ltr" style="text-align: center;">${dates}</td>
-          <td style="text-align: center;">${duration}</td>
-        </tr>
-      `;
-    }).join('');
+    try {
+      // 1. استيراد المكتبة بشكل ديناميكي (لكي لا تعطل بناء السيرفر SSR في Next.js)
+      const html2pdf = (await import('html2pdf.js')).default;
 
-    const htmlContent = `
-      <html dir="rtl" lang="ar">
-        <head>
-          <title>تقرير تبريرات الغياب المعتمدة</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-            body { font-family: 'Cairo', sans-serif; padding: 40px; color: #1e293b; background: #fff; line-height: 1.6; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-            .header h1 { color: #0f1423; margin: 0 0 10px 0; font-size: 28px; }
-            .header h2 { color: #475569; margin: 0 0 5px 0; font-size: 18px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background-color: #0f1423; color: white; padding: 12px; text-align: right; border: 1px solid #cbd5e1; font-size: 14px;}
-            td { padding: 12px; border: 1px solid #cbd5e1; font-size: 14px; }
-            tr:nth-child(even) { background-color: #f8fafc; }
-            .footer { margin-top: 40px; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px;}
-            @media print {
-              body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              th { background-color: #e2e8f0 !important; color: #000 !important; }
-              table, th, td { border: 1px solid #000; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>📄 تقرير غيابات الطلاب المبررة (المعتمدة)</h1>
-            <h2>مدرسة الرفعة النموذجية - قسم شؤون الطلاب</h2>
-            <p>تاريخ إصدار التقرير: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
+      // 2. بناء هيكل الـ HTML للتقرير
+      const tableRows = approvedExcuses.map((exc, index) => {
+        const studentName = Array.isArray(exc.students?.users) ? exc.students.users[0]?.full_name : exc.students?.users?.full_name;
+        const className = Array.isArray(exc.students?.sections?.classes) ? exc.students.sections.classes[0]?.name : exc.students?.sections?.classes?.name;
+        const sectionName = exc.students?.sections?.name;
+        const classFull = `${className?.replace('الصف', '') || ''} - ${sectionName || ''}`;
+        
+        const dates = exc.absent_dates && exc.absent_dates.length > 0 ? exc.absent_dates.join(' ، ') : exc.excuse_date;
+        const duration = exc.duration_type === 'full_day' ? 'يوم كامل' : `استئذان (حصص: ${exc.target_periods?.join(',')})`;
+
+        return `
+          <tr>
+            <td style="text-align: center;">${index + 1}</td>
+            <td style="font-weight: bold;">${studentName || 'مجهول'}</td>
+            <td>${classFull}</td>
+            <td dir="ltr" style="text-align: center;">${dates}</td>
+            <td style="text-align: center;">${duration}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const element = document.createElement('div');
+      element.innerHTML = `
+        <div style="font-family: Arial, sans-serif; padding: 30px; color: #000; direction: rtl; text-align: right;">
+          <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
+            <h2 style="margin: 5px 0; color: #111;">مدرسة الرفعة النموذجية</h2>
+            <h3 style="margin: 5px 0; color: #333;">تقرير الأعذار الطبية المعتمدة (تبرير الغياب)</h3>
+            <p style="font-size: 14px; color: #555;">تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
           </div>
-          <table>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
             <thead>
-              <tr>
-                <th width="5%">#</th>
-                <th width="30%">اسم الطالب</th>
-                <th width="20%">الصف والشعبة</th>
-                <th width="30%" style="text-align: center;">أيام الغياب المبررة</th>
-                <th width="15%" style="text-align: center;">نوع الدوام</th>
+              <tr style="background-color: #f0f0f0;">
+                <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="5%">#</th>
+                <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="30%">اسم الطالب</th>
+                <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="20%">الصف والشعبة</th>
+                <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="30%">أيام الغياب المبررة</th>
+                <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="15%">الدوام</th>
               </tr>
             </thead>
             <tbody>
               ${tableRows}
             </tbody>
           </table>
-          <div class="footer">
-            تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.
+          <div style="margin-top: 40px; font-size: 12px; text-align: center; border-top: 1px solid #000; padding-top: 10px; color: #555;">
+            <p>تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.</p>
           </div>
-          <script>
-            window.onload = () => { setTimeout(() => window.print(), 800); }
-          </script>
-        </body>
-      </html>
-    `;
+        </div>
+      `;
 
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+      // 3. إعدادات التصدير وتوليد الملف
+      const opt = {
+        margin:       0.5,
+        filename:     `تقرير_الأعذار_المعتمدة_${format(new Date(), 'yyyy-MM-dd')}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().from(element).set(opt).save();
+
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. تأكد من اتصالك بالإنترنت.');
+    } finally {
+      setIsExportingPDF(false);
+    }
   };
 
   const openExcuseModal = (excuse: any) => {
@@ -290,15 +282,17 @@ export default function AdminExcusesPage() {
             </div>
             
             <div className="flex flex-col items-center xl:items-end gap-4 w-full xl:w-auto">
-              {/* 🚀 زر الطباعة والتصدير يظهر فقط في التبويب المعتمد */}
+              {/* 🚀 زر الطباعة المباشرة الذي يعمل على الموبايل 100% */}
               <AnimatePresence>
                 {activeTab === 'approved' && (
                   <motion.button 
                     initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                     onClick={exportApprovedToPDF} 
-                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 w-full sm:w-auto"
+                    disabled={isExportingPDF}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 w-full sm:w-auto disabled:opacity-50"
                   >
-                    <Printer className="w-4 h-4" /> تصدير تقرير للإدارة المدرسية (PDF)
+                    {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />} 
+                    {isExportingPDF ? 'جاري تجهيز التقرير...' : 'تصدير تقرير للإدارة المدرسية (PDF)'}
                   </motion.button>
                 )}
               </AnimatePresence>
