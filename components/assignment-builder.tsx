@@ -27,7 +27,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     };
 
     if (type === 'comparison') {
-      // تعديل هام: بناء مصفوفة خيارات مقارنة تتوافق مع نظام Objects
       newQuestion.options = [
         { id: crypto.randomUUID(), content: 'الطرف الأول' },
         { id: crypto.randomUUID(), content: 'الطرف الثاني' },
@@ -73,7 +72,6 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
     const question = questions.find(q => q.id === questionId);
     if (question && question.options) {
       const options = [...question.options];
-      // التوافق العكسي: إذا كان الخيار نصاً اجعله كائناً
       if (typeof options[index] === 'string') {
         options[index] = { id: crypto.randomUUID(), content: value };
       } else {
@@ -234,6 +232,8 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                           <option value="multiple_choice">خيارات متعددة</option>
                           <option value="data_table">جدول بيانات ديناميكي</option>
                           <option value="comparison">مقارنة ثنائية</option>
+                          {/* 🚀 الإضافة الجديدة لمعلمي المشاريع 🚀 */}
+                          <option value="project_submission">مشروع علمي / تقرير 🌟</option>
                         </select>
                       </div>
                     </div>
@@ -356,8 +356,7 @@ export default function AssignmentBuilder({ questions, onChange }: AssignmentBui
                     <div className="flex items-center gap-4 bg-[#090b14]/50 px-4 py-3 rounded-xl border border-white/5 shadow-inner">
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] font-black text-slate-400 uppercase">النقاط:</span>
-<input type="number" step="any" min="0" className="w-16 rounded-xl border border-white/10 py-1.5 px-2 text-white bg-[#0f1423] outline-none text-xs font-black text-center shadow-inner" value={question.points} onChange={(e) => updateQuestion(question.id, { points: parseFloat(e.target.value) || 0 })} />
-
+                        <input type="number" step="any" min="0" className="w-16 rounded-xl border border-white/10 py-1.5 px-2 text-white bg-[#0f1423] outline-none text-xs font-black text-center shadow-inner" value={question.points} onChange={(e) => updateQuestion(question.id, { points: parseFloat(e.target.value) || 0 })} />
                       </div>
                     </div>
                   ) : <div></div>}
