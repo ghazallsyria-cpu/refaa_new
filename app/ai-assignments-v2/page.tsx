@@ -4,6 +4,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { 
   FileText, CheckCircle2, AlertCircle, Sparkles, 
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
@@ -15,6 +16,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// 🚀 استيراد المحرر البصري (WYSIWYG) بشكل ديناميكي لمنع أخطاء السيرفر
+const ReactQuill = dynamic(() => import('react-quill'), { 
+  ssr: false, 
+  loading: () => <div className="p-10 text-center text-slate-400 font-bold animate-pulse">جاري تحميل المحرر الاحترافي...</div> 
+});
+import 'react-quill/dist/quill.snow.css'; // تنسيقات المحرر
 
 // 🚀 استيراد مكتبة Tiptap العملاقة
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -29,7 +37,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 
-// استيراد مكتبة الرياضيات لعرض المعاينة
+// استيراد مكتبة الرياضيات لعرض المعاينة للخيارات
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -50,7 +58,7 @@ const cleanMathLatex = (text: string) => {
 };
 
 // ==========================================
-// 🚀 مكون محرر Tiptap المخصص (المحدث لدعم لصق الصور)
+// 🚀 مكون محرر Tiptap المخصص
 // ==========================================
 const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html: string) => void }) => {
   const editor = useEditor({
@@ -58,7 +66,7 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
       StarterKit,
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }),
-      Image.configure({ inline: true, allowBase64: true }), // 🚀 السماح للصور بالتحول لكود
+      Image.configure({ inline: true, allowBase64: true }), 
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -75,11 +83,9 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
         class: 'prose prose-slate max-w-none focus:outline-none min-h-[180px] p-4 text-slate-800 font-bold leading-loose',
         dir: 'rtl'
       },
-      // 🚀 التقاط الصور المنسوخة (Paste) وتحويلها فوراً للمحرر
       handlePaste: (view, event) => {
         const items = Array.from(event.clipboardData?.items || []);
         let imagePasted = false;
-
         items.forEach(item => {
           if (item.type.indexOf('image') === 0) {
             imagePasted = true;
@@ -96,11 +102,8 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
             }
           }
         });
-
-        // إذا كانت صورة مقصوصة فقط، نمنع الحدث الافتراضي لتجنب الأخطاء
         return imagePasted;
       },
-      // 🚀 التقاط الصور المسحوبة (Drag and Drop)
       handleDrop: (view, event, slice, moved) => {
         if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
           const file = event.dataTransfer.files[0];
@@ -132,7 +135,6 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner flex flex-col">
-      {/* شريط الأدوات */}
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap gap-1 items-center">
         <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Bold className="w-4 h-4"/></button>
         <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Italic className="w-4 h-4"/></button>
@@ -144,13 +146,23 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
         <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><List className="w-4 h-4"/></button>
         <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><ListOrdered className="w-4 h-4"/></button>
+        <div className="w-px h-5 bg-slate-300 mx-1"></div>
+        <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-2 rounded-lg text-slate-600 hover:bg-slate-200" title="إدراج جدول"><TableIcon className="w-4 h-4"/></button>
       </div>
 
-      {/* منطقة الكتابة واللصق */}
+      <div className="bg-indigo-50 border-b border-indigo-100 p-2 flex flex-wrap gap-2 items-center overflow-x-auto hide-scrollbar">
+        <span className="text-xs font-black text-indigo-700 ml-1">رياضيات:</span>
+        <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
+        <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
+        <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
+        <button onClick={() => insertMath('$\\sqrt{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">جذر</button>
+        <button onClick={() => insertMath('$\\begin{array}{c} A \\\\ | \\\\ B - C \\\\ | \\\\ D \\end{array}$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm flex items-center gap-1"><FlaskConical className="w-3 h-3"/> كيمياء</button>
+      </div>
+
       <div className="flex-1 bg-white relative">
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">
-            اكتب السؤال هنا، أو اضغط (لصق) لنسخ المحتوى...
+            اكتب السؤال هنا، أو اضغط (لصق) لنسخ المحتوى من Word (جداول، صور، ألوان)...
           </div>
         )}
         <EditorContent editor={editor} />
@@ -339,7 +351,7 @@ export default function AssignmentBuilderV2() {
   };
 
   const translateType = (t: string) => {
-    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / رفع ملف', 'section_header': 'ترويسة/نص عام' };
+    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
     return types[t] || t;
   };
 
@@ -356,7 +368,7 @@ export default function AssignmentBuilderV2() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         
         .ProseMirror table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 15px 0; overflow: hidden; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .ProseMirror td, .ProseMirror th { border: 1px solid #cbd5e1; padding: 8px; min-width: 1em; text-align: center; }
+        .ProseMirror td, .ProseMirror th { border: 1px solid #cbd5e1; padding: 12px; min-width: 1em; text-align: center; }
         .ProseMirror th { background-color: #f8fafc; font-weight: bold; }
         .ProseMirror img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin: 10px auto; display: block; }
         .ProseMirror p { margin-bottom: 0.5em; }
@@ -443,10 +455,8 @@ export default function AssignmentBuilderV2() {
                       </div>
                     </div>
                     
-                    {/* عرض المحتوى مع دعم Tiptap HTML */}
-                    <div className="ProseMirror prose-slate font-bold text-slate-800 leading-loose">
-                      <div dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
-                    </div>
+                    {/* 🚀 عرض المحتوى بأمان مع الاحتفاظ بتنسيقات Tiptap */}
+                    <div className="ProseMirror prose-slate font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
                     
                     {q.options && q.options.length > 0 && (
                       <div className="mt-5 space-y-2">
@@ -481,7 +491,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 نافذة المحرر البصري Tiptap (Word-Style) */}
+      {/* 🚀 نافذة المحرر البصري Tiptap */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -500,7 +510,7 @@ export default function AssignmentBuilderV2() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">نوع الإدراج</label>
                     <select value={currentQ.type} onChange={(e) => setCurrentQ({...currentQ, type: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-700 outline-none shadow-sm">
-                      <option value="essay">سؤال مقالي (نص مفتوح)</option>
+                      <option value="essay">سؤال مقالي (نص وتفاعل)</option>
                       <option value="multiple_choice">سؤال اختياري</option>
                       <option value="true_false">صح / خطأ</option>
                       <option value="section_header">ترويسة عريضة (عنوان)</option>
@@ -521,11 +531,10 @@ export default function AssignmentBuilderV2() {
                   />
                 </div>
 
-                {/* 🚀 المعاينة الحية للرياضيات من داخل Tiptap */}
-                <div className="bg-slate-800 rounded-2xl p-5 text-white shadow-inner">
-                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-700 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> معاينة فورية:</div>
-                  <div className="font-bold text-sm leading-loose">
-                    <div className="katex-container"><Latex>{cleanMathLatex(currentQ.content_html) || '...'}</Latex></div>
+                {/* 🚀 المعاينة الحية للرياضيات (بدون تدمير الجداول) */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-inner">
+                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> المعاينة النهائية للشكل:</div>
+                  <div className="ProseMirror prose-slate font-bold text-sm leading-loose text-slate-800" dangerouslySetInnerHTML={{ __html: currentQ.content_html || '...' }}>
                   </div>
                 </div>
 
