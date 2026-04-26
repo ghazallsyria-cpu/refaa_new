@@ -10,7 +10,7 @@ import {
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
   Loader2, Search, Filter, AlertTriangle, CheckSquare,
-  Printer 
+  Printer
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
@@ -38,7 +38,7 @@ export default function AdminExcusesPage() {
     }
   }, [activeTab, isChecking, fetchExcuses]);
 
-  // 🚀 دالة تصدير الـ PDF المحسنة (لا تتعطل أبداً على الجوال أو الكمبيوتر)
+  // 🚀 دالة التصدير المعزولة الجبارة لتفادي خطأ (oklab) في Tailwind v4
   const exportApprovedToPDF = async () => {
     const approvedExcuses = excuses.filter(e => e.status === 'approved');
 
@@ -50,12 +50,10 @@ export default function AdminExcusesPage() {
     setIsExportingPDF(true);
 
     try {
-      // 1. الاستدعاء الآمن للمكتبات
       const html2canvasModule = await import('html2canvas');
       const html2canvas = html2canvasModule.default || html2canvasModule;
       const { jsPDF } = await import('jspdf');
 
-      // 2. بناء هيكل الـ HTML
       const tableRows = approvedExcuses.map((exc, index) => {
         const studentName = Array.isArray(exc.students?.users) ? exc.students.users[0]?.full_name : exc.students?.users?.full_name;
         const className = Array.isArray(exc.students?.sections?.classes) ? exc.students.sections.classes[0]?.name : exc.students?.sections?.classes?.name;
@@ -67,70 +65,91 @@ export default function AdminExcusesPage() {
 
         return `
           <tr>
-            <td style="border: 1px solid #000; padding: 12px; text-align: center;">${index + 1}</td>
-            <td style="border: 1px solid #000; padding: 12px; font-weight: bold; text-align: right;">${studentName || 'مجهول'}</td>
-            <td style="border: 1px solid #000; padding: 12px; text-align: right;">${classFull}</td>
-            <td dir="ltr" style="border: 1px solid #000; padding: 12px; text-align: center;">${dates}</td>
-            <td style="border: 1px solid #000; padding: 12px; text-align: center;">${duration}</td>
+            <td style="border: 1px solid #000000; padding: 12px; text-align: center;">${index + 1}</td>
+            <td style="border: 1px solid #000000; padding: 12px; font-weight: bold; text-align: right;">${studentName || 'مجهول'}</td>
+            <td style="border: 1px solid #000000; padding: 12px; text-align: right;">${classFull}</td>
+            <td dir="ltr" style="border: 1px solid #000000; padding: 12px; text-align: center;">${dates}</td>
+            <td style="border: 1px solid #000000; padding: 12px; text-align: center;">${duration}</td>
           </tr>
         `;
       }).join('');
 
-      // 3. إنشاء العنصر داخل الشاشة ولكن مخفي خلف الواجهة
-      const element = document.createElement('div');
-      
-      // 🚀 الحل السحري للموبايل: العنصر داخل الشاشة (top: 0) ولكن خلف العناصر (z-index: -9999)
-      Object.assign(element.style, {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '800px',
-        padding: '40px',
-        backgroundColor: '#ffffff',
-        direction: 'rtl',
-        fontFamily: 'Arial, sans-serif',
-        color: '#000000',
-        zIndex: '-9999'
-      });
+      // 🚀 بناء غرفة العزل (Iframe) بعيداً عن ألوان Tailwind المسببة للانهيار
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.top = '-10000px';
+      iframe.style.width = '800px';
+      iframe.style.height = '1200px';
+      document.body.appendChild(iframe);
 
-      element.innerHTML = `
-        <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
-          <h2 style="margin: 5px 0; color: #111;">مدرسة الرفعة النموذجية</h2>
-          <h3 style="margin: 5px 0; color: #333;">تقرير الأعذار الطبية المعتمدة (تبرير الغياب)</h3>
-          <p style="font-size: 14px; color: #555;">تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
-        </div>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-          <thead>
-            <tr style="background-color: #f0f0f0;">
-              <th style="border: 1px solid #000; padding: 12px; text-align: center;" width="5%">#</th>
-              <th style="border: 1px solid #000; padding: 12px; text-align: right;" width="30%">اسم الطالب</th>
-              <th style="border: 1px solid #000; padding: 12px; text-align: right;" width="20%">الصف والشعبة</th>
-              <th style="border: 1px solid #000; padding: 12px; text-align: center;" width="30%">أيام الغياب المبررة</th>
-              <th style="border: 1px solid #000; padding: 12px; text-align: center;" width="15%">الدوام</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-        <div style="margin-top: 40px; font-size: 12px; text-align: center; border-top: 1px solid #000; padding-top: 10px; color: #555;">
-          <p>تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.</p>
-        </div>
-      `;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) throw new Error('Failed to isolate document');
 
-      document.body.appendChild(element);
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+          <head>
+            <meta charset="utf-8">
+            <style>
+              /* CSS خام وألوان كلاسيكية لكي لا تنهار مكتبة html2canvas */
+              body { font-family: Arial, sans-serif; padding: 40px; color: #000000; background-color: #ffffff; margin: 0; }
+              .header { text-align: center; border-bottom: 2px solid #000000; padding-bottom: 10px; margin-bottom: 20px; }
+              .header h2 { margin: 5px 0; color: #111111; }
+              .header h3 { margin: 5px 0; color: #333333; }
+              .header p { font-size: 14px; color: #555555; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #000000; padding: 12px; text-align: center; }
+              th { background-color: #f0f0f0; font-weight: bold; }
+              .footer { margin-top: 40px; font-size: 12px; text-align: center; border-top: 1px solid #000000; padding-top: 10px; color: #555555; }
+            </style>
+          </head>
+          <body>
+            <div id="pdf-target">
+              <div class="header">
+                <h2>مدرسة الرفعة النموذجية</h2>
+                <h3>تقرير الأعذار الطبية المعتمدة (تبرير الغياب)</h3>
+                <p>تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th width="5%">#</th>
+                    <th width="30%">اسم الطالب</th>
+                    <th width="20%">الصف والشعبة</th>
+                    <th width="30%">أيام الغياب المبررة</th>
+                    <th width="15%">الدوام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tableRows}
+                </tbody>
+              </table>
+              <div class="footer">
+                <p>تم استخراج هذا التقرير آلياً من النظام الإلكتروني لإدارة شؤون الطلاب.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+      doc.close();
 
-      // 4. مهلة لضمان بناء المتصفح للعنصر
+      // مهلة صغيرة للسماح للمتصفح برسم العنصر
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 5. تصوير العنصر وتحويله لـ PDF
-      const canvas = await html2canvas(element, { 
+      const targetElement = doc.getElementById('pdf-target');
+      if (!targetElement) throw new Error('Target element not found');
+
+      // التقاط الصورة داخل بيئة الـ iframe الآمنة
+      const canvas = await html2canvas(targetElement, { 
         scale: 2, 
         useCORS: true,
-        backgroundColor: '#ffffff' 
+        backgroundColor: '#ffffff',
+        window: iframe.contentWindow as Window,
+        logging: false
       });
       
-      const imgData = canvas.toDataURL('image/jpeg', 0.98); // استخدام Jpeg لضمان الحجم الجيد والألوان
+      const imgData = canvas.toDataURL('image/jpeg', 0.98); 
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -139,12 +158,12 @@ export default function AdminExcusesPage() {
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`تقرير_الأعذار_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 
-      // 6. تنظيف الذاكرة
-      document.body.removeChild(element);
+      // تدمير غرفة العزل بعد الانتهاء
+      document.body.removeChild(iframe);
 
     } catch (err: any) {
-      console.error('PDF Generation Error:', err);
-      alert('عذراً، حدث خطأ أثناء التصدير: ' + (err.message || 'تأكد من اتصالك بالإنترنت.'));
+      console.error('PDF Export Error:', err);
+      alert('حدث خطأ أثناء التصدير: ' + (err.message || 'تأكد من اتصالك بالإنترنت.'));
     } finally {
       setIsExportingPDF(false);
     }
