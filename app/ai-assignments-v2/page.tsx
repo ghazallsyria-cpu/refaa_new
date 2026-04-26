@@ -4,7 +4,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { 
   FileText, CheckCircle2, AlertCircle, Sparkles, 
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
@@ -16,13 +15,6 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// 🚀 استيراد المحرر البصري (WYSIWYG) بشكل ديناميكي لمنع أخطاء السيرفر
-const ReactQuill = dynamic(() => import('react-quill'), { 
-  ssr: false, 
-  loading: () => <div className="p-10 text-center text-slate-400 font-bold animate-pulse">جاري تحميل المحرر الاحترافي...</div> 
-});
-import 'react-quill/dist/quill.snow.css'; // تنسيقات المحرر
 
 // 🚀 استيراد مكتبة Tiptap العملاقة
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -491,7 +483,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 نافذة المحرر البصري Tiptap */}
+      {/* 🚀 نافذة المحرر البصري Tiptap (Word-Style) */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -510,7 +502,7 @@ export default function AssignmentBuilderV2() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">نوع الإدراج</label>
                     <select value={currentQ.type} onChange={(e) => setCurrentQ({...currentQ, type: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-700 outline-none shadow-sm">
-                      <option value="essay">سؤال مقالي (نص وتفاعل)</option>
+                      <option value="essay">سؤال مقالي (نص مفتوح)</option>
                       <option value="multiple_choice">سؤال اختياري</option>
                       <option value="true_false">صح / خطأ</option>
                       <option value="section_header">ترويسة عريضة (عنوان)</option>
@@ -531,10 +523,11 @@ export default function AssignmentBuilderV2() {
                   />
                 </div>
 
-                {/* 🚀 المعاينة الحية للرياضيات (بدون تدمير الجداول) */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-inner">
-                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> المعاينة النهائية للشكل:</div>
-                  <div className="ProseMirror prose-slate font-bold text-sm leading-loose text-slate-800" dangerouslySetInnerHTML={{ __html: currentQ.content_html || '...' }}>
+                {/* 🚀 المعاينة الحية للرياضيات من داخل Tiptap */}
+                <div className="bg-slate-800 rounded-2xl p-5 text-white shadow-inner">
+                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-700 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> معاينة فورية:</div>
+                  <div className="font-bold text-sm leading-loose">
+                    <div className="katex-container"><Latex>{cleanMathLatex(currentQ.content_html) || '...'}</Latex></div>
                   </div>
                 </div>
 
