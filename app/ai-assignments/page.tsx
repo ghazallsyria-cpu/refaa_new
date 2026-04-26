@@ -4,7 +4,6 @@
 import React, { useState, useEffect } from 'react';
 import { UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, Image as ImageIcon, ChevronDown, ChevronUp, Copy, List, CheckSquare, AlignLeft, TerminalSquare, Key, Save, UserCheck, FileJson, ClipboardPaste, Type, FileUp, ShieldCheck, Columns } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAssignmentsSystem } from '@/hooks/useAssignmentsSystem';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 
@@ -37,10 +36,12 @@ interface Section { id: string; name: string; }
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
-    // 1. تحويل الشرطات المزدوجة المعطوبة إلى شرطة واحدة سليمة للأوامر (مثال: \\frac تصبح \frac)
     .replace(/\\\\([a-zA-Z])/g, '\\$1')
-    // 2. توحيد علامات الدولار لمنع كسر الأسطر العشوائي
-    .replace(/\$\$/g, '$');
+    .replace(/\$\$/g, '$')
+    // 🚀 الفلتر السحري لمنع انقلاب الأقواس: يستخرج الأقواس من داخل علامة الدولار ويضعها بالخارج
+    .replace(/\$\s*\((.*?)\)\s*\$/g, '( $$1$ )')
+    .replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )')
+    .replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )( $$3$ )');
 };
 
 export default function AIAssignmentsSandbox() {
@@ -164,48 +165,32 @@ export default function AIAssignmentsSandbox() {
     setSelectedSections(prev => prev.includes(sectionId) ? prev.filter(id => id !== sectionId) : [...prev, sectionId]);
   };
 
-  // 🚀 البرومبت المحدث بقواعد الجداول الديناميكية والكيمياء العضوية
+  // 🚀 البرومبت المحدث بقواعد الرياضيات العربية
   const basePromptText = String.raw`أنت خبير تعليمي ومطور برمجيات. قم بتحليل المحتوى واستخراج الأسئلة بصيغة JSON حصراً.
 
-🛑 1. هيكلية الأسئلة (مهم جداً):
-إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "اقرأ المسألة التالية:"، أو "بناءً على الشكل:").
-ضعه كعنصر مستقل في المصفوفة نوعه "section_header"، ثم الأسئلة تحته.
+🛑 1. قواعد الرياضيات العربية (حرج جداً لمنع تشوه الأقواس):
+- يُمنع منعاً باتاً وضع الأقواس العادية () أو علامات + و - داخل علامات الدولار $ إذا كانت بجوار نصوص عربية.
+- افصل كل حد رياضي داخل دولار $ لوحده وضع الأقواس خارجه.
+- ✔️ صحيح (أقواس في الخارج): ( $س^٢$ + $٢$ ) - $٢٥$ ( $س$ + $٢$ )
+- ❌ خطأ (تُشوه النص): $(س^٢ + ٢) - ٢٥(س + ٢)$
+- ✔️ صحيح للتحليل: ( $س$ - $٢$ )( $س$ - $٥$ )
+- ❌ خطأ للتحليل: $(س - ٢)(س - ٥)$
 
-🛑 2. قواعد الرياضيات والفيزياء (LaTeX):
-- اكتب أوامر LaTeX مع وضع شرطة مائلة إضافية للهروب البرمجي (Escaping) الخاص بـ JSON.
-  ✔️ صحيح في الـ JSON: "\\frac{\\mu_0 I}{2 \\pi d}"
-- أي معادلة أو رقم ضعه داخل علامة دولار مفردة $ فقط.
-
-🛑 3. التعامل الصارم مع الجداول، الأسطر، والفراغات (حرج جداً):
-- **الأسطر الجديدة:** ❌ يُمنع منعاً باتاً استخدام "\n" أو "\\n" للنزول لسطر جديد. ✔️ يجب استخدام الوسم <br/> حصراً لأي سطر جديد داخل الـ content.
+🛑 2. التعامل الصارم مع الجداول، الأسطر، والفراغات:
+- **الأسطر الجديدة:** يجب استخدام الوسم <br/> حصراً لأي سطر جديد داخل الـ content.
 - **الفراغات:** عبر عن أي فراغ بـ 5 نقاط متتالية (.....).
-- **الجداول العادية:** ❌ يُمنع إخراج أي جدول بصيغة HTML أو Markdown داخل الـ content. ✔️ يجب أن يكون نوع السؤال "data_table" وتستخدم خاصية "table" (التفاصيل في النقطة 5).
+- **الجداول:** يجب أن يكون نوع السؤال "data_table" وتستخدم خاصية "table" كما في النقطة 4.
 
-🛑 4. الكيمياء العضوية والصيغ البنائية المتفرعة (الروابط العلوية والسفلية):
-- ❌ يُمنع محاولة رسم الروابط الكيميائية العمودية بالمسافات العادية.
-- ✔️ لرسم الروابط الكيميائية المتفرعة للأعلى والأسفل تماماً كما في الورقة، **يجب استخدام بيئة المصفوفة \begin{array}{c}** داخل أوامر LaTeX.
-- 💡 **مثال إجباري لمركب بتفرع علوي وسفلي (مثل الكحول الثالثي):**
-  "$\\begin{array}{c} CH_3 \\\\ | \\\\ C_2H_5 - C - OH \\\\ | \\\\ CH_3 \\end{array}$"
+🛑 3. هيكلية الأسئلة (مهم جداً):
+إذا كان هناك أمر عام يتبعه عدة أسئلة (مثل: "اقرأ المسألة التالية:"، أو "بناءً على الشكل:").
+ضعه كعنصر مستقل في المصفوفة نوعه "section_header".
 
-🛑 5. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
+🛑 4. أنواع الأسئلة (استخدم هذه المفاتيح حرفياً):
 - "multiple_choice": اختيار من متعدد.
 - "true_false": صح أو خطأ.
 - "essay": سؤال مقالي أو مسألة رياضية عادية.
 - "file": يتطلب رفع صورة/ملف.
-- "comparison": سؤال مقارنة (جدول). يجب أن تحتوي مصفوفة الـ options حصراً على: [اسم الطرف الأول، اسم الطرف الثاني، وجه المقارنة 1، وجه المقارنة 2، ...].
-- "data_table": سؤال الجداول (أسئلة إكمال البيانات في الجداول). 🛑 يجب إضافة كائن "table" داخل السؤال يحتوي على "headers" و "rows".
-  💡 **مثال على إخراج سؤال جدول:**
-  {
-    "type": "data_table",
-    "content": "أكمل الجدول التالي:",
-    "table": {
-      "headers": ["العناصر", "C", "H", "Cl"],
-      "rows": [
-        ["الكتل بالجرام", "0.24", "0.04", "1.42"],
-        ["كتلة المول M.wt", "12", "1", "35.5"]
-      ]
-    }
-  }
+- "data_table": سؤال الجداول. 🛑 يجب إضافة كائن "table" داخل السؤال يحتوي على "headers" و "rows".
 
 أخرج الناتج ككود JSON فقط بهذا الهيكل:
 {
@@ -218,7 +203,7 @@ export default function AIAssignmentsSandbox() {
   const copyPrompt = () => { 
     let finalPrompt = basePromptText;
     if (inputType === 'pdf' && pdfMode === 'range') {
-      finalPrompt = `[توجيه صارم للذكاء الاصطناعي: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق. يمنع منعاً باتاً استخراج أي شيء خارج هذا النطاق.]\n\n` + basePromptText;
+      finalPrompt = `[توجيه صارم للذكاء الاصطناعي: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق.]\n\n` + basePromptText;
     }
     navigator.clipboard.writeText(finalPrompt); 
     alert('تم نسخ أمر التوليد المخصص بنجاح! يمكنك الآن لصقه في حسابك الخارجي.'); 
@@ -328,7 +313,6 @@ export default function AIAssignmentsSandbox() {
         options: parsedOptions
       };
 
-      // تمرير كائن الجدول إذا كان من نوع data_table
       if (qType === 'data_table' && q.table) {
         questionObj.table = q.table;
       }
@@ -348,7 +332,7 @@ export default function AIAssignmentsSandbox() {
     try {
       let finalPrompt = basePromptText;
       if (inputType === 'pdf' && pdfMode === 'range') {
-        finalPrompt = `[توجيه صارم للذكاء الاصطناعي: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق. يمنع منعاً باتاً استخراج أي شيء خارج هذا النطاق.]\n\n` + basePromptText;
+        finalPrompt = `[توجيه صارم للذكاء الاصطناعي: قم بقراءة واستخراج الأسئلة حصراً من الصفحة رقم ${pageFrom} إلى الصفحة رقم ${pageTo} من ملف الـ PDF المرفق.]\n\n` + basePromptText;
       }
 
       let payloadParts: any[] = [{ text: finalPrompt }];
@@ -391,9 +375,7 @@ export default function AIAssignmentsSandbox() {
     try {
       const safeJsonStr = cleanRawJson(manualJson);
       const parsedData = JSON.parse(safeJsonStr);
-      
       const normalizedQuestions = parseAndNormalizeQuestions(parsedData);
-
       setResult({ title: parsedData.title || 'واجب بدون عنوان', questions: normalizedQuestions });
       setManualJson(''); 
       alert('تمت معالجة الكود بذكاء وتصحيح الهيكلية بنجاح! 🚀');
@@ -416,7 +398,6 @@ export default function AIAssignmentsSandbox() {
            finalOptions = finalOptions.map((opt: any) => ({ id: crypto.randomUUID(), content: String(opt), is_correct: false }));
         }
 
-        // 🚀 حفظ كائن الـ Table مباشرة داخل الخيارات إذا كان السؤال data_table
         if (q.type === 'data_table' && q.table) {
           finalOptions = [{ id: crypto.randomUUID(), content: JSON.stringify(q.table), is_correct: false }];
         }
@@ -477,6 +458,7 @@ export default function AIAssignmentsSandbox() {
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8 font-cairo text-slate-800 relative overflow-hidden" dir="rtl">
       
+      {/* 🚀 إصلاح الـ CSS الجذري لضمان اتجاه الرياضيات العربية */}
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 12px; }
@@ -484,8 +466,8 @@ export default function AIAssignmentsSandbox() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
         .katex-container {
-          direction: ltr !important;
-          unicode-bidi: isolate !important;
+          direction: rtl !important;
+          unicode-bidi: embed !important;
           display: inline-block;
           max-width: 100%;
           overflow-wrap: break-word;
@@ -493,8 +475,8 @@ export default function AIAssignmentsSandbox() {
         }
         
         .katex { 
-          direction: ltr !important; 
-          text-align: left !important;
+          direction: rtl !important; 
+          text-align: right !important;
         }
         
         .katex-display { 
@@ -504,6 +486,7 @@ export default function AIAssignmentsSandbox() {
           width: 100% !important;
           overflow-x: auto;
           overflow-y: hidden;
+          direction: rtl !important;
         }
       `}} />
 
