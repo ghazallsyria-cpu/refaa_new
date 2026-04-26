@@ -16,7 +16,6 @@ import { useAuth } from '@/context/auth-context';
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// استيراد Tiptap
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -29,6 +28,8 @@ import TableHeader from '@tiptap/extension-table-header';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 
+// 🚀 استيراد مكتبة Katex الأصلية للرندر المباشر داخل HTML
+import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -39,6 +40,20 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 interface Option { id: string; content: string; is_correct: boolean; }
 interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; }
 
+// 🚀 الدالة السحرية لتحويل المعادلات داخل الـ HTML المنسق
+const renderHTMLWithMath = (html: string) => {
+  if (!html) return '';
+  let parsed = html.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
+    try { return katex.renderToString(math, { displayMode: true, throwOnError: false, direction: 'rtl' }); }
+    catch (e) { return match; }
+  });
+  parsed = parsed.replace(/\$(.*?)\$/gs, (match, math) => {
+    try { return katex.renderToString(math, { displayMode: false, throwOnError: false, direction: 'rtl' }); }
+    catch (e) { return match; }
+  });
+  return parsed;
+};
+
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
   return text
@@ -48,9 +63,6 @@ const cleanMathLatex = (text: string) => {
     .replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )');
 };
 
-// ==========================================
-// مكون محرر Tiptap
-// ==========================================
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const editor = useEditor({
     extensions: [
@@ -108,6 +120,8 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
         <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
         <button onClick={() => insertMath('$\\sqrt{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">جذر</button>
+        <button onClick={() => insertMath('$\\mu_o$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\mu_o$</button>
+        <button onClick={() => insertMath('$\\pi$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\pi$</button>
       </div>
       <div className="flex-1 bg-white relative">
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
@@ -119,9 +133,6 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
   );
 };
 
-// ==========================================
-// الصفحة الرئيسية
-// ==========================================
 export default function AssignmentBuilderV2() {
   const router = useRouter();
   const { user, authRole, userRole } = useAuth() as any;
@@ -188,20 +199,20 @@ export default function AssignmentBuilderV2() {
 
   const toggleSection = (id: string) => setSelectedSections(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
-  // 🚀 البرومبت المتقدم لمطابقة الأسئلة والأجوبة
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي ومبرمج قوالب. سأعطيك نصاً يحتوي على "أسئلة" ونصاً آخر يحتوي على "إجابات".
-مهمتك هي مطابقة كل سؤال مع إجابته النموذجية، واستخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
+استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
 
-القواعد الصارمة جداً للرياضيات والفيزياء (KaTeX Compatibility):
+قواعد صارمة جداً:
 1. الأسئلة العامة أو العناوين اجعل نوعها "section_header".
 2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options".
-3. الأسئلة المقالية أو المسائل اجعل نوعها "essay".
-4. الأهم: ضع الإجابة النموذجية أو خطوات الحل المطابقة للسؤال داخل حقل "model_answer_html".
-5. قواعد علامة الدولار ($): ضع المعادلات والأرقام فقط داخل علامة دولار مفردة **بدون أي مسافات** بين العلامة والرقم/الرمز. (مثال صحيح: $x^2$ أو $0.001\pi$ | مثال خاطئ: $ x^2 $ أو $ 0.001 \pi $).
-6. الوحدات والنصوص: اكتب الوحدات الفيزيائية (مثل m, A, T, cm) والنصوص العربية **خارج** علامات الدولار دائماً.
-7. الهروب البرمجي (Escaping): يُمنع منعاً باتاً وضع شرطة مائلة (\) قبل الأرقام العادية. استخدمها فقط لأوامر LaTeX الصحيحة. يجب وضع شرطتين مائلتين للأوامر ليتم قراءتها كـ JSON صحيح (مثال: \\frac{1}{2} و \\pi).
-8. يجب أن يكون الناتج كود JSON صالحاً فقط (بدون أي نصوص تمهيدية).
+3. ضع الإجابة النموذجية أو خطوات الحل المطابقة للسؤال داخل حقل "model_answer_html".
+4. للرياضيات والفيزياء: يجب أن تستخدم أوامر LaTeX الصحيحة تماماً داخل علامتي دولار. 
+   - استخدم $\pi$ للباي (وليس pi).
+   - استخدم $\times$ للضرب.
+   - استخدم الكسور $\frac{A}{B}$.
+   - مثال للكسور والرموز: $ B = \frac{\mu_o I N}{2r} $
+5. يجب أن يكون الناتج JSON صالحاً فقط.
 
 هيكل JSON المطلوب:
 {
@@ -217,10 +228,9 @@ export default function AssignmentBuilderV2() {
   ]
 }
 
-إليك الأسئلة والإجابات، قم بالمطابقة الآن واستخرج الـ JSON:
-`;
+إليك الأسئلة والإجابات، قم بالمطابقة الآن واستخرج الـ JSON:`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت المتقدم! الصقه في الأداة الذكية ثم ألصق تحته الأسئلة والأجوبة.'); 
+    alert('تم نسخ البرومبت المتقدم! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
   const processManualJson = () => {
@@ -231,7 +241,7 @@ export default function AssignmentBuilderV2() {
       const newQuestions = parsedData.questions.map((q:any) => ({
         id: crypto.randomUUID(),
         content_html: cleanMathLatex(q.content || q.section_header || ''),
-        model_answer_html: cleanMathLatex(q.model_answer_html || ''), // 🚀 استقبال الإجابة النموذجية
+        model_answer_html: cleanMathLatex(q.model_answer_html || ''),
         type: q.type || 'essay',
         points: Number(q.points) || 1,
         options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ id: crypto.randomUUID(), content: cleanMathLatex(String(o)), is_correct: false })) : [],
@@ -406,7 +416,6 @@ export default function AssignmentBuilderV2() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             
             <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
-              {/* 🚀 تبديل النمط */}
               <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner mb-4">
                 <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
                   <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
@@ -456,13 +465,13 @@ export default function AssignmentBuilderV2() {
                       </div>
                     </div>
                     
-                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
+                    {/* 🚀 السحر هنا: استخدام renderHTMLWithMath لعرض المعادلات المحشورة داخل الـ HTML المنسق */}
+                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
                     
-                    {/* 🚀 إظهار الإجابة النموذجية المدمجة */}
                     {q.model_answer_html && (
-                      <div className="mt-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl">
-                        <span className="text-xs font-black text-emerald-800 block mb-2 flex items-center gap-1"><CheckCircle2 className="w-4 h-4"/> الإجابة النموذجية / خطوات الحل:</span>
-                        <div className="tiptap-content prose prose-slate max-w-none text-sm font-bold text-emerald-900 leading-relaxed" dangerouslySetInnerHTML={{ __html: q.model_answer_html }}></div>
+                      <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                        <span className="text-xs font-black text-emerald-700 block mb-2">الإجابة النموذجية / الشرح:</span>
+                        <div className="tiptap-content prose prose-slate max-w-none text-sm font-bold text-emerald-900 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }}></div>
                       </div>
                     )}
 
@@ -486,7 +495,7 @@ export default function AssignmentBuilderV2() {
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">حالة الواجب عند الإرسال</label>
+              <label className="block text-xs font-bold text-slate-500">الحالة</label>
               <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none">
                 <option value="draft">حفظ كمسودة (مخفي)</option>
                 <option value="published">نشر للطلاب</option>
@@ -499,7 +508,6 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 نافذة المحرر المزدوج (سؤال + إجابة) */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -516,45 +524,49 @@ export default function AssignmentBuilderV2() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500">نوع الإدراج</label>
+                    <label className="text-xs font-bold text-slate-500">نوع السؤال</label>
                     <select value={currentQ.type} onChange={(e) => setCurrentQ({...currentQ, type: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-700 outline-none shadow-sm">
-                      <option value="essay">مقالي / تفاعلي (للتصحيح الذاتي)</option>
+                      <option value="essay">مقالي / ورقة عمل</option>
                       <option value="multiple_choice">اختياري متعدد</option>
                       <option value="true_false">صح / خطأ</option>
-                      <option value="section_header">ترويسة عريضة</option>
                     </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">الدرجة</label>
-                    <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} disabled={currentQ.type === 'section_header'} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-center text-slate-700 outline-none disabled:opacity-50 shadow-sm" />
+                    <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-center text-slate-700 outline-none shadow-sm" />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-black text-indigo-900 flex items-center gap-2">1. نص السؤال (المحتوى الأساسي)</label>
+                  <label className="text-sm font-black text-indigo-900">1. نص السؤال (والجدول المرفق)</label>
                   <TiptapEditor 
                     content={currentQ.content_html} 
                     onChange={(html) => setCurrentQ({ ...currentQ, content_html: html })} 
-                    placeholder="الصق السؤال أو ارسم الجدول هنا..."
+                    placeholder="الصق السؤال هنا..."
                   />
+                  {/* 🚀 معاينة فورية للرياضيات المحشورة */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl tiptap-content font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                 </div>
 
                 <div className="space-y-2 mt-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl">
-                  <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية (اختياري)</label>
-                  <p className="text-xs font-bold text-emerald-600 mb-2">هذا النص سيظهر للطالب في "وضع التدريب" ليعرف خطوات الحل الصحيحة.</p>
+                  <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية / خطوات الحل (اختياري)</label>
+                  <p className="text-xs font-bold text-emerald-600 mb-2">هذا النص سيظهر للطالب بعد أن يحل السؤال ليصحح أخطاءه (في وضع التدريب).</p>
                   <TiptapEditor 
                     content={currentQ.model_answer_html || ''} 
                     onChange={(html) => setCurrentQ({ ...currentQ, model_answer_html: html })} 
-                    placeholder="الصق خطوات الحل النموذجية هنا..."
+                    placeholder="الصق الإجابة النموذجية أو خطوات الحل هنا..."
                   />
+                   {/* 🚀 معاينة فورية للرياضيات المحشورة في الإجابة */}
+                   <div className="mt-2 p-3 bg-white border border-emerald-200 rounded-xl tiptap-content font-bold text-emerald-900" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html || '') }}></div>
                 </div>
 
                 {currentQ.type === 'multiple_choice' && (
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                     <h4 className="font-black text-slate-800 flex items-center justify-between">
-                      خيارات الإجابة
+                      خيارات الإجابة (للتصحيح الآلي)
                       <button onClick={addOption} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3 h-3"/> إضافة خيار</button>
                     </h4>
+                    
                     <div className="space-y-3">
                       {currentQ.options.map((opt, i) => (
                         <div key={opt.id} className={`flex items-center gap-3 p-2 rounded-xl border transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200 bg-slate-50'}`}>
