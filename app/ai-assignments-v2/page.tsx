@@ -1,6 +1,4 @@
 // @ts-nocheck
-/* eslint-disable react/no-unescaped-entities */
-/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,7 +7,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -28,7 +26,6 @@ import TableHeader from '@tiptap/extension-table-header';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 
-// 🚀 استيراد مكتبة Katex الأصلية للرندر المباشر داخل HTML
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
@@ -40,27 +37,25 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 interface Option { id: string; content: string; is_correct: boolean; }
 interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; }
 
-// 🚀 الدالة السحرية لتحويل المعادلات داخل الـ HTML المنسق
+// دالة تنظيف الرياضيات
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
-  let parsed = html.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
-    try { return katex.renderToString(math, { displayMode: true, throwOnError: false, direction: 'rtl' }); }
-    catch (e) { return match; }
-  });
-  parsed = parsed.replace(/\$(.*?)\$/gs, (match, math) => {
-    try { return katex.renderToString(math, { displayMode: false, throwOnError: false, direction: 'rtl' }); }
-    catch (e) { return match; }
-  });
+  let parsed = html;
+  const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
+    try {
+      let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+      return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
+    } catch (e) { return match; }
+  };
+  parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
+  parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
   return parsed;
 };
 
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
-  return text
-    .replace(/\\\\([a-zA-Z])/g, '\\$1')
-    .replace(/\$\$/g, '$')
-    .replace(/\$\s*\((.*?)\)\s*\$/g, '( $$1$ )')
-    .replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )');
+  return text.replace(/\\\\([a-zA-Z])/g, '\\$1').replace(/\$\$/g, '$').replace(/\$\s*\((.*?)\)\s*\$/g, '( $$1$ )').replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )');
 };
 
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
@@ -119,8 +114,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
         <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
         <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
-        <button onClick={() => insertMath('$\\sqrt{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">جذر</button>
-        <button onClick={() => insertMath('$\\mu_o$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\mu_o$</button>
+        <button onClick={() => insertMath('$\\mu_0$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\mu_0$</button>
         <button onClick={() => insertMath('$\\pi$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\pi$</button>
       </div>
       <div className="flex-1 bg-white relative">
@@ -142,7 +136,8 @@ export default function AssignmentBuilderV2() {
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
   
-  const [activeTab, setActiveTab] = useState<'builder' | 'import'>('builder');
+  // 🚀 أضفنا قسم الإدارة (manage)
+  const [activeTab, setActiveTab] = useState<'builder' | 'import' | 'manage'>('builder');
   
   const [assignmentTitle, setAssignmentTitle] = useState('بنك تدريب جديد');
   const [selectedTeacher, setSelectedTeacher] = useState('');
@@ -151,6 +146,9 @@ export default function AssignmentBuilderV2() {
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
   const [isPracticeMode, setIsPracticeMode] = useState<boolean>(true);
   
+  // 🚀 تحديد إن كنا في وضع تعديل درس موجود
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+
   const [questions, setQuestions] = useState<Question[]>([]);
   const [manualJson, setManualJson] = useState('');
   const [manualJsonError, setManualJsonError] = useState<string | null>(null);
@@ -162,8 +160,12 @@ export default function AssignmentBuilderV2() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
 
+  // 🚀 حالات الإدارة والمتابعة
+  const [manageAssignments, setManageAssignments] = useState<any[]>([]);
+  const [isManageLoading, setIsManageLoading] = useState(false);
+
   useEffect(() => {
-    if (currentRole !== 'admin' && currentRole !== 'management') return;
+    if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
     const fetchTeachers = async () => {
       const { data } = await supabase.from('teachers').select(`id, users ( full_name )`);
       const formattedTeachers = data?.map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' })) || [];
@@ -197,21 +199,96 @@ export default function AssignmentBuilderV2() {
     fetchTeacherSections();
   }, [selectedTeacher, selectedSubject]);
 
-  const toggleSection = (id: string) => setSelectedSections(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  // 🚀 جلب الدروس عندما يفتح المدير قسم الإدارة
+  useEffect(() => {
+    if (activeTab === 'manage') {
+      fetchManageList();
+    }
+  }, [activeTab]);
+
+  const fetchManageList = async () => {
+    setIsManageLoading(true);
+    try {
+      let query = supabase.from('assignments_v2').select(`
+        *,
+        teachers ( users ( full_name ) ),
+        subjects ( name ),
+        assignment_questions_v2 ( id )
+      `).order('created_at', { ascending: false });
+      
+      // المدير يرى كل شيء، المعلم يرى دروسه فقط
+      if (currentRole === 'teacher') {
+        query = query.eq('teacher_id', user.id);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      setManageAssignments(data || []);
+    } catch (err) { console.error(err); } finally { setIsManageLoading(false); }
+  };
+
+  // 🚀 حذف الدرس من جذوره (الأسئلة والتقدم والدرس)
+  const handleDeleteAssignment = async (id: string) => {
+    if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟ سيتم مسح جميع أسئلته وتقدم الطلاب المرتبط به!')) return;
+    try {
+      // الحذف سيتم تلقائياً في الجداول المرتبطة بفضل ON DELETE CASCADE، لكن للتأكيد نحذفها برمجياً
+      await supabase.from('assignment_questions_v2').delete().eq('assignment_id', id);
+      await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
+      await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
+      await supabase.from('assignments_v2').delete().eq('id', id);
+      
+      fetchManageList();
+      setGlobalMessage({ text: 'تم حذف الدرس وتنظيف النظام بنجاح!', type: 'success' });
+      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
+    } catch (err) { alert('حدث خطأ أثناء الحذف.'); }
+  };
+
+  // 🚀 تحميل الدرس للقسم الأول (البناء) ليتم تعديله
+  const handleEditAssignment = async (assign: any) => {
+    try {
+      const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', assign.id).order('order_index', { ascending: true });
+      const { data: sData } = await supabase.from('assignment_sections_v2').select('*').eq('assignment_id', assign.id);
+      
+      setAssignmentTitle(assign.title);
+      setSelectedTeacher(assign.teacher_id);
+      setSelectedSubject(assign.subject_id);
+      setAssignmentStatus(assign.status);
+      setIsPracticeMode(assign.is_practice_mode);
+      setSelectedSections(sData?.map((s:any) => s.section_id) || []);
+      
+      const formattedQs = qData?.map((q:any) => ({
+        id: crypto.randomUUID(),
+        type: q.question_type,
+        content_html: q.content_html,
+        model_answer_html: q.model_answer_html || '',
+        points: q.points,
+        options: q.options || []
+      })) || [];
+      
+      setQuestions(formattedQs);
+      setEditingAssignmentId(assign.id); // 🚀 حفظ الـ ID لنعرف أننا نعدل ولانضيف جديد
+      setActiveTab('builder');
+      
+      setGlobalMessage({ text: 'تم فتح الدرس في وضع التعديل. يمكنك حفظه بعد الانتهاء.', type: 'success' });
+      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
+    } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
+  };
 
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي ومبرمج قوالب. سأعطيك نصاً يحتوي على "أسئلة" ونصاً آخر يحتوي على "إجابات".
 استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
 
-قواعد صارمة جداً:
+قواعد صارمة جداً (أهم شيء هو دقة الرياضيات):
 1. الأسئلة العامة أو العناوين اجعل نوعها "section_header".
 2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options".
-3. ضع الإجابة النموذجية أو خطوات الحل المطابقة للسؤال داخل حقل "model_answer_html".
-4. للرياضيات والفيزياء: يجب أن تستخدم أوامر LaTeX الصحيحة تماماً داخل علامتي دولار. 
-   - استخدم $\pi$ للباي (وليس pi).
-   - استخدم $\times$ للضرب.
-   - استخدم الكسور $\frac{A}{B}$.
-   - مثال للكسور والرموز: $ B = \frac{\mu_o I N}{2r} $
+3. ضع الإجابة النموذجية المطابقة للسؤال داخل حقل "model_answer_html".
+4. **قواعد الرياضيات الصارمة:**
+   - استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $
+   - لا تكتب mu_o أبداً، بل اكتبها هكذا: \mu_0
+   - لا تكتب pi، بل اكتبها هكذا: \pi
+   - اكتب الأرقام قبل الرموز (مثال: 0.001\pi).
+   - استخدم \times للضرب، و \frac{A}{B} للكسور.
+   - لا تضع علامة \ زائدة في نهاية المعادلة.
 5. يجب أن يكون الناتج JSON صالحاً فقط.
 
 هيكل JSON المطلوب:
@@ -228,7 +305,7 @@ export default function AssignmentBuilderV2() {
   ]
 }
 
-إليك الأسئلة والإجابات، قم بالمطابقة الآن واستخرج الـ JSON:`;
+إليك الأسئلة والإجابات:`;
     navigator.clipboard.writeText(basePromptText); 
     alert('تم نسخ البرومبت المتقدم! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
@@ -240,11 +317,11 @@ export default function AssignmentBuilderV2() {
       const parsedData = JSON.parse(safeJsonStr);
       const newQuestions = parsedData.questions.map((q:any) => ({
         id: crypto.randomUUID(),
-        content_html: cleanMathLatex(q.content || q.section_header || ''),
-        model_answer_html: cleanMathLatex(q.model_answer_html || ''),
+        content_html: q.content || q.section_header || '',
+        model_answer_html: q.model_answer_html || '', 
         type: q.type || 'essay',
         points: Number(q.points) || 1,
-        options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ id: crypto.randomUUID(), content: cleanMathLatex(String(o)), is_correct: false })) : [],
+        options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ id: crypto.randomUUID(), content: String(o), is_correct: false })) : [],
       }));
 
       setAssignmentTitle(parsedData.title || 'بنك مستورد بذكاء');
@@ -310,25 +387,45 @@ export default function AssignmentBuilderV2() {
     setIsSavingDB(true);
     try {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
-      const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
-        title: assignmentTitle, 
-        description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-        subject_id: selectedSubject, 
-        teacher_id: selectedTeacher, 
-        due_date: dueDate.toISOString(), 
-        status: assignmentStatus,
-        is_practice_mode: isPracticeMode 
-      }).select().single();
+      let finalAssignmentId = editingAssignmentId;
+
+      if (editingAssignmentId) {
+        // 🚀 وضع التعديل (تحديث السجل وحذف الأسئلة القديمة لإعادة زرعها)
+        const { error: assignErr } = await supabase.from('assignments_v2').update({ 
+          title: assignmentTitle, 
+          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+          subject_id: selectedSubject, 
+          teacher_id: selectedTeacher, 
+          status: assignmentStatus,
+          is_practice_mode: isPracticeMode 
+        }).eq('id', editingAssignmentId);
+        
+        if (assignErr) throw assignErr;
+
+        await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
+        await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
+      } else {
+        // 🚀 وضع الإنشاء الجديد
+        const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
+          title: assignmentTitle, 
+          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+          subject_id: selectedSubject, 
+          teacher_id: selectedTeacher, 
+          due_date: dueDate.toISOString(), 
+          status: assignmentStatus,
+          is_practice_mode: isPracticeMode 
+        }).select().single();
+        
+        if (assignErr) throw assignErr;
+        finalAssignmentId = assignData.id;
+      }
       
-      if (assignErr) throw assignErr;
-      
-      const newAssignmentId = assignData.id;
-      const sectionsPayload = selectedSections.map(secId => ({ assignment_id: newAssignmentId, section_id: secId }));
+      const sectionsPayload = selectedSections.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
       const { error: secErr } = await supabase.from('assignment_sections_v2').insert(sectionsPayload);
       if (secErr) throw secErr;
 
       const questionsPayload = questions.map((q, index) => ({ 
-        assignment_id: newAssignmentId, 
+        assignment_id: finalAssignmentId, 
         question_type: q.type, 
         content_html: q.content_html, 
         model_answer_html: q.model_answer_html, 
@@ -339,8 +436,11 @@ export default function AssignmentBuilderV2() {
       const { error: qErr } = await supabase.from('assignment_questions_v2').insert(questionsPayload);
       if (qErr) throw qErr;
 
-      setGlobalMessage({ text: 'تم حفظ بنك الأسئلة بنجاح!', type: 'success' });
-      setTimeout(() => { router.push('/assignments'); }, 2000);
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم حفظ الدرس الجديد بنجاح!', type: 'success' });
+      setEditingAssignmentId(null); // مسح حالة التعديل
+      
+      // العودة لتبويبة الإدارة ليرى النتيجة
+      setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}) }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ: ' + err.message); } finally { setIsSavingDB(false); }
   };
 
@@ -349,20 +449,29 @@ export default function AssignmentBuilderV2() {
     return types[t] || t;
   };
 
-  if (currentRole !== 'admin' && currentRole !== 'management') return <div className="p-10 text-center">غير مصرح لك.</div>;
+  // زر إلغاء التعديل
+  const cancelEdit = () => {
+    setEditingAssignmentId(null);
+    setAssignmentTitle('بنك تدريب جديد');
+    setQuestions([]);
+    setGlobalMessage({ text: 'تم إلغاء وضع التعديل والعودة للوضع الجديد.', type: 'success' });
+    setTimeout(() => setGlobalMessage({text:'', type:''}), 2000);
+  };
+
+  if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
 
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4 font-cairo text-slate-800 pb-32" dir="rtl">
       <style dangerouslySetInnerHTML={{ __html: `
-        .katex-container { direction: rtl !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
-        .katex { direction: rtl !important; text-align: right !important; }
-        .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: rtl !important; }
+        .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
+        .katex { direction: ltr !important; text-align: left !important; }
+        .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .tiptap-content table, .ProseMirror table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #94a3b8 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
-        .tiptap-content th, .ProseMirror th { background-color: #f1f5f9 !important; font-weight: 900 !important; }
-        .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 8px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1) !important; }
-        .tiptap-content p, .ProseMirror p { margin-bottom: 0.5em !important; }
+        .tiptap-content table, .ProseMirror table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: white; }
+        .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
+        .tiptap-content th, .ProseMirror th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
+        .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
+        .tiptap-content p { margin-bottom: 0.5em !important; }
       `}} />
 
       <AnimatePresence>
@@ -377,19 +486,81 @@ export default function AssignmentBuilderV2() {
         
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
           <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
-          <h1 className="text-2xl font-black text-slate-900">منشئ التفاعل المتقدم (V2)</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء "بنوك التدريب التفاعلية" و "الواجبات" المتقدمة.</p>
+          <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
+          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة "بنوك التدريب التفاعلية" و "الواجبات".</p>
         </div>
 
+        {/* 🚀 القائمة العلوية بثلاث تبويبات الآن */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-          <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ListOrdered className="w-4 h-4 inline-block ml-2 mb-1" /> بناء الواجب / البنك
+          <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'بناء درس جديد'}
           </button>
-          <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <FileJson className="w-4 h-4 inline-block ml-2 mb-1" /> استيراد ذكي (AI)
+          <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <FileJson className="w-4 h-4" /> استيراد ذكي (AI)
+          </button>
+          <button onClick={() => setActiveTab('manage')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'manage' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <Database className="w-4 h-4" /> إدارة السجلات
           </button>
         </div>
 
+        {/* ================================================================= */}
+        {/* 🚀 قسم إدارة السجلات (الجديد كلياً) */}
+        {/* ================================================================= */}
+        {activeTab === 'manage' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h2 className="font-black text-xl text-slate-800 flex items-center gap-2">
+                <Database className="w-6 h-6 text-rose-500" /> إدارة الدروس والبنوك المكتملة
+              </h2>
+              <button onClick={fetchManageList} className="p-2 bg-slate-50 text-slate-500 rounded-lg hover:bg-slate-100 transition-colors">
+                <RefreshCcw className={`w-5 h-5 ${isManageLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {isManageLoading ? (
+              <div className="text-center p-10 text-slate-400 font-bold animate-pulse">جاري جلب السجلات...</div>
+            ) : manageAssignments.length === 0 ? (
+              <div className="text-center p-10 bg-slate-50 rounded-2xl border border-slate-100 font-bold text-slate-500">لا توجد دروس أو تحديات محفوظة في النظام حتى الآن.</div>
+            ) : (
+              <div className="space-y-4">
+                {manageAssignments.map((assign) => (
+                  <div key={assign.id} className="border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow bg-slate-50/50 flex flex-col md:flex-row justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${assign.is_practice_mode ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {assign.is_practice_mode ? 'بنك تدريب' : 'واجب رسمي'}
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${assign.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                          {assign.status === 'published' ? 'منشور' : 'مسودة'}
+                        </span>
+                        {assign.subjects?.name && <span className="text-[10px] font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded-lg">{assign.subjects.name}</span>}
+                      </div>
+                      <h3 className="font-black text-lg text-slate-800 mb-1">{assign.title}</h3>
+                      <div className="text-xs font-bold text-slate-500 flex items-center gap-4">
+                        <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> المعلم: {assign.teachers?.users?.full_name || 'غير محدد'}</span>
+                        <span className="flex items-center gap-1"><ListOrdered className="w-3 h-3"/> {assign.assignment_questions_v2?.length || 0} أسئلة</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(assign.created_at).toLocaleDateString('ar-KW')}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 border-t md:border-t-0 md:border-r border-slate-200 pt-4 md:pt-0 md:pr-4 shrink-0">
+                      <button onClick={() => handleEditAssignment(assign)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-xs hover:bg-indigo-100 transition-colors">
+                        <Edit3 className="w-4 h-4" /> تعديل
+                      </button>
+                      <button onClick={() => handleDeleteAssignment(assign.id)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-xs hover:bg-rose-100 transition-colors">
+                        <Trash2 className="w-4 h-4" /> حذف جذري
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* ================================================================= */}
+        {/* 🚀 قسم استيراد الذكاء الاصطناعي */}
+        {/* ================================================================= */}
         {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
             <div className="flex items-center justify-between mb-4">
@@ -412,9 +583,22 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
 
+        {/* ================================================================= */}
+        {/* 🚀 قسم البناء والتعديل (الأساسي) */}
+        {/* ================================================================= */}
         {activeTab === 'builder' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             
+            {/* إشعار بارز إذا كنا في وضع التعديل */}
+            {editingAssignmentId && (
+              <div className="bg-amber-100 border border-amber-300 text-amber-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-2 font-black text-sm">
+                  <Edit3 className="w-5 h-5" /> أنت الآن في وضع تعديل درس موجود مسبقاً.
+                </div>
+                <button onClick={cancelEdit} className="bg-white text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-50">إلغاء التعديل</button>
+              </div>
+            )}
+
             <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
               <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner mb-4">
                 <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
@@ -465,7 +649,6 @@ export default function AssignmentBuilderV2() {
                       </div>
                     </div>
                     
-                    {/* 🚀 السحر هنا: استخدام renderHTMLWithMath لعرض المعادلات المحشورة داخل الـ HTML المنسق */}
                     <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
                     
                     {q.model_answer_html && (
@@ -495,19 +678,21 @@ export default function AssignmentBuilderV2() {
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">الحالة</label>
+              <label className="block text-xs font-bold text-slate-500">حالة الدرس عند الحفظ</label>
               <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none">
                 <option value="draft">حفظ كمسودة (مخفي)</option>
                 <option value="published">نشر للطلاب</option>
               </select>
-              <button onClick={saveAssignmentToDB} disabled={isSavingDB} className="w-full bg-slate-900 text-white font-black text-lg py-4 rounded-xl shadow-lg hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2 active:scale-95 transition-all">
-                {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} حفظ التعيين في النظام
+              <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
+                {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
+                {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'إنشاء الدرس وحفظه'}
               </button>
             </div>
           </motion.div>
         )}
       </div>
 
+      {/* نافذة المحرر المزدوج */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -521,7 +706,6 @@ export default function AssignmentBuilderV2() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-6 pb-32">
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">نوع السؤال</label>
@@ -529,36 +713,37 @@ export default function AssignmentBuilderV2() {
                       <option value="essay">مقالي / ورقة عمل</option>
                       <option value="multiple_choice">اختياري متعدد</option>
                       <option value="true_false">صح / خطأ</option>
+                      <option value="section_header">ترويسة / قصة نصية</option>
                     </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">الدرجة</label>
-                    <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-center text-slate-700 outline-none shadow-sm" />
+                    <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-center text-slate-700 outline-none shadow-sm" disabled={currentQ.type === 'section_header'} />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-black text-indigo-900">1. نص السؤال (والجدول المرفق)</label>
+                  <label className="text-sm font-black text-indigo-900">1. نص السؤال (أو الترويسة الثابتة)</label>
                   <TiptapEditor 
                     content={currentQ.content_html} 
                     onChange={(html) => setCurrentQ({ ...currentQ, content_html: html })} 
                     placeholder="الصق السؤال هنا..."
                   />
-                  {/* 🚀 معاينة فورية للرياضيات المحشورة */}
                   <div className="p-3 bg-white border border-slate-200 rounded-xl tiptap-content font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                 </div>
 
-                <div className="space-y-2 mt-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl">
-                  <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية / خطوات الحل (اختياري)</label>
-                  <p className="text-xs font-bold text-emerald-600 mb-2">هذا النص سيظهر للطالب بعد أن يحل السؤال ليصحح أخطاءه (في وضع التدريب).</p>
-                  <TiptapEditor 
-                    content={currentQ.model_answer_html || ''} 
-                    onChange={(html) => setCurrentQ({ ...currentQ, model_answer_html: html })} 
-                    placeholder="الصق الإجابة النموذجية أو خطوات الحل هنا..."
-                  />
-                   {/* 🚀 معاينة فورية للرياضيات المحشورة في الإجابة */}
-                   <div className="mt-2 p-3 bg-white border border-emerald-200 rounded-xl tiptap-content font-bold text-emerald-900" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html || '') }}></div>
-                </div>
+                {currentQ.type !== 'section_header' && (
+                  <div className="space-y-2 mt-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl">
+                    <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية / خطوات الحل (اختياري)</label>
+                    <p className="text-xs font-bold text-emerald-600 mb-2">تظهر للطالب بعد الحل لتقييم نفسه وتصحيح أخطائه.</p>
+                    <TiptapEditor 
+                      content={currentQ.model_answer_html || ''} 
+                      onChange={(html) => setCurrentQ({ ...currentQ, model_answer_html: html })} 
+                      placeholder="الصق الإجابة النموذجية هنا..."
+                    />
+                    <div className="mt-2 p-3 bg-white border border-emerald-200 rounded-xl tiptap-content font-bold text-emerald-900" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html || '') }}></div>
+                  </div>
+                )}
 
                 {currentQ.type === 'multiple_choice' && (
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -566,7 +751,6 @@ export default function AssignmentBuilderV2() {
                       خيارات الإجابة (للتصحيح الآلي)
                       <button onClick={addOption} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3 h-3"/> إضافة خيار</button>
                     </h4>
-                    
                     <div className="space-y-3">
                       {currentQ.options.map((opt, i) => (
                         <div key={opt.id} className={`flex items-center gap-3 p-2 rounded-xl border transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200 bg-slate-50'}`}>
