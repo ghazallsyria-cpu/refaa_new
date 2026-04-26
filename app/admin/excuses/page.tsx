@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useAdminExcuses } from '@/hooks/useAdminExcuses';
 import { supabase } from '@/lib/supabase'; 
@@ -11,7 +11,7 @@ import {
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
   Loader2, Search, Filter, AlertTriangle, CheckSquare,
-  Printer, School, GraduationCap, Download
+  Printer, School, GraduationCap, Download, Play
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format, subDays } from 'date-fns';
@@ -38,6 +38,7 @@ export default function AdminExcusesPage() {
   const [rawFullDayData, setRawFullDayData] = useState<any[]>([]);
   const [isFullDayLoading, setIsFullDayLoading] = useState(false);
   const [isFullDayExporting, setIsFullDayExporting] = useState(false);
+  const [hasSearchedFullDay, setHasSearchedFullDay] = useState(false);
   
   const [fullDayStartDate, setFullDayStartDate] = useState('');
   const [fullDayEndDate, setFullDayEndDate] = useState('');
@@ -54,24 +55,20 @@ export default function AdminExcusesPage() {
     setFullDayStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   }, []);
 
-  // 2. جلب سجلات الأعذار (محمي من الحلقات اللانهائية)
+  // 2. جلب سجلات الأعذار 
   useEffect(() => {
     if (!mounted || isChecking || activeTab === 'inquiry' || activeTab === 'full_day_absence') return;
     fetchExcuses(activeTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isChecking, mounted]);
 
-  // 3. جلب بيانات المنقطعين (غياب كامل) محمي تماماً
-  useEffect(() => {
-    if (activeTab === 'full_day_absence' && mounted && fullDayStartDate && fullDayEndDate) {
-      fetchFullDayAbsences();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, fullDayStartDate, fullDayEndDate, mounted]);
-
+  // 🚀 3. الاستعلام اليدوي الآمن لحماية Supabase من الـ 521 Error
   const fetchFullDayAbsences = async () => {
     if (!fullDayStartDate || !fullDayEndDate) return;
+    
     setIsFullDayLoading(true);
+    setHasSearchedFullDay(true);
+    
     try {
       const { data: records, error } = await supabase
         .from('attendance_records')
@@ -170,6 +167,9 @@ export default function AdminExcusesPage() {
 
     } catch (err: any) {
       console.error('Error fetching full day absences:', err);
+      if(err.message?.includes('FetchError') || err.message?.includes('521')) {
+        alert('عذراً، سيرفر قاعدة البيانات يواجه ضغطاً حالياً. يرجى المحاولة بعد قليل.');
+      }
     } finally {
       setIsFullDayLoading(false);
     }
@@ -475,7 +475,7 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني) */}
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
@@ -489,7 +489,7 @@ export default function AdminExcusesPage() {
                     </div>
                   </div>
                   
-                  {/* 🚀 لوحة التحكم بالفلاتر والبحث */}
+                  {/* 🚀 لوحة التحكم بالفلاتر والبحث الآمن */}
                   <div className="flex flex-wrap items-center gap-3 bg-[#090b14]/50 p-4 rounded-2xl border border-white/5 w-full">
                      <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
                        <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">من تاريخ</label>
@@ -545,10 +545,21 @@ export default function AdminExcusesPage() {
                        </div>
                      </div>
                      <div className="flex flex-col justify-end min-w-[140px]">
+                       {/* زر البحث اليدوي لمنع الضغط على السيرفر */}
+                       <button 
+                         onClick={fetchFullDayAbsences}
+                         disabled={isFullDayLoading}
+                         className="flex items-center justify-center gap-2 px-5 py-2.5 mt-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all shadow-md active:scale-95 disabled:opacity-50 w-full h-[40px]"
+                       >
+                         {isFullDayLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                         بحث وعرض
+                       </button>
+                     </div>
+                     <div className="flex flex-col justify-end min-w-[140px]">
                        <button 
                          onClick={exportFullDayToPDF}
                          disabled={isFullDayExporting || filteredFullDayData.length === 0}
-                         className="flex items-center justify-center gap-2 px-5 py-2.5 mt-5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-sm transition-all shadow-md active:scale-95 disabled:opacity-50 w-full"
+                         className="flex items-center justify-center gap-2 px-5 py-2.5 mt-5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-sm transition-all shadow-md active:scale-95 disabled:opacity-50 w-full h-[40px]"
                        >
                          {isFullDayExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                          تصدير PDF
@@ -559,6 +570,12 @@ export default function AdminExcusesPage() {
 
                 {isFullDayLoading ? (
                   <div className="flex justify-center py-20"><Loader2 className="w-12 h-12 animate-spin text-rose-500" /></div>
+                ) : !hasSearchedFullDay ? (
+                   <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
+                    <Search className="h-16 w-16 mx-auto text-indigo-500/50 mb-4" />
+                    <h3 className="text-xl font-black text-white">الاستعلام عن الغياب الكلي</h3>
+                    <p className="text-slate-400 font-bold mt-2">حدد النطاق الزمني واضغط على "بحث وعرض" لجلب السجلات.</p>
+                  </div>
                 ) : filteredFullDayData.length === 0 ? (
                   <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
                     <CheckCircle2 className="h-16 w-16 mx-auto text-emerald-500/50 mb-4" />
