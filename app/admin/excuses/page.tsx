@@ -1,4 +1,3 @@
-// @ts-nocheck
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
@@ -21,7 +20,6 @@ export default function AdminExcusesPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const { excuses, loading, fetchExcuses, approveExcuse, rejectExcuse } = useAdminExcuses();
   
-  // 🚀 أضفنا تبويب "full_day_absence" للمدير
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'inquiry' | 'full_day_absence'>('pending');
   const [selectedExcuse, setSelectedExcuse] = useState<any>(null);
   const [selectedDatesToApprove, setSelectedDatesToApprove] = useState<string[]>([]);
@@ -34,34 +32,36 @@ export default function AdminExcusesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{studentName: string, records: any[]}[] | null>(null);
 
-  // 🚀 حالات تقرير الغياب الكامل للمدير
   const [fullDayAbsences, setFullDayAbsences] = useState<Record<string, any[]>>({});
   const [isFullDayLoading, setIsFullDayLoading] = useState(false);
-  const [fullDayDateFilter, setFullDayDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'));
+  
+  // 🚀 حل مشكلة الانهيار (Hydration) بتأخير تعيين التاريخ لحين التحميل في المتصفح
+  const [fullDayDateFilter, setFullDayDateFilter] = useState('');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    setFullDayDateFilter(format(new Date(), 'yyyy-MM-dd'));
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     if (!isChecking && activeTab !== 'inquiry' && activeTab !== 'full_day_absence') {
       fetchExcuses(activeTab);
     }
-    if (activeTab === 'full_day_absence') {
+    if (activeTab === 'full_day_absence' && fullDayDateFilter) {
       fetchFullDayAbsences();
     }
-  }, [activeTab, isChecking, fetchExcuses, fullDayDateFilter]);
+  }, [activeTab, isChecking, fetchExcuses, fullDayDateFilter, mounted]);
 
-  // 🚀 الدالة السحرية لجلب الطلاب الغائبين يوماً كاملاً وتصنيفهم حسب الصف
+  // 🚀 استعلام آمن ومستقل تماماً لعدم إرباك قاعدة البيانات
   const fetchFullDayAbsences = async () => {
     setIsFullDayLoading(true);
     try {
-      // 1. جلب جميع سجلات الغياب للتاريخ المحدد
+      // 1. جلب الغيابات أولاً
       const { data: records, error } = await supabase
         .from('attendance_records')
-        .select(`
-          id, date, period, status, student_id,
-          users!attendance_records_student_id_fkey(full_name),
-          student_sections!inner(
-             sections(name, classes(name))
-          )
-        `)
+        .select('id, date, period, status, student_id')
         .eq('date', fullDayDateFilter)
         .eq('status', 'absent');
 
@@ -69,52 +69,68 @@ export default function AdminExcusesPage() {
 
       if (!records || records.length === 0) {
         setFullDayAbsences({});
+        setIsFullDayLoading(false);
         return;
       }
 
-      // 2. تجميع الغيابات حسب الطالب لحساب عدد الحصص
-      const studentGroups: Record<string, any> = {};
+      // 2. تجميع وتحديد من غاب 7 حصص فأكثر
+      const studentPeriods: Record<string, Set<number>> = {};
       records.forEach(rec => {
-        const sId = rec.student_id;
-        if (!studentGroups[sId]) {
-          const className = Array.isArray(rec.student_sections?.sections?.classes) 
-            ? rec.student_sections.sections.classes[0]?.name 
-            : rec.student_sections?.sections?.classes?.name || 'بدون صف';
-          const sectionName = rec.student_sections?.sections?.name || '';
-          
-          studentGroups[sId] = {
-            studentName: rec.users?.full_name || 'مجهول',
-            classFull: `${className.replace('الصف', '')} - ${sectionName}`,
-            periods: new Set()
-          };
-        }
-        studentGroups[sId].periods.add(rec.period);
+        if (!studentPeriods[rec.student_id]) studentPeriods[rec.student_id] = new Set();
+        studentPeriods[rec.student_id].add(rec.period);
       });
 
-      // 3. فلترة الطلاب الذين غابوا 7 حصص فأكثر (يعتبر غياب يوم كامل) وتصنيفهم حسب الصف
+      const fullDayStudentIds = Object.keys(studentPeriods).filter(sId => studentPeriods[sId].size >= 7);
+
+      if (fullDayStudentIds.length === 0) {
+        setFullDayAbsences({});
+        setIsFullDayLoading(false);
+        return;
+      }
+
+      // 3. جلب بيانات الطلاب والصفوف بدقة عالية
+      const { data: studentsData, error: stuErr } = await supabase
+        .from('users')
+        .select(`
+          id, full_name,
+          student_sections(
+             sections(name, classes(name))
+          )
+        `)
+        .in('id', fullDayStudentIds);
+
+      if (stuErr) throw stuErr;
+
       const finalReport: Record<string, any[]> = {};
       
-      Object.values(studentGroups).forEach(student => {
-        if (student.periods.size >= 7) {
-          if (!finalReport[student.classFull]) {
-            finalReport[student.classFull] = [];
+      studentsData?.forEach(student => {
+        let className = 'بدون صف';
+        try {
+          const sectionsData = Array.isArray(student.student_sections) ? student.student_sections[0]?.sections : (student as any).student_sections?.sections;
+          const classData = Array.isArray(sectionsData?.classes) ? sectionsData.classes[0] : sectionsData?.classes;
+          if (classData?.name && sectionsData?.name) {
+             className = `${classData.name.replace('الصف', '').trim()} - ${sectionsData.name}`;
           }
-          finalReport[student.classFull].push(student);
-        }
+        } catch(e) {}
+
+        if (!finalReport[className]) finalReport[className] = [];
+        finalReport[className].push({
+          studentName: student.full_name,
+          periodsCount: studentPeriods[student.id].size
+        });
       });
 
       setFullDayAbsences(finalReport);
 
     } catch (err: any) {
       console.error('Error fetching full day absences:', err);
-      alert('خطأ في جلب تقرير الغياب: ' + err.message);
     } finally {
       setIsFullDayLoading(false);
     }
   };
 
   const exportApprovedToPDF = async () => {
-    const approvedExcuses = excuses.filter(e => e.status === 'approved');
+    const approvedExcuses = (excuses || []).filter(e => e.status === 'approved');
 
     if (approvedExcuses.length === 0) {
       alert('لا توجد أعذار معتمدة لتصديرها.');
@@ -379,7 +395,7 @@ export default function AdminExcusesPage() {
     }
   };
 
-  if (isChecking) return <div className="min-h-screen flex items-center justify-center bg-[#090b14]"><Loader2 className="w-12 h-12 animate-spin text-emerald-500" /></div>;
+  if (!mounted || isChecking) return <div className="min-h-screen flex items-center justify-center bg-[#090b14]"><Loader2 className="w-12 h-12 animate-spin text-emerald-500" /></div>;
 
   return (
     <div className="min-h-screen bg-[#090b14] text-slate-200 pb-32 font-cairo" dir="rtl">
@@ -418,7 +434,6 @@ export default function AdminExcusesPage() {
                 <button onClick={() => setActiveTab('approved')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>معتمدة</button>
                 <button onClick={() => setActiveTab('rejected')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'rejected' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>مرفوضة</button>
                 <button onClick={() => setActiveTab('inquiry')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'inquiry' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-400 hover:text-indigo-300'}`}><Search className="w-4 h-4"/> استعلام شامل</button>
-                {/* 🚀 الزر الجديد للإدارة */}
                 {(currentRole === 'admin' || currentRole === 'management') && (
                   <button onClick={() => setActiveTab('full_day_absence')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'full_day_absence' ? 'bg-rose-600 text-white shadow-lg' : 'text-rose-400 hover:bg-rose-500/20'}`}><AlertTriangle className="w-4 h-4"/> غياب يوم كامل</button>
                 )}
@@ -427,7 +442,6 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
@@ -474,7 +488,7 @@ export default function AdminExcusesPage() {
                               </div>
                               <div className="min-w-0">
                                 <p className="font-black text-white text-sm truncate">{student.studentName}</p>
-                                <p className="text-xs text-rose-400 font-bold mt-1">إجمالي الحصص: {student.periods.size}</p>
+                                <p className="text-xs text-rose-400 font-bold mt-1">إجمالي الحصص: {student.periodsCount}</p>
                               </div>
                             </div>
                           ))}
@@ -571,7 +585,7 @@ export default function AdminExcusesPage() {
           <>
             {loading ? (
               <div className="flex justify-center py-20"><Loader2 className="w-12 h-12 animate-spin text-emerald-500" /></div>
-            ) : excuses.length === 0 ? (
+            ) : (excuses || []).length === 0 ? (
               <div className="bg-[#131836]/40 backdrop-blur-xl rounded-[3rem] p-16 text-center border border-white/5">
                 <CheckCircle2 className="h-16 w-16 mx-auto text-emerald-500/50 mb-4" />
                 <h3 className="text-2xl font-black text-white">لا توجد طلبات في هذا القسم</h3>
