@@ -24,7 +24,8 @@ export default function EvaluationsArchivePage() {
             evaluation_date,
             subject,
             class_name,
-            has_clear_lesson, has_delay_record, parents_contacted, student_followup, periodic_exams,
+            plan_prep, sci_mastery, presentation, tech_use, class_mgt, 
+            ind_diff, interaction, notebooks, delay_record, parents_comm,
             teachers ( users (full_name) ),
             evaluator:users!evaluator_id (full_name)
           `)
@@ -42,14 +43,19 @@ export default function EvaluationsArchivePage() {
     fetchEvaluations();
   }, []);
 
-  // حساب النتيجة من 5
+  // 🚀 تحديث دالة الحساب لتقرأ البنود الـ 10 الجديدة
   const calculateScore = (evalObj: any) => {
     let score = 0;
-    if (evalObj.has_clear_lesson) score++;
-    if (evalObj.has_delay_record) score++;
-    if (evalObj.parents_contacted) score++;
-    if (evalObj.student_followup) score++;
-    if (evalObj.periodic_exams) score++;
+    if (evalObj.plan_prep) score++;
+    if (evalObj.sci_mastery) score++;
+    if (evalObj.presentation) score++;
+    if (evalObj.tech_use) score++;
+    if (evalObj.class_mgt) score++;
+    if (evalObj.ind_diff) score++;
+    if (evalObj.interaction) score++;
+    if (evalObj.notebooks) score++;
+    if (evalObj.delay_record) score++;
+    if (evalObj.parents_comm) score++;
     return score;
   };
 
@@ -107,7 +113,7 @@ export default function EvaluationsArchivePage() {
                     <th className="py-4 px-6 text-xs font-black uppercase text-slate-500">المعلم / المادة</th>
                     <th className="py-4 px-6 text-xs font-black uppercase text-slate-500">التاريخ</th>
                     <th className="py-4 px-6 text-xs font-black uppercase text-slate-500">الصف</th>
-                    <th className="py-4 px-6 text-xs font-black uppercase text-slate-500 text-center">المؤشر (من 5)</th>
+                    <th className="py-4 px-6 text-xs font-black uppercase text-slate-500 text-center">المؤشر (من 10)</th>
                     <th className="py-4 px-6 text-xs font-black uppercase text-slate-500 text-center">بواسطة</th>
                     <th className="py-4 px-6 text-xs font-black uppercase text-slate-500 text-center">الإجراء</th>
                   </tr>
@@ -137,9 +143,9 @@ export default function EvaluationsArchivePage() {
                           {ev.class_name}
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <div className="inline-flex items-center justify-center w-12 h-8 rounded-lg font-black text-sm border bg-slate-50">
-                            <span className={score >= 4 ? 'text-emerald-600' : score >= 3 ? 'text-amber-600' : 'text-rose-600'}>{score}</span>
-                            <span className="text-slate-400 mx-0.5">/</span>5
+                          <div className="inline-flex items-center justify-center w-14 h-8 rounded-lg font-black text-sm border bg-slate-50">
+                            <span className={score >= 8 ? 'text-emerald-600' : score >= 5 ? 'text-amber-600' : 'text-rose-600'}>{score}</span>
+                            <span className="text-slate-400 mx-0.5">/</span>10
                           </div>
                         </td>
                         <td className="py-4 px-6 text-center text-xs font-bold text-slate-500">
