@@ -5,9 +5,10 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
+// 🚀 تم إضافة Loader2 هنا
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Search, Sparkles, Activity
+  MessageSquareHeart, Send, X, Search, Sparkles, Activity, Loader2
 } from 'lucide-react';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -24,13 +25,11 @@ export default function ArenaMonitorDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // نافذة الملاحظات
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [feedbackText, setFeedbackText] = useState('');
   const [savingFeedback, setSavingFeedback] = useState(false);
 
-  // 1. جلب قائمة الدروس الخاصة بالمعلم
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
 
@@ -38,7 +37,6 @@ export default function ArenaMonitorDashboard() {
       try {
         let query = supabase.from('assignments_v2').select('id, title, is_practice_mode, created_at, assignment_questions_v2(id)').order('created_at', { ascending: false });
         
-        // إذا كان معلماً، نجلب دروسه فقط
         if (currentRole === 'teacher') {
           query = query.eq('teacher_id', user.id);
         }
@@ -57,12 +55,10 @@ export default function ArenaMonitorDashboard() {
     fetchAssignments();
   }, [user, currentRole]);
 
-  // 2. جلب تقدم الطلاب عند اختيار درس
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
     try {
-      // جلب سجلات التقدم
       const { data: progData, error: progErr } = await supabase
         .from('student_progress_v2')
         .select('*')
@@ -75,7 +71,6 @@ export default function ArenaMonitorDashboard() {
         return;
       }
 
-      // جلب أسماء الطلاب بناءً على ID
       const studentIds = progData.map(p => p.student_id);
       const { data: usersData, error: usersErr } = await supabase
         .from('users')
@@ -84,7 +79,6 @@ export default function ArenaMonitorDashboard() {
 
       if (usersErr) throw usersErr;
 
-      // دمج البيانات
       const merged = progData.map(p => {
         const studentInfo = usersData?.find(u => u.id === p.student_id);
         const percentage = p.is_completed ? 100 : Math.round((p.current_index / assignment.total_questions) * 100);
@@ -95,14 +89,12 @@ export default function ArenaMonitorDashboard() {
         };
       });
 
-      // ترتيب الطلاب: المكتملون أولاً ثم الأعلى إنجازاً
       merged.sort((a, b) => b.percentage - a.percentage);
       setStudentsProgress(merged);
 
     } catch (err) { console.error("Error fetching progress:", err); } finally { setRefreshing(false); }
   };
 
-  // 3. حفظ الملاحظة للطالب
   const saveFeedback = async () => {
     if (!selectedStudent || !selectedAssignment) return;
     setSavingFeedback(true);
@@ -115,7 +107,6 @@ export default function ArenaMonitorDashboard() {
 
       if (error) throw error;
       
-      // تحديث الواجهة محلياً
       setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText } : p));
       setFeedbackModalOpen(false);
       setFeedbackText('');
@@ -135,7 +126,6 @@ export default function ArenaMonitorDashboard() {
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* الهيدر السريع */}
         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center shrink-0">
@@ -164,11 +154,9 @@ export default function ArenaMonitorDashboard() {
           </div>
         </div>
 
-        {/* عرض بيانات الدرس المحدد */}
         {selectedAssignment && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             
-            {/* بطاقات الإحصائيات السريعة */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><Users className="w-6 h-6"/></div>
@@ -195,7 +183,6 @@ export default function ArenaMonitorDashboard() {
               </div>
             </div>
 
-            {/* قائمة الطلاب وتفاصيل الإنجاز */}
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والمتابعة</h3>
@@ -264,7 +251,6 @@ export default function ArenaMonitorDashboard() {
         )}
       </div>
 
-      {/* 🚀 نافذة إرسال الملاحظة (Modal) */}
       <AnimatePresence>
         {feedbackModalOpen && selectedStudent && (
           <>
