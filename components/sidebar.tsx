@@ -13,7 +13,7 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles
 } from 'lucide-react';
 
 const navigation = [
@@ -46,6 +46,7 @@ const navigation = [
   { name: 'الحصص الحية', href: '/live', icon: Clock },
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
+  { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments', icon: Sparkles }, // 🚀 الرابط الجديد للمدير فقط
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
   { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
@@ -88,6 +89,9 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
 
   const filteredNavigation = navigation.filter(item => {
+    // 🚀 حصر رابط الواجبات الذكية على المدير فقط
+    if (item.name === 'الواجبات بالذكاء الاصطناعي') return authRole === 'admin';
+
     // إخفاء هذه الأزرار المخصصة للإدارة فقط (حتى عن المشرف)
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
