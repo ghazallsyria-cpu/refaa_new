@@ -4,6 +4,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { 
   FileText, CheckCircle2, AlertCircle, Sparkles, 
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
@@ -16,7 +17,14 @@ import { useAuth } from '@/context/auth-context';
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// 🚀 استيراد مكتبة Tiptap العملاقة
+// 🚀 استيراد المحرر البصري
+const ReactQuill = dynamic(() => import('react-quill'), { 
+  ssr: false, 
+  loading: () => <div className="p-10 text-center text-slate-400 font-bold animate-pulse">جاري التحميل...</div> 
+});
+import 'react-quill/dist/quill.snow.css';
+
+// 🚀 استيراد مكتبة Tiptap
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -29,7 +37,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 
-// استيراد مكتبة الرياضيات لعرض المعاينة للخيارات
+// الرياضيات
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
@@ -50,7 +58,7 @@ const cleanMathLatex = (text: string) => {
 };
 
 // ==========================================
-// 🚀 مكون محرر Tiptap المخصص
+// 🚀 مكون محرر Tiptap
 // ==========================================
 const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html: string) => void }) => {
   const editor = useEditor({
@@ -72,7 +80,7 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-slate max-w-none focus:outline-none min-h-[180px] p-4 text-slate-800 font-bold leading-loose',
+        class: 'prose prose-slate max-w-none focus:outline-none min-h-[180px] p-4 text-slate-800 font-bold leading-loose tiptap-content',
         dir: 'rtl'
       },
       handlePaste: (view, event) => {
@@ -343,7 +351,7 @@ export default function AssignmentBuilderV2() {
   };
 
   const translateType = (t: string) => {
-    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
+    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'ورقة عمل (مقالي/تفاعلي)', 'section_header': 'ترويسة/نص عام' };
     return types[t] || t;
   };
 
@@ -352,20 +360,21 @@ export default function AssignmentBuilderV2() {
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4 font-cairo text-slate-800 pb-32" dir="rtl">
       
-      {/* 🚀 CSS مخصص لضمان جمال جداول Tiptap وتنسيقات الرياضيات */}
+      {/* 🚀 CSS مخصص وعنيف لإجبار المتصفح على احترام شكل الجداول في كل مكان */}
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: rtl !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: rtl !important; text-align: right !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: rtl !important; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         
-        .ProseMirror table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 15px 0; overflow: hidden; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .ProseMirror td, .ProseMirror th { border: 1px solid #cbd5e1; padding: 12px; min-width: 1em; text-align: center; }
-        .ProseMirror th { background-color: #f8fafc; font-weight: bold; }
-        .ProseMirror img { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin: 10px auto; display: block; }
-        .ProseMirror p { margin-bottom: 0.5em; }
-        .ProseMirror ul { list-style-type: disc; padding-inline-start: 20px; }
-        .ProseMirror ol { list-style-type: decimal; padding-inline-start: 20px; }
+        /* 🚀 الكلاس السحري الذي يجبر الجداول على الظهور بالشكل الصحيح في المعاينة والمحرر */
+        .tiptap-content table, .ProseMirror table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #94a3b8 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
+        .tiptap-content th, .ProseMirror th { background-color: #f1f5f9 !important; font-weight: 900 !important; }
+        .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 8px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1) !important; }
+        .tiptap-content p, .ProseMirror p { margin-bottom: 0.5em !important; }
+        .tiptap-content ul, .ProseMirror ul { list-style-type: disc !important; padding-inline-start: 20px !important; }
+        .tiptap-content ol, .ProseMirror ol { list-style-type: decimal !important; padding-inline-start: 20px !important; }
       `}} />
 
       <AnimatePresence>
@@ -447,8 +456,8 @@ export default function AssignmentBuilderV2() {
                       </div>
                     </div>
                     
-                    {/* 🚀 عرض المحتوى بأمان مع الاحتفاظ بتنسيقات Tiptap */}
-                    <div className="ProseMirror prose-slate font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
+                    {/* 🚀 عرض المحتوى مع كلاس tiptap-content الإجباري */}
+                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
                     
                     {q.options && q.options.length > 0 && (
                       <div className="mt-5 space-y-2">
@@ -465,7 +474,7 @@ export default function AssignmentBuilderV2() {
               </div>
 
               <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
-                <Plus className="w-5 h-5" /> إضافة سؤال / كتلة نصية جديدة
+                <Plus className="w-5 h-5" /> إضافة سؤال / كتلة نصية (جدول)
               </button>
             </div>
 
@@ -483,7 +492,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 نافذة المحرر البصري Tiptap (Word-Style) */}
+      {/* 🚀 نافذة المحرر البصري Tiptap */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -502,7 +511,7 @@ export default function AssignmentBuilderV2() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">نوع الإدراج</label>
                     <select value={currentQ.type} onChange={(e) => setCurrentQ({...currentQ, type: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-700 outline-none shadow-sm">
-                      <option value="essay">سؤال مقالي (نص مفتوح)</option>
+                      <option value="essay">سؤال مقالي / ورقة عمل (جدول فارغ)</option>
                       <option value="multiple_choice">سؤال اختياري</option>
                       <option value="true_false">صح / خطأ</option>
                       <option value="section_header">ترويسة عريضة (عنوان)</option>
@@ -514,7 +523,6 @@ export default function AssignmentBuilderV2() {
                   </div>
                 </div>
 
-                {/* 🚀 استخدام Tiptap Editor */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500">محتوى السؤال (الصق من Word مباشرة)</label>
                   <TiptapEditor 
@@ -523,24 +531,29 @@ export default function AssignmentBuilderV2() {
                   />
                 </div>
 
-                {/* 🚀 المعاينة الحية للرياضيات من داخل Tiptap */}
-                <div className="bg-slate-800 rounded-2xl p-5 text-white shadow-inner">
-                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-700 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> معاينة فورية:</div>
-                  <div className="font-bold text-sm leading-loose">
-                    <div className="katex-container"><Latex>{cleanMathLatex(currentQ.content_html) || '...'}</Latex></div>
+                {/* 🚀 المعاينة الفورية مع كلاس tiptap-content لحماية الجداول */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-inner">
+                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> المعاينة النهائية للشكل:</div>
+                  <div className="tiptap-content prose prose-slate max-w-none font-bold text-sm leading-loose text-slate-800" dangerouslySetInnerHTML={{ __html: currentQ.content_html || '...' }}>
                   </div>
                 </div>
 
                 {currentQ.type === 'multiple_choice' && (
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                     <h4 className="font-black text-slate-800 flex items-center justify-between">
-                      خيارات الإجابة
+                      خيارات الإجابة (للتصحيح الآلي)
                       <button onClick={addOption} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3 h-3"/> إضافة خيار</button>
                     </h4>
+                    
+                    {/* 💡 نصيحة للمعلم */}
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs font-bold text-amber-700 leading-relaxed">
+                      💡 <b>نصيحة هامة:</b> إذا نسخت سؤالاً يحتوي على خيارات (A, B, C, D) من الوورد، يفضل مسحها من المحرر بالأعلى، وإعادة كتابتها/لصقها هنا في الأسفل لكي يقوم النظام بتصحيحها للطلاب آلياً!
+                    </div>
+
                     <div className="space-y-3">
                       {currentQ.options.map((opt, i) => (
                         <div key={opt.id} className={`flex items-center gap-3 p-2 rounded-xl border transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200 bg-slate-50'}`}>
-                          <button onClick={() => toggleCorrectOption(opt.id)} className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center border-2 transition-colors ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'}`}>
+                          <button onClick={() => toggleCorrectOption(opt.id)} className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center border-2 transition-colors ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'}`} title="تحديد كإجابة صحيحة">
                             {opt.is_correct && <CheckCircle2 className="w-4 h-4" />}
                           </button>
                           <input type="text" value={opt.content} onChange={(e) => updateOptionContent(opt.id, e.target.value)} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold text-sm outline-none focus:border-indigo-500" placeholder={`اكتب الخيار رقم ${i + 1}`} dir="rtl" />
