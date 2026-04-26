@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useAdminExcuses } from '@/hooks/useAdminExcuses';
 import { supabase } from '@/lib/supabase'; 
@@ -34,12 +34,11 @@ export default function AdminExcusesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{studentName: string, records: any[]}[] | null>(null);
 
-  // 🚀 تقرير الغياب الكامل 
+  // 🚀 حالات تقرير الغياب الكامل 
   const [rawFullDayData, setRawFullDayData] = useState<any[]>([]);
   const [isFullDayLoading, setIsFullDayLoading] = useState(false);
   const [isFullDayExporting, setIsFullDayExporting] = useState(false);
   
-  // 🚀 حل مشكلة الانهيار بتفريغ التواريخ مبدئياً
   const [fullDayStartDate, setFullDayStartDate] = useState('');
   const [fullDayEndDate, setFullDayEndDate] = useState('');
   
@@ -48,20 +47,29 @@ export default function AdminExcusesPage() {
   
   const [mounted, setMounted] = useState(false);
 
+  // 1. الإعداد الأولي عند فتح الصفحة
   useEffect(() => {
     setMounted(true);
-    // تعيين التاريخ هنا لمنع عدم التطابق بين السيرفر والمتصفح
     setFullDayEndDate(format(new Date(), 'yyyy-MM-dd'));
     setFullDayStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   }, []);
 
-  // 🚀 جلب البيانات الأساسية
+  // 2. جلب سجلات الأعذار (محمي من الحلقات اللانهائية)
   useEffect(() => {
     if (!mounted || isChecking || activeTab === 'inquiry' || activeTab === 'full_day_absence') return;
     fetchExcuses(activeTab);
-  }, [activeTab, isChecking, fetchExcuses, mounted]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isChecking, mounted]);
 
-  const fetchFullDayAbsences = useCallback(async () => {
+  // 3. جلب بيانات المنقطعين (غياب كامل) محمي تماماً
+  useEffect(() => {
+    if (activeTab === 'full_day_absence' && mounted && fullDayStartDate && fullDayEndDate) {
+      fetchFullDayAbsences();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, fullDayStartDate, fullDayEndDate, mounted]);
+
+  const fetchFullDayAbsences = async () => {
     if (!fullDayStartDate || !fullDayEndDate) return;
     setIsFullDayLoading(true);
     try {
@@ -96,7 +104,7 @@ export default function AdminExcusesPage() {
       
       Object.entries(studentDatePeriods).forEach(([sId, datesMap]) => {
         const fullAbsentDates = Object.entries(datesMap)
-          .filter(([_, periods]) => periods.size >= 5) 
+          .filter(([_, periods]) => periods.size >= 5) // غياب 5 حصص فأكثر يعني غياب يوم كامل
           .map(([date]) => date)
           .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
@@ -165,13 +173,7 @@ export default function AdminExcusesPage() {
     } finally {
       setIsFullDayLoading(false);
     }
-  }, [fullDayStartDate, fullDayEndDate]);
-
-  useEffect(() => {
-    if (activeTab === 'full_day_absence' && mounted && fullDayStartDate && fullDayEndDate) {
-      fetchFullDayAbsences();
-    }
-  }, [activeTab, fetchFullDayAbsences, mounted, fullDayStartDate, fullDayEndDate]);
+  };
 
   const { filteredFullDayData, groupedFullDay, availableClasses } = useMemo(() => {
     let filtered = rawFullDayData;
@@ -473,7 +475,7 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني) */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
@@ -487,6 +489,7 @@ export default function AdminExcusesPage() {
                     </div>
                   </div>
                   
+                  {/* 🚀 لوحة التحكم بالفلاتر والبحث */}
                   <div className="flex flex-wrap items-center gap-3 bg-[#090b14]/50 p-4 rounded-2xl border border-white/5 w-full">
                      <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
                        <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">من تاريخ</label>
