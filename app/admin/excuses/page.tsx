@@ -1,6 +1,6 @@
-/* eslint-disable react/no-unescaped-entities */
-/* eslint-disable @next/next/no-img-element */
 // @ts-nocheck
+/* eslint-disable @next/next/no-img-element */
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
@@ -12,7 +12,7 @@ import {
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
   Loader2, Search, Filter, AlertTriangle, CheckSquare,
-  Printer, School, GraduationCap, Download, Play
+  Printer, School, GraduationCap, Download, Play, Trash2
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format, subDays } from 'date-fns';
@@ -47,6 +47,9 @@ export default function AdminExcusesPage() {
   const [stageFilter, setStageFilter] = useState('all'); 
   const [classFilter, setClassFilter] = useState('all'); 
   
+  // 🚀 حالة فلترة الأعذار المعتمدة
+  const [approvedDateFilter, setApprovedDateFilter] = useState('');
+
   const [mounted, setMounted] = useState(false);
 
   // 1. الإعداد الأولي عند فتح الصفحة
@@ -63,7 +66,7 @@ export default function AdminExcusesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isChecking, mounted]);
 
-  // 🚀 3. دالة البحث الشامل (معزولة تماماً لا تعمل إلا بالضغط على الزر)
+  // 🚀 3. دالة البحث الشامل للغياب الكلي
   const executeFullDaySearch = async () => {
     if (!fullDayStartDate || !fullDayEndDate) {
       alert('يرجى تحديد التواريخ بشكل صحيح');
@@ -303,9 +306,20 @@ export default function AdminExcusesPage() {
     }
   };
 
+  // 🚀 تطبيق فلتر التاريخ المحلي على الأعذار
+  const displayedExcuses = useMemo(() => {
+    if (activeTab === 'approved' && approvedDateFilter) {
+      return excuses.filter(e => 
+        (e.absent_dates && e.absent_dates.includes(approvedDateFilter)) || 
+        e.excuse_date === approvedDateFilter
+      );
+    }
+    return excuses || [];
+  }, [excuses, activeTab, approvedDateFilter]);
+
   const exportApprovedToPDF = async () => {
-    const approvedExcuses = (excuses || []).filter(e => e.status === 'approved');
-    if (approvedExcuses.length === 0) { alert('لا توجد أعذار معتمدة لتصديرها.'); return; }
+    const approvedExcuses = displayedExcuses.filter(e => e.status === 'approved');
+    if (approvedExcuses.length === 0) { alert('لا توجد أعذار معتمدة لتصديرها في هذا النطاق.'); return; }
     setIsExportingPDF(true);
 
     try {
@@ -330,7 +344,7 @@ export default function AdminExcusesPage() {
 
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       doc!.open();
-      doc!.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>body { font-family: Arial, sans-serif; padding: 40px; color: #000; background-color: #fff; margin: 0; }.header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }table { width: 100%; border-collapse: collapse; margin-top: 20px; }th, td { border: 1px solid #000; padding: 12px; text-align: center; }th { background-color: #f0f0f0; font-weight: bold; }</style></head><body><div id="pdf-target"><div class="header"><h2>مدرسة الرفعة النموذجية</h2><h3>تقرير الأعذار الطبية المعتمدة</h3><p>تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p></div><table><thead><tr><th width="5%">#</th><th width="30%">اسم الطالب</th><th width="20%">الصف والشعبة</th><th width="30%">أيام الغياب</th><th width="15%">الدوام</th></tr></thead><tbody>${tableRows}</tbody></table></div></body></html>`);
+      doc!.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>body { font-family: Arial, sans-serif; padding: 40px; color: #000; background-color: #fff; margin: 0; }.header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }table { width: 100%; border-collapse: collapse; margin-top: 20px; }th, td { border: 1px solid #000; padding: 12px; text-align: center; }th { background-color: #f0f0f0; font-weight: bold; }</style></head><body><div id="pdf-target"><div class="header"><h2>مدرسة الرفعة النموذجية</h2><h3>تقرير الأعذار الطبية المعتمدة</h3><p>تاريخ الإصدار: ${new Date().toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })}</p>${approvedDateFilter ? `<p style="font-size: 14px; color: #be123c;">تمت التصفية ليوم: <span dir="ltr">${approvedDateFilter}</span></p>` : ''}</div><table><thead><tr><th width="5%">#</th><th width="30%">اسم الطالب</th><th width="20%">الصف والشعبة</th><th width="30%">أيام الغياب</th><th width="15%">الدوام</th></tr></thead><tbody>${tableRows}</tbody></table></div></body></html>`);
       doc!.close();
 
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -343,7 +357,7 @@ export default function AdminExcusesPage() {
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`تقرير_الأعذار_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+      pdf.save(`تقرير_الأعذار_${approvedDateFilter ? approvedDateFilter : format(new Date(), 'yyyy-MM-dd')}.pdf`);
       document.body.removeChild(iframe);
 
     } catch (err) { alert('حدث خطأ أثناء التصدير.'); } finally { setIsExportingPDF(false); }
@@ -417,6 +431,24 @@ export default function AdminExcusesPage() {
     } catch (err: any) { alert('حدث خطأ أثناء تحديث الحالة: ' + err.message); }
   };
 
+  // 🚀 دالة الحذف للمدير
+  const handleDeleteRecord = async (recordId: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذا السجل نهائياً؟')) return;
+    try {
+      const { error } = await supabase.from('attendance_records').delete().eq('id', recordId);
+      if (error) throw error;
+      setSearchResults(prev => {
+        if (!prev) return prev;
+        return prev.map(student => ({
+          ...student,
+          records: student.records.filter(rec => rec.id !== recordId)
+        })).filter(student => student.records.length > 0);
+      });
+    } catch (err: any) {
+      alert('حدث خطأ أثناء الحذف: ' + err.message);
+    }
+  };
+
   const safeFormat = (dateStr: any, formatStr: string, fallback = '...') => {
     if (!dateStr) return fallback;
     try { return format(new Date(dateStr), formatStr, { locale: arSA }); } catch (e) { return fallback; }
@@ -452,20 +484,6 @@ export default function AdminExcusesPage() {
             </div>
             
             <div className="flex flex-col items-center xl:items-end gap-4 w-full xl:w-auto">
-              <AnimatePresence>
-                {activeTab === 'approved' && (
-                  <motion.button 
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                    onClick={exportApprovedToPDF} 
-                    disabled={isExportingPDF}
-                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm transition-all shadow-[0_0_15px_rgba(16,185,129,0.4)] active:scale-95 w-full sm:w-auto disabled:opacity-50"
-                  >
-                    {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />} 
-                    {isExportingPDF ? 'جاري تجهيز التقرير...' : 'تصدير تقرير للإدارة المدرسية (PDF)'}
-                  </motion.button>
-                )}
-              </AnimatePresence>
-
               <div className="flex flex-wrap justify-center bg-[#090b14]/80 p-1.5 rounded-2xl border border-white/5 w-full">
                 <button onClick={() => setActiveTab('pending')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'pending' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>طلبات معلقة</button>
                 <button onClick={() => setActiveTab('approved')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>معتمدة</button>
@@ -479,7 +497,7 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني والبحث اليدوي الآمن) */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
@@ -673,16 +691,25 @@ export default function AdminExcusesPage() {
                                    <div className="flex justify-between items-start mb-4">
                                      <div className="font-black text-lg text-white" dir="ltr">{safeFormat(rec.date, 'dd MMM yyyy')}</div>
                                      
-                                     <select 
-                                       value={rec.status}
-                                       onChange={(e) => handleUpdateRecordStatus(rec.id, e.target.value)}
-                                       className={`px-3 py-1.5 rounded-lg text-xs font-black border outline-none cursor-pointer appearance-none text-center shadow-sm focus:ring-2 transition-all ${statusInfo.color}`}
-                                     >
-                                       <option value="absent" className="bg-[#090b14] text-rose-400">غياب</option>
-                                       <option value="excused" className="bg-[#090b14] text-indigo-400">مستأذن</option>
-                                       <option value="late" className="bg-[#090b14] text-amber-400">تأخير</option>
-                                       <option value="present" className="bg-[#090b14] text-emerald-400">حاضر</option>
-                                     </select>
+                                     <div className="flex items-center gap-2">
+                                       <select 
+                                         value={rec.status}
+                                         onChange={(e) => handleUpdateRecordStatus(rec.id, e.target.value)}
+                                         className={`px-3 py-1.5 rounded-lg text-xs font-black border outline-none cursor-pointer appearance-none text-center shadow-sm focus:ring-2 transition-all ${statusInfo.color}`}
+                                       >
+                                         <option value="absent" className="bg-[#090b14] text-rose-400">غياب</option>
+                                         <option value="excused" className="bg-[#090b14] text-indigo-400">مستأذن</option>
+                                         <option value="late" className="bg-[#090b14] text-amber-400">تأخير</option>
+                                         <option value="present" className="bg-[#090b14] text-emerald-400">حاضر</option>
+                                       </select>
+                                       
+                                       {/* 🚀 زر الحذف الخاص بالمدير */}
+                                       {(currentRole === 'admin' || currentRole === 'management') && (
+                                         <button onClick={() => handleDeleteRecord(rec.id)} className="p-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-lg transition-colors" title="حذف السجل نهائياً">
+                                           <Trash2 className="w-4 h-4" />
+                                         </button>
+                                       )}
+                                     </div>
 
                                    </div>
                                    <div className="flex justify-between items-end text-sm font-bold text-slate-400">
@@ -702,9 +729,33 @@ export default function AdminExcusesPage() {
           </div>
         ) : (
           <>
+            {/* 🚀 قسم الأعذار المعتمدة يحتوي على فلتر التاريخ الجديد */}
+            {activeTab === 'approved' && (
+              <div className="bg-[#131836]/60 backdrop-blur-xl p-6 rounded-[2rem] border border-white/5 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <span className="text-sm font-bold text-slate-400">تصفية الأعذار المعتمدة:</span>
+                  <input 
+                    type="date" 
+                    className="bg-[#090b14] border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-indigo-500/50"
+                    value={approvedDateFilter}
+                    onChange={(e) => setApprovedDateFilter(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                   <button onClick={() => setApprovedDateFilter('')} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-sm transition-all">
+                     عرض الكل
+                   </button>
+                   <button onClick={exportApprovedToPDF} disabled={isExportingPDF} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-sm transition-all disabled:opacity-50">
+                     {isExportingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                     {approvedDateFilter ? 'طباعة حسب التاريخ' : 'طباعة الكل'}
+                   </button>
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center py-20"><Loader2 className="w-12 h-12 animate-spin text-emerald-500" /></div>
-            ) : (excuses || []).length === 0 ? (
+            ) : (displayedExcuses || []).length === 0 ? (
               <div className="bg-[#131836]/40 backdrop-blur-xl rounded-[3rem] p-16 text-center border border-white/5">
                 <CheckCircle2 className="h-16 w-16 mx-auto text-emerald-500/50 mb-4" />
                 <h3 className="text-2xl font-black text-white">لا توجد طلبات في هذا القسم</h3>
@@ -712,7 +763,7 @@ export default function AdminExcusesPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-                {excuses.map((excuse) => {
+                {displayedExcuses.map((excuse) => {
                   const studentName = Array.isArray(excuse.students?.users) ? excuse.students.users[0]?.full_name : excuse.students?.users?.full_name;
                   const className = Array.isArray(excuse.students?.sections?.classes) ? excuse.students.sections.classes[0]?.name : excuse.students?.sections?.classes?.name;
                   const sectionName = excuse.students?.sections?.name;
