@@ -9,7 +9,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -38,7 +38,8 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Option { id: string; content: string; is_correct: boolean; }
-interface Question { id: string; type: string; content_html: string; points: number; options: Option[]; }
+// 🚀 تحديث الواجهة لتشمل الإجابة النموذجية
+interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; }
 
 const cleanMathLatex = (text: string) => {
   if (!text) return '';
@@ -50,9 +51,9 @@ const cleanMathLatex = (text: string) => {
 };
 
 // ==========================================
-// 🚀 مكون محرر Tiptap
+// 🚀 مكون محرر Tiptap (مُحسن للأداء)
 // ==========================================
-const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html: string) => void }) => {
+const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -72,7 +73,7 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-slate max-w-none focus:outline-none min-h-[180px] p-4 text-slate-800 font-bold leading-loose tiptap-content',
+        class: 'prose prose-slate max-w-none focus:outline-none min-h-[120px] p-4 text-slate-800 font-bold leading-loose tiptap-content',
         dir: 'rtl'
       },
       handlePaste: (view, event) => {
@@ -121,40 +122,33 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
 
   if (!editor) return null;
 
-  const insertMath = (symbol: string) => {
-    editor.chain().focus().insertContent(` ${symbol} `).run();
-  };
+  const insertMath = (symbol: string) => { editor.chain().focus().insertContent(` ${symbol} `).run(); };
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner flex flex-col">
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap gap-1 items-center">
-        <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Bold className="w-4 h-4"/></button>
-        <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Italic className="w-4 h-4"/></button>
-        <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('underline') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><UnderlineIcon className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Bold className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Italic className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('underline') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><UnderlineIcon className="w-4 h-4"/></button>
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
-        <button onClick={() => editor.chain().focus().setTextAlign('right').run()} className={`p-2 rounded-lg transition-colors ${editor.isActive({ textAlign: 'right' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignRight className="w-4 h-4"/></button>
-        <button onClick={() => editor.chain().focus().setTextAlign('center').run()} className={`p-2 rounded-lg transition-colors ${editor.isActive({ textAlign: 'center' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignCenter className="w-4 h-4"/></button>
-        <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-2 rounded-lg transition-colors ${editor.isActive({ textAlign: 'left' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignLeft className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().setTextAlign('right').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'right' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignRight className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().setTextAlign('center').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'center' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignCenter className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive({ textAlign: 'left' }) ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><AlignLeft className="w-4 h-4"/></button>
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
-        <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><List className="w-4 h-4"/></button>
-        <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><ListOrdered className="w-4 h-4"/></button>
-        <div className="w-px h-5 bg-slate-300 mx-1"></div>
-        <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-2 rounded-lg text-slate-600 hover:bg-slate-200" title="إدراج جدول"><TableIcon className="w-4 h-4"/></button>
+        <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200" title="إدراج جدول"><TableIcon className="w-4 h-4"/></button>
       </div>
 
       <div className="bg-indigo-50 border-b border-indigo-100 p-2 flex flex-wrap gap-2 items-center overflow-x-auto hide-scrollbar">
-        <span className="text-xs font-black text-indigo-700 ml-1">رياضيات:</span>
         <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
         <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
         <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
         <button onClick={() => insertMath('$\\sqrt{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">جذر</button>
-        <button onClick={() => insertMath('$\\begin{array}{c} A \\\\ | \\\\ B - C \\\\ | \\\\ D \\end{array}$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm flex items-center gap-1"><FlaskConical className="w-3 h-3"/> كيمياء</button>
       </div>
 
       <div className="flex-1 bg-white relative">
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">
-            اكتب السؤال هنا، أو اضغط (لصق) لنسخ المحتوى من Word (جداول، صور، ألوان)...
+            {placeholder}
           </div>
         )}
         <EditorContent editor={editor} />
@@ -180,11 +174,14 @@ export default function AssignmentBuilderV2() {
 
   const [activeTab, setActiveTab] = useState<'builder' | 'import'>('builder');
   
-  const [assignmentTitle, setAssignmentTitle] = useState('واجب جديد');
+  const [assignmentTitle, setAssignmentTitle] = useState('بنك تدريب جديد');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
+  
+  // 🚀 حالة نمط التدريب
+  const [isPracticeMode, setIsPracticeMode] = useState<boolean>(true);
   
   const [questions, setQuestions] = useState<Question[]>([]);
   
@@ -241,10 +238,8 @@ export default function AssignmentBuilderV2() {
   const toggleSection = (id: string) => setSelectedSections(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const copyPrompt = () => { 
-    const basePromptText = String.raw`أنت خبير تعليمي. استخرج الأسئلة بـ JSON:
-1. الأسئلة العامة اجعلها "section_header".
-2. الرياضيات العربية: افصل كل حد داخل دولار وضعه خارجه الأقواس. ( $س$ - $٢$ )
-أخرج الناتج ككود JSON: { "title": "عنوان", "questions": [ { "type": "multiple_choice", "content": "السؤال", "points": 1, "options": ["خيار1"] } ] }`;
+    const basePromptText = String.raw`أنت خبير تعليمي. استخرج الأسئلة بـ JSON. إذا كان هناك إجابة نموذجية ضعها في model_answer_html. 
+أخرج الناتج ككود JSON: { "title": "عنوان", "questions": [ { "type": "multiple_choice", "content": "السؤال", "model_answer_html": "خطوات الحل", "points": 1, "options": ["خيار1"] } ] }`;
     navigator.clipboard.writeText(basePromptText); 
     alert('تم نسخ أمر التوليد الذكي!'); 
   };
@@ -257,12 +252,13 @@ export default function AssignmentBuilderV2() {
       const newQuestions = parsedData.questions.map((q:any) => ({
         id: crypto.randomUUID(),
         content_html: cleanMathLatex(q.content || q.section_header || ''),
+        model_answer_html: cleanMathLatex(q.model_answer_html || ''), // قراءة الإجابة النموذجية
         type: q.type || 'essay',
         points: Number(q.points) || 1,
         options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ id: crypto.randomUUID(), content: cleanMathLatex(String(o)), is_correct: false })) : [],
       }));
 
-      setAssignmentTitle(parsedData.title || 'واجب مستورد');
+      setAssignmentTitle(parsedData.title || 'بنك مستورد');
       setQuestions(prev => [...prev, ...newQuestions]);
       setManualJson(''); 
       setManualJsonError(null);
@@ -271,7 +267,7 @@ export default function AssignmentBuilderV2() {
   };
 
   const openNewQuestion = () => {
-    setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', points: 1, options: [] });
+    setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [] });
     setEditingIndex(null);
     setIsEditorOpen(true);
   };
@@ -325,7 +321,16 @@ export default function AssignmentBuilderV2() {
     setIsSavingDB(true);
     try {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
-      const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ title: assignmentTitle, description: 'تم الإنشاء بواسطة الصانع البصري', subject_id: selectedSubject, teacher_id: selectedTeacher, due_date: dueDate.toISOString(), status: assignmentStatus }).select().single();
+      const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
+        title: assignmentTitle, 
+        description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+        subject_id: selectedSubject, 
+        teacher_id: selectedTeacher, 
+        due_date: dueDate.toISOString(), 
+        status: assignmentStatus,
+        is_practice_mode: isPracticeMode // 🚀 حفظ النمط
+      }).select().single();
+      
       if (assignErr) throw assignErr;
       
       const newAssignmentId = assignData.id;
@@ -333,17 +338,25 @@ export default function AssignmentBuilderV2() {
       const { error: secErr } = await supabase.from('assignment_sections_v2').insert(sectionsPayload);
       if (secErr) throw secErr;
 
-      const questionsPayload = questions.map((q, index) => ({ assignment_id: newAssignmentId, question_type: q.type, content_html: q.content_html, points: q.points, options: q.options, order_index: index + 1 }));
+      const questionsPayload = questions.map((q, index) => ({ 
+        assignment_id: newAssignmentId, 
+        question_type: q.type, 
+        content_html: q.content_html, 
+        model_answer_html: q.model_answer_html, // 🚀 حفظ الإجابة النموذجية
+        points: q.points, 
+        options: q.options, 
+        order_index: index + 1 
+      }));
       const { error: qErr } = await supabase.from('assignment_questions_v2').insert(questionsPayload);
       if (qErr) throw qErr;
 
-      setGlobalMessage({ text: 'تم حفظ الواجب الجديد بنجاح!', type: 'success' });
+      setGlobalMessage({ text: 'تم حفظ بنك الأسئلة بنجاح!', type: 'success' });
       setTimeout(() => { router.push('/assignments'); }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ: ' + err.message); } finally { setIsSavingDB(false); }
   };
 
   const translateType = (t: string) => {
-    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'ورقة عمل (مقالي/تفاعلي)', 'section_header': 'ترويسة/نص عام' };
+    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
     return types[t] || t;
   };
 
@@ -351,22 +364,16 @@ export default function AssignmentBuilderV2() {
 
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4 font-cairo text-slate-800 pb-32" dir="rtl">
-      
-      {/* 🚀 CSS مخصص وعنيف لإجبار المتصفح على احترام شكل الجداول في كل مكان */}
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: rtl !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: rtl !important; text-align: right !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: rtl !important; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        
-        /* 🚀 الكلاس السحري الذي يجبر الجداول على الظهور بالشكل الصحيح في المعاينة والمحرر */
         .tiptap-content table, .ProseMirror table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #94a3b8 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
         .tiptap-content th, .ProseMirror th { background-color: #f1f5f9 !important; font-weight: 900 !important; }
         .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 8px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1) !important; }
         .tiptap-content p, .ProseMirror p { margin-bottom: 0.5em !important; }
-        .tiptap-content ul, .ProseMirror ul { list-style-type: disc !important; padding-inline-start: 20px !important; }
-        .tiptap-content ol, .ProseMirror ol { list-style-type: decimal !important; padding-inline-start: 20px !important; }
       `}} />
 
       <AnimatePresence>
@@ -380,120 +387,103 @@ export default function AssignmentBuilderV2() {
       <div className="max-w-4xl mx-auto space-y-6">
         
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
-          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Sparkles className="w-8 h-8" /></div>
-          <h1 className="text-2xl font-black text-slate-900">منشئ الواجبات الاحترافي (Tiptap V2)</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">انسخ والصق من Word مباشرة (نصوص، صور، جداول) مع دعم كامل للرياضيات.</p>
+          <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
+          <h1 className="text-2xl font-black text-slate-900">منشئ التفاعل المتقدم (V2)</h1>
+          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء "بنوك التدريب التفاعلية" و "الواجبات" المتقدمة.</p>
         </div>
 
-        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-          <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ListOrdered className="w-4 h-4 inline-block ml-2 mb-1" /> بناء الواجب
-          </button>
-          <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <FileJson className="w-4 h-4 inline-block ml-2 mb-1" /> استيراد ذكي (ChatGPT)
-          </button>
-        </div>
-
-        {activeTab === 'import' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
-            <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
-            <button onClick={processManualJson} className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl hover:bg-emerald-700 flex justify-center items-center gap-2 shadow-md transition-all active:scale-95">
-              <ClipboardPaste className="w-5 h-5" /> استيراد الكود وتحويله لأسئلة
+        <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
+          {/* 🚀 زر التبديل بين الواجب وبنك التدريب */}
+          <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner mb-4">
+            <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+              <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
             </button>
-          </motion.div>
-        )}
+            <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+              <FileText className="w-4 h-4" /> واجب رسمي (بدرجات)
+            </button>
+          </div>
 
-        {activeTab === 'builder' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-            
-            <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
-              <h2 className="font-black text-indigo-900 border-b border-slate-100 pb-3 flex items-center gap-2"><FileText className="w-5 h-5" /> بيانات الواجب</h2>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">عنوان الواجب</label>
-                <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" placeholder="مثال: ورقة عمل الكيمياء" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select value={selectedTeacher} onChange={e => setSelectedTeacher(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
-                  <option value="">اختر المعلم...</option>
-                  {teachers.map((t:any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                </select>
-                <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={!selectedTeacher} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
-                  <option value="">اختر المادة...</option>
-                  {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-40 overflow-y-auto">
-                {!selectedSubject ? <span className="text-xs font-bold text-slate-400">اختر المادة أولاً</span> : sections.map((sec:any) => (
-                  <label key={sec.id} className="flex items-center gap-2 cursor-pointer p-1">
-                    <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-4 h-4" />
-                    <span className="text-sm font-bold text-slate-700">{sec.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 mb-2">عنوان {isPracticeMode ? 'البنك' : 'الواجب'}</label>
+            <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" placeholder={isPracticeMode ? "مثال: تدريبات شاملة على السعة الحرارية" : "مثال: واجب الأسبوع الأول"} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select value={selectedTeacher} onChange={e => setSelectedTeacher(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
+              <option value="">اختر المعلم...</option>
+              {teachers.map((t:any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+            </select>
+            <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={!selectedTeacher} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
+              <option value="">اختر المادة...</option>
+              {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-40 overflow-y-auto">
+            {!selectedSubject ? <span className="text-xs font-bold text-slate-400">اختر المادة أولاً</span> : sections.map((sec:any) => (
+              <label key={sec.id} className="flex items-center gap-2 cursor-pointer p-1">
+                <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-4 h-4" />
+                <span className="text-sm font-bold text-slate-700">{sec.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-2">
-                <h3 className="font-black text-slate-800 text-lg">الأسئلة والكتل ({questions.length})</h3>
-              </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h3 className="font-black text-slate-800 text-lg">الأسئلة والكتل ({questions.length})</h3>
+          </div>
 
-              <div className="space-y-4">
-                {questions.map((q, i) => (
-                  <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
-                      <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
-                        <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    </div>
-                    
-                    {/* 🚀 عرض المحتوى مع كلاس tiptap-content الإجباري */}
-                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
-                    
-                    {q.options && q.options.length > 0 && (
-                      <div className="mt-5 space-y-2">
-                        {q.options.map((opt, oIdx) => (
-                          <div key={opt.id} className={`p-3 rounded-xl text-sm font-bold flex items-center gap-3 border ${opt.is_correct ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
-                            {opt.is_correct && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                            <div className="katex-container"><Latex>{opt.content}</Latex></div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+          <div className="space-y-4">
+            {questions.map((q, i) => (
+              <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                  <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
+                    <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
                   </div>
-                ))}
+                </div>
+                
+                <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: q.content_html }}></div>
+                
+                {/* عرض مصغر للإجابة النموذجية لو وجدت */}
+                {q.model_answer_html && (
+                  <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                    <span className="text-xs font-black text-emerald-700 block mb-2">الإجابة النموذجية / الشرح:</span>
+                    <div className="tiptap-content prose prose-slate max-w-none text-sm font-bold text-emerald-900 leading-relaxed" dangerouslySetInnerHTML={{ __html: q.model_answer_html }}></div>
+                  </div>
+                )}
+
               </div>
+            ))}
+          </div>
 
-              <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
-                <Plus className="w-5 h-5" /> إضافة سؤال / كتلة نصية (جدول)
-              </button>
-            </div>
+          <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
+            <Plus className="w-5 h-5" /> إضافة سؤال جديد
+          </button>
+        </div>
 
-            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">حالة الواجب عند الإرسال</label>
-              <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none">
-                <option value="draft">حفظ كمسودة</option>
-                <option value="published">نشر للطلاب مباشرة</option>
-              </select>
-              <button onClick={saveAssignmentToDB} disabled={isSavingDB} className="w-full bg-slate-900 text-white font-black text-lg py-4 rounded-xl shadow-lg hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2 active:scale-95 transition-all">
-                {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} حفظ التعيين في النظام
-              </button>
-            </div>
-          </motion.div>
-        )}
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
+          <label className="block text-xs font-bold text-slate-500">الحالة</label>
+          <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none">
+            <option value="draft">حفظ كمسودة (مخفي)</option>
+            <option value="published">نشر للطلاب</option>
+          </select>
+          <button onClick={saveAssignmentToDB} disabled={isSavingDB} className="w-full bg-slate-900 text-white font-black text-lg py-4 rounded-xl shadow-lg hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2 active:scale-95 transition-all">
+            {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : <Save className="w-5 h-5" />} حفظ التعيين في النظام
+          </button>
+        </div>
       </div>
 
-      {/* 🚀 نافذة المحرر البصري Tiptap */}
+      {/* 🚀 نافذة المحرر المزدوج (سؤال + إجابة نموذجية) */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsEditorOpen(false)} />
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 250 }} className="fixed bottom-0 left-0 w-full h-[95vh] bg-slate-100 rounded-t-[2rem] shadow-2xl z-50 flex flex-col overflow-hidden">
               
-              <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-white rounded-t-[2rem]">
+              <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-white rounded-t-[2rem] shrink-0">
                 <button onClick={() => setIsEditorOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 rounded-full shadow-sm"><X className="w-5 h-5" /></button>
-                <h3 className="font-black text-slate-800 text-lg">المحرر البصري (Tiptap)</h3>
+                <h3 className="font-black text-slate-800 text-lg">تحرير السؤال والحل</h3>
                 <button onClick={saveQuestion} className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm shadow-md active:scale-95 transition-all">إدراج بالسجل</button>
               </div>
 
@@ -501,33 +491,38 @@ export default function AssignmentBuilderV2() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500">نوع الإدراج</label>
+                    <label className="text-xs font-bold text-slate-500">نوع السؤال</label>
                     <select value={currentQ.type} onChange={(e) => setCurrentQ({...currentQ, type: e.target.value})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-slate-700 outline-none shadow-sm">
-                      <option value="essay">سؤال مقالي / ورقة عمل (جدول فارغ)</option>
-                      <option value="multiple_choice">سؤال اختياري</option>
+                      <option value="essay">مقالي / ورقة عمل</option>
+                      <option value="multiple_choice">اختياري متعدد</option>
                       <option value="true_false">صح / خطأ</option>
-                      <option value="section_header">ترويسة عريضة (عنوان)</option>
                     </select>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">الدرجة</label>
-                    <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} disabled={currentQ.type === 'section_header'} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-center text-slate-700 outline-none disabled:opacity-50 shadow-sm" />
+                    <input type="number" min="0" value={currentQ.points} onChange={(e) => setCurrentQ({...currentQ, points: Number(e.target.value)})} className="w-full p-3 bg-white border border-slate-200 rounded-xl font-black text-center text-slate-700 outline-none shadow-sm" />
                   </div>
                 </div>
 
+                {/* 🚀 محرر نص السؤال الأساسي */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500">محتوى السؤال (الصق من Word مباشرة)</label>
+                  <label className="text-sm font-black text-indigo-900">1. نص السؤال (والجدول المرفق)</label>
                   <TiptapEditor 
                     content={currentQ.content_html} 
                     onChange={(html) => setCurrentQ({ ...currentQ, content_html: html })} 
+                    placeholder="الصق السؤال هنا..."
                   />
                 </div>
 
-                {/* 🚀 المعاينة الفورية مع كلاس tiptap-content لحماية الجداول */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-inner">
-                  <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-100 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> المعاينة النهائية للشكل:</div>
-                  <div className="tiptap-content prose prose-slate max-w-none font-bold text-sm leading-loose text-slate-800" dangerouslySetInnerHTML={{ __html: currentQ.content_html || '...' }}>
-                  </div>
+                {/* 🚀 محرر الإجابة النموذجية الجديد */}
+                <div className="space-y-2 mt-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl">
+                  <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية / خطوات الحل (اختياري)</label>
+                  <p className="text-xs font-bold text-emerald-600 mb-2">هذا النص سيظهر للطالب بعد أن يحل السؤال ليصحح أخطاءه (في وضع التدريب).</p>
+                  <TiptapEditor 
+                    content={currentQ.model_answer_html || ''} 
+                    onChange={(html) => setCurrentQ({ ...currentQ, model_answer_html: html })} 
+                    placeholder="الصق الإجابة النموذجية أو خطوات الحل هنا..."
+                  />
                 </div>
 
                 {currentQ.type === 'multiple_choice' && (
@@ -537,14 +532,10 @@ export default function AssignmentBuilderV2() {
                       <button onClick={addOption} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3 h-3"/> إضافة خيار</button>
                     </h4>
                     
-                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs font-bold text-amber-700 leading-relaxed">
-                      💡 <b>نصيحة هامة:</b> إذا نسخت سؤالاً يحتوي على خيارات (A, B, C, D) من الوورد، يفضل مسحها من المحرر بالأعلى، وإعادة كتابتها/لصقها هنا في الأسفل لكي يقوم النظام بتصحيحها للطلاب آلياً!
-                    </div>
-
                     <div className="space-y-3">
                       {currentQ.options.map((opt, i) => (
                         <div key={opt.id} className={`flex items-center gap-3 p-2 rounded-xl border transition-all ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200 bg-slate-50'}`}>
-                          <button onClick={() => toggleCorrectOption(opt.id)} className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center border-2 transition-colors ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'}`} title="تحديد كإجابة صحيحة">
+                          <button onClick={() => toggleCorrectOption(opt.id)} className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center border-2 transition-colors ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'}`}>
                             {opt.is_correct && <CheckCircle2 className="w-4 h-4" />}
                           </button>
                           <input type="text" value={opt.content} onChange={(e) => updateOptionContent(opt.id, e.target.value)} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold text-sm outline-none focus:border-indigo-500" placeholder={`اكتب الخيار رقم ${i + 1}`} dir="rtl" />
