@@ -34,14 +34,14 @@ export default function AdminExcusesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{studentName: string, records: any[]}[] | null>(null);
 
-  // 🚀 حالات تقرير الغياب الكامل (محسنة الأداء)
+  // 🚀 تقرير الغياب الكامل 
   const [rawFullDayData, setRawFullDayData] = useState<any[]>([]);
   const [isFullDayLoading, setIsFullDayLoading] = useState(false);
   const [isFullDayExporting, setIsFullDayExporting] = useState(false);
   
-  // 🚀 إعداد التواريخ المبدئية لمرة واحدة
-  const [fullDayStartDate, setFullDayStartDate] = useState(() => format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [fullDayEndDate, setFullDayEndDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  // 🚀 حل مشكلة الانهيار بتفريغ التواريخ مبدئياً
+  const [fullDayStartDate, setFullDayStartDate] = useState('');
+  const [fullDayEndDate, setFullDayEndDate] = useState('');
   
   const [stageFilter, setStageFilter] = useState('all'); 
   const [classFilter, setClassFilter] = useState('all'); 
@@ -50,15 +50,17 @@ export default function AdminExcusesPage() {
 
   useEffect(() => {
     setMounted(true);
+    // تعيين التاريخ هنا لمنع عدم التطابق بين السيرفر والمتصفح
+    setFullDayEndDate(format(new Date(), 'yyyy-MM-dd'));
+    setFullDayStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   }, []);
 
-  // 🚀 جلب بيانات الأعذار الأساسية
+  // 🚀 جلب البيانات الأساسية
   useEffect(() => {
     if (!mounted || isChecking || activeTab === 'inquiry' || activeTab === 'full_day_absence') return;
     fetchExcuses(activeTab);
   }, [activeTab, isChecking, fetchExcuses, mounted]);
 
-  // 🚀 جلب بيانات الغياب الشامل (مفصولة لمنع الـ Infinite Loop)
   const fetchFullDayAbsences = useCallback(async () => {
     if (!fullDayStartDate || !fullDayEndDate) return;
     setIsFullDayLoading(true);
@@ -74,6 +76,7 @@ export default function AdminExcusesPage() {
 
       if (!records || records.length === 0) {
         setRawFullDayData([]);
+        setIsFullDayLoading(false);
         return;
       }
 
@@ -106,6 +109,7 @@ export default function AdminExcusesPage() {
 
       if (fullDayStudentIds.length === 0) {
         setRawFullDayData([]);
+        setIsFullDayLoading(false);
         return;
       }
 
@@ -163,14 +167,12 @@ export default function AdminExcusesPage() {
     }
   }, [fullDayStartDate, fullDayEndDate]);
 
-  // 🚀 جلب البيانات تلقائياً عند الدخول للتبويب
   useEffect(() => {
-    if (activeTab === 'full_day_absence' && mounted) {
+    if (activeTab === 'full_day_absence' && mounted && fullDayStartDate && fullDayEndDate) {
       fetchFullDayAbsences();
     }
-  }, [activeTab, fetchFullDayAbsences, mounted]);
+  }, [activeTab, fetchFullDayAbsences, mounted, fullDayStartDate, fullDayEndDate]);
 
-  // 🚀 الفلترة السريعة (بدون تحميل جديد)
   const { filteredFullDayData, groupedFullDay, availableClasses } = useMemo(() => {
     let filtered = rawFullDayData;
 
@@ -192,7 +194,6 @@ export default function AdminExcusesPage() {
     return { filteredFullDayData: filtered, groupedFullDay: grouped, availableClasses: available };
   }, [rawFullDayData, stageFilter, classFilter]);
 
-  // 🚀 التصدير الشامل للـ PDF (محمي من أخطاء الذاكرة)
   const exportFullDayToPDF = async () => {
     if (filteredFullDayData.length === 0) {
       alert('لا توجد بيانات لتصديرها.'); return;
@@ -472,12 +473,11 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني) */}
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
                 
-                {/* 🚀 فلاتر التحكم بالتقرير */}
                 <div className="flex flex-col gap-4 mb-8 border-b border-white/5 pb-8">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-rose-500/20 rounded-2xl border border-rose-500/30"><ShieldAlert className="w-6 h-6 text-rose-400" /></div>
@@ -487,7 +487,6 @@ export default function AdminExcusesPage() {
                     </div>
                   </div>
                   
-                  {/* 🚀 لوحة التحكم بالفلاتر والبحث */}
                   <div className="flex flex-wrap items-center gap-3 bg-[#090b14]/50 p-4 rounded-2xl border border-white/5 w-full">
                      <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
                        <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">من تاريخ</label>
