@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { useAuth } from '@/context/auth-context'; // 🚀 جلبنا بيانات المستخدم لمعرفة من يتدرب
+import { useAuth } from '@/context/auth-context'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
@@ -35,18 +35,39 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// مكون الاحتفال
+// 🚀 تم إصلاح مكون الاحتفال (Confetti) ليتوافق مع القواعد الصارمة لـ React 19
 const CelebrationConfetti = () => {
-  const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
+  const [pieces, setPieces] = useState<any[]>([]);
+
+  useEffect(() => {
+    const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
+    const generatedPieces = Array.from({ length: 40 }).map((_, i) => ({
+      id: i,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      scale: Math.random() * 1.5 + 0.5,
+      x: (Math.random() - 0.5) * 500,
+      y: (Math.random() - 0.5) * 500,
+      rotate: Math.random() * 360,
+      isCircle: Math.random() > 0.5
+    }));
+    setPieces(generatedPieces);
+  }, []);
+
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-50 flex items-center justify-center">
-      {Array.from({ length: 40 }).map((_, i) => (
+      {pieces.map((p) => (
         <motion.div
-          key={i}
+          key={p.id}
           initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
-          animate={{ opacity: 0, scale: Math.random() * 1.5 + 0.5, x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500, rotate: Math.random() * 360 }}
+          animate={{ opacity: 0, scale: p.scale, x: p.x, y: p.y, rotate: p.rotate }}
           transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ position: 'absolute', width: '10px', height: '10px', backgroundColor: colors[Math.floor(Math.random() * colors.length)], borderRadius: Math.random() > 0.5 ? '50%' : '2px' }}
+          style={{ 
+            position: 'absolute', 
+            width: '10px', 
+            height: '10px', 
+            backgroundColor: p.color, 
+            borderRadius: p.isCircle ? '50%' : '2px' 
+          }}
         />
       ))}
     </div>
@@ -74,7 +95,7 @@ export default function PracticeArena() {
   const [score, setScore] = useState({ correct: 0, wrong: 0 });
   const [isFinished, setIsFinished] = useState(false);
 
-  // 🚀 جلب البيانات واستعادة التقدم
+  // جلب البيانات واستعادة التقدم
   useEffect(() => {
     if (!id || !user) return;
     
@@ -108,7 +129,7 @@ export default function PracticeArena() {
     fetchArena();
   }, [id, user]);
 
-  // 🚀 دالة حفظ التقدم الصامتة في السيرفر
+  // دالة حفظ التقدم الصامتة في السيرفر
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
     if (!user) return;
     try {
@@ -157,11 +178,10 @@ export default function PracticeArena() {
       setAttempts(0);
       setShowHint(false);
       
-      // 🚀 حفظ التقدم الجديد
       saveProgressToDB(nextIdx, score, false);
     } else {
       setIsFinished(true);
-      saveProgressToDB(currentIndex, score, true); // 🚀 حفظ الإنجاز النهائي
+      saveProgressToDB(currentIndex, score, true); 
     }
   };
 
@@ -380,7 +400,7 @@ export default function PracticeArena() {
                   </div>
                 </div>
 
-                <button onClick={() => router.back()} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">
+                <button onClick={() => router.push('/arena')} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">
                   العودة للساحة الرئيسية <Sparkles className="w-5 h-5" />
                 </button>
               </motion.div>
