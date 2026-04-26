@@ -49,6 +49,10 @@ export default function AssignmentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   
+  // 🚀 فلاتر التصنيف الجديدة
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [taskStateFilter, setTaskStateFilter] = useState('all');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
   const [currentAssignment, setCurrentAssignment] = useState<any>({});
@@ -69,72 +73,79 @@ export default function AssignmentsPage() {
     setTimeout(() => setNotification(null), 5000);
   };
 
+  const isOverdue = (dueDateStr: string) => new Date(dueDateStr) < new Date();
+
+  // 🚀 محرك الفلترة والتصنيف الذكي
   const filteredAssignments = assignments.filter(a => {
     if(!a) return false;
+    
     const matchTitle = a.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
-    const matchSubject = a.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    const matchSubjectSearch = a.subject_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
     const matchStatus = statusFilter === 'all' || a.status === statusFilter;
-    return (matchTitle || matchSubject) && matchStatus;
+    const matchSubjectDropdown = subjectFilter === 'all' || a.subject_id === subjectFilter;
+    
+    let matchTaskState = true;
+    const overdue = isOverdue(a.due_date!);
+    
+    if (currentRole === 'student') {
+      const subStatus = String((studentSubmissions[a.id] as any)?.status || '');
+      const isDone = ['submitted', 'graded'].includes(subStatus);
+      
+      if (taskStateFilter === 'completed') matchTaskState = isDone;
+      else if (taskStateFilter === 'overdue') matchTaskState = !isDone && overdue;
+      else if (taskStateFilter === 'active') matchTaskState = !isDone && !overdue;
+    } else {
+      if (taskStateFilter === 'overdue') matchTaskState = overdue;
+      else if (taskStateFilter === 'active') matchTaskState = !overdue;
+    }
+
+    return (matchTitle || matchSubjectSearch) && matchStatus && matchSubjectDropdown && matchTaskState;
   });
 
   const displayedAssignments = (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') 
     ? filteredAssignments 
     : filteredAssignments.filter(e => e?.status === 'published');
 
+  // 🚀 تجميع الواجبات المفلترة حسب المادة لتكوين أقسام بصرية
+  const groupedAssignments = displayedAssignments.reduce((acc, curr) => {
+    const subj = curr.subject_name || 'مواد عامة';
+    if (!acc[subj]) acc[subj] = [];
+    acc[subj].push(curr);
+    return acc;
+  }, {} as Record<string, any[]>);
+
   const handleSaveAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    if (!currentAssignment.subject_id) {
-      showNotification('error', 'عذراً، يجب اختيار المادة الدراسية');
-      return;
-    }
-    if (!currentAssignment.section_ids || currentAssignment.section_ids.length === 0) {
-      showNotification('error', 'عذراً، يجب تحديد شعبة واحدة على الأقل لإرسال الواجب إليها');
-      return;
-    }
+    if (!currentAssignment.subject_id) { showNotification('error', 'عذراً، يجب اختيار المادة الدراسية'); return; }
+    if (!currentAssignment.section_ids || currentAssignment.section_ids.length === 0) { showNotification('error', 'عذراً، يجب تحديد شعبة واحدة على الأقل لإرسال الواجب إليها'); return; }
 
     const isEdit = !!currentAssignment.id;
 
     let finalTeacherId = currentAssignment.teacher_id;
-    if (finalTeacherId && typeof finalTeacherId === 'object') {
-      finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id;
-    }
-    if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') {
-      finalTeacherId = currentAssignment.teacher.id;
-    }
-    if (!finalTeacherId && currentRole === 'teacher') {
-      finalTeacherId = user.id;
-    }
+    if (finalTeacherId && typeof finalTeacherId === 'object') { finalTeacherId = finalTeacherId.id || finalTeacherId.auth_id; }
+    if (!finalTeacherId && currentAssignment.teacher && typeof currentAssignment.teacher === 'object') { finalTeacherId = currentAssignment.teacher.id; }
+    if (!finalTeacherId && currentRole === 'teacher') { finalTeacherId = user.id; }
 
-    if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) {
-      showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب');
-      return;
-    }
+    if ((currentRole === 'admin' || currentRole === 'management') && !finalTeacherId) { showNotification('error', 'عذراً، يجب اختيار المعلم المسؤول عن الواجب'); return; }
 
     const payload: any = {
-      title: currentAssignment.title,
-      description: currentAssignment.description,
-      subject_id: currentAssignment.subject_id,
-      due_date: currentAssignment.due_date,
-      file_url: currentAssignment.file_url,
-      status: currentAssignment.status || 'draft',
+      title: currentAssignment.title, description: currentAssignment.description,
+      subject_id: currentAssignment.subject_id, due_date: currentAssignment.due_date,
+      file_url: currentAssignment.file_url, status: currentAssignment.status || 'draft',
       teacher_id: finalTeacherId 
     };
 
     setIsSubmitting(true);
     try {
       await saveAssignment(payload, currentAssignment.id || null, questions, currentAssignment.section_ids, subjects);
-
       showNotification('success', isEdit ? 'تم تحديث الواجب بنجاح' : 'تم إضافة الواجب بنجاح');
       setIsModalOpen(false);
       if (refresh) refresh();
     } catch (error: any) {
-      console.error('Error saving assignment:', error);
       showNotification('error', error.message || 'حدث خطأ أثناء حفظ الواجب');
-    } finally {
-      setIsSubmitting(false);
-    }
+    } finally { setIsSubmitting(false); }
   };
 
   const handleDeleteAssignment = async () => {
@@ -142,33 +153,19 @@ export default function AssignmentsPage() {
     setLoading(true);
     try {
       const assignment = assignments.find(a => a.id === assignmentToDelete);
-      
-      if (assignment?.file_url) {
-        try { await deleteFromCloudinary(assignment.file_url); } catch (e) { console.error('Teacher file delete error:', e); }
-      }
+      if (assignment?.file_url) { try { await deleteFromCloudinary(assignment.file_url); } catch (e) { } }
 
-      const { data: subs } = await supabase
-        .from('assignment_submissions')
-        .select('file_url')
-        .eq('assignment_id', assignmentToDelete);
-        
+      const { data: subs } = await supabase.from('assignment_submissions').select('file_url').eq('assignment_id', assignmentToDelete);
       if (subs && subs.length > 0) {
-        for (const sub of subs) {
-          if (sub.file_url) {
-            try { await deleteFromCloudinary(sub.file_url); } catch (e) { console.error('Student file delete error:', e); }
-          }
-        }
+        for (const sub of subs) { if (sub.file_url) { try { await deleteFromCloudinary(sub.file_url); } catch (e) { } } }
       }
 
       await deleteAssignment(assignmentToDelete);
       showNotification('success', 'تم حذف الواجب وجميع مرفقاته بنجاح');
       setAssignmentToDelete(null);
       if (refresh) refresh();
-    } catch (error: any) {
-      showNotification('error', error.message || 'حدث خطأ أثناء حذف الواجب');
-    } finally {
-      setLoading(false);
-    }
+    } catch (error: any) { showNotification('error', error.message || 'حدث خطأ أثناء حذف الواجب'); } 
+    finally { setLoading(false); }
   };
 
   const openFullEditModal = async (assignment: any) => {
@@ -177,17 +174,11 @@ export default function AssignmentsPage() {
     const formattedDate = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
     
     let pureTeacherId = assignment.teacher_id;
-    if (pureTeacherId && typeof pureTeacherId === 'object') {
-      pureTeacherId = pureTeacherId.id || pureTeacherId.auth_id;
-    }
-    if (!pureTeacherId && assignment.teacher && typeof assignment.teacher === 'object') {
-      pureTeacherId = assignment.teacher.id;
-    }
+    if (pureTeacherId && typeof pureTeacherId === 'object') { pureTeacherId = pureTeacherId.id || pureTeacherId.auth_id; }
+    if (!pureTeacherId && assignment.teacher && typeof assignment.teacher === 'object') { pureTeacherId = assignment.teacher.id; }
 
     setCurrentAssignment({
-      ...assignment,
-      due_date: formattedDate,
-      teacher_id: pureTeacherId, 
+      ...assignment, due_date: formattedDate, teacher_id: pureTeacherId, 
       section_ids: assignment.assignment_sections?.map((as: any) => as.section_id) || assignment.section_ids || []
     });
     const qData = await fetchAssignmentQuestions(assignment.id);
@@ -197,19 +188,12 @@ export default function AssignmentsPage() {
 
   const openAddModal = () => {
     setEditingAssignment(null);
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(8, 0, 0, 0);
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(8, 0, 0, 0);
     const formattedDate = new Date(tomorrow.getTime() - (tomorrow.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
     setCurrentAssignment({
-      title: '',
-      description: '',
-      subject_id: subjects[0]?.id || '',
+      title: '', description: '', subject_id: subjects[0]?.id || '',
       teacher_id: currentRole === 'teacher' ? user?.id : '', 
-      due_date: formattedDate,
-      section_ids: [],
-      file_url: '',
-      status: 'draft'
+      due_date: formattedDate, section_ids: [], file_url: '', status: 'draft'
     });
     setQuestions([]);
     setIsModalOpen(true);
@@ -229,14 +213,11 @@ export default function AssignmentsPage() {
     );
   }
 
-  const isOverdue = (dueDateStr: string) => new Date(dueDateStr) < new Date();
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-cairo overflow-x-hidden relative pb-32 pt-6" dir="rtl">
       
       <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* إشعار النجاح / الخطأ */}
         <AnimatePresence>
           {notification && (
             <motion.div initial={{ opacity: 0, y: -20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }} className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] px-6 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-3xl shadow-xl flex items-center gap-3 sm:gap-4 transition-all bg-white border w-[90%] sm:w-auto ${
@@ -253,7 +234,6 @@ export default function AssignmentsPage() {
           )}
         </AnimatePresence>
 
-        {/* 🚀 الهيدر المضيء */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white p-6 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[3rem] border border-slate-200 shadow-sm relative overflow-hidden">
           <div className="relative z-10 space-y-3 sm:space-y-4 text-center md:text-right w-full md:w-auto">
             <div className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] sm:text-xs font-black text-indigo-700 uppercase tracking-widest mx-auto md:mx-0">
@@ -272,33 +252,76 @@ export default function AssignmentsPage() {
           )}
         </div>
 
-        {/* 🚀 فلاتر البحث المضيئة */}
+        {/* 🚀 فلاتر التصنيف الشاملة الجديدة */}
         <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
-            <div className="relative flex-1 group">
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 sm:pr-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
-                <Search className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+          <div className="flex flex-col md:flex-row gap-4 flex-wrap">
+            {/* بحث */}
+            <div className="relative flex-1 group min-w-[200px]">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                <Search className="h-4 w-4" />
               </div>
               <input
                 type="text"
-                className="block w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3.5 sm:py-4 pr-10 sm:pr-12 pl-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm transition-all font-bold outline-none placeholder:text-slate-400"
+                className="block w-full rounded-xl border border-slate-200 py-3.5 pr-10 pl-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-bold outline-none placeholder:text-slate-400"
                 placeholder="البحث بعنوان الواجب أو المادة..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             
-            {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
-              <div className="relative md:w-64 group">
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 sm:pr-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
-                  <Filter className="h-4 w-4 sm:h-5 sm:w-5" />
-                </div>
+            {/* فلتر المادة */}
+            <div className="relative md:w-48 group">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                <BookOpen className="h-4 w-4" />
+              </div>
+              <select
+                className="block w-full rounded-xl border border-slate-200 py-3.5 pr-10 pl-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-bold appearance-none outline-none cursor-pointer"
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+              >
+                <option value="all">جميع المواد</option>
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+
+            {/* فلتر حالة الواجب (ديناميكي حسب الصلاحية) */}
+            <div className="relative md:w-56 group">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                <Filter className="h-4 w-4" />
+              </div>
+              {currentRole === 'student' ? (
                 <select
-                  className="block w-full rounded-xl sm:rounded-2xl border border-slate-200 py-3.5 sm:py-4 pr-10 sm:pr-12 pl-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm transition-all font-bold appearance-none outline-none cursor-pointer"
+                  className="block w-full rounded-xl border border-slate-200 py-3.5 pr-10 pl-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-bold appearance-none outline-none cursor-pointer"
+                  value={taskStateFilter}
+                  onChange={(e) => setTaskStateFilter(e.target.value)}
+                >
+                  <option value="all">حالة الحل (الكل)</option>
+                  <option value="active">مطلوب حله (ساري)</option>
+                  <option value="completed">تم الحل / مقيّم</option>
+                  <option value="overdue">متأخر (لم يتم الحل)</option>
+                </select>
+              ) : (
+                <select
+                  className="block w-full rounded-xl border border-slate-200 py-3.5 pr-10 pl-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-bold appearance-none outline-none cursor-pointer"
+                  value={taskStateFilter}
+                  onChange={(e) => setTaskStateFilter(e.target.value)}
+                >
+                  <option value="all">زمن الواجب (الكل)</option>
+                  <option value="active">ساري (وقت مفتوح)</option>
+                  <option value="overdue">منتهي الوقت</option>
+                </select>
+              )}
+            </div>
+            
+            {/* فلتر حالة النشر للمعلمين */}
+            {(currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') && (
+              <div className="relative md:w-48 group">
+                <select
+                  className="block w-full rounded-xl border border-slate-200 py-3.5 px-4 text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-bold appearance-none outline-none cursor-pointer"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
-                  <option value="all">جميع الواجبات</option>
+                  <option value="all">حالة النشر (الكل)</option>
                   <option value="published">المنشورة فقط</option>
                   <option value="draft">المسودات فقط</option>
                 </select>
@@ -307,190 +330,205 @@ export default function AssignmentsPage() {
           </div>
         </div>
 
-        {/* 🚀 المحتوى (الواجبات) */}
+        {/* 🚀 المحتوى (الواجبات مجسدة حسب المواد) */}
         {contentLoading && assignments.length === 0 ? (
           <div className="flex flex-col justify-center items-center py-20 sm:py-32 gap-5 relative z-10">
             <Loader2 className="animate-spin h-14 w-14 sm:h-16 sm:w-16 text-indigo-600" />
             <p className="text-slate-500 font-black animate-pulse tracking-widest text-sm sm:text-base">جاري تحميل الواجبات...</p>
           </div>
-        ) : displayedAssignments.length === 0 ? (
+        ) : Object.keys(groupedAssignments).length === 0 ? (
           <div className="text-center py-20 sm:py-32 bg-white rounded-[2rem] sm:rounded-[3rem] border border-dashed border-slate-300 px-4">
             <div className="h-20 w-20 sm:h-24 sm:w-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 border border-slate-200">
               <FileText className="h-10 w-10 sm:h-12 sm:w-12 text-slate-400" />
             </div>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mb-2">لا توجد واجبات مسجلة</h3>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mb-2">لا توجد واجبات مطابقة للفرز</h3>
             <p className="text-slate-500 font-bold text-xs sm:text-sm max-w-xs mx-auto">
-               {statusFilter === 'draft' ? 'لا يوجد مسودات مسجلة حالياً.' : 'قم بإضافة واجبات جديدة للطلاب للبدء.'}
+               لا يوجد واجبات تتطابق مع بحثك أو الفلاتر المحددة حالياً.
             </p>
           </div>
         ) : (
-          <div className={currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" : "flex flex-col gap-5 sm:gap-6"}>
-            {displayedAssignments.map((assignment, index) => {
-              
-              if (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') {
-                const pendingGradesCount = (assignment.submission_count || 0) - (assignment.graded_count || 0);
-                const needsTeacherGrading = pendingGradesCount > 0;
-                const overdue = isOverdue(assignment.due_date!);
-                const dueDateObj = new Date(assignment.due_date!);
+          <div className="space-y-12">
+            {Object.entries(groupedAssignments).map(([subjectName, subjAssigns]) => (
+              <div key={subjectName} className="space-y-6">
+                {/* ترويسة المادة */}
+                <div className="flex items-center gap-3 border-b-2 border-indigo-100 pb-3 mb-6">
+                  <div className="p-2.5 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm">
+                    <BookOpen className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-800">{subjectName}</h2>
+                  <span className="bg-white border border-slate-200 text-slate-500 shadow-sm text-xs font-black px-3 py-1 rounded-full mr-2">{subjAssigns.length} واجبات</span>
+                </div>
                 
-                let checkTeacherId = assignment.teacher_id;
-                if (checkTeacherId && typeof checkTeacherId === 'object') checkTeacherId = (checkTeacherId as any).id || (checkTeacherId as any).auth_id;
-                const canEdit = currentRole === 'admin' || currentRole === 'management' || checkTeacherId === user?.id;
+                {/* كروت الواجبات التابعة للمادة */}
+                <div className={currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" : "flex flex-col gap-5 sm:gap-6"}>
+                  {subjAssigns.map((assignment) => {
+                    if (currentRole === 'teacher' || currentRole === 'admin' || currentRole === 'management') {
+                      const pendingGradesCount = (assignment.submission_count || 0) - (assignment.graded_count || 0);
+                      const needsTeacherGrading = pendingGradesCount > 0;
+                      const overdue = isOverdue(assignment.due_date!);
+                      const dueDateObj = new Date(assignment.due_date!);
+                      
+                      let checkTeacherId = assignment.teacher_id;
+                      if (checkTeacherId && typeof checkTeacherId === 'object') checkTeacherId = (checkTeacherId as any).id || (checkTeacherId as any).auth_id;
+                      const canEdit = currentRole === 'admin' || currentRole === 'management' || checkTeacherId === user?.id;
 
-                return (
-                  <div key={assignment.id} className="group bg-white rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 hover:border-indigo-300 hover:shadow-lg transition-all overflow-hidden flex flex-col">
-                    <div className="p-6 sm:p-8 flex-1 relative">
-                      <div className="flex items-start justify-between mb-6 sm:mb-8 gap-2 relative z-10">
-                        <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border whitespace-nowrap ${getStatusColor(assignment.status)}`}>
-                          {getStatusLabel(assignment.status)}
-                        </div>
+                      return (
+                        <div key={assignment.id} className="group bg-white rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 hover:border-indigo-300 hover:shadow-lg transition-all overflow-hidden flex flex-col">
+                          <div className="p-6 sm:p-8 flex-1 relative">
+                            <div className="flex items-start justify-between mb-6 sm:mb-8 gap-2 relative z-10">
+                              <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border whitespace-nowrap ${getStatusColor(assignment.status)}`}>
+                                {getStatusLabel(assignment.status)}
+                              </div>
 
-                        {needsTeacherGrading && (
-                          <div className="flex-1 flex justify-end">
-                            <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black border bg-amber-50 text-amber-600 border-amber-200 flex items-center gap-1 sm:gap-1.5 animate-pulse">
-                              <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                              <span>{pendingGradesCount} للتقييم</span>
+                              {needsTeacherGrading && (
+                                <div className="flex-1 flex justify-end">
+                                  <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black border bg-amber-50 text-amber-600 border-amber-200 flex items-center gap-1 sm:gap-1.5 animate-pulse">
+                                    <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                    <span>{pendingGradesCount} للتقييم</span>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="flex gap-1.5 sm:gap-2 relative z-10">
+                                <Link 
+                                   href={`/assignments/${assignment.id}`}
+                                   className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all bg-slate-50 border border-slate-200 active:scale-95"
+                                   title="عرض التفاصيل"
+                                >
+                                  <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                                </Link>
+                                {canEdit && (
+                                  <button 
+                                    onClick={() => openFullEditModal(assignment)}
+                                    className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all bg-slate-50 border border-slate-200 active:scale-95"
+                                    title="تعديل الواجب بالكامل"
+                                  >
+                                    <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                                  </button>
+                                )}
+                                {canEdit && (
+                                  <button 
+                                    onClick={() => setAssignmentToDelete(assignment.id)}
+                                    className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all bg-slate-50 border border-slate-200 active:scale-95"
+                                    title="حذف الواجب"
+                                  >
+                                    <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <h3 className="text-xl sm:text-2xl font-black text-slate-900 mb-3 sm:mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight line-clamp-2">
+                              {assignment.title}
+                            </h3>
+                            
+                            <p className="text-slate-500 font-bold line-clamp-2 mb-6 sm:mb-8 text-xs sm:text-sm leading-relaxed">
+                              يرجى فتح الواجب لرؤية التعليمات التفصيلية للحل والتقييم...
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 relative z-10">
+                              <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-600 bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200 group-hover:border-indigo-200 transition-colors">
+                                <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-indigo-100 flex items-center justify-center shrink-0 border border-indigo-200"><BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-600" /></div>
+                                <span className="truncate">{assignment.subject_name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-600 bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200 group-hover:border-emerald-200 transition-colors">
+                                <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 border border-emerald-200"><Users className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-600" /></div>
+                                <span>{assignment.submission_count || 0} تسليم</span>
+                              </div>
                             </div>
                           </div>
-                        )}
-                        
-                        <div className="flex gap-1.5 sm:gap-2 relative z-10">
-                          <Link 
-                             href={`/assignments/${assignment.id}`}
-                             className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all bg-slate-50 border border-slate-200 active:scale-95"
-                             title="عرض التفاصيل"
-                          >
-                            <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
-                          </Link>
-                          {canEdit && (
-                            <button 
-                              onClick={() => openFullEditModal(assignment)}
-                              className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all bg-slate-50 border border-slate-200 active:scale-95"
-                              title="تعديل الواجب بالكامل"
-                            >
-                              <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </button>
-                          )}
-                          {canEdit && (
-                            <button 
-                              onClick={() => setAssignmentToDelete(assignment.id)}
-                              className="h-8 w-8 sm:h-10 sm:w-10 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all bg-slate-50 border border-slate-200 active:scale-95"
-                              title="حذف الواجب"
-                            >
-                              <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
 
-                      <h3 className="text-xl sm:text-2xl font-black text-slate-900 mb-3 sm:mb-4 group-hover:text-indigo-600 transition-colors tracking-tight leading-tight line-clamp-2">
-                        {assignment.title}
-                      </h3>
-                      
-                      <p className="text-slate-500 font-bold line-clamp-2 mb-6 sm:mb-8 text-xs sm:text-sm leading-relaxed">
-                        يرجى فتح الواجب لرؤية التعليمات التفصيلية للحل والتقييم...
-                      </p>
-
-                      <div className="grid grid-cols-2 gap-3 sm:gap-4 relative z-10">
-                        <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-600 bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200 group-hover:border-indigo-200 transition-colors">
-                          <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-indigo-100 flex items-center justify-center shrink-0 border border-indigo-200"><BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-600" /></div>
-                          <span className="truncate">{assignment.subject_name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold text-slate-600 bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200 group-hover:border-emerald-200 transition-colors">
-                          <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 border border-emerald-200"><Users className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-600" /></div>
-                          <span>{assignment.submission_count || 0} تسليم</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={`px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors ${overdue && assignment.status === 'published' ? 'bg-rose-50/50' : 'bg-slate-50 group-hover:bg-slate-100/50'}`}>
-                      <div className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black ${overdue && assignment.status === 'published' ? 'text-rose-600' : 'text-slate-500'}`}>
-                        <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
-                        <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto relative z-10">
-                        {assignment.file_url && (
-                          <a 
-                            href={assignment.file_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="h-9 sm:h-11 px-3 sm:px-4 rounded-lg sm:rounded-xl bg-white text-[10px] sm:text-xs font-black text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
-                          >
-                            <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            <span>المرفق</span>
-                          </a>
-                        )}
-                        <Link 
-                          href={`/assignments/${assignment.id}`}
-                          className="h-9 sm:h-11 px-4 sm:px-6 rounded-lg sm:rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs sm:text-sm font-black border border-indigo-500 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
-                        >
-                          <span>النتائج</span>
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                );
-              } 
-              
-              // 👨‍🎓 واجهة الطالب
-              else {
-                const statusStr = String((studentSubmissions[assignment.id] as any)?.status || '');
-                const isStudentDone = ['submitted', 'graded'].includes(statusStr);
-                const overdue = isOverdue(assignment.due_date!);
-                const dueDateObj = new Date(assignment.due_date!);
-                
-                return (
-                  <div key={assignment.id} className="w-full bg-white rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5 sm:gap-6 group hover:border-indigo-300 hover:shadow-md transition-all relative overflow-hidden">
-
-                     <div className="flex items-center gap-4 sm:gap-5 w-full md:w-auto relative z-10">
-                        <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl shrink-0 border transition-all ${
-                          isStudentDone 
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 group-hover:bg-emerald-100' 
-                            : overdue
-                              ? 'bg-rose-50 text-rose-600 border-rose-200 group-hover:bg-rose-100'
-                              : 'bg-indigo-50 text-indigo-600 border-indigo-200 group-hover:bg-indigo-100'
-                        }`}>
-                          <FileText className="h-6 w-6 sm:h-8 sm:w-8" />
-                        </div>
-                        <div className="text-right min-w-0 pr-1">
-                          <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5 sm:mb-2 group-hover:text-indigo-600 transition-colors leading-tight line-clamp-1">{assignment.title}</h3>
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold text-slate-500">
-                            <span className="flex items-center gap-1 sm:gap-1.5 bg-slate-50 px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg border border-slate-200"><BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5"/> {assignment.subject_name}</span>
-                            <span className={`flex items-center gap-1 sm:gap-1.5 ${overdue && !isStudentDone ? 'text-rose-600' : ''}`}>
-                              <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5"/> 
+                          <div className={`px-6 sm:px-8 py-4 sm:py-5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors ${overdue && assignment.status === 'published' ? 'bg-rose-50/50' : 'bg-slate-50 group-hover:bg-slate-100/50'}`}>
+                            <div className={`flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-black ${overdue && assignment.status === 'published' ? 'text-rose-600' : 'text-slate-500'}`}>
+                              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
                               <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
-                            </span>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto relative z-10">
+                              {assignment.file_url && (
+                                <a 
+                                  href={assignment.file_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="h-9 sm:h-11 px-3 sm:px-4 rounded-lg sm:rounded-xl bg-white text-[10px] sm:text-xs font-black text-indigo-600 border border-indigo-200 hover:bg-indigo-50 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                                >
+                                  <ImageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                  <span>المرفق</span>
+                                </a>
+                              )}
+                              <Link 
+                                href={`/assignments/${assignment.id}`}
+                                className="h-9 sm:h-11 px-4 sm:px-6 rounded-lg sm:rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs sm:text-sm font-black border border-indigo-500 transition-all flex items-center gap-1.5 sm:gap-2 active:scale-95 flex-1 sm:flex-none justify-center"
+                              >
+                                <span>النتائج</span>
+                              </Link>
+                            </div>
                           </div>
                         </div>
-                     </div>
-                     
-                     <div className="flex flex-col md:flex-row items-center gap-3 sm:gap-4 w-full md:w-auto justify-end border-t md:border-0 border-slate-100 pt-4 md:pt-0 mt-2 md:mt-0 relative z-10">
-                        {isStudentDone ? (
-                          <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border w-full md:w-auto text-center ${statusStr === 'graded' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                            {statusStr === 'graded' ? 'تم التقييم' : 'قيد المراجعة'}
-                          </div>
-                        ) : (
-                          <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border w-full md:w-auto text-center ${overdue ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
-                            {overdue ? 'متأخر' : 'مطلوب حله'}
-                          </div>
-                        )}
-                        
-                        <Link href={`/assignments/${assignment.id}`} className="w-full md:w-auto">
-                          <button className={`w-full md:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 active:scale-95 ${
-                            isStudentDone 
-                              ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600' 
-                              : 'bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-500'
-                          }`}>
-                              {isStudentDone ? <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                              {isStudentDone ? 'عرض النتيجة' : 'فتح الواجب'}
-                          </button>
-                        </Link>
-                     </div>
-                  </div>
-                );
-              }
-            })}
+                      );
+                    } 
+                    
+                    // 👨‍🎓 واجهة الطالب
+                    else {
+                      const statusStr = String((studentSubmissions[assignment.id] as any)?.status || '');
+                      const isStudentDone = ['submitted', 'graded'].includes(statusStr);
+                      const overdue = isOverdue(assignment.due_date!);
+                      const dueDateObj = new Date(assignment.due_date!);
+                      
+                      return (
+                        <div key={assignment.id} className="w-full bg-white rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5 sm:gap-6 group hover:border-indigo-300 hover:shadow-md transition-all relative overflow-hidden">
+
+                           <div className="flex items-center gap-4 sm:gap-5 w-full md:w-auto relative z-10">
+                              <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl shrink-0 border transition-all ${
+                                isStudentDone 
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200 group-hover:bg-emerald-100' 
+                                  : overdue
+                                    ? 'bg-rose-50 text-rose-600 border-rose-200 group-hover:bg-rose-100'
+                                    : 'bg-indigo-50 text-indigo-600 border-indigo-200 group-hover:bg-indigo-100'
+                              }`}>
+                                <FileText className="h-6 w-6 sm:h-8 sm:w-8" />
+                              </div>
+                              <div className="text-right min-w-0 pr-1">
+                                <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5 sm:mb-2 group-hover:text-indigo-600 transition-colors leading-tight line-clamp-1">{assignment.title}</h3>
+                                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold text-slate-500">
+                                  <span className="flex items-center gap-1 sm:gap-1.5 bg-slate-50 px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg border border-slate-200"><BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5"/> {assignment.subject_name}</span>
+                                  <span className={`flex items-center gap-1 sm:gap-1.5 ${overdue && !isStudentDone ? 'text-rose-600' : ''}`}>
+                                    <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5"/> 
+                                    <span dir="ltr">{format(dueDateObj, 'yyyy/MM/dd HH:mm')}</span>
+                                  </span>
+                                </div>
+                              </div>
+                           </div>
+                           
+                           <div className="flex flex-col md:flex-row items-center gap-3 sm:gap-4 w-full md:w-auto justify-end border-t md:border-0 border-slate-100 pt-4 md:pt-0 mt-2 md:mt-0 relative z-10">
+                              {isStudentDone ? (
+                                <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border w-full md:w-auto text-center ${statusStr === 'graded' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                  {statusStr === 'graded' ? 'تم التقييم' : 'تم الحل (قيد المراجعة)'}
+                                </div>
+                              ) : (
+                                <div className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest border w-full md:w-auto text-center ${overdue ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
+                                  {overdue ? 'متأخر' : 'مطلوب حله'}
+                                </div>
+                              )}
+                              
+                              <Link href={`/assignments/${assignment.id}`} className="w-full md:w-auto">
+                                <button className={`w-full md:w-auto px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 active:scale-95 ${
+                                  isStudentDone 
+                                    ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600' 
+                                    : 'bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-500'
+                                }`}>
+                                    {isStudentDone ? <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                                    {isStudentDone ? 'عرض النتيجة' : 'فتح الواجب'}
+                                </button>
+                              </Link>
+                           </div>
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -738,7 +776,7 @@ export default function AssignmentsPage() {
           .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 12px; border: 1px solid #f1f5f9; }
           .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
           
-          /* تحويل عناصر البناء داخل المودال (التي تأتي من AssignmentBuilder) للثيم المضيء */
+          /* تحويل عناصر البناء داخل المودال للثيم المضيء */
           .dark-theme-override .bg-\\[\\#090b14\\]\\/50, .dark-theme-override .bg-\\[\\#131836\\]\\/60, .dark-theme-override .bg-\\[\\#02040a\\]\\/60, .dark-theme-override .bg-\\[\\#0f1423\\]\\/80, .dark-theme-override .bg-\\[\\#061121\\]\\/80, .dark-theme-override .bg-\\[\\#131836\\]\\/40, .dark-theme-override .bg-\\[\\#090b14\\]\\/30 {
              background-color: #ffffff !important;
              border-color: #e2e8f0 !important;
