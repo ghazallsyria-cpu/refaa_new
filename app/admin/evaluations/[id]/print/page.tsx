@@ -50,6 +50,7 @@ export default function PrintEvaluationPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-indigo-600" /></div>;
   if (error || !data) return <div className="p-10 text-center font-bold text-rose-600">حدث خطأ في تحميل التقييم: {error}</div>;
 
+  // 🚀 جلب الأسماء ديناميكياً من قاعدة البيانات
   const teacherName = data.teachers?.users?.full_name || 'غير محدد';
   const evaluatorName = data.evaluator?.full_name || 'غير محدد';
 
@@ -169,18 +170,22 @@ export default function PrintEvaluationPage() {
             </div>
           </div>
 
-          {/* التواقيع - تم الحذف حسب طلبك */}
+          {/* التواقيع المعدلة */}
           <div className="mt-auto grid grid-cols-3 gap-4 text-center font-bold text-slate-900 text-sm">
             <div>
-              <p className="mb-14">المعلم المزار</p>
+              <p className="mb-8">المعلم المزار</p>
+              {/* 🚀 طباعة اسم المعلم ديناميكياً */}
+              <p className="font-black mb-2 text-indigo-700">{teacherName}</p>
               <p className="border-t border-slate-400 w-3/4 mx-auto pt-2 text-xs text-slate-500">الاسم والتوقيع</p>
             </div>
             <div>
               <p className="mb-8">رئيس القسم / الزائر</p>
+              {/* 🚀 طباعة اسم المُقيّم ديناميكياً */}
               <p className="font-black mb-2 text-indigo-700">{evaluatorName}</p>
               <p className="border-t border-slate-400 w-3/4 mx-auto pt-2 text-xs text-slate-500">الاسم والتوقيع</p>
             </div>
             <div>
+              {/* 🚀 ترك مساحة لمدير المدرسة للتوقيع */}
               <p className="mb-14">مدير المدرسة</p>
               <p className="border-t border-slate-400 w-3/4 mx-auto pt-2 text-xs text-slate-500">التوقيع والاعتماد</p>
             </div>
