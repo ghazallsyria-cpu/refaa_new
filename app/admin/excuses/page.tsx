@@ -1,5 +1,6 @@
-// @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 /* eslint-disable @next/next/no-img-element */
+// @ts-nocheck
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
@@ -65,7 +66,7 @@ export default function AdminExcusesPage() {
   // 🚀 3. دالة البحث الشامل (معزولة تماماً لا تعمل إلا بالضغط على الزر)
   const executeFullDaySearch = async () => {
     if (!fullDayStartDate || !fullDayEndDate) {
-      alert("يرجى تحديد التواريخ بشكل صحيح");
+      alert('يرجى تحديد التواريخ بشكل صحيح');
       return;
     }
     
@@ -104,7 +105,7 @@ export default function AdminExcusesPage() {
       
       Object.entries(studentDatePeriods).forEach(([sId, datesMap]) => {
         const fullAbsentDates = Object.entries(datesMap)
-          .filter(([_, periods]) => periods.size >= 5) // غياب 5 حصص فأكثر يعني غياب يوم كامل
+          .filter(([_, periods]) => periods.size >= 5) 
           .map(([date]) => date)
           .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
@@ -478,7 +479,7 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني والبحث اليدوي الآمن) */}
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
@@ -577,7 +578,7 @@ export default function AdminExcusesPage() {
                    <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
                     <Search className="h-16 w-16 mx-auto text-indigo-500/50 mb-4" />
                     <h3 className="text-xl font-black text-white">الاستعلام عن الغياب الكلي</h3>
-                    <p className="text-slate-400 font-bold mt-2">حدد النطاق الزمني واضغط على "بحث وعرض" لجلب السجلات بأمان.</p>
+                    <p className="text-slate-400 font-bold mt-2">حدد النطاق الزمني واضغط على زر "بحث وعرض" لجلب السجلات بأمان.</p>
                   </div>
                 ) : filteredFullDayData.length === 0 ? (
                   <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
