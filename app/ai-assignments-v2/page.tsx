@@ -50,7 +50,7 @@ const cleanMathLatex = (text: string) => {
 };
 
 // ==========================================
-// 🚀 مكون محرر Tiptap المخصص (القلب النابض)
+// 🚀 مكون محرر Tiptap المخصص (المحدث لدعم لصق الصور)
 // ==========================================
 const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html: string) => void }) => {
   const editor = useEditor({
@@ -58,7 +58,7 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
       StarterKit,
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }),
-      Image.configure({ inline: true }),
+      Image.configure({ inline: true, allowBase64: true }), // 🚀 السماح للصور بالتحول لكود
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -74,6 +74,52 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
       attributes: {
         class: 'prose prose-slate max-w-none focus:outline-none min-h-[180px] p-4 text-slate-800 font-bold leading-loose',
         dir: 'rtl'
+      },
+      // 🚀 التقاط الصور المنسوخة (Paste) وتحويلها فوراً للمحرر
+      handlePaste: (view, event) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        let imagePasted = false;
+
+        items.forEach(item => {
+          if (item.type.indexOf('image') === 0) {
+            imagePasted = true;
+            const file = item.getAsFile();
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const base64 = e.target?.result as string;
+                const node = view.state.schema.nodes.image.create({ src: base64 });
+                const transaction = view.state.tr.replaceSelectionWith(node);
+                view.dispatch(transaction);
+              };
+              reader.readAsDataURL(file);
+            }
+          }
+        });
+
+        // إذا كانت صورة مقصوصة فقط، نمنع الحدث الافتراضي لتجنب الأخطاء
+        return imagePasted;
+      },
+      // 🚀 التقاط الصور المسحوبة (Drag and Drop)
+      handleDrop: (view, event, slice, moved) => {
+        if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+          const file = event.dataTransfer.files[0];
+          if (file.type.indexOf('image') === 0) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const base64 = e.target?.result as string;
+              const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+              if (coordinates) {
+                const node = view.state.schema.nodes.image.create({ src: base64 });
+                const transaction = view.state.tr.insert(coordinates.pos, node);
+                view.dispatch(transaction);
+              }
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+        return false;
       }
     }
   });
@@ -86,7 +132,7 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
 
   return (
     <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner flex flex-col">
-      {/* شريط الأدوات العادي */}
+      {/* شريط الأدوات */}
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap gap-1 items-center">
         <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Bold className="w-4 h-4"/></button>
         <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Italic className="w-4 h-4"/></button>
@@ -98,25 +144,13 @@ const TiptapEditor = ({ content, onChange }: { content: string, onChange: (html:
         <div className="w-px h-5 bg-slate-300 mx-1"></div>
         <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('bulletList') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><List className="w-4 h-4"/></button>
         <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`p-2 rounded-lg transition-colors ${editor.isActive('orderedList') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><ListOrdered className="w-4 h-4"/></button>
-        <div className="w-px h-5 bg-slate-300 mx-1"></div>
-        <button onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} className="p-2 rounded-lg text-slate-600 hover:bg-slate-200" title="إدراج جدول"><TableIcon className="w-4 h-4"/></button>
       </div>
 
-      {/* 🚀 شريط أدوات الرياضيات السريع */}
-      <div className="bg-indigo-50 border-b border-indigo-100 p-2 flex flex-wrap gap-2 items-center overflow-x-auto hide-scrollbar">
-        <span className="text-xs font-black text-indigo-700 ml-1">رياضيات:</span>
-        <button onClick={() => insertMath('$ $')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm flex items-center gap-1"><Calculator className="w-3 h-3"/> $ $</button>
-        <button onClick={() => insertMath('$\\frac{ }{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">كسر</button>
-        <button onClick={() => insertMath('$^{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">أس</button>
-        <button onClick={() => insertMath('$\\sqrt{ }$')} className="px-2 py-1 bg-white text-indigo-700 rounded text-xs font-bold font-mono border border-indigo-200 shadow-sm">جذر</button>
-        <button onClick={() => insertMath('$\\begin{array}{c} A \\\\ | \\\\ B - C \\\\ | \\\\ D \\end{array}$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm flex items-center gap-1"><FlaskConical className="w-3 h-3"/> كيمياء</button>
-      </div>
-
-      {/* منطقة الكتابة واللصق من Word */}
+      {/* منطقة الكتابة واللصق */}
       <div className="flex-1 bg-white relative">
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">
-            اكتب السؤال هنا، أو اضغط (لصق) لنسخ المحتوى من Word (جداول، صور، ألوان)...
+            اكتب السؤال هنا، أو اضغط (لصق) لنسخ المحتوى...
           </div>
         )}
         <EditorContent editor={editor} />
