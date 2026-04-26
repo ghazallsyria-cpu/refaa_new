@@ -1,3 +1,5 @@
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -116,7 +118,7 @@ export default function PrintEvaluationPage() {
             </div>
           </div>
 
-          {/* عنوان النموذج (أبيض بخلفية سوداء كما طلبت) */}
+          {/* عنوان النموذج */}
           <div className="text-center mb-8">
             <h1 className="inline-block text-2xl sm:text-3xl font-black bg-slate-800 text-white px-10 py-3 shadow-[4px_4px_0_0_rgba(148,163,184,1)] rounded-md">
               نموذج متابعة معلم وتأخر دراسي
@@ -167,10 +169,10 @@ export default function PrintEvaluationPage() {
             </div>
           </div>
 
-          {/* التواقيع */}
+          {/* التواقيع - تم الحذف حسب طلبك */}
           <div className="mt-auto grid grid-cols-3 gap-4 text-center font-bold text-slate-900 text-sm">
             <div>
-              <p className="mb-8">المعلم المزار</p>
+              <p className="mb-14">المعلم المزار</p>
               <p className="border-t border-slate-400 w-3/4 mx-auto pt-2 text-xs text-slate-500">الاسم والتوقيع</p>
             </div>
             <div>
@@ -179,8 +181,7 @@ export default function PrintEvaluationPage() {
               <p className="border-t border-slate-400 w-3/4 mx-auto pt-2 text-xs text-slate-500">الاسم والتوقيع</p>
             </div>
             <div>
-              <p className="mb-8">مدير المدرسة</p>
-              <p className="font-black mb-2 text-indigo-700">أ. صالح المطيري</p>
+              <p className="mb-14">مدير المدرسة</p>
               <p className="border-t border-slate-400 w-3/4 mx-auto pt-2 text-xs text-slate-500">التوقيع والاعتماد</p>
             </div>
           </div>
