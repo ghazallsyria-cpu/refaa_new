@@ -12,12 +12,35 @@ import {
   Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, CheckSquare
 } from 'lucide-react';
 
+import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// 🚀 دالة تنظيف الرياضيات الفولاذية (لشاشة الطالب)
+const renderHTMLWithMath = (html: string) => {
+  if (!html) return '';
+  let parsed = html;
+
+  const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
+    try {
+      let cleanMath = mathString.replace(/<[^>]+>/g, '');
+      cleanMath = cleanMath.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+      
+      return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
+    } catch (e) {
+      return match;
+    }
+  };
+
+  parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
+  parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
+  return parsed;
+};
 
 export default function PracticeArena() {
   const params = useParams();
@@ -28,7 +51,6 @@ export default function PracticeArena() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // 🚀 حالات التدريب التفاعلي
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -40,7 +62,6 @@ export default function PracticeArena() {
     if (!id) return;
     const fetchArena = async () => {
       try {
-        // جلب الواجب مرة واحدة فقط
         const { data: assignData } = await supabase.from('assignments_v2').select('*').eq('id', id).single();
         const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', id).order('order_index', { ascending: true });
         
@@ -57,9 +78,8 @@ export default function PracticeArena() {
 
   const currentQ = questions[currentIndex];
 
-  // 🚀 دالة اختيار الإجابة (للاختياري)
   const handleOptionClick = (opt: any) => {
-    if (isAnswered) return; // منع التغيير بعد الإجابة
+    if (isAnswered) return;
     setSelectedOptionId(opt.id);
     setIsAnswered(true);
     
@@ -69,13 +89,11 @@ export default function PracticeArena() {
       setScore(s => ({ ...s, wrong: s.wrong + 1 }));
     }
 
-    // إظهار الإجابة النموذجية تلقائياً إذا أخطأ (أو إذا كان المعلم وضع شرحاً)
     if (currentQ.model_answer_html) {
       setTimeout(() => setShowModelAnswer(true), 500);
     }
   };
 
-  // 🚀 دالة الانتقال للسؤال التالي
   const nextQuestion = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -87,7 +105,6 @@ export default function PracticeArena() {
     }
   };
 
-  // 🚀 دالة التقييم الذاتي (للمقالي)
   const handleSelfEvaluation = (understood: boolean) => {
     if (understood) {
       setScore(s => ({ ...s, correct: s.correct + 1 }));
@@ -102,14 +119,17 @@ export default function PracticeArena() {
 
   const progress = ((currentIndex) / questions.length) * 100;
 
+  // 🚀 حماية فولاذية: تحديد طبيعة السؤال بدقة لتجنب تجمد الشاشة
+  const isMCQ = currentQ.type === 'multiple_choice' && Array.isArray(currentQ.options) && currentQ.options.length > 0;
+  const hasModelAnswer = !!currentQ.model_answer_html?.trim();
+
   return (
     <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col" dir="rtl">
       
-      {/* CSS التنسيق الإجباري للجداول والرياضيات (نفس الذي في V2) */}
       <style dangerouslySetInnerHTML={{ __html: `
-        .katex-container { direction: rtl !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
-        .katex { direction: rtl !important; text-align: right !important; }
-        .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: rtl !important; }
+        .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
+        .katex { direction: ltr !important; text-align: left !important; }
+        .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
         .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .tiptap-content td, .tiptap-content th { border: 2px solid #94a3b8 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
         .tiptap-content th { background-color: #f1f5f9 !important; font-weight: 900 !important; }
@@ -134,7 +154,7 @@ export default function PracticeArena() {
         </div>
       </div>
 
-      {/* ساحة البطاقات التفاعلية */}
+      {/* ساحة البطاقات */}
       <div className="flex-1 max-w-2xl w-full mx-auto p-4 flex flex-col justify-center">
         <AnimatePresence mode="wait">
           {!isFinished ? (
@@ -147,24 +167,21 @@ export default function PracticeArena() {
               className="bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[80vh]"
             >
               
-              {/* هيدر البطاقة */}
-              <div className="bg-slate-50 p-4 border-b border-slate-100 flex items-center gap-2">
+              <div className="bg-slate-50 p-4 border-b border-slate-100 flex items-center gap-2 shrink-0">
                 <BrainCircuit className="w-5 h-5 text-indigo-500" />
-                <h3 className="font-black text-slate-700 text-sm">{currentQ.type === 'section_header' ? 'معلومة للقراءة' : 'تحدي التدريب'}</h3>
+                <h3 className="font-black text-slate-700 text-sm">تحدي التدريب</h3>
               </div>
 
               {/* نص السؤال */}
               <div className="p-6 overflow-y-auto flex-1">
-                <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: currentQ.content_html }}></div>
+                <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                 
-                {/* 🚀 حالة 1: الاختيار من متعدد */}
-                {currentQ.type === 'multiple_choice' && (
+                {isMCQ && (
                   <div className="mt-8 space-y-3">
-                    {currentQ.options?.map((opt: any) => {
+                    {currentQ.options.map((opt: any) => {
                       const isSelected = selectedOptionId === opt.id;
                       const isCorrect = opt.is_correct;
                       
-                      // تحديد لون الزر بناءً على الإجابة
                       let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50";
                       if (isAnswered) {
                         if (isCorrect) btnStyle = "bg-emerald-50 border-emerald-400 text-emerald-800 shadow-emerald-100/50 shadow-lg scale-[1.02]";
@@ -180,45 +197,29 @@ export default function PracticeArena() {
                           className={`w-full p-4 rounded-2xl border-2 font-bold text-base text-right transition-all flex items-center justify-between ${btnStyle}`}
                         >
                           <div className="katex-container flex-1"><Latex>{opt.content}</Latex></div>
-                          {isAnswered && isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-500" />}
-                          {isAnswered && isSelected && !isCorrect && <XCircle className="w-6 h-6 text-rose-500" />}
+                          {isAnswered && isCorrect && <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />}
+                          {isAnswered && isSelected && !isCorrect && <XCircle className="w-6 h-6 text-rose-500 shrink-0" />}
                         </button>
                       );
                     })}
                   </div>
                 )}
 
-                {/* 🚀 حالة 2: سؤال مقالي أو جدول (التصحيح الذاتي) */}
-                {currentQ.type === 'essay' && !showModelAnswer && (
-                  <div className="mt-8 text-center">
-                    <p className="text-sm font-bold text-slate-500 mb-4">حل المسألة في ورقة خارجية، ثم اضغط لرؤية الحل النموذجي.</p>
-                    <button onClick={() => setShowModelAnswer(true)} className="w-full bg-indigo-50 text-indigo-700 border-2 border-dashed border-indigo-300 font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors">
-                      <Lightbulb className="w-6 h-6" /> اكشف لي الإجابة النموذجية
-                    </button>
-                  </div>
-                )}
-
-                {/* 🚀 عرض الإجابة النموذجية (إذا تم كشفها أو إذا أخطأ الطالب) */}
                 <AnimatePresence>
-                  {showModelAnswer && currentQ.model_answer_html && (
+                  {showModelAnswer && hasModelAnswer && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-8 p-5 bg-emerald-50 border border-emerald-200 rounded-2xl overflow-hidden">
                       <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-100 pb-2">
-                        <CheckSquare className="w-5 h-5" /> خطوات الحل والإجابة الصحيحة:
+                        <CheckSquare className="w-5 h-5" /> الإجابة النموذجية أو خطوات الحل:
                       </div>
-                      <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: currentQ.model_answer_html }}></div>
+                      <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}></div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-
               </div>
 
-              {/* Footer Buttons */}
-              <div className="p-4 bg-white border-t border-slate-100">
-                {currentQ.type === 'section_header' ? (
-                  <button onClick={nextQuestion} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all">
-                    فهمت، التالي <ChevronRight className="w-5 h-5" />
-                  </button>
-                ) : currentQ.type === 'multiple_choice' ? (
+              {/* 🚀 أزرار التحكم الفولاذية (لن تختفي الشاشة أبداً) */}
+              <div className="p-4 bg-white border-t border-slate-100 shrink-0 mt-auto">
+                {isMCQ ? (
                   <AnimatePresence>
                     {isAnswered && (
                       <motion.button initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onClick={nextQuestion} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all">
@@ -226,7 +227,11 @@ export default function PracticeArena() {
                       </motion.button>
                     )}
                   </AnimatePresence>
-                ) : currentQ.type === 'essay' && showModelAnswer ? (
+                ) : hasModelAnswer && !showModelAnswer ? (
+                  <button onClick={() => setShowModelAnswer(true)} className="w-full bg-indigo-50 text-indigo-700 border-2 border-dashed border-indigo-300 font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors">
+                    <Lightbulb className="w-6 h-6" /> اكشف لي الإجابة النموذجية
+                  </button>
+                ) : hasModelAnswer && showModelAnswer ? (
                   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
                     <p className="text-center text-sm font-black text-slate-600">كن صادقاً.. هل كانت إجابتك مطابقة للحل؟</p>
                     <div className="flex gap-2">
@@ -238,12 +243,16 @@ export default function PracticeArena() {
                       </button>
                     </div>
                   </motion.div>
-                ) : null}
+                ) : (
+                  /* الحل البديل لأي سؤال ليس به خيارات ولا إجابة نموذجية */
+                  <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all">
+                    متابعة / التالي <ChevronRight className="w-5 h-5" />
+                  </button>
+                )}
               </div>
 
             </motion.div>
           ) : (
-            /* 🚀 شاشة النهاية والاحتفال */
             <motion.div 
               initial={{ scale: 0.8, opacity: 0 }} 
               animate={{ scale: 1, opacity: 1 }} 
