@@ -4,7 +4,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { 
   FileText, CheckCircle2, AlertCircle, Sparkles, 
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
@@ -16,13 +15,6 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
 import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// 🚀 استيراد المحرر البصري
-const ReactQuill = dynamic(() => import('react-quill'), { 
-  ssr: false, 
-  loading: () => <div className="p-10 text-center text-slate-400 font-bold animate-pulse">جاري التحميل...</div> 
-});
-import 'react-quill/dist/quill.snow.css';
 
 // 🚀 استيراد مكتبة Tiptap
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -545,7 +537,6 @@ export default function AssignmentBuilderV2() {
                       <button onClick={addOption} className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus className="w-3 h-3"/> إضافة خيار</button>
                     </h4>
                     
-                    {/* 💡 نصيحة للمعلم */}
                     <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs font-bold text-amber-700 leading-relaxed">
                       💡 <b>نصيحة هامة:</b> إذا نسخت سؤالاً يحتوي على خيارات (A, B, C, D) من الوورد، يفضل مسحها من المحرر بالأعلى، وإعادة كتابتها/لصقها هنا في الأسفل لكي يقوم النظام بتصحيحها للطلاب آلياً!
                     </div>
