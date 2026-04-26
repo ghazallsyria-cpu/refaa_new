@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { useAdminExcuses } from '@/hooks/useAdminExcuses';
 import { supabase } from '@/lib/supabase'; 
@@ -14,7 +14,7 @@ import {
   Printer, School, GraduationCap, Download
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
 export default function AdminExcusesPage() {
@@ -34,14 +34,14 @@ export default function AdminExcusesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{studentName: string, records: any[]}[] | null>(null);
 
-  // 🚀 حالات تقرير الغياب الكامل الذكي
+  // 🚀 حالات تقرير الغياب الكامل (محسنة الأداء)
   const [rawFullDayData, setRawFullDayData] = useState<any[]>([]);
   const [isFullDayLoading, setIsFullDayLoading] = useState(false);
   const [isFullDayExporting, setIsFullDayExporting] = useState(false);
   
-  // 🚀 فلتر النطاق الزمني للغياب الكلي
-  const [fullDayStartDate, setFullDayStartDate] = useState('2026-03-01');
-  const [fullDayEndDate, setFullDayEndDate] = useState('');
+  // 🚀 إعداد التواريخ المبدئية لمرة واحدة
+  const [fullDayStartDate, setFullDayStartDate] = useState(() => format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+  const [fullDayEndDate, setFullDayEndDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   
   const [stageFilter, setStageFilter] = useState('all'); 
   const [classFilter, setClassFilter] = useState('all'); 
@@ -50,22 +50,16 @@ export default function AdminExcusesPage() {
 
   useEffect(() => {
     setMounted(true);
-    setFullDayEndDate(format(new Date(), 'yyyy-MM-dd'));
   }, []);
 
+  // 🚀 جلب بيانات الأعذار الأساسية
   useEffect(() => {
-    if (!mounted) return;
-    if (!isChecking && activeTab !== 'inquiry' && activeTab !== 'full_day_absence') {
-      fetchExcuses(activeTab);
-    }
-    // تحديث التقرير تلقائياً عند تغيير التواريخ والتبويب
-    if (activeTab === 'full_day_absence' && fullDayStartDate && fullDayEndDate) {
-      fetchFullDayAbsences();
-    }
-  }, [activeTab, isChecking, fetchExcuses, fullDayStartDate, fullDayEndDate, mounted]);
+    if (!mounted || isChecking || activeTab === 'inquiry' || activeTab === 'full_day_absence') return;
+    fetchExcuses(activeTab);
+  }, [activeTab, isChecking, fetchExcuses, mounted]);
 
-  // 🚀 جلب البيانات الشاملة ضمن نطاق زمني
-  const fetchFullDayAbsences = async () => {
+  // 🚀 جلب بيانات الغياب الشامل (مفصولة لمنع الـ Infinite Loop)
+  const fetchFullDayAbsences = useCallback(async () => {
     if (!fullDayStartDate || !fullDayEndDate) return;
     setIsFullDayLoading(true);
     try {
@@ -80,12 +74,9 @@ export default function AdminExcusesPage() {
 
       if (!records || records.length === 0) {
         setRawFullDayData([]);
-        setIsFullDayLoading(false);
         return;
       }
 
-      // تجميع الغيابات حسب الطالب والتاريخ
-      // الهيكل: student_id -> date -> Set(periods)
       const studentDatePeriods: Record<string, Record<string, Set<number>>> = {};
       
       records.forEach(rec => {
@@ -98,14 +89,13 @@ export default function AdminExcusesPage() {
         studentDatePeriods[rec.student_id][rec.date].add(rec.period);
       });
 
-      // 🚀 المنطق الجديد: الغياب الكلي = 5 حصص فأكثر في نفس اليوم
-      const fullDayStudents: Record<string, string[]> = {}; // student_id -> dates[]
+      const fullDayStudents: Record<string, string[]> = {};
       
       Object.entries(studentDatePeriods).forEach(([sId, datesMap]) => {
         const fullAbsentDates = Object.entries(datesMap)
-          .filter(([date, periods]) => periods.size >= 5) // الخوارزمية المطلوبة: 5 أو 6 يعني غياب كامل
+          .filter(([_, periods]) => periods.size >= 5) 
           .map(([date]) => date)
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime()); // ترتيب تنازلي
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
         if (fullAbsentDates.length > 0) {
           fullDayStudents[sId] = fullAbsentDates;
@@ -116,11 +106,9 @@ export default function AdminExcusesPage() {
 
       if (fullDayStudentIds.length === 0) {
         setRawFullDayData([]);
-        setIsFullDayLoading(false);
         return;
       }
 
-      // جلب بيانات الطلاب الذين لديهم غياب كلي
       const { data: studentsData, error: stuErr } = await supabase
         .from('users')
         .select(`
@@ -165,9 +153,7 @@ export default function AdminExcusesPage() {
         };
       });
 
-      // ترتيب الطلاب حسب عدد أيام الغياب الكلي (الأكثر غياباً أولاً)
       formattedResults.sort((a, b) => b.fullDaysCount - a.fullDaysCount);
-
       setRawFullDayData(formattedResults);
 
     } catch (err: any) {
@@ -175,8 +161,16 @@ export default function AdminExcusesPage() {
     } finally {
       setIsFullDayLoading(false);
     }
-  };
+  }, [fullDayStartDate, fullDayEndDate]);
 
+  // 🚀 جلب البيانات تلقائياً عند الدخول للتبويب
+  useEffect(() => {
+    if (activeTab === 'full_day_absence' && mounted) {
+      fetchFullDayAbsences();
+    }
+  }, [activeTab, fetchFullDayAbsences, mounted]);
+
+  // 🚀 الفلترة السريعة (بدون تحميل جديد)
   const { filteredFullDayData, groupedFullDay, availableClasses } = useMemo(() => {
     let filtered = rawFullDayData;
 
@@ -198,7 +192,7 @@ export default function AdminExcusesPage() {
     return { filteredFullDayData: filtered, groupedFullDay: grouped, availableClasses: available };
   }, [rawFullDayData, stageFilter, classFilter]);
 
-  // 🚀 تصدير التقرير الذكي الشامل للـ PDF
+  // 🚀 التصدير الشامل للـ PDF (محمي من أخطاء الذاكرة)
   const exportFullDayToPDF = async () => {
     if (filteredFullDayData.length === 0) {
       alert('لا توجد بيانات لتصديرها.'); return;
@@ -303,7 +297,7 @@ export default function AdminExcusesPage() {
   };
 
   const exportApprovedToPDF = async () => {
-    const approvedExcuses = excuses.filter(e => e.status === 'approved');
+    const approvedExcuses = (excuses || []).filter(e => e.status === 'approved');
     if (approvedExcuses.length === 0) { alert('لا توجد أعذار معتمدة لتصديرها.'); return; }
     setIsExportingPDF(true);
 
@@ -483,6 +477,7 @@ export default function AdminExcusesPage() {
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
                 
+                {/* 🚀 فلاتر التحكم بالتقرير */}
                 <div className="flex flex-col gap-4 mb-8 border-b border-white/5 pb-8">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-rose-500/20 rounded-2xl border border-rose-500/30"><ShieldAlert className="w-6 h-6 text-rose-400" /></div>
