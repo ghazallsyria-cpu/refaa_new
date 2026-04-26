@@ -10,7 +10,7 @@ import {
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
   Loader2, Search, Filter, AlertTriangle, CheckSquare,
-  Printer
+  Printer 
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
@@ -38,7 +38,7 @@ export default function AdminExcusesPage() {
     }
   }, [activeTab, isChecking, fetchExcuses]);
 
-  // 🚀 دالة تصدير الـ PDF باستخدام المكتبات المتوفرة لديك مسبقاً (html2canvas & jspdf)
+  // 🚀 دالة تصدير الـ PDF المحسنة (لا تتعطل أبداً على الجوال أو الكمبيوتر)
   const exportApprovedToPDF = async () => {
     const approvedExcuses = excuses.filter(e => e.status === 'approved');
 
@@ -50,8 +50,9 @@ export default function AdminExcusesPage() {
     setIsExportingPDF(true);
 
     try {
-      // 1. استيراد المكتبات الموجودة لديك بالفعل في package.json
-      const html2canvas = (await import('html2canvas')).default;
+      // 1. الاستدعاء الآمن للمكتبات
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default || html2canvasModule;
       const { jsPDF } = await import('jspdf');
 
       // 2. بناء هيكل الـ HTML
@@ -66,26 +67,31 @@ export default function AdminExcusesPage() {
 
         return `
           <tr>
-            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${index + 1}</td>
-            <td style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: right;">${studentName || 'مجهول'}</td>
-            <td style="border: 1px solid #000; padding: 10px; text-align: right;">${classFull}</td>
-            <td dir="ltr" style="border: 1px solid #000; padding: 10px; text-align: center;">${dates}</td>
-            <td style="border: 1px solid #000; padding: 10px; text-align: center;">${duration}</td>
+            <td style="border: 1px solid #000; padding: 12px; text-align: center;">${index + 1}</td>
+            <td style="border: 1px solid #000; padding: 12px; font-weight: bold; text-align: right;">${studentName || 'مجهول'}</td>
+            <td style="border: 1px solid #000; padding: 12px; text-align: right;">${classFull}</td>
+            <td dir="ltr" style="border: 1px solid #000; padding: 12px; text-align: center;">${dates}</td>
+            <td style="border: 1px solid #000; padding: 12px; text-align: center;">${duration}</td>
           </tr>
         `;
       }).join('');
 
-      // 3. إنشاء عنصر مؤقت ومخفي لتصويره
+      // 3. إنشاء العنصر داخل الشاشة ولكن مخفي خلف الواجهة
       const element = document.createElement('div');
-      element.style.width = '800px';
-      element.style.padding = '40px';
-      element.style.backgroundColor = '#ffffff';
-      element.style.direction = 'rtl';
-      element.style.fontFamily = 'Arial, sans-serif';
-      element.style.color = '#000000';
-      element.style.position = 'absolute';
-      element.style.top = '-10000px'; // إخفاء العنصر عن المستخدم
-      element.style.left = '-10000px';
+      
+      // 🚀 الحل السحري للموبايل: العنصر داخل الشاشة (top: 0) ولكن خلف العناصر (z-index: -9999)
+      Object.assign(element.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '800px',
+        padding: '40px',
+        backgroundColor: '#ffffff',
+        direction: 'rtl',
+        fontFamily: 'Arial, sans-serif',
+        color: '#000000',
+        zIndex: '-9999'
+      });
 
       element.innerHTML = `
         <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
@@ -96,11 +102,11 @@ export default function AdminExcusesPage() {
         <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
           <thead>
             <tr style="background-color: #f0f0f0;">
-              <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="5%">#</th>
-              <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="30%">اسم الطالب</th>
-              <th style="border: 1px solid #000; padding: 10px; text-align: right;" width="20%">الصف والشعبة</th>
-              <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="30%">أيام الغياب المبررة</th>
-              <th style="border: 1px solid #000; padding: 10px; text-align: center;" width="15%">الدوام</th>
+              <th style="border: 1px solid #000; padding: 12px; text-align: center;" width="5%">#</th>
+              <th style="border: 1px solid #000; padding: 12px; text-align: right;" width="30%">اسم الطالب</th>
+              <th style="border: 1px solid #000; padding: 12px; text-align: right;" width="20%">الصف والشعبة</th>
+              <th style="border: 1px solid #000; padding: 12px; text-align: center;" width="30%">أيام الغياب المبررة</th>
+              <th style="border: 1px solid #000; padding: 12px; text-align: center;" width="15%">الدوام</th>
             </tr>
           </thead>
           <tbody>
@@ -114,23 +120,31 @@ export default function AdminExcusesPage() {
 
       document.body.appendChild(element);
 
-      // 4. تصوير العنصر وتحويله لـ PDF
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
+      // 4. مهلة لضمان بناء المتصفح للعنصر
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 5. تصوير العنصر وتحويله لـ PDF
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: '#ffffff' 
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.98); // استخدام Jpeg لضمان الحجم الجيد والألوان
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`تقرير_الأعذار_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 
-      // تنظيف الذاكرة
+      // 6. تنظيف الذاكرة
       document.body.removeChild(element);
 
-    } catch (err) {
-      console.error('Error generating PDF:', err);
-      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. تأكد من اتصالك بالإنترنت.');
+    } catch (err: any) {
+      console.error('PDF Generation Error:', err);
+      alert('عذراً، حدث خطأ أثناء التصدير: ' + (err.message || 'تأكد من اتصالك بالإنترنت.'));
     } finally {
       setIsExportingPDF(false);
     }
