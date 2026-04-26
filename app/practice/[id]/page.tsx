@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import { useAuth } from '@/context/auth-context'; // 🚀 جلبنا بيانات المستخدم لمعرفة من يتدرب
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
@@ -18,7 +19,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 🚀 دالة تنظيف الرياضيات
+// دالة تنظيف الرياضيات
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
@@ -34,7 +35,7 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 مكون الاحتفال (Confetti) المدمج بدون مكتبات خارجية
+// مكون الاحتفال
 const CelebrationConfetti = () => {
   const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
   return (
@@ -43,17 +44,9 @@ const CelebrationConfetti = () => {
         <motion.div
           key={i}
           initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
-          animate={{ 
-            opacity: 0, scale: Math.random() * 1.5 + 0.5, 
-            x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500,
-            rotate: Math.random() * 360 
-          }}
+          animate={{ opacity: 0, scale: Math.random() * 1.5 + 0.5, x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500, rotate: Math.random() * 360 }}
           transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{
-            position: 'absolute', width: '10px', height: '10px',
-            backgroundColor: colors[Math.floor(Math.random() * colors.length)],
-            borderRadius: Math.random() > 0.5 ? '50%' : '2px'
-          }}
+          style={{ position: 'absolute', width: '10px', height: '10px', backgroundColor: colors[Math.floor(Math.random() * colors.length)], borderRadius: Math.random() > 0.5 ? '50%' : '2px' }}
         />
       ))}
     </div>
@@ -64,6 +57,7 @@ export default function PracticeArena() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
+  const { user } = useAuth() as any; 
 
   const [assignment, setAssignment] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -72,7 +66,6 @@ export default function PracticeArena() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   
-  // 🚀 حالات التحفيز واللعب
   const [attempts, setAttempts] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
   const [shake, setShake] = useState(false);
@@ -81,36 +74,71 @@ export default function PracticeArena() {
   const [score, setScore] = useState({ correct: 0, wrong: 0 });
   const [isFinished, setIsFinished] = useState(false);
 
+  // 🚀 جلب البيانات واستعادة التقدم
   useEffect(() => {
-    if (!id) return;
+    if (!id || !user) return;
+    
     const fetchArena = async () => {
       try {
         const { data: assignData } = await supabase.from('assignments_v2').select('*').eq('id', id).single();
         const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', id).order('order_index', { ascending: true });
+        
+        // جلب تقدم الطالب إن وجد
+        const { data: progressData } = await supabase
+          .from('student_progress_v2')
+          .select('*')
+          .eq('student_id', user.id)
+          .eq('assignment_id', id)
+          .single();
+
         setAssignment(assignData);
         setQuestions(qData || []);
+
+        if (progressData) {
+          if (progressData.is_completed) {
+            setIsFinished(true);
+            setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score });
+          } else {
+            setCurrentIndex(progressData.current_index || 0);
+            setScore({ correct: progressData.correct_score || 0, wrong: progressData.wrong_score || 0 });
+          }
+        }
       } catch (error) { console.error(error); } finally { setLoading(false); }
     };
     fetchArena();
-  }, [id]);
+  }, [id, user]);
+
+  // 🚀 دالة حفظ التقدم الصامتة في السيرفر
+  const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
+    if (!user) return;
+    try {
+      await supabase.from('student_progress_v2').upsert({
+        student_id: user.id,
+        assignment_id: id,
+        current_index: newIndex,
+        correct_score: newScore.correct,
+        wrong_score: newScore.wrong,
+        is_completed: finished,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'student_id, assignment_id' });
+    } catch (err) { console.error("Error saving progress:", err); }
+  };
 
   const currentQ = questions[currentIndex];
-  
-  // 🚀 الذكاء الاستراتيجي: إيجاد "السؤال الرئيسي" الثابت (Section Header)
   const currentContextHeader = questions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
 
   const handleOptionClick = (opt: any) => {
-    if (isSuccess) return; // لا تفعل شيئاً إذا كان قد أجاب صح
-    
+    if (isSuccess) return; 
     setSelectedOptionId(opt.id);
     
     if (opt.is_correct) {
-      // 🟢 إجابة صحيحة
       setIsSuccess(true);
-      setScore(s => ({ ...s, correct: s.correct + (attempts === 0 ? 1 : 0) })); // نقطة فقط من المحاولة الأولى
-      setShowHint(true); // كشف الشرح الكامل
+      setScore(s => {
+        const newScore = { ...s, correct: s.correct + (attempts === 0 ? 1 : 0) };
+        return newScore;
+      });
+      setShowHint(true); 
     } else {
-      // 🔴 إجابة خاطئة
       setAttempts(a => a + 1);
       setShake(true);
       setTimeout(() => setShake(false), 500);
@@ -120,35 +148,49 @@ export default function PracticeArena() {
 
   const nextQuestion = () => {
     if (currentIndex < questions.length - 1) {
-      // إذا كان السؤال القادم هو "ترويسة"، نتخطاه ليصبح هو الثابت ونظهر الذي يليه
       let nextIdx = currentIndex + 1;
-      if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) {
-        nextIdx++;
-      }
+      if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) nextIdx++;
+      
       setCurrentIndex(nextIdx);
       setSelectedOptionId(null);
       setIsSuccess(false);
       setAttempts(0);
       setShowHint(false);
+      
+      // 🚀 حفظ التقدم الجديد
+      saveProgressToDB(nextIdx, score, false);
     } else {
       setIsFinished(true);
+      saveProgressToDB(currentIndex, score, true); // 🚀 حفظ الإنجاز النهائي
     }
   };
 
   const handleSelfEvaluation = (understood: boolean) => {
-    if (understood) setScore(s => ({ ...s, correct: s.correct + 1 }));
-    else setScore(s => ({ ...s, wrong: s.wrong + 1 }));
-    nextQuestion();
+    const newScore = { 
+      correct: score.correct + (understood ? 1 : 0), 
+      wrong: score.wrong + (!understood ? 1 : 0) 
+    };
+    setScore(newScore);
+    
+    if (currentIndex < questions.length - 1) {
+      let nextIdx = currentIndex + 1;
+      if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) nextIdx++;
+      setCurrentIndex(nextIdx);
+      setSelectedOptionId(null);
+      setShowHint(false);
+      saveProgressToDB(nextIdx, newScore, false);
+    } else {
+      setIsFinished(true);
+      saveProgressToDB(currentIndex, newScore, true);
+    }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز ساحة التحدي...</p></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة واسترجاع تقدمك...</p></div></div>;
   if (!assignment || questions.length === 0) return <div className="p-10 text-center font-cairo">لا يوجد تدريب متاح هنا.</div>;
 
   const progress = ((currentIndex + 1) / questions.length) * 100;
   const isMCQ = currentQ.type === 'multiple_choice' && Array.isArray(currentQ.options) && currentQ.options.length > 0;
   const hasModelAnswer = !!currentQ.model_answer_html?.trim();
-
-  // رسائل تشجيعية عشوائية
   const successMessages = ["أنت بطل! 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية! 👏"];
   const randomSuccessMsg = successMessages[currentIndex % successMessages.length];
 
@@ -166,7 +208,6 @@ export default function PracticeArena() {
         .tiptap-content p { margin-bottom: 0.5em !important; }
       `}} />
 
-      {/* شريط التقدم العلوي */}
       <div className="bg-white shadow-sm z-20 shrink-0 border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <button onClick={() => router.back()} className="p-2 bg-slate-50 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><ArrowRight className="w-5 h-5" /></button>
@@ -183,10 +224,8 @@ export default function PracticeArena() {
         </div>
       </div>
 
-      {/* 🚀 الشاشة المنقسمة (Split View) */}
       <div className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col md:flex-row gap-6 overflow-hidden h-[calc(100vh-70px)]">
         
-        {/* 1. النصف الأيمن (السؤال الرئيسي الثابت) - يظهر فقط إذا كان هناك Context */}
         <AnimatePresence>
           {currentContextHeader && currentQ.type !== 'section_header' && !isFinished && (
             <motion.div 
@@ -204,7 +243,6 @@ export default function PracticeArena() {
           )}
         </AnimatePresence>
 
-        {/* 2. النصف الأيسر (منطقة التفاعل والأسئلة) */}
         <div className={`flex-1 flex flex-col justify-center h-full ${currentContextHeader ? 'md:w-1/2' : 'w-full max-w-2xl mx-auto'}`}>
           <AnimatePresence mode="wait">
             {!isFinished ? (
@@ -237,21 +275,18 @@ export default function PracticeArena() {
                       {currentQ.options.map((opt: any) => {
                         const isSelected = selectedOptionId === opt.id;
                         const isCorrect = opt.is_correct;
-                        
                         let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md";
-                        
                         if (isSuccess) {
                           if (isCorrect) btnStyle = "bg-emerald-50 border-emerald-400 text-emerald-800 shadow-lg scale-[1.02] ring-4 ring-emerald-100";
                           else btnStyle = "bg-white border-slate-100 text-slate-300 opacity-40";
                         } else if (attempts > 0 && isSelected && !isCorrect) {
-                          btnStyle = "bg-rose-50 border-rose-300 text-rose-700 opacity-60"; // خيار خاطئ تم ضغطه
+                          btnStyle = "bg-rose-50 border-rose-300 text-rose-700 opacity-60"; 
                         }
-
                         return (
                           <button 
                             key={opt.id} 
                             onClick={() => handleOptionClick(opt)}
-                            disabled={isSuccess || (attempts > 0 && isSelected && !isCorrect)} // لا يستطيع الضغط على الخيار الخاطئ مرة أخرى
+                            disabled={isSuccess || (attempts > 0 && isSelected && !isCorrect)} 
                             className={`w-full p-4 rounded-2xl border-2 font-bold text-base text-right transition-all duration-300 flex items-center justify-between ${btnStyle}`}
                           >
                             <div className="katex-container flex-1"><Latex>{opt.content}</Latex></div>
@@ -263,7 +298,6 @@ export default function PracticeArena() {
                     </div>
                   )}
 
-                  {/* التلميحات (Hints) للمقالي أو بعد المحاولة الخاطئة */}
                   {currentQ.type === 'essay' && !showHint && (
                     <div className="mt-8 text-center bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed">
                       <p className="text-sm font-bold text-slate-500 mb-4">✍️ فكر جيداً وحل المسألة في ورقة خارجية...</p>
@@ -285,7 +319,6 @@ export default function PracticeArena() {
                   </AnimatePresence>
                 </div>
 
-                {/* أزرار التحكم السفلية */}
                 <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
@@ -327,7 +360,6 @@ export default function PracticeArena() {
 
               </motion.div>
             ) : (
-              /* شاشة النهاية والاحتفال */
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-8 text-center relative overflow-hidden">
                 <CelebrationConfetti />
                 <div className="w-28 h-28 bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-indigo-100">
