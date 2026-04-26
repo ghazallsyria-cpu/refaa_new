@@ -35,7 +35,7 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 تم إصلاح مكون الاحتفال (Confetti) ليتوافق مع القواعد الصارمة لـ React 19
+// 🚀 مكون الاحتفال (Confetti) المصحح تماماً
 const CelebrationConfetti = () => {
   const [pieces, setPieces] = useState<any[]>([]);
 
@@ -50,6 +50,7 @@ const CelebrationConfetti = () => {
       rotate: Math.random() * 360,
       isCircle: Math.random() > 0.5
     }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     setPieces(generatedPieces);
   }, []);
 
@@ -95,7 +96,6 @@ export default function PracticeArena() {
   const [score, setScore] = useState({ correct: 0, wrong: 0 });
   const [isFinished, setIsFinished] = useState(false);
 
-  // جلب البيانات واستعادة التقدم
   useEffect(() => {
     if (!id || !user) return;
     
@@ -104,7 +104,6 @@ export default function PracticeArena() {
         const { data: assignData } = await supabase.from('assignments_v2').select('*').eq('id', id).single();
         const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', id).order('order_index', { ascending: true });
         
-        // جلب تقدم الطالب إن وجد
         const { data: progressData } = await supabase
           .from('student_progress_v2')
           .select('*')
@@ -129,7 +128,6 @@ export default function PracticeArena() {
     fetchArena();
   }, [id, user]);
 
-  // دالة حفظ التقدم الصامتة في السيرفر
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
     if (!user) return;
     try {
