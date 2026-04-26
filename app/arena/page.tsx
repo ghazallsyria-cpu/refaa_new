@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/context/auth-context';
 import { motion } from 'framer-motion';
-import { Gamepad2, FileText, ChevronLeft, Sparkles, BrainCircuit, Clock, PlayCircle, CheckCircle2, MessageSquareHeart } from 'lucide-react';
+// 🚀 تم إضافة RefreshCcw هنا
+import { Gamepad2, FileText, ChevronLeft, Sparkles, BrainCircuit, Clock, PlayCircle, CheckCircle2, MessageSquareHeart, RefreshCcw } from 'lucide-react';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -24,7 +25,6 @@ export default function StudentArenaDashboard() {
 
     const fetchArenaData = async () => {
       try {
-        // 1. جلب الواجبات وبنوك الأسئلة المتاحة مع عدد أسئلتها
         const { data: assignmentsData, error: assignErr } = await supabase
           .from('assignments_v2')
           .select(`
@@ -37,7 +37,6 @@ export default function StudentArenaDashboard() {
 
         if (assignErr) throw assignErr;
 
-        // 2. جلب تقدم الطالب الحالي (الذي سنبرمجه لاحقاً في شاشة التدريب)
         const { data: progressData, error: progErr } = await supabase
           .from('student_progress_v2')
           .select('*')
@@ -45,13 +44,12 @@ export default function StudentArenaDashboard() {
 
         if (progErr) throw progErr;
 
-        // دمج البيانات لحساب نسبة الإنجاز
         const mergedMissions = assignmentsData?.map(assign => {
           const totalQuestions = assign.assignment_questions_v2?.length || 1;
           const userProgress = progressData?.find(p => p.assignment_id === assign.id);
           
           let percentage = 0;
-          let status = 'new'; // new, in_progress, completed
+          let status = 'new'; 
 
           if (userProgress) {
             if (userProgress.is_completed) {
@@ -89,7 +87,6 @@ export default function StudentArenaDashboard() {
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
       <div className="max-w-4xl mx-auto space-y-8">
         
-        {/* هيدر الساحة */}
         <div className="bg-gradient-to-r from-indigo-900 to-indigo-700 rounded-[2rem] p-8 text-white shadow-xl relative overflow-hidden">
           <div className="relative z-10">
             <div className="inline-flex p-3 bg-white/20 backdrop-blur-md rounded-2xl mb-4">
@@ -103,7 +100,6 @@ export default function StudentArenaDashboard() {
           <BrainCircuit className="absolute -left-10 -bottom-10 w-64 h-64 text-white opacity-5" />
         </div>
 
-        {/* قائمة التحديات */}
         <div className="space-y-4">
           <h2 className="text-xl font-black text-slate-800 px-2 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-amber-500" /> التحديات المتاحة ({missions.length})
@@ -125,7 +121,6 @@ export default function StudentArenaDashboard() {
                       mission.status === 'in_progress' ? 'border-amber-300' : 'border-indigo-100'}`}
                 >
                   
-                  {/* شريط التقدم في أعلى البطاقة */}
                   {mission.status !== 'new' && (
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100">
                       <motion.div 
@@ -150,7 +145,6 @@ export default function StudentArenaDashboard() {
                     <h3 className="font-black text-slate-800 text-lg mb-2">{mission.title}</h3>
                     <p className="text-xs font-bold text-slate-500 line-clamp-2 mb-4">{mission.description}</p>
                     
-                    {/* 🚀 ملاحظة المعلم (إن وجدت) */}
                     {mission.progress?.teacher_feedback && (
                       <div className="mb-4 bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-2">
                         <MessageSquareHeart className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
