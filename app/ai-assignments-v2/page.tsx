@@ -7,7 +7,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   UploadCloud, Loader2, FileText, CheckCircle2, AlertCircle, Sparkles, 
   Image as ImageIcon, Copy, ClipboardPaste, Type, FileUp, ShieldCheck, 
-  Edit3, Trash2, GripVertical, Plus, Save, X, Calculator, FlaskConical, Beaker
+  Edit3, Trash2, GripVertical, Plus, Save, X, Calculator, FlaskConical, Beaker,
+  FileJson
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -60,7 +61,6 @@ export default function AIAssignmentsV2Mobile() {
   const [inputType, setInputType] = useState<'text' | 'image' | 'pdf'>('text'); 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState('');
-  
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   
   const [loading, setLoading] = useState(false);
@@ -68,7 +68,10 @@ export default function AIAssignmentsV2Mobile() {
   const [error, setError] = useState<string | null>(null);
   
   const [customApiKey, setCustomApiKey] = useState('');
+  
+  // 🚀 حالات الإدخال اليدوي
   const [manualJson, setManualJson] = useState('');
+  const [manualJsonError, setManualJsonError] = useState<string | null>(null);
 
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -76,7 +79,7 @@ export default function AIAssignmentsV2Mobile() {
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
   const [isSavingDB, setIsSavingDB] = useState(false);
 
-  // 🚀 حالات المحرر السريع المنبثق للموبايل
+  // حالات المحرر السريع المنبثق للموبايل
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editQuestionState, setEditQuestionState] = useState<ExtractedQuestion | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -132,13 +135,17 @@ export default function AIAssignmentsV2Mobile() {
     fetchTeacherSections();
   }, [selectedTeacher, selectedSubject]);
 
-  // 🚀 البرومبت المخصص
   const basePromptText = String.raw`أنت خبير تعليمي. استخرج الأسئلة بـ JSON:
 1. الأسئلة العامة (مثل: بناء على النص) اجعلها "section_header".
 2. الرياضيات العربية: افصل كل حد داخل دولار وضعه خارجه الأقواس. ( $س$ - $٢$ )
 3. الكيمياء العضوية: للروابط العلوية/السفلية استخدم: $\begin{array}{c} CH_3 \\ | \\ C - OH \\ | \\ CH_3 \end{array}$
 4. الجداول: استخدم type "data_table" وأضف كائن "table" يحتوي "headers" و "rows".
 أخرج الناتج ككود JSON: { "title": "عنوان", "questions": [ { "type": "...", "content": "...", "options": [] } ] }`;
+
+  const copyPrompt = () => { 
+    navigator.clipboard.writeText(basePromptText); 
+    alert('تم نسخ أمر التوليد المخصص بنجاح! يمكنك الآن لصقه في حسابك الخارجي.'); 
+  };
 
   const analyzeContent = async () => {
     if (inputType === 'image' && !imageFile) return;
@@ -187,6 +194,33 @@ export default function AIAssignmentsV2Mobile() {
     } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   };
 
+  // 🚀 معالجة الإدخال اليدوي (لصق JSON الجاهز)
+  const processManualJson = () => {
+    if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
+    setManualJsonError(null);
+    try {
+      let safeJsonStr = manualJson.trim();
+      if (safeJsonStr.startsWith('```')) {
+        safeJsonStr = safeJsonStr.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
+      }
+      
+      const parsedData = JSON.parse(safeJsonStr);
+      
+      const normalizedQuestions = parsedData.questions.map((q:any) => ({
+        content: cleanMathLatex(q.content || q.section_header || ''),
+        type: q.type || 'essay',
+        points: Number(q.points) || 1,
+        options: Array.isArray(q.options) ? q.options.map((o:any)=> cleanMathLatex(String(o))) : [],
+        table: q.table || null
+      }));
+
+      setResult({ title: parsedData.title || 'واجب تفاعلي ذكي', questions: normalizedQuestions });
+      setManualJson(''); 
+    } catch (err: any) { 
+      setManualJsonError('خطأ في قراءة الكود: تأكد من أن الـ JSON منسوخ بالكامل.'); 
+    }
+  };
+
   const toggleSection = (id: string) => setSelectedSections(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const saveToRealDatabase = async () => {
@@ -212,17 +246,12 @@ export default function AIAssignmentsV2Mobile() {
     } catch (error: any) { alert('خطأ: ' + error.message); } finally { setIsSavingDB(false); }
   };
 
-  // 🚀 المحرر السريع: فتح وإغلاق المحرر
+  // فتح وإغلاق وحفظ المحرر
   const openEditor = (index: number) => {
-    setEditQuestionState(JSON.parse(JSON.stringify(result!.questions[index]))); // Clone
+    setEditQuestionState(JSON.parse(JSON.stringify(result!.questions[index])));
     setEditingIndex(index);
   };
-
-  const closeEditor = () => {
-    setEditingIndex(null);
-    setEditQuestionState(null);
-  };
-
+  const closeEditor = () => { setEditingIndex(null); setEditQuestionState(null); };
   const saveEditor = () => {
     if (editingIndex !== null && editQuestionState && result) {
       const newQuestions = [...result.questions];
@@ -231,7 +260,6 @@ export default function AIAssignmentsV2Mobile() {
     }
     closeEditor();
   };
-
   const handleDeleteQuestion = (index: number) => {
     if(confirm('هل أنت متأكد من حذف هذا السؤال؟')) {
       const newQuestions = [...result!.questions];
@@ -240,7 +268,6 @@ export default function AIAssignmentsV2Mobile() {
     }
   };
 
-  // 🚀 المحرر السريع: إدراج الرموز من الشريط
   const insertSymbol = (symbol: string) => {
     if (!textareaRef.current || !editQuestionState) return;
     const start = textareaRef.current.selectionStart;
@@ -248,10 +275,7 @@ export default function AIAssignmentsV2Mobile() {
     const text = editQuestionState.content;
     const before = text.substring(0, start);
     const after = text.substring(end, text.length);
-    
     setEditQuestionState({ ...editQuestionState, content: before + symbol + after });
-    
-    // إعادة التركيز بعد الإدراج
     setTimeout(() => {
       textareaRef.current?.focus();
       textareaRef.current?.setSelectionRange(start + symbol.length, start + symbol.length);
@@ -263,7 +287,6 @@ export default function AIAssignmentsV2Mobile() {
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-4 font-cairo text-slate-800" dir="rtl">
       
-      {/* 🚀 CSS الخاص بـ RTL للرياضيات ودعم الموبايل */}
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: rtl !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: rtl !important; text-align: right !important; }
@@ -276,38 +299,70 @@ export default function AIAssignmentsV2Mobile() {
         {/* هيدر الصفحة */}
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
           <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Sparkles className="w-8 h-8" /></div>
-          <h1 className="text-2xl font-black text-slate-900">توليد الواجبات (V2)</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">الإصدار المخصص للموبايل والسرعة القصوى.</p>
+          <h1 className="text-2xl font-black text-slate-900">إنشاء الواجبات (V2)</h1>
+          <p className="text-sm text-slate-500 font-bold mt-2">الإصدار المخصص للموبايل والتعديل السريع.</p>
         </div>
 
-        {/* منطقة التوليد */}
+        {/* 🚀 منطقة الإدخال قبل عرض البطاقات */}
         {!result && (
-          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-4">
-            <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
-              <button onClick={() => setInputType('text')} className={`flex-1 py-2 rounded-xl font-bold text-sm ${inputType === 'text' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600'}`}>نص</button>
-              <button onClick={() => setInputType('image')} className={`flex-1 py-2 rounded-xl font-bold text-sm ${inputType === 'image' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600'}`}>صورة</button>
+          <>
+            {/* 🚀 قسم الإدخال اليدوي (JSON الجاهز) الذي طلبته */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-200 space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-indigo-700">
+                  <FileJson className="w-6 h-6" /> <h2 className="font-black text-lg">إدخال الكود الجاهز (يدوي)</h2>
+                </div>
+                <button onClick={copyPrompt} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-colors">
+                  <Copy className="w-3 h-3" /> نسخ البرومبت
+                </button>
+              </div>
+              <p className="text-xs font-bold text-slate-500 mb-2 leading-relaxed">
+                هل تفضل استخدام حسابك الخارجي؟ انسخ البرومبت، ولّد الكود هناك، ثم الصقه هنا لعرضه في الواجهة الذكية الجديدة فوراً.
+              </p>
+              <textarea 
+                value={manualJson} 
+                onChange={(e) => setManualJson(e.target.value)} 
+                placeholder="الصق كود الـ JSON هنا..." 
+                className="w-full h-32 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-indigo-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 resize-none shadow-inner" 
+                dir="ltr"
+              ></textarea>
+              {manualJsonError && <div className="text-rose-600 text-xs font-bold bg-rose-50 p-2 rounded-lg">{manualJsonError}</div>}
+              <button onClick={processManualJson} className="w-full bg-indigo-50 text-indigo-700 font-black py-3.5 rounded-xl hover:bg-indigo-100 flex justify-center items-center gap-2 border border-indigo-200 transition-all active:scale-95">
+                <ClipboardPaste className="w-5 h-5" /> بناء الواجب من الكود
+              </button>
             </div>
-            
-            {inputType === 'text' && (
-              <textarea value={rawText} onChange={e => setRawText(e.target.value)} placeholder="الصق أسئلة الواجب هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-slate-800 focus:border-indigo-500 outline-none resize-none"></textarea>
-            )}
-            {inputType === 'image' && (
-              <input type="file" accept="image/*" onChange={handleImageChange} className="w-full file:bg-indigo-50 file:text-indigo-700 file:border-0 file:py-3 file:px-4 file:rounded-xl file:font-bold text-slate-500 text-sm" />
-            )}
 
-            <button onClick={analyzeContent} disabled={loading} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl shadow-md disabled:opacity-50 flex justify-center items-center gap-2">
-              {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'توليد ذكي الآن'}
-            </button>
-            {error && <div className="text-rose-600 text-sm font-bold text-center bg-rose-50 p-2 rounded-lg">{error}</div>}
-          </div>
+            {/* قسم التوليد بالـ API الداخلي (اختياري) */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-4 opacity-80 hover:opacity-100 transition-opacity">
+              <div className="flex items-center gap-2 mb-2 text-slate-700">
+                <Sparkles className="w-5 h-5" /> <h2 className="font-black text-base">أو التوليد الداخلي المباشر</h2>
+              </div>
+              <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+                <button onClick={() => setInputType('text')} className={`flex-1 py-2 rounded-xl font-bold text-sm ${inputType === 'text' ? 'bg-slate-800 text-white shadow' : 'text-slate-600'}`}>نص</button>
+                <button onClick={() => setInputType('image')} className={`flex-1 py-2 rounded-xl font-bold text-sm ${inputType === 'image' ? 'bg-slate-800 text-white shadow' : 'text-slate-600'}`}>صورة</button>
+              </div>
+              
+              {inputType === 'text' && (
+                <textarea value={rawText} onChange={e => setRawText(e.target.value)} placeholder="الصق أسئلة الواجب هنا..." className="w-full h-32 bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-slate-800 focus:border-slate-500 outline-none resize-none"></textarea>
+              )}
+              {inputType === 'image' && (
+                <input type="file" accept="image/*" onChange={handleImageChange} className="w-full file:bg-slate-100 file:text-slate-700 file:border-0 file:py-3 file:px-4 file:rounded-xl file:font-bold text-slate-500 text-sm" />
+              )}
+
+              <button onClick={analyzeContent} disabled={loading} className="w-full bg-slate-800 text-white font-black py-3.5 rounded-xl shadow-md disabled:opacity-50 flex justify-center items-center gap-2 transition-all active:scale-95">
+                {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'توليد ذكي الآن'}
+              </button>
+              {error && <div className="text-rose-600 text-sm font-bold text-center bg-rose-50 p-2 rounded-lg">{error}</div>}
+            </div>
+          </>
         )}
 
-        {/* 🚀 نظام البطاقات الذكية (بعد التوليد) */}
+        {/* 🚀 نظام البطاقات الذكية (بعد التوليد أو لصق الـ JSON) */}
         {result && (
           <div className="space-y-4">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center sticky top-2 z-10">
               <h2 className="font-black text-indigo-900 truncate">المسودة: {result.title}</h2>
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-black px-3 py-1 rounded-full">{result.questions.length} سؤال</span>
+              <span className="bg-indigo-100 text-indigo-700 text-xs font-black px-3 py-1 rounded-full shrink-0">{result.questions.length} سؤال</span>
             </div>
 
             <div className="space-y-3">
@@ -322,7 +377,7 @@ export default function AIAssignmentsV2Mobile() {
                   </div>
                   
                   {/* عرض المعاينة المصغرة */}
-                  <div className="text-slate-800 text-sm font-bold leading-relaxed line-clamp-3">
+                  <div className="text-slate-800 text-sm font-bold leading-relaxed">
                     <div className="katex-container"><Latex>{q.content}</Latex></div>
                   </div>
                   
@@ -365,14 +420,12 @@ export default function AIAssignmentsV2Mobile() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeEditor} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" />
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed bottom-0 left-0 w-full h-[85vh] bg-white rounded-t-[2rem] shadow-2xl z-50 flex flex-col overflow-hidden">
               
-              {/* هيدر النافذة */}
               <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50 rounded-t-[2rem]">
                 <button onClick={closeEditor} className="p-2 text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
-                <h3 className="font-black text-slate-800">تعديل السؤال المباشر</h3>
-                <button onClick={saveEditor} className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-black text-sm">حفظ التعديل</button>
+                <h3 className="font-black text-slate-800">تعديل مباشر</h3>
+                <button onClick={saveEditor} className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-black text-sm">حفظ</button>
               </div>
 
-              {/* 🚀 شريط أدوات الرياضيات السريع (Swipeable) */}
               <div className="flex gap-2 overflow-x-auto hide-scrollbar p-3 bg-white border-b border-slate-100">
                 <button onClick={() => insertSymbol(' $  $ ')} className="shrink-0 flex items-center gap-1 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold font-mono border border-indigo-100"><Calculator className="w-3 h-3"/> $ $</button>
                 <button onClick={() => insertSymbol('$\\frac{ }{ }$')} className="shrink-0 flex items-center gap-1 bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold font-mono border border-slate-200">كسر</button>
@@ -382,10 +435,7 @@ export default function AIAssignmentsV2Mobile() {
                 <button onClick={() => insertSymbol('$\\begin{array}{c} A \\\\ | \\\\ B - C \\\\ | \\\\ D \\end{array}$')} className="shrink-0 flex items-center gap-1 bg-rose-50 text-rose-700 px-3 py-1.5 rounded-lg text-xs font-bold font-mono border border-rose-200"><FlaskConical className="w-3 h-3"/> كيمياء</button>
               </div>
 
-              {/* قسم الكتابة والمعاينة */}
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                
-                {/* مربع الكتابة الأصلي (سريع جداً) */}
                 <div className="flex-1 min-h-[150px] relative">
                   <textarea 
                     ref={textareaRef}
@@ -396,14 +446,12 @@ export default function AIAssignmentsV2Mobile() {
                   ></textarea>
                 </div>
 
-                {/* المعاينة الحية */}
                 <div className="flex-1 min-h-[150px] bg-slate-800 rounded-xl p-4 text-white overflow-y-auto">
-                  <div className="text-xs text-slate-400 font-bold mb-2 uppercase tracking-widest border-b border-slate-700 pb-2">المعاينة النهائية للطالب:</div>
+                  <div className="text-xs text-slate-400 font-bold mb-2 uppercase tracking-widest border-b border-slate-700 pb-2">المعاينة الفورية:</div>
                   <div className="font-bold text-sm leading-loose">
                     <div className="katex-container"><Latex>{editQuestionState.content}</Latex></div>
                   </div>
                 </div>
-
               </div>
             </motion.div>
           </>
