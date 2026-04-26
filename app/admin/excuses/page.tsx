@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
 // @ts-nocheck
 /* eslint-disable @next/next/no-img-element */
 'use client';
@@ -56,16 +55,19 @@ export default function AdminExcusesPage() {
     setFullDayStartDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   }, []);
 
-  // 2. جلب سجلات الأعذار 
+  // 2. جلب سجلات الأعذار (نقية وآمنة)
   useEffect(() => {
     if (!mounted || isChecking || activeTab === 'inquiry' || activeTab === 'full_day_absence') return;
     fetchExcuses(activeTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, isChecking, mounted]);
 
-  // 🚀 3. الاستعلام اليدوي الآمن لحماية Supabase من الـ 521 Error
-  const fetchFullDayAbsences = async () => {
-    if (!fullDayStartDate || !fullDayEndDate) return;
+  // 🚀 3. دالة البحث الشامل (معزولة تماماً لا تعمل إلا بالضغط على الزر)
+  const executeFullDaySearch = async () => {
+    if (!fullDayStartDate || !fullDayEndDate) {
+      alert("يرجى تحديد التواريخ بشكل صحيح");
+      return;
+    }
     
     setIsFullDayLoading(true);
     setHasSearchedFullDay(true);
@@ -169,7 +171,7 @@ export default function AdminExcusesPage() {
     } catch (err: any) {
       console.error('Error fetching full day absences:', err);
       if(err.message?.includes('FetchError') || err.message?.includes('521')) {
-        alert('عذراً، سيرفر قاعدة البيانات يواجه ضغطاً حالياً. يرجى المحاولة بعد قليل.');
+        alert('عذراً، السيرفر يواجه ضغطاً حالياً. يرجى المحاولة بعد قليل.');
       }
     } finally {
       setIsFullDayLoading(false);
@@ -476,7 +478,7 @@ export default function AdminExcusesPage() {
           </div>
         </div>
 
-        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني والبحث اليدوي الآمن) */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
@@ -546,9 +548,9 @@ export default function AdminExcusesPage() {
                        </div>
                      </div>
                      <div className="flex flex-col justify-end min-w-[140px]">
-                       {/* زر البحث اليدوي لمنع الضغط على السيرفر */}
+                       {/* 🚀 الزر السحري الجديد لمنع الضغط على السيرفر */}
                        <button 
-                         onClick={fetchFullDayAbsences}
+                         onClick={executeFullDaySearch}
                          disabled={isFullDayLoading}
                          className="flex items-center justify-center gap-2 px-5 py-2.5 mt-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm transition-all shadow-md active:scale-95 disabled:opacity-50 w-full h-[40px]"
                        >
@@ -575,7 +577,7 @@ export default function AdminExcusesPage() {
                    <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
                     <Search className="h-16 w-16 mx-auto text-indigo-500/50 mb-4" />
                     <h3 className="text-xl font-black text-white">الاستعلام عن الغياب الكلي</h3>
-                    <p className="text-slate-400 font-bold mt-2">حدد النطاق الزمني واضغط على "بحث وعرض" لجلب السجلات.</p>
+                    <p className="text-slate-400 font-bold mt-2">حدد النطاق الزمني واضغط على "بحث وعرض" لجلب السجلات بأمان.</p>
                   </div>
                 ) : filteredFullDayData.length === 0 ? (
                   <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
