@@ -39,15 +39,18 @@ export default function AdminExcusesPage() {
   const [isFullDayLoading, setIsFullDayLoading] = useState(false);
   const [isFullDayExporting, setIsFullDayExporting] = useState(false);
   
-  const [fullDayDateFilter, setFullDayDateFilter] = useState('');
-  const [stageFilter, setStageFilter] = useState('all'); // all, middle, high
-  const [classFilter, setClassFilter] = useState('all'); // all, or specific class name
+  // 🚀 فلتر النطاق الزمني للغياب الكلي
+  const [fullDayStartDate, setFullDayStartDate] = useState('2026-03-01');
+  const [fullDayEndDate, setFullDayEndDate] = useState('');
+  
+  const [stageFilter, setStageFilter] = useState('all'); 
+  const [classFilter, setClassFilter] = useState('all'); 
   
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    setFullDayDateFilter(format(new Date(), 'yyyy-MM-dd'));
+    setFullDayEndDate(format(new Date(), 'yyyy-MM-dd'));
   }, []);
 
   useEffect(() => {
@@ -55,19 +58,22 @@ export default function AdminExcusesPage() {
     if (!isChecking && activeTab !== 'inquiry' && activeTab !== 'full_day_absence') {
       fetchExcuses(activeTab);
     }
-    if (activeTab === 'full_day_absence' && fullDayDateFilter) {
+    // تحديث التقرير تلقائياً عند تغيير التواريخ والتبويب
+    if (activeTab === 'full_day_absence' && fullDayStartDate && fullDayEndDate) {
       fetchFullDayAbsences();
     }
-  }, [activeTab, isChecking, fetchExcuses, fullDayDateFilter, mounted]);
+  }, [activeTab, isChecking, fetchExcuses, fullDayStartDate, fullDayEndDate, mounted]);
 
-  // 🚀 جلب البيانات مرة واحدة وتخزينها محلياً لتخفيف الضغط
+  // 🚀 جلب البيانات الشاملة ضمن نطاق زمني
   const fetchFullDayAbsences = async () => {
+    if (!fullDayStartDate || !fullDayEndDate) return;
     setIsFullDayLoading(true);
     try {
       const { data: records, error } = await supabase
         .from('attendance_records')
         .select('id, date, period, status, student_id')
-        .eq('date', fullDayDateFilter)
+        .gte('date', fullDayStartDate)
+        .lte('date', fullDayEndDate)
         .eq('status', 'absent');
 
       if (error) throw error;
@@ -78,13 +84,35 @@ export default function AdminExcusesPage() {
         return;
       }
 
-      const studentPeriods: Record<string, Set<number>> = {};
+      // تجميع الغيابات حسب الطالب والتاريخ
+      // الهيكل: student_id -> date -> Set(periods)
+      const studentDatePeriods: Record<string, Record<string, Set<number>>> = {};
+      
       records.forEach(rec => {
-        if (!studentPeriods[rec.student_id]) studentPeriods[rec.student_id] = new Set();
-        studentPeriods[rec.student_id].add(rec.period);
+        if (!studentDatePeriods[rec.student_id]) {
+          studentDatePeriods[rec.student_id] = {};
+        }
+        if (!studentDatePeriods[rec.student_id][rec.date]) {
+          studentDatePeriods[rec.student_id][rec.date] = new Set();
+        }
+        studentDatePeriods[rec.student_id][rec.date].add(rec.period);
       });
 
-      const fullDayStudentIds = Object.keys(studentPeriods).filter(sId => studentPeriods[sId].size >= 7);
+      // 🚀 المنطق الجديد: الغياب الكلي = 5 حصص فأكثر في نفس اليوم
+      const fullDayStudents: Record<string, string[]> = {}; // student_id -> dates[]
+      
+      Object.entries(studentDatePeriods).forEach(([sId, datesMap]) => {
+        const fullAbsentDates = Object.entries(datesMap)
+          .filter(([date, periods]) => periods.size >= 5) // الخوارزمية المطلوبة: 5 أو 6 يعني غياب كامل
+          .map(([date]) => date)
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime()); // ترتيب تنازلي
+
+        if (fullAbsentDates.length > 0) {
+          fullDayStudents[sId] = fullAbsentDates;
+        }
+      });
+
+      const fullDayStudentIds = Object.keys(fullDayStudents);
 
       if (fullDayStudentIds.length === 0) {
         setRawFullDayData([]);
@@ -92,6 +120,7 @@ export default function AdminExcusesPage() {
         return;
       }
 
+      // جلب بيانات الطلاب الذين لديهم غياب كلي
       const { data: studentsData, error: stuErr } = await supabase
         .from('users')
         .select(`
@@ -130,10 +159,14 @@ export default function AdminExcusesPage() {
           className: cName,
           sectionName: sName,
           classFull: `${cName.replace('الصف', '').trim()} - ${sName}`,
-          periodsCount: studentPeriods[student.id].size,
+          fullDaysCount: fullDayStudents[student.id].length,
+          absentDates: fullDayStudents[student.id],
           stage
         };
       });
+
+      // ترتيب الطلاب حسب عدد أيام الغياب الكلي (الأكثر غياباً أولاً)
+      formattedResults.sort((a, b) => b.fullDaysCount - a.fullDaysCount);
 
       setRawFullDayData(formattedResults);
 
@@ -144,7 +177,6 @@ export default function AdminExcusesPage() {
     }
   };
 
-  // 🚀 الفلترة الذكية تتم محلياً دون ضغط على السيرفر
   const { filteredFullDayData, groupedFullDay, availableClasses } = useMemo(() => {
     let filtered = rawFullDayData;
 
@@ -166,7 +198,7 @@ export default function AdminExcusesPage() {
     return { filteredFullDayData: filtered, groupedFullDay: grouped, availableClasses: available };
   }, [rawFullDayData, stageFilter, classFilter]);
 
-  // 🚀 تصدير تقرير المنقطعين (غياب يوم كامل) إلى PDF
+  // 🚀 تصدير التقرير الذكي الشامل للـ PDF
   const exportFullDayToPDF = async () => {
     if (filteredFullDayData.length === 0) {
       alert('لا توجد بيانات لتصديرها.'); return;
@@ -184,7 +216,7 @@ export default function AdminExcusesPage() {
       Object.entries(groupedFullDay).forEach(([classFullName, students]) => {
         tableRows += `
           <tr style="background-color: #fce7f3;">
-            <td colspan="4" style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: center; color: #be123c;">${classFullName} (${students.length} طلاب)</td>
+            <td colspan="5" style="border: 1px solid #000; padding: 10px; font-weight: bold; text-align: center; color: #be123c;">${classFullName} (${students.length} طلاب مسجلين)</td>
           </tr>
         `;
         students.forEach(student => {
@@ -192,15 +224,16 @@ export default function AdminExcusesPage() {
             <tr>
               <td style="border: 1px solid #000; padding: 8px; text-align: center;">${counter++}</td>
               <td style="border: 1px solid #000; padding: 8px; font-weight: bold; text-align: right;">${student.studentName}</td>
-              <td style="border: 1px solid #000; padding: 8px; text-align: right;">${student.className}</td>
-              <td style="border: 1px solid #000; padding: 8px; text-align: center;">${student.periodsCount} حصص</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">${student.className}</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; color: #be123c;">${student.fullDaysCount} يوم</td>
+              <td dir="ltr" style="border: 1px solid #000; padding: 8px; text-align: right; font-size: 11px;">${student.absentDates.join(' | ')}</td>
             </tr>
           `;
         });
       });
 
       const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed'; iframe.style.top = '-10000px'; iframe.style.width = '800px'; iframe.style.height = '1200px';
+      iframe.style.position = 'fixed'; iframe.style.top = '-10000px'; iframe.style.width = '1000px'; iframe.style.height = '1200px';
       document.body.appendChild(iframe);
 
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -224,17 +257,18 @@ export default function AdminExcusesPage() {
             <div id="pdf-target">
               <div class="header">
                 <h2>مدرسة الرفعة النموذجية</h2>
-                <h3>تقرير المنقطعين (غياب يوم كامل)</h3>
-                <p>تاريخ الغياب: <span dir="ltr">${fullDayDateFilter}</span></p>
+                <h3>التقرير الشامل للطلاب المنقطعين (غياب كلي 5 حصص فأكثر)</h3>
+                <p>من تاريخ: <span dir="ltr">${fullDayStartDate}</span> إلى تاريخ: <span dir="ltr">${fullDayEndDate}</span></p>
                 <p style="font-size: 12px; color: #555;">المرحلة: ${stageFilter === 'all' ? 'الكل' : stageFilter === 'middle' ? 'المتوسطة' : 'الثانوية'} | الصف: ${classFilter === 'all' ? 'الكل' : classFilter}</p>
               </div>
               <table>
                 <thead>
                   <tr>
-                    <th width="10%">#</th>
-                    <th width="45%">اسم الطالب</th>
-                    <th width="25%">الصف</th>
-                    <th width="20%">عدد الحصص المفقودة</th>
+                    <th width="5%">#</th>
+                    <th width="30%">اسم الطالب</th>
+                    <th width="15%">الصف</th>
+                    <th width="15%">أيام الانقطاع</th>
+                    <th width="35%">التواريخ التفصيلية</th>
                   </tr>
                 </thead>
                 <tbody>${tableRows}</tbody>
@@ -246,7 +280,7 @@ export default function AdminExcusesPage() {
       `);
       doc.close();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 600));
       const targetElement = doc.getElementById('pdf-target');
       
       const canvas = await html2canvas(targetElement!, { scale: 2, useCORS: true, backgroundColor: '#ffffff', window: iframe.contentWindow as any });
@@ -256,18 +290,18 @@ export default function AdminExcusesPage() {
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`تقرير_المنقطعين_${fullDayDateFilter}.pdf`);
+      pdf.save(`تقرير_المنقطعين_${fullDayEndDate}.pdf`);
 
       document.body.removeChild(iframe);
 
     } catch (err) {
-      alert('حدث خطأ أثناء التصدير.');
+      console.error(err);
+      alert('حدث خطأ أثناء تصدير التقرير، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsFullDayExporting(false);
     }
   };
 
-  // 🚀 تصدير تقرير الأعذار المعتمدة
   const exportApprovedToPDF = async () => {
     const approvedExcuses = excuses.filter(e => e.status === 'approved');
     if (approvedExcuses.length === 0) { alert('لا توجد أعذار معتمدة لتصديرها.'); return; }
@@ -437,68 +471,92 @@ export default function AdminExcusesPage() {
                 <button onClick={() => setActiveTab('rejected')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'rejected' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>مرفوضة</button>
                 <button onClick={() => setActiveTab('inquiry')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'inquiry' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-400 hover:text-indigo-300'}`}><Search className="w-4 h-4"/> استعلام شامل</button>
                 {(currentRole === 'admin' || currentRole === 'management') && (
-                  <button onClick={() => setActiveTab('full_day_absence')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'full_day_absence' ? 'bg-rose-600 text-white shadow-lg' : 'text-rose-400 hover:bg-rose-500/20'}`}><AlertTriangle className="w-4 h-4"/> غياب يوم كامل</button>
+                  <button onClick={() => setActiveTab('full_day_absence')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'full_day_absence' ? 'bg-rose-600 text-white shadow-lg' : 'text-rose-400 hover:bg-rose-500/20'}`}><AlertTriangle className="w-4 h-4"/> سجل المنقطعين</button>
                 )}
               </div>
             </div>
           </div>
         </div>
 
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل (مع دعم النطاق الزمني) */}
         {activeTab === 'full_day_absence' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
                 
-                {/* 🚀 فلاتر التحكم بالتقرير */}
                 <div className="flex flex-col gap-4 mb-8 border-b border-white/5 pb-8">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-rose-500/20 rounded-2xl border border-rose-500/30"><ShieldAlert className="w-6 h-6 text-rose-400" /></div>
                     <div>
-                       <h2 className="text-2xl font-black text-white">تقرير المنقطعين (غياب يوم كامل)</h2>
-                       <p className="text-sm font-bold text-slate-400 mt-1">يعرض الطلاب الذين غابوا 7 حصص فأكثر في اليوم المحدد.</p>
+                       <h2 className="text-2xl font-black text-white">التقرير الشامل للمنقطعين</h2>
+                       <p className="text-sm font-bold text-slate-400 mt-1">يعرض الطلاب الذين تغيبوا (5 حصص فأكثر) في اليوم الواحد خلال الفترة المحددة.</p>
                     </div>
                   </div>
                   
+                  {/* 🚀 لوحة التحكم بالفلاتر والبحث */}
                   <div className="flex flex-wrap items-center gap-3 bg-[#090b14]/50 p-4 rounded-2xl border border-white/5 w-full">
-                     <div className="flex items-center gap-2 flex-1 min-w-[150px]">
-                       <Calendar className="w-4 h-4 text-slate-400" />
-                       <input 
-                         type="date" 
-                         className="bg-[#131836] border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold outline-none focus:border-rose-500/50 w-full"
-                         value={fullDayDateFilter}
-                         onChange={(e) => setFullDayDateFilter(e.target.value)}
-                       />
+                     <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+                       <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">من تاريخ</label>
+                       <div className="flex items-center gap-2">
+                         <Calendar className="w-4 h-4 text-slate-400" />
+                         <input 
+                           type="date" 
+                           className="bg-[#131836] border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-rose-500/50 w-full text-sm"
+                           value={fullDayStartDate}
+                           onChange={(e) => setFullDayStartDate(e.target.value)}
+                         />
+                       </div>
                      </div>
-                     <div className="flex items-center gap-2 flex-1 min-w-[150px]">
-                       <GraduationCap className="w-4 h-4 text-slate-400" />
-                       <select 
-                         className="bg-[#131836] border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold outline-none focus:border-rose-500/50 w-full cursor-pointer appearance-none"
-                         value={stageFilter}
-                         onChange={(e) => { setStageFilter(e.target.value); setClassFilter('all'); }}
+                     <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+                       <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">إلى تاريخ</label>
+                       <div className="flex items-center gap-2">
+                         <Calendar className="w-4 h-4 text-slate-400" />
+                         <input 
+                           type="date" 
+                           className="bg-[#131836] border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-rose-500/50 w-full text-sm"
+                           value={fullDayEndDate}
+                           onChange={(e) => setFullDayEndDate(e.target.value)}
+                         />
+                       </div>
+                     </div>
+                     <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+                       <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">المرحلة الدراسية</label>
+                       <div className="flex items-center gap-2">
+                         <GraduationCap className="w-4 h-4 text-slate-400" />
+                         <select 
+                           className="bg-[#131836] border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-rose-500/50 w-full text-sm cursor-pointer appearance-none"
+                           value={stageFilter}
+                           onChange={(e) => { setStageFilter(e.target.value); setClassFilter('all'); }}
+                         >
+                           <option value="all">الكل</option>
+                           <option value="middle">المتوسطة</option>
+                           <option value="high">الثانوية</option>
+                         </select>
+                       </div>
+                     </div>
+                     <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+                       <label className="text-[10px] text-slate-500 font-bold px-1 uppercase">الصف</label>
+                       <div className="flex items-center gap-2">
+                         <School className="w-4 h-4 text-slate-400" />
+                         <select 
+                           className="bg-[#131836] border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-rose-500/50 w-full text-sm cursor-pointer appearance-none"
+                           value={classFilter}
+                           onChange={(e) => setClassFilter(e.target.value)}
+                         >
+                           <option value="all">الكل</option>
+                           {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                       </div>
+                     </div>
+                     <div className="flex flex-col justify-end min-w-[140px]">
+                       <button 
+                         onClick={exportFullDayToPDF}
+                         disabled={isFullDayExporting || filteredFullDayData.length === 0}
+                         className="flex items-center justify-center gap-2 px-5 py-2.5 mt-5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-sm transition-all shadow-md active:scale-95 disabled:opacity-50 w-full"
                        >
-                         <option value="all">جميع المراحل</option>
-                         <option value="middle">المرحلة المتوسطة</option>
-                         <option value="high">المرحلة الثانوية</option>
-                       </select>
+                         {isFullDayExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                         تصدير PDF
+                       </button>
                      </div>
-                     <div className="flex items-center gap-2 flex-1 min-w-[150px]">
-                       <School className="w-4 h-4 text-slate-400" />
-                       <select 
-                         className="bg-[#131836] border border-white/10 rounded-xl px-4 py-2.5 text-white font-bold outline-none focus:border-rose-500/50 w-full cursor-pointer appearance-none"
-                         value={classFilter}
-                         onChange={(e) => setClassFilter(e.target.value)}
-                       >
-                         <option value="all">جميع الصفوف</option>
-                         {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
-                       </select>
-                     </div>
-                     <button 
-                       onClick={exportFullDayToPDF}
-                       disabled={isFullDayExporting || filteredFullDayData.length === 0}
-                       className="flex items-center justify-center gap-2 px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-sm transition-all shadow-md active:scale-95 disabled:opacity-50 shrink-0 h-[46px]"
-                     >
-                       {isFullDayExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                       تصدير التقرير PDF
-                     </button>
                   </div>
                 </div>
 
@@ -507,8 +565,8 @@ export default function AdminExcusesPage() {
                 ) : filteredFullDayData.length === 0 ? (
                   <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
                     <CheckCircle2 className="h-16 w-16 mx-auto text-emerald-500/50 mb-4" />
-                    <h3 className="text-xl font-black text-white">لا يوجد غياب كلي مطابق</h3>
-                    <p className="text-slate-400 font-bold mt-2">لا يوجد طلاب متطابقون مع خيارات البحث في هذا اليوم.</p>
+                    <h3 className="text-xl font-black text-white">السجلات نظيفة</h3>
+                    <p className="text-slate-400 font-bold mt-2">لا يوجد طلاب متطابقون مع خيارات البحث في هذه الفترة.</p>
                   </div>
                 ) : (
                   <div className="space-y-6">
@@ -516,17 +574,22 @@ export default function AdminExcusesPage() {
                       <div key={className} className="bg-[#090b14]/80 rounded-[2rem] border border-white/5 overflow-hidden">
                         <div className="bg-rose-500/10 px-6 py-4 flex items-center justify-between border-b border-rose-500/20">
                           <h3 className="font-black text-rose-400 text-lg flex items-center gap-2"><School className="w-5 h-5"/> {className}</h3>
-                          <span className="bg-rose-500 text-white font-black text-xs px-3 py-1 rounded-full">{students.length} غياب</span>
+                          <span className="bg-rose-500 text-white font-black text-xs px-3 py-1 rounded-full">{students.length} طلاب منقطعين</span>
                         </div>
-                        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {students.map((student: any, idx: number) => (
-                            <div key={idx} className="bg-[#131836]/50 p-4 rounded-2xl border border-white/5 hover:border-rose-500/30 transition-colors flex items-center gap-3">
-                              <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-300 border border-white/5 shrink-0">
-                                {idx + 1}
+                            <div key={idx} className="bg-[#131836]/50 p-4 rounded-2xl border border-white/5 hover:border-rose-500/30 transition-colors flex flex-col gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-300 border border-white/5 shrink-0">
+                                  {idx + 1}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-black text-white text-sm truncate" title={student.studentName}>{student.studentName}</p>
+                                  <p className="text-xs text-rose-400 font-bold mt-1">غياب كامل لـ {student.fullDaysCount} يوم</p>
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <p className="font-black text-white text-sm truncate" title={student.studentName}>{student.studentName}</p>
-                                <p className="text-xs text-rose-400 font-bold mt-1">إجمالي الحصص: {student.periodsCount}</p>
+                              <div className="text-[10px] text-slate-400 font-bold bg-[#090b14] p-2 rounded-lg border border-white/5" dir="ltr" title="تواريخ الغياب الكامل">
+                                {student.absentDates.join(' | ')}
                               </div>
                             </div>
                           ))}
