@@ -8,7 +8,7 @@ import {
   FileText, CheckCircle2, AlertCircle, Sparkles, 
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, Calculator, FlaskConical, UserCheck, 
-  ListOrdered, FileJson, CheckSquare
+  ListOrdered, FileJson, CheckSquare, Loader2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -215,11 +215,9 @@ export default function AssignmentBuilderV2() {
   const toggleCorrectOption = (optId: string) => {
     if(currentQ) {
       const updatedOptions = currentQ.options.map(o => {
-        // إذا كان اختيار من متعدد، نجعل خيار واحد فقط هو الصحيح
         if (currentQ.type === 'multiple_choice' || currentQ.type === 'true_false') {
           return { ...o, is_correct: o.id === optId };
         }
-        // يمكن تطويره لاحقاً لدعم (اختيار متعدد الإجابات)
         return o.id === optId ? { ...o, is_correct: !o.is_correct } : o;
       });
       setCurrentQ({...currentQ, options: updatedOptions});
@@ -335,7 +333,7 @@ export default function AssignmentBuilderV2() {
           <p className="text-sm text-slate-500 font-bold mt-2">نظام مستقل بميزانية صفرية، يعتمد على البناء اليدوي البصري والاستيراد.</p>
         </div>
 
-        {/* 🚀 القوائم العلوية */}
+        {/* القوائم العلوية */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <ListOrdered className="w-4 h-4 inline-block ml-2 mb-1" /> بناء الواجب
@@ -345,7 +343,7 @@ export default function AssignmentBuilderV2() {
           </button>
         </div>
 
-        {/* 🚀 قسم الاستيراد (مفصول تماماً) */}
+        {/* قسم الاستيراد */}
         {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
             <div className="flex items-center justify-between mb-4">
@@ -371,7 +369,7 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
 
-        {/* 🚀 قسم البناء الأساسي */}
+        {/* قسم البناء الأساسي */}
         {activeTab === 'builder' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             
@@ -482,7 +480,7 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* 🚀 نافذة محرر السؤال المنبثقة (WYSIWYG Style) */}
+      {/* 🚀 نافذة محرر السؤال المنبثقة */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
@@ -497,7 +495,6 @@ export default function AssignmentBuilderV2() {
 
               <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-6 bg-slate-50/50 pb-32">
                 
-                {/* الإعدادات السريعة */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500">نوع السؤال</label>
@@ -514,7 +511,6 @@ export default function AssignmentBuilderV2() {
                   </div>
                 </div>
 
-                {/* المحرر وشريط الأدوات السريع */}
                 <div className="space-y-2 bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm">
                   <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-3">
                     <label className="text-sm font-black text-indigo-900">نص السؤال</label>
@@ -533,7 +529,6 @@ export default function AssignmentBuilderV2() {
                   ></textarea>
                 </div>
 
-                {/* المعاينة الحية (WYSIWYG) */}
                 <div className="bg-slate-800 rounded-[2rem] p-5 text-white shadow-inner min-h-[100px]">
                   <div className="text-[10px] text-slate-400 font-bold mb-3 uppercase tracking-widest border-b border-slate-700 pb-2 flex items-center gap-2"><CheckSquare className="w-3 h-3"/> كيف يراها الطالب:</div>
                   <div className="font-bold text-sm leading-loose">
@@ -541,7 +536,6 @@ export default function AssignmentBuilderV2() {
                   </div>
                 </div>
 
-                {/* محرر الخيارات (لو كان اختياري) */}
                 {currentQ.type === 'multiple_choice' && (
                   <div className="bg-white p-5 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
                     <h4 className="font-black text-slate-800 flex items-center justify-between">
