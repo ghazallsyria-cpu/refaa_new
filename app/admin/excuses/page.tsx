@@ -11,7 +11,7 @@ import {
   ShieldAlert, CheckCircle2, XCircle, Clock, 
   Calendar, FileText, Image as ImageIcon, User, 
   Loader2, Search, Filter, AlertTriangle, CheckSquare,
-  Printer
+  Printer, School 
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { format } from 'date-fns';
@@ -21,7 +21,8 @@ export default function AdminExcusesPage() {
   const { user, isChecking, authRole, userRole } = useAuth() as any;
   const { excuses, loading, fetchExcuses, approveExcuse, rejectExcuse } = useAdminExcuses();
   
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'inquiry'>('pending');
+  // 🚀 أضفنا تبويب "full_day_absence" للمدير
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected' | 'inquiry' | 'full_day_absence'>('pending');
   const [selectedExcuse, setSelectedExcuse] = useState<any>(null);
   const [selectedDatesToApprove, setSelectedDatesToApprove] = useState<string[]>([]);
   const [overridePeriods, setOverridePeriods] = useState<boolean>(true);
@@ -33,13 +34,85 @@ export default function AdminExcusesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{studentName: string, records: any[]}[] | null>(null);
 
+  // 🚀 حالات تقرير الغياب الكامل للمدير
+  const [fullDayAbsences, setFullDayAbsences] = useState<Record<string, any[]>>({});
+  const [isFullDayLoading, setIsFullDayLoading] = useState(false);
+  const [fullDayDateFilter, setFullDayDateFilter] = useState(format(new Date(), 'yyyy-MM-dd'));
+
   useEffect(() => {
-    if (!isChecking && activeTab !== 'inquiry') {
+    if (!isChecking && activeTab !== 'inquiry' && activeTab !== 'full_day_absence') {
       fetchExcuses(activeTab);
     }
-  }, [activeTab, isChecking, fetchExcuses]);
+    if (activeTab === 'full_day_absence') {
+      fetchFullDayAbsences();
+    }
+  }, [activeTab, isChecking, fetchExcuses, fullDayDateFilter]);
 
-  // 🚀 دالة التصدير المعزولة الجبارة لتفادي خطأ (oklab) في Tailwind v4
+  // 🚀 الدالة السحرية لجلب الطلاب الغائبين يوماً كاملاً وتصنيفهم حسب الصف
+  const fetchFullDayAbsences = async () => {
+    setIsFullDayLoading(true);
+    try {
+      // 1. جلب جميع سجلات الغياب للتاريخ المحدد
+      const { data: records, error } = await supabase
+        .from('attendance_records')
+        .select(`
+          id, date, period, status, student_id,
+          users!attendance_records_student_id_fkey(full_name),
+          student_sections!inner(
+             sections(name, classes(name))
+          )
+        `)
+        .eq('date', fullDayDateFilter)
+        .eq('status', 'absent');
+
+      if (error) throw error;
+
+      if (!records || records.length === 0) {
+        setFullDayAbsences({});
+        return;
+      }
+
+      // 2. تجميع الغيابات حسب الطالب لحساب عدد الحصص
+      const studentGroups: Record<string, any> = {};
+      records.forEach(rec => {
+        const sId = rec.student_id;
+        if (!studentGroups[sId]) {
+          const className = Array.isArray(rec.student_sections?.sections?.classes) 
+            ? rec.student_sections.sections.classes[0]?.name 
+            : rec.student_sections?.sections?.classes?.name || 'بدون صف';
+          const sectionName = rec.student_sections?.sections?.name || '';
+          
+          studentGroups[sId] = {
+            studentName: rec.users?.full_name || 'مجهول',
+            classFull: `${className.replace('الصف', '')} - ${sectionName}`,
+            periods: new Set()
+          };
+        }
+        studentGroups[sId].periods.add(rec.period);
+      });
+
+      // 3. فلترة الطلاب الذين غابوا 7 حصص فأكثر (يعتبر غياب يوم كامل) وتصنيفهم حسب الصف
+      const finalReport: Record<string, any[]> = {};
+      
+      Object.values(studentGroups).forEach(student => {
+        if (student.periods.size >= 7) {
+          if (!finalReport[student.classFull]) {
+            finalReport[student.classFull] = [];
+          }
+          finalReport[student.classFull].push(student);
+        }
+      });
+
+      setFullDayAbsences(finalReport);
+
+    } catch (err: any) {
+      console.error('Error fetching full day absences:', err);
+      alert('خطأ في جلب تقرير الغياب: ' + err.message);
+    } finally {
+      setIsFullDayLoading(false);
+    }
+  };
+
   const exportApprovedToPDF = async () => {
     const approvedExcuses = excuses.filter(e => e.status === 'approved');
 
@@ -75,7 +148,6 @@ export default function AdminExcusesPage() {
         `;
       }).join('');
 
-      // 🚀 بناء غرفة العزل (Iframe) بعيداً عن ألوان Tailwind المسببة للانهيار
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.top = '-10000px';
@@ -93,7 +165,6 @@ export default function AdminExcusesPage() {
           <head>
             <meta charset="utf-8">
             <style>
-              /* CSS خام وألوان كلاسيكية لكي لا تنهار مكتبة html2canvas */
               body { font-family: Arial, sans-serif; padding: 40px; color: #000000; background-color: #ffffff; margin: 0; }
               .header { text-align: center; border-bottom: 2px solid #000000; padding-bottom: 10px; margin-bottom: 20px; }
               .header h2 { margin: 5px 0; color: #111111; }
@@ -135,20 +206,18 @@ export default function AdminExcusesPage() {
       `);
       doc.close();
 
-      // مهلة صغيرة للسماح للمتصفح برسم العنصر
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const targetElement = doc.getElementById('pdf-target');
       if (!targetElement) throw new Error('Target element not found');
 
-      // التقاط الصورة داخل بيئة الـ iframe الآمنة وتخطي تدقيق TypeScript
       const canvas = await html2canvas(targetElement, { 
         scale: 2, 
         useCORS: true,
         backgroundColor: '#ffffff',
-        window: iframe.contentWindow,
+        window: iframe.contentWindow as Window,
         logging: false
-      } as any); // 🚀 السحر هنا: as any يُسكت الـ TypeScript تماماً
+      } as any);
       
       const imgData = canvas.toDataURL('image/jpeg', 0.98); 
 
@@ -159,7 +228,6 @@ export default function AdminExcusesPage() {
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`تقرير_الأعذار_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 
-      // تدمير غرفة العزل بعد الانتهاء
       document.body.removeChild(iframe);
 
     } catch (err: any) {
@@ -350,12 +418,74 @@ export default function AdminExcusesPage() {
                 <button onClick={() => setActiveTab('approved')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'approved' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>معتمدة</button>
                 <button onClick={() => setActiveTab('rejected')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all ${activeTab === 'rejected' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>مرفوضة</button>
                 <button onClick={() => setActiveTab('inquiry')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'inquiry' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-400 hover:text-indigo-300'}`}><Search className="w-4 h-4"/> استعلام شامل</button>
+                {/* 🚀 الزر الجديد للإدارة */}
+                {(currentRole === 'admin' || currentRole === 'management') && (
+                  <button onClick={() => setActiveTab('full_day_absence')} className={`px-4 sm:px-6 py-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'full_day_absence' ? 'bg-rose-600 text-white shadow-lg' : 'text-rose-400 hover:bg-rose-500/20'}`}><AlertTriangle className="w-4 h-4"/> غياب يوم كامل</button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {activeTab === 'inquiry' ? (
+        {/* 🚀 التبويب الجديد لغياب اليوم الكامل */}
+        {activeTab === 'full_day_absence' ? (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+             <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-rose-500/20 shadow-lg">
+                <div className="flex items-center justify-between flex-col md:flex-row gap-4 mb-6 border-b border-white/5 pb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-rose-500/20 rounded-2xl border border-rose-500/30"><ShieldAlert className="w-6 h-6 text-rose-400" /></div>
+                    <div>
+                       <h2 className="text-xl sm:text-2xl font-black text-white">تقرير المنقطعين (غياب يوم كامل)</h2>
+                       <p className="text-sm font-bold text-slate-400 mt-1">يعرض الطلاب الذين غابوا 7 حصص فأكثر في اليوم المحدد.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 bg-[#090b14]/50 p-2.5 rounded-2xl border border-white/5">
+                     <span className="text-sm font-black text-slate-400 mr-2">تاريخ التقرير:</span>
+                     <input 
+                       type="date" 
+                       className="bg-[#131836] border border-white/10 rounded-xl px-4 py-2 text-white font-bold outline-none focus:border-rose-500/50"
+                       value={fullDayDateFilter}
+                       onChange={(e) => setFullDayDateFilter(e.target.value)}
+                     />
+                  </div>
+                </div>
+
+                {isFullDayLoading ? (
+                  <div className="flex justify-center py-20"><Loader2 className="w-12 h-12 animate-spin text-rose-500" /></div>
+                ) : Object.keys(fullDayAbsences).length === 0 ? (
+                  <div className="bg-[#090b14]/40 rounded-[2rem] p-12 text-center border border-white/5">
+                    <CheckCircle2 className="h-16 w-16 mx-auto text-emerald-500/50 mb-4" />
+                    <h3 className="text-xl font-black text-white">لا يوجد غياب كلي</h3>
+                    <p className="text-slate-400 font-bold mt-2">لا يوجد أي طالب مسجل كغائب في جميع حصص هذا اليوم.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(fullDayAbsences).map(([className, students]) => (
+                      <div key={className} className="bg-[#090b14]/80 rounded-[2rem] border border-white/5 overflow-hidden">
+                        <div className="bg-rose-500/10 px-6 py-4 flex items-center justify-between border-b border-rose-500/20">
+                          <h3 className="font-black text-rose-400 text-lg flex items-center gap-2"><School className="w-5 h-5"/> {className}</h3>
+                          <span className="bg-rose-500 text-white font-black text-xs px-3 py-1 rounded-full">{students.length} غياب</span>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {students.map((student: any, idx: number) => (
+                            <div key={idx} className="bg-[#131836]/50 p-4 rounded-2xl border border-white/5 hover:border-rose-500/30 transition-colors flex items-center gap-3">
+                              <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-300 border border-white/5 shrink-0">
+                                {idx + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-black text-white text-sm truncate">{student.studentName}</p>
+                                <p className="text-xs text-rose-400 font-bold mt-1">إجمالي الحصص: {student.periods.size}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+             </div>
+          </div>
+        ) : activeTab === 'inquiry' ? (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
              <div className="bg-[#131836]/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-indigo-500/20 shadow-lg">
                 <div className="flex items-center gap-3 mb-6">
