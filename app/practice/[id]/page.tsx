@@ -19,7 +19,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 🚀 تم تحديث فلتر تنظيف الرياضيات ليعالج مشكلة الـ pi المقلوبة في صورتك
+// دالة تنظيف الرياضيات
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
@@ -30,7 +30,7 @@ const renderHTMLWithMath = (html: string) => {
         .replace(/\\mu_o/g, '\\mu_0')
         .replace(/mu_o/g, '\\mu_0')
         .replace(/\\pi\\0\.001/g, '0.001\\pi')
-        .replace(/pi\\0\.001/g, '0.001\\pi') // معالجة الخطأ الذي ظهر في الصورة
+        .replace(/pi\\0\.001/g, '0.001\\pi') 
         .replace(/\\ /g, ' ');
       return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
     } catch (e) { return match; }
@@ -38,6 +38,20 @@ const renderHTMLWithMath = (html: string) => {
   parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
   parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
   return parsed;
+};
+
+// 🚀 دالة أمان لفك تشفير الخيارات القادمة من قاعدة البيانات
+const safeParseOptions = (optionsData: any) => {
+  if (!optionsData) return [];
+  if (Array.isArray(optionsData)) return optionsData;
+  if (typeof optionsData === 'string') {
+    try {
+      return JSON.parse(optionsData);
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
 };
 
 const CelebrationConfetti = () => {
@@ -212,9 +226,10 @@ export default function PracticeArena() {
 
   const progress = ((currentIndex + 1) / questions.length) * 100;
   
-  // 🚀 الفلتر الذكي: التأكد أن السؤال الاختياري يمتلك خيارات فعلاً
-  const isMCQ = currentQ.type === 'multiple_choice' && Array.isArray(currentQ.options) && currentQ.options.length > 0;
-  const hasModelAnswer = !!currentQ.model_answer_html?.trim();
+  // 🚀 الفلتر الذكي المُصحح: استخدام safeParseOptions لاستخراج الخيارات بأمان
+  const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
+  const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
+  const hasModelAnswer = !!currentQ?.model_answer_html?.trim();
   const successMessages = ["أنت بطل! 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية! 👏"];
   const randomSuccessMsg = successMessages[currentIndex % successMessages.length];
 
@@ -251,7 +266,7 @@ export default function PracticeArena() {
       <div className="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col md:flex-row gap-6 overflow-hidden h-[calc(100vh-70px)]">
         
         <AnimatePresence>
-          {currentContextHeader && currentQ.type !== 'section_header' && !isFinished && (
+          {currentContextHeader && currentQ?.type !== 'section_header' && !isFinished && (
             <motion.div 
               initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }}
               className="md:w-1/2 flex flex-col bg-indigo-50/50 rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden h-[30vh] md:h-full shrink-0"
@@ -269,7 +284,7 @@ export default function PracticeArena() {
 
         <div className={`flex-1 flex flex-col justify-center h-full ${currentContextHeader ? 'md:w-1/2' : 'w-full max-w-2xl mx-auto'}`}>
           <AnimatePresence mode="wait">
-            {!isFinished ? (
+            {!isFinished && currentQ ? (
               <motion.div 
                 key={currentQ.id}
                 initial={{ opacity: 0, scale: 0.95 }} 
@@ -294,9 +309,10 @@ export default function PracticeArena() {
                 <div className="p-6 overflow-y-auto flex-1">
                   <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                   
+                  {/* 🚀 تم استخدام المصفوفة الآمنة safeOptions هنا */}
                   {isMCQ && (
                     <div className="mt-8 space-y-3">
-                      {currentQ.options.map((opt: any) => {
+                      {safeOptions.map((opt: any) => {
                         const isSelected = selectedOptionId === opt.id;
                         const isCorrect = opt.is_correct;
                         let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md";
@@ -343,7 +359,6 @@ export default function PracticeArena() {
                   </AnimatePresence>
                 </div>
 
-                {/* 🚀 أزرار التحكم السفلية (زر الطوارئ المضاف) */}
                 <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
@@ -381,10 +396,8 @@ export default function PracticeArena() {
                       </div>
                     </motion.div>
                   ) : currentQ.type === 'essay' && !showHint ? (
-                     // زر الكشف موجود في الأعلى، نترك الأسفل فارغاً
                      null
                   ) : (
-                    /* 🚀 زر الطوارئ الاحتياطي للترويسات والأسئلة المعطلة (التي لا تحوي خيارات) */
                     <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-lg">
                       {currentQ.type === 'section_header' ? 'قرأت ذلك، تابع' : 'تخطي هذا الجزء (لا توجد خيارات)'} <ChevronRight className="w-5 h-5" />
                     </button>
