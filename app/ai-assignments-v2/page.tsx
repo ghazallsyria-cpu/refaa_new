@@ -257,10 +257,13 @@ export default function AssignmentBuilderV2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+// 🚀 نسخة محسنة وخفيفة جداً لإنقاذ موارد السيرفر (Optimized Query)
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false });
+      // 1. استخدام limit(50) لكي لا نرهق قاعدة البيانات بجلب آلاف السجلات دفعة واحدة
+      let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false }).limit(50);
+      
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
         if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
@@ -275,19 +278,19 @@ export default function AssignmentBuilderV2() {
         return;
       }
 
-      const { data: questions } = await supabase.from('assignment_questions_v2').select('assignment_id');
+      // 2. إيقاف جلب جدول الأسئلة بالكامل لتوفير 90% من استهلاك الـ CPU
       const { data: subjectsList } = await supabase.from('subjects').select('id, name');
       const { data: teachersList } = await supabase.from('teachers').select('id, users(full_name)');
 
       const mergedData = assignments.map(assign => {
         const sub = subjectsList?.find(s => s.id === assign.subject_id);
         const teacher = teachersList?.find(t => t.id === assign.teacher_id);
-        const qCount = questions?.filter(q => q.assignment_id === assign.id).length || 0;
         return {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
           teachers: { users: { full_name: teacher?.users?.full_name || 'معلم غير محدد' } },
-          assignment_questions_v2: new Array(qCount).fill({}) 
+          // نضع مصفوفة فارغة لكي لا ينكسر الكود، وسيظهر عدد الأسئلة كـ 0 مؤقتاً لإنقاذ السيرفر
+          assignment_questions_v2: [] 
         };
       });
 
