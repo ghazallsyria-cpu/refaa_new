@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
  
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Calendar, Save, CheckCircle2, XCircle, Clock, AlertCircle, Users, 
   LayoutGrid, Info, ShieldCheck, BookOpen, UserMinus, BarChart2, 
@@ -42,6 +42,13 @@ export default function AttendancePage() {
   const [message, setMessage] = useState({ text: '', type: '' });
  
   const [activeKey, setActiveKey] = useState<string | null>(null);
+
+  // 🚀 حراس لمنع تكرار الطلبات (In-flight & Duplicate Guards)
+  const adminFetchRef = useRef(false);
+  const studentFetchRef = useRef(false);
+  const attendanceFetchRef = useRef(false);
+  const scheduleFetchRef = useRef<string | null>(null);
+  const sectionsFetchRef = useRef<string | null>(null);
  
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
@@ -69,8 +76,10 @@ export default function AttendancePage() {
     setSnapshotDate(today);
   }, []);
  
+  // 🚀 حارس دالة الإدارة
   const fetchDailySnapshot = useCallback(async () => {
-    if (!user || !isAdmin || !snapshotDate) return;
+    if (!user || !isAdmin || !snapshotDate || adminFetchRef.current) return;
+    adminFetchRef.current = true;
     setAdminLoading(true);
     try {
       const { data, error } = await supabase
@@ -110,6 +119,7 @@ export default function AttendancePage() {
       console.error("Admin Fetch Error:", error);
     } finally {
       setAdminLoading(false);
+      adminFetchRef.current = false;
     }
   }, [user, isAdmin, snapshotDate]);
  
@@ -203,8 +213,10 @@ export default function AttendancePage() {
     printWindow.document.write(html); printWindow.document.close();
   };
  
+  // 🚀 حارس تأثير جلب الجدول (يمنع التكرار لنفس التاريخ)
   useEffect(() => {
-    if (date && currentRole === 'teacher') {
+    if (date && currentRole === 'teacher' && scheduleFetchRef.current !== date) {
+      scheduleFetchRef.current = date;
       fetchDaySchedule(date).then((schedule) => {
         if (schedule && schedule.length > 0) {
           setPeriod(prevPeriod => {
@@ -217,8 +229,11 @@ export default function AttendancePage() {
     }
   }, [date, currentRole, fetchDaySchedule]);
  
+  // 🚀 حارس تأثير جلب الفصول
   useEffect(() => {
-    if (date && period && currentRole === 'teacher') {
+    const key = `${date}_${period}`;
+    if (date && period && currentRole === 'teacher' && sectionsFetchRef.current !== key) {
+      sectionsFetchRef.current = key;
       fetchSections(date, period).then(sectionsData => {
         if (sectionsData && sectionsData.length > 0) {
           setSelectedSection(sectionsData[0].id);
@@ -228,42 +243,48 @@ export default function AttendancePage() {
     }
   }, [date, period, fetchSections, currentRole]);
  
+  // 🚀 حارس جلب بيانات الحضور والغياب (المتسبب الأكبر في التكرار)
   const loadStudentsAndAttendance = useCallback(async () => {
-    if (selectedSection && date && currentRole === 'teacher') {
+    if (selectedSection && date && currentRole === 'teacher' && !attendanceFetchRef.current) {
+      attendanceFetchRef.current = true;
       setActiveKey(null);
       
-      const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
-      if (res) {
-        const sortedStudents = [...res.students].sort((a: any, b: any) => {
-          const userA = Array.isArray(a.users) ? a.users[0] : a.users;
-          const userB = Array.isArray(b.users) ? b.users[0] : b.users;
-          return (userA?.full_name || '').localeCompare(userB?.full_name || '', 'ar'); 
-        });
-        setStudents(sortedStudents); 
-        
-        const localDraftKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
-        const cachedStr = localStorage.getItem(localDraftKey);
-        
-        const hasDbData = res.attendance && Object.keys(res.attendance).length > 0;
- 
-        if (hasDbData) {
-           setAttendance(res.attendance);
-           setLessonTitle(res.savedLessonTitle || '');
-        } else if (cachedStr) {
-          try {
-            const parsed = JSON.parse(cachedStr);
-            setAttendance(parsed.attendance && Object.keys(parsed.attendance).length > 0 ? parsed.attendance : res.attendance);
-            setLessonTitle(parsed.lessonTitle !== undefined && parsed.lessonTitle !== '' ? parsed.lessonTitle : (res.savedLessonTitle || ''));
-          } catch(e) {
+      try {
+        const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
+        if (res) {
+          const sortedStudents = [...res.students].sort((a: any, b: any) => {
+            const userA = Array.isArray(a.users) ? a.users[0] : a.users;
+            const userB = Array.isArray(b.users) ? b.users[0] : b.users;
+            return (userA?.full_name || '').localeCompare(userB?.full_name || '', 'ar'); 
+          });
+          setStudents(sortedStudents); 
+          
+          const localDraftKey = `attendance_draft_${user?.id}_${selectedSection}_${selectedSubject}_${date}_${period}`;
+          const cachedStr = localStorage.getItem(localDraftKey);
+          
+          const hasDbData = res.attendance && Object.keys(res.attendance).length > 0;
+   
+          if (hasDbData) {
+             setAttendance(res.attendance);
+             setLessonTitle(res.savedLessonTitle || '');
+          } else if (cachedStr) {
+            try {
+              const parsed = JSON.parse(cachedStr);
+              setAttendance(parsed.attendance && Object.keys(parsed.attendance).length > 0 ? parsed.attendance : res.attendance);
+              setLessonTitle(parsed.lessonTitle !== undefined && parsed.lessonTitle !== '' ? parsed.lessonTitle : (res.savedLessonTitle || ''));
+            } catch(e) {
+              setAttendance(res.attendance); 
+              setLessonTitle(res.savedLessonTitle || '');
+            }
+          } else {
             setAttendance(res.attendance); 
             setLessonTitle(res.savedLessonTitle || '');
           }
-        } else {
-          setAttendance(res.attendance); 
-          setLessonTitle(res.savedLessonTitle || '');
+          
+          setActiveKey(localDraftKey);
         }
-        
-        setActiveKey(localDraftKey);
+      } finally {
+        attendanceFetchRef.current = false;
       }
     }
   }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole, user?.id]);
@@ -299,8 +320,10 @@ export default function AttendancePage() {
     } finally { setSaving(false); }
   };
  
+  // 🚀 حارس دالة الطالب
   const fetchStudentDataDirectly = useCallback(async () => {
-    if (currentRole !== 'student' || !user) return;
+    if (currentRole !== 'student' || !user || studentFetchRef.current) return;
+    studentFetchRef.current = true;
     setIsStudentLoading(true); setStudentDbError(null);
     try {
       const { data: studentData, error: stuErr } = await supabase.from('students').select('id, sections(name, classes(name))').eq('id', user.id).maybeSingle();
@@ -330,7 +353,10 @@ export default function AttendancePage() {
         calculatedStats.fullDaysAbsent = Math.floor(calculatedStats.absent / 5);
         setStudentStats(calculatedStats); setSubjectStats(Array.from(subjectsMap.values()).sort((a, b) => b.absent - a.absent)); setStudentAttendance(enrichedRecords);
       }
-    } catch (error: any) { setStudentDbError(error.message); } finally { setIsStudentLoading(false); }
+    } catch (error: any) { setStudentDbError(error.message); } finally { 
+      setIsStudentLoading(false); 
+      studentFetchRef.current = false;
+    }
   }, [currentRole, user]);
  
   useEffect(() => { fetchStudentDataDirectly(); }, [fetchStudentDataDirectly]);
