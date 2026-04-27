@@ -50,7 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
   const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
+  
+  // 🚀 حراس الأمان لمنع تكرار الطلبات (In-flight guards)
   const fetchedUserId = useRef<string | null>(null);
+  const isFetchingRef = useRef(false);
+
   const router = useRouter();
   const pathname = usePathname();
   
@@ -117,7 +121,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthRole(userData.role as UserRole);
     setUserName(name);
     
-    // حفظ الكاش فوراً عند الدخول
     localStorage.setItem('cached_role', userData.role);
     localStorage.setItem('cached_name', name);
     setIsChecking(false);
@@ -140,13 +143,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login');
   };
 
-  // 3. المحرك الأساسي مع نظام الكاش الذكي (المعدل هنا 🚀)
+  // 3. المحرك الأساسي (المحصّن 🛡️)
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
+      // 🚀 حارس يمنع تشغيل الدالة مرتين في نفس اللحظة
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+
       try {
-        // 🚀 الخطوة الأولى: استعادة الإعدادات والصلاحيات من الكاش فوراً لفتح الصفحة
         const cachedRole = localStorage.getItem('cached_role');
         const cachedName = localStorage.getItem('cached_name');
         const cachedSettings = localStorage.getItem('school_settings');
@@ -155,7 +161,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setAuthRole(cachedRole as UserRole);
             if (cachedName) setUserName(cachedName);
             if (cachedSettings) setRawSettings(JSON.parse(cachedSettings));
-            // إذا وجدنا كاش، ننهي شاشة التحميل فوراً لكي لا يمل المستخدم
             setIsChecking(false);
         }
 
@@ -173,15 +178,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (mounted) setUser(session.user);
 
-        // 🚀 الخطوة الثانية: تحديث البيانات من السيرفر في الخلفية
+        // 🚀 تحديث البيانات من السيرفر فقط إذا اختلف المستخدم أو لم يسبق الجلب
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
            
-           // نجلب البيانات مع حماية التايم أوت
+           // إذا كانت الإعدادات موجودة مسبقاً، لا ترهق السيرفر بطلبها مجدداً هنا
+           const shouldFetchSettings = !isPublicPage && !rawSettings;
+
            const [userRes, settingsRes] = await withTimeout(
              Promise.all([
                supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
-               !isPublicPage ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
+               shouldFetchSettings ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
              ]),
              12000, "السيرفر بطيء"
            ) as any;
@@ -204,6 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Auth init failed:", err);
       } finally {
         if (mounted) setIsChecking(false);
+        isFetchingRef.current = false; // 🚀 تحرير الحارس بعد انتهاء العمل
       }
     };
 
@@ -212,13 +220,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         if (mounted) { setUser(null); setAuthRole(null); if (!isPublicPage) window.location.replace('/login'); }
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user && fetchedUserId.current !== session.user.id) initializeAuth();
+      } 
+      // 🚀 تم إزالة TOKEN_REFRESHED لمنع العواصف المزدوجة على السيرفر
+      else if (event === 'SIGNED_IN') {
+        if (session?.user && fetchedUserId.current !== session.user.id) {
+          initializeAuth();
+        }
       }
     });
 
-    return () => { mounted = false; subscription.unsubscribe(); };
-  }, [isPublicPage]);
+    return () => { 
+      mounted = false; 
+      subscription.unsubscribe(); 
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicPage]); // إزالة rawSettings من المصفوفة لتجنب الحلقات اللانهائية
 
   // تقييم حالة المنصة
   useEffect(() => {
@@ -293,13 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
-}
-
-// أضف هذه الدوال الفارغة لتجنب أخطاء TypeScript إذا كانت غير معرفة
+// توابع المساعدة
 const resetPassword = async (password: string) => {};
 const requestPasswordReset = async (civilId: string) => {};
 const updatePassword = async (password: string) => {};
