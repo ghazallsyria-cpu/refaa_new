@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   BookOpen, Calendar, CheckCircle2, Clock, 
   FileText, GraduationCap, LayoutDashboard, 
@@ -65,7 +65,9 @@ export default function StudentDashboard() {
   const [isUploadingReport, setIsUploadingReport] = useState(false);
   const [isSubmittingExcuse, setIsSubmittingExcuse] = useState(false);
   
-  // 🚀 التعديل الجوهري: إضافة absent_dates لدعم الأيام المتعددة
+  // 🚀 حارس لمنع تكرار الطلبات واستنزاف قاعدة البيانات (In-flight guard)
+  const isFetchingRef = useRef(false);
+
   const [currentDateInput, setCurrentDateInput] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [excuseForm, setExcuseForm] = useState({
     absent_dates: [format(new Date(), 'yyyy-MM-dd')], // مصفوفة التواريخ
@@ -86,8 +88,10 @@ export default function StudentDashboard() {
   const { fetchStudentDashboardData, updateStudentTrack } = useDashboardSystem();
 
   const fetchData = useCallback(async () => {
-    if (!user?.id || authRole !== 'student') return;
-
+    // 🚀 الإغلاق المُحكم لمنع الطلبات المزدوجة
+    if (!user?.id || authRole !== 'student' || isFetchingRef.current) return;
+    
+    isFetchingRef.current = true;
     try {
       setLoading(true);
       const data = await fetchStudentDashboardData();
@@ -152,8 +156,9 @@ export default function StudentDashboard() {
       console.error('Error fetching student dashboard data:', error);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false; // 🚀 فتح الباب مجدداً بعد انتهاء الطلب
     }
-  }, [fetchStudentDashboardData, user, authRole]);
+  }, [fetchStudentDashboardData, user?.id, authRole]);
 
   // ==========================================
   // 🚀 دوال محرك الأعذار الطبية المتعددة
