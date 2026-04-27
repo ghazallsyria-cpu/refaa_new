@@ -18,17 +18,36 @@ export function Header({
   const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
   const [imageError, setImageError] = useState(false);
 
+  // 🚀 التحصين: القراءة من الكاش الذكي بدلاً من استنزاف قاعدة البيانات
   useEffect(() => {
-    const fetchSchoolData = async () => {
+    const loadSchoolData = async () => {
       try {
-        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').maybeSingle();
-        if (data) setSchoolData({ name: data.school_name || 'الرفعة النموذجية', logo_url: data.logo_url || '' });
-      } catch (err) { console.error('Error fetching school data:', err); }
+        // 1. محاولة القراءة من الذاكرة (سريعة جداً و 0 استهلاك للسيرفر)
+        const cachedSettings = localStorage.getItem('school_settings');
+        if (cachedSettings) {
+          const parsed = JSON.parse(cachedSettings);
+          setSchoolData({ 
+            name: parsed.school_name || 'الرفعة النموذجية', 
+            logo_url: parsed.logo_url || '' 
+          });
+          return; // 🚀 توقف هنا! لا تطلب من قاعدة البيانات
+        }
+
+        // 2. طلب احتياطي (فقط إذا كانت الذاكرة فارغة)
+        const { data } = await supabase.from('platform_settings').select('school_name, logo_url').limit(1).maybeSingle();
+        if (data) {
+          setSchoolData({ name: data.school_name || 'الرفعة النموذجية', logo_url: data.logo_url || '' });
+          localStorage.setItem('school_settings', JSON.stringify(data)); // حفظها للمرات القادمة
+        }
+      } catch (err) { 
+        console.error('Error fetching school data:', err); 
+      }
     };
-    fetchSchoolData();
+    
+    loadSchoolData();
   }, []);
 
-const handleSignOut = async () => { 
+  const handleSignOut = async () => { 
     // 1. تسجيل الخروج من قاعدة البيانات
     await supabase.auth.signOut(); 
     
@@ -39,6 +58,7 @@ const handleSignOut = async () => {
     // 3. توجيه إجباري ينظف المتصفح من أي بقايا
     window.location.href = '/login?cleared=' + new Date().getTime();
   };
+  
   const roleMap: Record<string, string> = { 'admin': 'المدير العام', 'management': 'الإدارة', 'teacher': 'معلم', 'student': 'طالب', 'parent': 'ولي أمر' };
   const displayRole = authRole ? (roleMap[authRole] || authRole) : '';
 
@@ -119,11 +139,9 @@ const handleSignOut = async () => {
 
       {/* الوسط: الشعار مركزي مطلق */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        {/* 🚀 إضافة prefetch={false} للوقاية القصوى */}
         <Link href="/" prefetch={false} className="pointer-events-auto group transition-transform hover:scale-105">
           <div className="relative h-12 w-48 sm:h-14 sm:w-64 md:h-16 md:w-80 flex items-center justify-center">
             {!imageError ? (
-              /* 🚀 استخدام img العادي لتفادي أخطاء 400 من Next.js مع الروابط الخارجية */
               <img
                 src={finalLogoSrc}
                 alt={schoolData.name}
