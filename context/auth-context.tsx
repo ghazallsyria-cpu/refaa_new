@@ -313,3 +313,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 const resetPassword = async (password: string) => {};
 const requestPasswordReset = async (civilId: string) => {};
 const updatePassword = async (password: string) => {};
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+}
+
+    
