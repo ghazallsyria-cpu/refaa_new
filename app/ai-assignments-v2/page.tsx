@@ -173,7 +173,6 @@ export default function AssignmentBuilderV2() {
     fetchTeachers();
   }, [currentRole]);
 
-  // 🚀 التعديل الجذري الأول: جلب المواد بصلاحيات المدير المطلقة
   useEffect(() => {
     const fetchSubjects = async () => {
       if (currentRole === 'admin' || currentRole === 'management') {
@@ -189,7 +188,6 @@ export default function AssignmentBuilderV2() {
     fetchSubjects();
   }, [selectedTeacher, currentRole]);
 
-  // 🚀 التعديل الجذري الثاني: جلب الصفوف بصلاحيات المدير المطلقة لكي يستطيع النشر بأريحية
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
@@ -216,9 +214,7 @@ export default function AssignmentBuilderV2() {
   }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
-    if (activeTab === 'manage') {
-      fetchManageList();
-    }
+    if (activeTab === 'manage') fetchManageList();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -226,16 +222,11 @@ export default function AssignmentBuilderV2() {
     setIsManageLoading(true);
     try {
       let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false });
-      
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
-        if (teacherProfile) {
-          query = query.eq('teacher_id', teacherProfile.id);
-        } else {
-          query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
-        }
+        if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
+        else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
       }
-      
       const { data: assignments, error: assignErr } = await query;
       if (assignErr) throw assignErr;
 
@@ -253,7 +244,6 @@ export default function AssignmentBuilderV2() {
         const sub = subjectsList?.find(s => s.id === assign.subject_id);
         const teacher = teachersList?.find(t => t.id === assign.teacher_id);
         const qCount = questions?.filter(q => q.assignment_id === assign.id).length || 0;
-
         return {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
@@ -265,23 +255,18 @@ export default function AssignmentBuilderV2() {
       setManageAssignments(mergedData);
     } catch (err: any) { 
       console.error(err); 
-      setGlobalMessage({ text: 'خطأ في جلب البيانات من السيرفر.', type: 'error' });
-      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
     } finally { setIsManageLoading(false); }
   };
 
-  const toggleSection = (id: string) => {
-    setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
+  const toggleSection = (id: string) => setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const handleDeleteAssignment = async (id: string) => {
-    if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟ سيتم مسح جميع أسئلته وتقدم الطلاب المرتبط به!')) return;
+    if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟')) return;
     try {
       await supabase.from('assignment_questions_v2').delete().eq('assignment_id', id);
       await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
       await supabase.from('assignments_v2').delete().eq('id', id);
-      
       fetchManageList();
       setGlobalMessage({ text: 'تم حذف الدرس وتنظيف النظام بنجاح!', type: 'success' });
       setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
@@ -312,39 +297,37 @@ export default function AssignmentBuilderV2() {
       setQuestions(formattedQs);
       setEditingAssignmentId(assign.id); 
       setActiveTab('builder');
-      
-      setGlobalMessage({ text: 'تم فتح الدرس في وضع التعديل. يمكنك حفظه بعد الانتهاء.', type: 'success' });
-      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
+  // 🚀 تم تحديث البرومبت ليجبر ChatGPT على تحديد الخيار الصحيح بـ is_correct
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي ومبرمج قوالب. سأعطيك نصاً يحتوي على "أسئلة" ونصاً آخر يحتوي على "إجابات".
 استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
 
 قواعد صارمة جداً (أهم شيء هو دقة الرياضيات):
 1. الأسئلة العامة أو العناوين اجعل نوعها "section_header".
-2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options".
+2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options" بحيث يحتوي كل خيار على النص (content) وحالة الإجابة (is_correct: true/false). يجب أن يكون هناك خيار واحد فقط is_correct: true.
 3. ضع الإجابة النموذجية المطابقة للسؤال داخل حقل "model_answer_html".
 4. **قواعد الرياضيات الصارمة:**
    - استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $
    - لا تكتب mu_o أبداً، بل اكتبها هكذا: \mu_0
    - لا تكتب pi، بل اكتبها هكذا: \pi
-   - اكتب الأرقام قبل الرموز (مثال: 0.001\pi).
    - استخدم \times للضرب، و \frac{A}{B} للكسور.
-   - لا تضع علامة \ زائدة في نهاية المعادلة.
-5. يجب أن يكون الناتج JSON صالحاً فقط.
 
 هيكل JSON المطلوب:
 {
   "title": "عنوان بنك الأسئلة",
   "questions": [
     {
-      "type": "essay",
+      "type": "multiple_choice",
       "content": "نص السؤال هنا",
       "model_answer_html": "خطوات الحل والإجابة المطابقة هنا",
       "points": 1,
-      "options": []
+      "options": [
+         { "content": "خيار خاطئ", "is_correct": false },
+         { "content": "خيار صحيح", "is_correct": true }
+      ]
     }
   ]
 }
@@ -354,6 +337,7 @@ export default function AssignmentBuilderV2() {
     alert('تم نسخ البرومبت المتقدم! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
+  // 🚀 تم تحديث دالة الاستيراد لتقرأ الخيار الصحيح مباشرة
   const processManualJson = () => {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     try {
@@ -365,7 +349,11 @@ export default function AssignmentBuilderV2() {
         model_answer_html: q.model_answer_html || '', 
         type: q.type || 'essay',
         points: Number(q.points) || 1,
-        options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ id: crypto.randomUUID(), content: String(o), is_correct: false })) : [],
+        options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ 
+          id: crypto.randomUUID(), 
+          content: typeof o === 'string' ? String(o) : String(o.content || ''), 
+          is_correct: o.is_correct === true 
+        })) : [],
       }));
 
       setAssignmentTitle(parsedData.title || 'بنك مستورد بذكاء');
@@ -376,17 +364,8 @@ export default function AssignmentBuilderV2() {
     } catch (err: any) { setManualJsonError('الكود المنسوخ غير صالح، تأكد أنه بصيغة JSON.'); }
   };
 
-  const openNewQuestion = () => {
-    setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [] });
-    setEditingIndex(null);
-    setIsEditorOpen(true);
-  };
-
-  const openEditQuestion = (index: number) => {
-    setCurrentQ(JSON.parse(JSON.stringify(questions[index])));
-    setEditingIndex(index);
-    setIsEditorOpen(true);
-  };
+  const openNewQuestion = () => { setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [] }); setEditingIndex(null); setIsEditorOpen(true); };
+  const openEditQuestion = (index: number) => { setCurrentQ(JSON.parse(JSON.stringify(questions[index]))); setEditingIndex(index); setIsEditorOpen(true); };
 
   const saveQuestion = () => {
     if (!currentQ?.content_html.trim() || currentQ.content_html === '<p></p>') { alert('يرجى كتابة محتوى السؤال'); return; }
@@ -395,21 +374,14 @@ export default function AssignmentBuilderV2() {
       updatedQ.options = [ { id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false } ];
     }
     if (editingIndex !== null) {
-      const newArr = [...questions];
-      newArr[editingIndex] = updatedQ;
-      setQuestions(newArr);
+      const newArr = [...questions]; newArr[editingIndex] = updatedQ; setQuestions(newArr);
     } else {
       setQuestions([...questions, updatedQ]);
     }
     setIsEditorOpen(false);
   };
 
-  const deleteQuestion = (index: number) => {
-    if(!confirm('حذف هذا السؤال؟')) return;
-    const newArr = [...questions];
-    newArr.splice(index, 1);
-    setQuestions(newArr);
-  };
+  const deleteQuestion = (index: number) => { if(!confirm('حذف هذا السؤال؟')) return; const newArr = [...questions]; newArr.splice(index, 1); setQuestions(newArr); };
 
   const addOption = () => { if(currentQ) setCurrentQ({...currentQ, options: [...currentQ.options, { id: crypto.randomUUID(), content: 'خيار جديد', is_correct: false }]}); };
   const removeOption = (optId: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.filter(o => o.id !== optId)}); };
@@ -435,68 +407,38 @@ export default function AssignmentBuilderV2() {
 
       if (editingAssignmentId) {
         const { error: assignErr } = await supabase.from('assignments_v2').update({ 
-          title: assignmentTitle, 
-          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-          subject_id: selectedSubject, 
-          teacher_id: selectedTeacher, 
-          status: assignmentStatus,
-          is_practice_mode: isPracticeMode 
+          title: assignmentTitle, description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+          subject_id: selectedSubject, teacher_id: selectedTeacher, status: assignmentStatus, is_practice_mode: isPracticeMode 
         }).eq('id', editingAssignmentId);
-        
         if (assignErr) throw assignErr;
-
         await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
         await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
       } else {
         const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
-          title: assignmentTitle, 
-          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-          subject_id: selectedSubject, 
-          teacher_id: selectedTeacher, 
-          due_date: dueDate.toISOString(), 
-          status: assignmentStatus,
-          is_practice_mode: isPracticeMode 
+          title: assignmentTitle, description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+          subject_id: selectedSubject, teacher_id: selectedTeacher, due_date: dueDate.toISOString(), status: assignmentStatus, is_practice_mode: isPracticeMode 
         }).select().single();
-        
         if (assignErr) throw assignErr;
         finalAssignmentId = assignData.id;
       }
       
       const sectionsPayload = selectedSections.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
-      const { error: secErr } = await supabase.from('assignment_sections_v2').insert(sectionsPayload);
-      if (secErr) throw secErr;
+      await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
       const questionsPayload = questions.map((q, index) => ({ 
-        assignment_id: finalAssignmentId, 
-        question_type: q.type, 
-        content_html: q.content_html, 
-        model_answer_html: q.model_answer_html, 
-        points: q.points, 
-        options: q.options, 
-        order_index: index + 1 
+        assignment_id: finalAssignmentId, question_type: q.type, content_html: q.content_html, 
+        model_answer_html: q.model_answer_html, points: q.points, options: q.options, order_index: index + 1 
       }));
-      const { error: qErr } = await supabase.from('assignment_questions_v2').insert(questionsPayload);
-      if (qErr) throw qErr;
+      await supabase.from('assignment_questions_v2').insert(questionsPayload);
 
       setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم حفظ الدرس الجديد بنجاح!', type: 'success' });
       setEditingAssignmentId(null); 
-      
       setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}) }, 2000);
-    } catch (err: any) { alert('حدث خطأ أثناء الحفظ: ' + err.message); } finally { setIsSavingDB(false); }
+    } catch (err: any) { alert('حدث خطأ أثناء الحفظ.'); } finally { setIsSavingDB(false); }
   };
 
-  const translateType = (t: string) => {
-    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
-    return types[t] || t;
-  };
-
-  const cancelEdit = () => {
-    setEditingAssignmentId(null);
-    setAssignmentTitle('بنك تدريب جديد');
-    setQuestions([]);
-    setGlobalMessage({ text: 'تم إلغاء وضع التعديل والعودة للوضع الجديد.', type: 'success' });
-    setTimeout(() => setGlobalMessage({text:'', type:''}), 2000);
-  };
+  const translateType = (t: string) => { const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' }; return types[t] || t; };
+  const cancelEdit = () => { setEditingAssignmentId(null); setAssignmentTitle('بنك تدريب جديد'); setQuestions([]); setGlobalMessage({ text: 'تم إلغاء التعديل.', type: 'success' }); setTimeout(() => setGlobalMessage({text:'', type:''}), 2000); };
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
 
@@ -507,10 +449,10 @@ export default function AssignmentBuilderV2() {
         .katex { direction: ltr !important; text-align: left !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .tiptap-content table, .ProseMirror table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: white; }
-        .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
-        .tiptap-content th, .ProseMirror th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
-        .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
+        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: white; }
+        .tiptap-content td, .tiptap-content th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
+        .tiptap-content th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
+        .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
         .tiptap-content p { margin-bottom: 0.5em !important; }
       `}} />
 
@@ -573,9 +515,8 @@ export default function AssignmentBuilderV2() {
                       </div>
                       <h3 className="font-black text-lg text-slate-800 mb-1">{assign.title}</h3>
                       <div className="text-xs font-bold text-slate-500 flex items-center gap-4">
-                        <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> المعلم: {assign.teachers?.users?.full_name || 'غير محدد'}</span>
+                        <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> {assign.teachers?.users?.full_name || 'غير محدد'}</span>
                         <span className="flex items-center gap-1"><ListOrdered className="w-3 h-3"/> {assign.assignment_questions_v2?.length || 0} أسئلة</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {new Date(assign.created_at).toLocaleDateString('ar-KW')}</span>
                       </div>
                     </div>
                     
@@ -584,7 +525,7 @@ export default function AssignmentBuilderV2() {
                         <Edit3 className="w-4 h-4" /> تعديل
                       </button>
                       <button onClick={() => handleDeleteAssignment(assign.id)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-xs hover:bg-rose-100 transition-colors">
-                        <Trash2 className="w-4 h-4" /> حذف جذري
+                        <Trash2 className="w-4 h-4" /> حذف
                       </button>
                     </div>
                   </div>
@@ -602,32 +543,15 @@ export default function AssignmentBuilderV2() {
                 <Copy className="w-4 h-4" /> انسخ البرومبت المتقدم
               </button>
             </div>
-            <div className="text-sm font-bold text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <p>1. انسخ البرومبت المتقدم بالأعلى.</p>
-              <p>2. اذهب إلى ChatGPT وألصقه، ثم ألصق تحته (بنك الأسئلة) و(بنك الإجابات).</p>
-              <p>3. سيقوم الذكاء الاصطناعي بربط كل سؤال بإجابته النموذجية في كود JSON.</p>
-              <p>4. انسخ الكود وألصقه هنا بالأسفل!</p>
-            </div>
             <textarea value={manualJson} onChange={(e) => setManualJson(e.target.value)} placeholder="الصق كود الـ JSON هنا..." className="w-full h-40 bg-slate-50 border border-slate-200 rounded-xl p-4 font-mono text-sm text-emerald-700 outline-none focus:border-emerald-500 resize-none shadow-inner" dir="ltr"></textarea>
-            {manualJsonError && <div className="text-rose-600 text-xs font-bold bg-rose-50 p-3 rounded-xl border border-rose-100">{manualJsonError}</div>}
             <button onClick={processManualJson} className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl hover:bg-emerald-700 flex justify-center items-center gap-2 shadow-md transition-all active:scale-95">
-              <ClipboardPaste className="w-5 h-5" /> استيراد الكود وبناء البطاقات التفاعلية
+              <ClipboardPaste className="w-5 h-5" /> استيراد الكود وبناء البطاقات
             </button>
           </motion.div>
         )}
 
         {activeTab === 'builder' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-            
-            {editingAssignmentId && (
-              <div className="bg-amber-100 border border-amber-300 text-amber-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-2 font-black text-sm">
-                  <Edit3 className="w-5 h-5" /> أنت الآن في وضع تعديل درس موجود مسبقاً.
-                </div>
-                <button onClick={cancelEdit} className="bg-white text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-50">إلغاء التعديل</button>
-              </div>
-            )}
-
             <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
               <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner mb-4">
                 <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
@@ -639,8 +563,8 @@ export default function AssignmentBuilderV2() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2">عنوان {isPracticeMode ? 'البنك' : 'الواجب'}</label>
-                <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" placeholder={isPracticeMode ? "مثال: تدريبات شاملة على السعة الحرارية" : "مثال: واجب الأسبوع الأول"} />
+                <label className="block text-xs font-bold text-slate-500 mb-2">عنوان الدرس</label>
+                <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <select value={selectedTeacher} onChange={e => setSelectedTeacher(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
@@ -652,16 +576,10 @@ export default function AssignmentBuilderV2() {
                   {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
-              
-              {/* 🚀 تصميم أفضل وأوضح لاختيار الصفوف */}
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                <label className="block text-xs font-bold text-slate-500 mb-3">اختر الصفوف المستهدفة (يمكنك اختيار أكثر من صف):</label>
+                <label className="block text-xs font-bold text-slate-500 mb-3">اختر الصفوف المستهدفة:</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2">
-                  {!selectedSubject ? (
-                    <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">يرجى اختيار المادة أولاً لتظهر الصفوف</span>
-                  ) : sections.length === 0 ? (
-                    <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">لا توجد صفوف متاحة لهذه المادة.</span>
-                  ) : sections.map((sec:any) => (
+                  {!selectedSubject ? <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">يرجى اختيار المادة أولاً</span> : sections.map((sec:any) => (
                     <label key={sec.id} className="flex items-center gap-3 cursor-pointer p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all shadow-sm">
                       <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-5 h-5 cursor-pointer rounded" />
                       <span className="text-sm font-bold text-slate-700">{sec.name}</span>
@@ -669,14 +587,9 @@ export default function AssignmentBuilderV2() {
                   ))}
                 </div>
               </div>
-
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between px-2">
-                <h3 className="font-black text-slate-800 text-lg">الأسئلة والكتل ({questions.length})</h3>
-              </div>
-
               <div className="space-y-4">
                 {questions.map((q, i) => (
                   <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
@@ -687,41 +600,16 @@ export default function AssignmentBuilderV2() {
                         <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
-                    
-                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
-                    
-                    {q.model_answer_html && (
-                      <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-                        <span className="text-xs font-black text-emerald-700 block mb-2">الإجابة النموذجية / الشرح:</span>
-                        <div className="tiptap-content prose prose-slate max-w-none text-sm font-bold text-emerald-900 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }}></div>
-                      </div>
-                    )}
-
-                    {q.options && q.options.length > 0 && (
-                      <div className="mt-5 space-y-2">
-                        {q.options.map((opt, oIdx) => (
-                          <div key={opt.id} className={`p-3 rounded-xl text-sm font-bold flex items-center gap-3 border ${opt.is_correct ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
-                            {opt.is_correct && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                            <div className="katex-container"><Latex>{opt.content}</Latex></div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
                   </div>
                 ))}
               </div>
-
               <button onClick={openNewQuestion} className="w-full border-2 border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 font-black py-4 rounded-[2rem] flex justify-center items-center gap-2 transition-colors">
                 <Plus className="w-5 h-5" /> إضافة سؤال جديد
               </button>
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">حالة الدرس عند الحفظ</label>
-              <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none">
-                <option value="draft">حفظ كمسودة (مخفي)</option>
-                <option value="published">نشر للطلاب</option>
-              </select>
               <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
                 {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
                 {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'إنشاء الدرس وحفظه'}
@@ -731,12 +619,12 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
+      {/* Editor Modal */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsEditorOpen(false)} />
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 250 }} className="fixed bottom-0 left-0 w-full h-[95vh] bg-slate-100 rounded-t-[2rem] shadow-2xl z-50 flex flex-col overflow-hidden">
-              
               <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-white rounded-t-[2rem] shrink-0">
                 <button onClick={() => setIsEditorOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 rounded-full shadow-sm"><X className="w-5 h-5" /></button>
                 <h3 className="font-black text-slate-800 text-lg">تحرير السؤال والحل</h3>
@@ -761,25 +649,14 @@ export default function AssignmentBuilderV2() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-black text-indigo-900">1. نص السؤال (أو الترويسة الثابتة)</label>
-                  <TiptapEditor 
-                    content={currentQ.content_html} 
-                    onChange={(html) => setCurrentQ({ ...currentQ, content_html: html })} 
-                    placeholder="الصق السؤال هنا..."
-                  />
-                  <div className="p-3 bg-white border border-slate-200 rounded-xl tiptap-content font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
+                  <label className="text-sm font-black text-indigo-900">1. نص السؤال</label>
+                  <TiptapEditor content={currentQ.content_html} onChange={(html) => setCurrentQ({ ...currentQ, content_html: html })} placeholder="الصق السؤال هنا..." />
                 </div>
 
                 {currentQ.type !== 'section_header' && (
                   <div className="space-y-2 mt-4 p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl">
-                    <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية / خطوات الحل (اختياري)</label>
-                    <p className="text-xs font-bold text-emerald-600 mb-2">تظهر للطالب بعد الحل لتقييم نفسه وتصحيح أخطائه.</p>
-                    <TiptapEditor 
-                      content={currentQ.model_answer_html || ''} 
-                      onChange={(html) => setCurrentQ({ ...currentQ, model_answer_html: html })} 
-                      placeholder="الصق الإجابة النموذجية هنا..."
-                    />
-                    <div className="mt-2 p-3 bg-white border border-emerald-200 rounded-xl tiptap-content font-bold text-emerald-900" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html || '') }}></div>
+                    <label className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4"/> 2. الإجابة النموذجية</label>
+                    <TiptapEditor content={currentQ.model_answer_html || ''} onChange={(html) => setCurrentQ({ ...currentQ, model_answer_html: html })} placeholder="الصق الإجابة النموذجية هنا..." />
                   </div>
                 )}
 
@@ -795,20 +672,18 @@ export default function AssignmentBuilderV2() {
                           <button onClick={() => toggleCorrectOption(opt.id)} className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center border-2 transition-colors ${opt.is_correct ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300'}`}>
                             {opt.is_correct && <CheckCircle2 className="w-4 h-4" />}
                           </button>
-                          <input type="text" value={opt.content} onChange={(e) => updateOptionContent(opt.id, e.target.value)} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold text-sm outline-none focus:border-indigo-500" placeholder={`اكتب الخيار رقم ${i + 1}`} dir="rtl" />
+                          <input type="text" value={opt.content} onChange={(e) => updateOptionContent(opt.id, e.target.value)} className="w-full bg-white border border-slate-200 p-2.5 rounded-lg font-bold text-sm outline-none focus:border-indigo-500" dir="rtl" />
                           <button onClick={() => removeOption(opt.id)} className="p-2 text-slate-400 hover:text-rose-600 bg-white rounded-lg border border-slate-200"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
