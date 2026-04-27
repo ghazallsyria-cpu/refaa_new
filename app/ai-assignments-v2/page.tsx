@@ -39,7 +39,6 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 interface Option { id: string; content: string; is_correct: boolean; }
 interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; }
 
-// دالة تنظيف الرياضيات
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
@@ -205,6 +204,7 @@ export default function AssignmentBuilderV2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // 🚀 تم إصلاح فلتر المعلم هنا
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
@@ -216,7 +216,14 @@ export default function AssignmentBuilderV2() {
       `).order('created_at', { ascending: false });
       
       if (currentRole === 'teacher') {
-        query = query.eq('teacher_id', user.id);
+        // البحث عن ملف المعلم المرتبط بحساب تسجيل الدخول
+        const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+        if (teacherProfile) {
+          query = query.eq('teacher_id', teacherProfile.id);
+        } else {
+          // إذا لم يجد ملفاً، يعيد قائمة فارغة
+          query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+        }
       }
       
       const { data, error } = await query;
