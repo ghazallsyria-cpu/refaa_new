@@ -54,11 +54,6 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-const cleanMathLatex = (text: string) => {
-  if (!text) return '';
-  return text.replace(/\\\\([a-zA-Z])/g, '\\$1').replace(/\$\$/g, '$').replace(/\$\s*\((.*?)\)\s*\$/g, '( $$1$ )').replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )');
-};
-
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const editor = useEditor({
     extensions: [
@@ -204,32 +199,56 @@ export default function AssignmentBuilderV2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // 🚀 تم إصلاح فلتر المعلم هنا
+  // 🚀 السحر هنا: الدمج المحلي المنيع ضد أخطاء قاعدة البيانات
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      let query = supabase.from('assignments_v2').select(`
-        *,
-        teachers ( users ( full_name ) ),
-        subjects ( name ),
-        assignment_questions_v2 ( id )
-      `).order('created_at', { ascending: false });
+      // 1. جلب الواجبات الأساسية بدون JOINs لتجنب أي أخطاء من Supabase
+      let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false });
       
       if (currentRole === 'teacher') {
-        // البحث عن ملف المعلم المرتبط بحساب تسجيل الدخول
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
         if (teacherProfile) {
           query = query.eq('teacher_id', teacherProfile.id);
         } else {
-          // إذا لم يجد ملفاً، يعيد قائمة فارغة
           query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
         }
       }
       
-      const { data, error } = await query;
-      if (error) throw error;
-      setManageAssignments(data || []);
-    } catch (err) { console.error(err); } finally { setIsManageLoading(false); }
+      const { data: assignments, error: assignErr } = await query;
+      if (assignErr) throw assignErr;
+
+      if (!assignments || assignments.length === 0) {
+        setManageAssignments([]);
+        setIsManageLoading(false);
+        return;
+      }
+
+      // 2. جلب البيانات المرتبطة بشكل منفصل وآمن
+      const { data: questions } = await supabase.from('assignment_questions_v2').select('assignment_id');
+      const { data: subjectsList } = await supabase.from('subjects').select('id, name');
+      const { data: teachersList } = await supabase.from('teachers').select('id, users(full_name)');
+
+      // 3. الدمج المحلي (Application-Side Join)
+      const mergedData = assignments.map(assign => {
+        const sub = subjectsList?.find(s => s.id === assign.subject_id);
+        const teacher = teachersList?.find(t => t.id === assign.teacher_id);
+        const qCount = questions?.filter(q => q.assignment_id === assign.id).length || 0;
+
+        return {
+          ...assign,
+          subjects: { name: sub?.name || 'مادة غير محددة' },
+          teachers: { users: { full_name: teacher?.users?.full_name || 'معلم غير محدد' } },
+          assignment_questions_v2: new Array(qCount).fill({}) // محاكاة المصفوفة لكي يعمل الكود السفلي
+        };
+      });
+
+      setManageAssignments(mergedData);
+    } catch (err: any) { 
+      console.error(err); 
+      setGlobalMessage({ text: 'خطأ في جلب البيانات من السيرفر.', type: 'error' });
+      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
+    } finally { setIsManageLoading(false); }
   };
 
   const handleDeleteAssignment = async (id: string) => {
