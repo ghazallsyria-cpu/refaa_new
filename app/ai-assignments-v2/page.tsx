@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
-import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -32,9 +31,8 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// 🚀 تم استدعاء الاتصال النظيف والآمن من الملف الذي أنشأته
+import { supabase } from '@/lib/supabase';
 
 interface Option { id: string; content: string; is_correct: boolean; }
 interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; }
@@ -60,6 +58,9 @@ const cleanMathLatex = (text: string) => {
 };
 
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
+  // 🚀 حالة جديدة لإظهار أيقونة التحميل أثناء رفع الصورة
+  const [isUploading, setIsUploading] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit, Underline,
@@ -73,24 +74,52 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
       attributes: { class: 'prose prose-slate max-w-none focus:outline-none min-h-[120px] p-4 text-slate-800 font-bold leading-loose tiptap-content', dir: 'rtl' },
       handlePaste: (view, event) => {
         const items = Array.from(event.clipboardData?.items || []);
-        let imagePasted = false;
-        items.forEach(item => {
-          if (item.type.indexOf('image') === 0) {
-            imagePasted = true;
-            const file = item.getAsFile();
-            if (file) {
-              const reader = new FileReader();
-              reader.onload = (e) => {
-                const base64 = e.target?.result as string;
-                const node = view.state.schema.nodes.image.create({ src: base64 });
+        let imageItem = items.find(item => item.type.indexOf('image') === 0);
+
+        if (imageItem) {
+          const file = imageItem.getAsFile();
+          if (file) {
+            event.preventDefault(); // 🚀 منع إدراج الصورة كـ Base64
+
+            const uploadImage = async () => {
+              setIsUploading(true); // إظهار شاشة التحميل
+              try {
+                // 1. توليد اسم عشوائي للصورة
+                const fileExt = file.name ? file.name.split('.').pop() : 'png';
+                const fileName = `${crypto.randomUUID()}.${fileExt}`;
+
+                // 2. الرفع إلى سلة Supabase Storage
+                const { data, error } = await supabase.storage
+                  .from('questions_images')
+                  .upload(fileName, file);
+
+                if (error) {
+                  console.error("Supabase Upload Error:", error);
+                  alert("حدث خطأ أثناء رفع الصورة. هل تأكدت من إنشاء سلة questions_images وأنها Public؟");
+                  return;
+                }
+
+                // 3. جلب الرابط العام للصورة
+                const { data: publicUrlData } = supabase.storage
+                  .from('questions_images')
+                  .getPublicUrl(fileName);
+
+                // 4. إدراج الصورة النظيفة داخل المحرر
+                const node = view.state.schema.nodes.image.create({ src: publicUrlData.publicUrl });
                 const transaction = view.state.tr.replaceSelectionWith(node);
                 view.dispatch(transaction);
-              };
-              reader.readAsDataURL(file);
-            }
+              } catch (err) {
+                console.error('Upload failed:', err);
+              } finally {
+                setIsUploading(false); // إخفاء شاشة التحميل
+              }
+            };
+
+            uploadImage();
+            return true; // تم معالجة اللصق بنجاح
           }
-        });
-        return imagePasted;
+        }
+        return false; // السماح بلصق النصوص بشكل طبيعي
       }
     }
   });
@@ -99,7 +128,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
   const insertMath = (symbol: string) => { editor.chain().focus().insertContent(` ${symbol} `).run(); };
 
   return (
-    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner flex flex-col">
+    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-inner flex flex-col relative">
       <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-wrap gap-1 items-center">
         <button onClick={() => editor.chain().focus().toggleBold().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Bold className="w-4 h-4"/></button>
         <button onClick={() => editor.chain().focus().toggleItalic().run()} className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-200'}`}><Italic className="w-4 h-4"/></button>
@@ -118,7 +147,17 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <button onClick={() => insertMath('$\\mu_0$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\mu_0$</button>
         <button onClick={() => insertMath('$\\pi$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\pi$</button>
       </div>
-      <div className="flex-1 bg-white relative">
+      <div className="flex-1 bg-white relative min-h-[120px]">
+        {/* 🚀 شاشة التحميل الأنيقة أثناء رفع الصورة */}
+        <AnimatePresence>
+          {isUploading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <span className="text-sm font-black text-indigo-800">جاري الرفع لـ Supabase...</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
         {!editor.getText() && !editor.isActive('image') && !editor.isActive('table') && (
           <div className="absolute inset-0 pointer-events-none p-4 text-slate-400 font-bold text-sm">{placeholder}</div>
         )}
@@ -337,7 +376,6 @@ export default function AssignmentBuilderV2() {
     alert('تم نسخ البرومبت المتقدم! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
-  // 🚀 السحر هنا: معالجة ذكية لأخطاء الذكاء الاصطناعي وتحديد الإجابة الصح تلقائياً
   const processManualJson = () => {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     try {
@@ -357,7 +395,6 @@ export default function AssignmentBuilderV2() {
                return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: opt.is_correct === true };
             }
           });
-          // إجراء أمني أخير: إذا كان السؤال اختياري وكل الخيارات خاطئة، نضع الأول صح لتجنب تعليق النظام
           if (q.type === 'multiple_choice' && opts.length > 0 && !opts.some((o:any) => o.is_correct)) {
             opts[0].is_correct = true;
           }
