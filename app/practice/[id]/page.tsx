@@ -48,7 +48,6 @@ const safeParseOptions = (optionsData: any) => {
   return [];
 };
 
-// 🚀 تم إضافة setTimeout لتجاوز فحص React 19 الصارم
 const CelebrationConfetti = () => {
   const [pieces, setPieces] = useState<any[]>([]);
   useEffect(() => {
@@ -58,7 +57,6 @@ const CelebrationConfetti = () => {
       scale: Math.random() * 1.5 + 0.5, x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500, rotate: Math.random() * 360, isCircle: Math.random() > 0.5
     }));
     
-    // الحل السحري لتجنب خطأ السيرفر
     const timer = setTimeout(() => {
       setPieces(generatedPieces);
     }, 0);
@@ -304,24 +302,22 @@ export default function PracticeArena() {
                     </div>
                   )}
 
-                  {/* 🚀 إظهار الإجابة النموذجية المضمون */}
-                  <AnimatePresence>
-                    {showHint && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-8 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-200/50 pb-3">
-                          <CheckSquare className="w-5 h-5" /> {isMCQ ? "شرح وتوضيح الإجابة:" : "الإجابة النموذجية:"}
-                        </div>
-                        {currentQ.model_answer_html ? (
-                          <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}></div>
-                        ) : (
-                          <p className="text-sm font-bold text-slate-500">لا توجد إجابة نموذجية مسجلة لهذا السؤال.</p>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* 🚀 إظهار الإجابة النموذجية المضمون (معدل لتجنب اختفاء العنصر) */}
+                  {showHint && (
+                    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-200/50 pb-3">
+                        <CheckSquare className="w-5 h-5" /> {isMCQ ? "شرح وتوضيح الإجابة:" : "الإجابة النموذجية:"}
+                      </div>
+                      {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? (
+                        <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}></div>
+                      ) : (
+                        <p className="text-sm font-bold text-slate-500">لا توجد إجابة نموذجية مسجلة لهذا السؤال.</p>
+                      )}
+                    </motion.div>
+                  )}
                 </div>
 
-                {/* 🚀 نظام التشجيع والتحفيز (Gamification Bottom Bar) */}
+                {/* نظام التشجيع والتحفيز (Gamification Bottom Bar) */}
                 <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
