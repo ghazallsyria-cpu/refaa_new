@@ -40,16 +40,12 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 دالة أمان لفك تشفير الخيارات القادمة من قاعدة البيانات
+// دالة أمان لفك تشفير الخيارات
 const safeParseOptions = (optionsData: any) => {
   if (!optionsData) return [];
   if (Array.isArray(optionsData)) return optionsData;
   if (typeof optionsData === 'string') {
-    try {
-      return JSON.parse(optionsData);
-    } catch (e) {
-      return [];
-    }
+    try { return JSON.parse(optionsData); } catch (e) { return []; }
   }
   return [];
 };
@@ -80,13 +76,7 @@ const CelebrationConfetti = () => {
           initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
           animate={{ opacity: 0, scale: p.scale, x: p.x, y: p.y, rotate: p.rotate }}
           transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ 
-            position: 'absolute', 
-            width: '10px', 
-            height: '10px', 
-            backgroundColor: p.color, 
-            borderRadius: p.isCircle ? '50%' : '2px' 
-          }}
+          style={{ position: 'absolute', width: '10px', height: '10px', backgroundColor: p.color, borderRadius: p.isCircle ? '50%' : '2px' }}
         />
       ))}
     </div>
@@ -130,7 +120,13 @@ export default function PracticeArena() {
           .single();
 
         setAssignment(assignData);
-        setQuestions(qData || []);
+        
+        // 🚀 السحر هنا: قمنا بتعريف نوع السؤال بشكل صريح لكي تفهمه الشاشة
+        const formattedQs = (qData || []).map((q: any) => ({
+          ...q,
+          type: q.question_type 
+        }));
+        setQuestions(formattedQs);
 
         if (progressData) {
           if (progressData.is_completed) {
@@ -170,10 +166,7 @@ export default function PracticeArena() {
     
     if (opt.is_correct) {
       setIsSuccess(true);
-      setScore(s => {
-        const newScore = { ...s, correct: s.correct + (attempts === 0 ? 1 : 0) };
-        return newScore;
-      });
+      setScore(s => ({ ...s, correct: s.correct + (attempts === 0 ? 1 : 0) }));
       setShowHint(true); 
     } else {
       setAttempts(a => a + 1);
@@ -202,10 +195,7 @@ export default function PracticeArena() {
   };
 
   const handleSelfEvaluation = (understood: boolean) => {
-    const newScore = { 
-      correct: score.correct + (understood ? 1 : 0), 
-      wrong: score.wrong + (!understood ? 1 : 0) 
-    };
+    const newScore = { correct: score.correct + (understood ? 1 : 0), wrong: score.wrong + (!understood ? 1 : 0) };
     setScore(newScore);
     
     if (currentIndex < questions.length - 1) {
@@ -226,7 +216,6 @@ export default function PracticeArena() {
 
   const progress = ((currentIndex + 1) / questions.length) * 100;
   
-  // 🚀 الفلتر الذكي المُصحح: استخدام safeParseOptions لاستخراج الخيارات بأمان
   const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
   const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
   const hasModelAnswer = !!currentQ?.model_answer_html?.trim();
@@ -309,7 +298,6 @@ export default function PracticeArena() {
                 <div className="p-6 overflow-y-auto flex-1">
                   <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.content_html) }}></div>
                   
-                  {/* 🚀 تم استخدام المصفوفة الآمنة safeOptions هنا */}
                   {isMCQ && (
                     <div className="mt-8 space-y-3">
                       {safeOptions.map((opt: any) => {
