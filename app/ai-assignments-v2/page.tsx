@@ -214,7 +214,9 @@ export default function AssignmentBuilderV2() {
   }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
-    if (activeTab === 'manage') fetchManageList();
+    if (activeTab === 'manage') {
+      fetchManageList();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -222,11 +224,16 @@ export default function AssignmentBuilderV2() {
     setIsManageLoading(true);
     try {
       let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false });
+      
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
-        if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
-        else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+        if (teacherProfile) {
+          query = query.eq('teacher_id', teacherProfile.id);
+        } else {
+          query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+        }
       }
+      
       const { data: assignments, error: assignErr } = await query;
       if (assignErr) throw assignErr;
 
@@ -244,6 +251,7 @@ export default function AssignmentBuilderV2() {
         const sub = subjectsList?.find(s => s.id === assign.subject_id);
         const teacher = teachersList?.find(t => t.id === assign.teacher_id);
         const qCount = questions?.filter(q => q.assignment_id === assign.id).length || 0;
+
         return {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
@@ -258,7 +266,9 @@ export default function AssignmentBuilderV2() {
     } finally { setIsManageLoading(false); }
   };
 
-  const toggleSection = (id: string) => setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleSection = (id: string) => {
+    setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
 
   const handleDeleteAssignment = async (id: string) => {
     if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟')) return;
@@ -267,8 +277,9 @@ export default function AssignmentBuilderV2() {
       await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
       await supabase.from('assignments_v2').delete().eq('id', id);
+      
       fetchManageList();
-      setGlobalMessage({ text: 'تم حذف الدرس وتنظيف النظام بنجاح!', type: 'success' });
+      setGlobalMessage({ text: 'تم حذف الدرسوتنظيف النظام بنجاح!', type: 'success' });
       setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
     } catch (err) { alert('حدث خطأ أثناء الحذف.'); }
   };
@@ -300,7 +311,6 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
-  // 🚀 تم تحديث البرومبت ليجبر ChatGPT على تحديد الخيار الصحيح بـ is_correct
   const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي ومبرمج قوالب. سأعطيك نصاً يحتوي على "أسئلة" ونصاً آخر يحتوي على "إجابات".
 استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
@@ -313,21 +323,21 @@ export default function AssignmentBuilderV2() {
    - استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $
    - لا تكتب mu_o أبداً، بل اكتبها هكذا: \mu_0
    - لا تكتب pi، بل اكتبها هكذا: \pi
+   - اكتب الأرقام قبل الرموز (مثال: 0.001\pi).
    - استخدم \times للضرب، و \frac{A}{B} للكسور.
+   - لا تضع علامة \ زائدة في نهاية المعادلة.
+5. يجب أن يكون الناتج JSON صالحاً فقط.
 
 هيكل JSON المطلوب:
 {
   "title": "عنوان بنك الأسئلة",
   "questions": [
     {
-      "type": "multiple_choice",
+      "type": "essay",
       "content": "نص السؤال هنا",
       "model_answer_html": "خطوات الحل والإجابة المطابقة هنا",
       "points": 1,
-      "options": [
-         { "content": "خيار خاطئ", "is_correct": false },
-         { "content": "خيار صحيح", "is_correct": true }
-      ]
+      "options": []
     }
   ]
 }
@@ -337,7 +347,6 @@ export default function AssignmentBuilderV2() {
     alert('تم نسخ البرومبت المتقدم! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
-  // 🚀 تم تحديث دالة الاستيراد لتقرأ الخيار الصحيح مباشرة
   const processManualJson = () => {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     try {
@@ -364,8 +373,17 @@ export default function AssignmentBuilderV2() {
     } catch (err: any) { setManualJsonError('الكود المنسوخ غير صالح، تأكد أنه بصيغة JSON.'); }
   };
 
-  const openNewQuestion = () => { setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [] }); setEditingIndex(null); setIsEditorOpen(true); };
-  const openEditQuestion = (index: number) => { setCurrentQ(JSON.parse(JSON.stringify(questions[index]))); setEditingIndex(index); setIsEditorOpen(true); };
+  const openNewQuestion = () => {
+    setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [] });
+    setEditingIndex(null);
+    setIsEditorOpen(true);
+  };
+
+  const openEditQuestion = (index: number) => {
+    setCurrentQ(JSON.parse(JSON.stringify(questions[index])));
+    setEditingIndex(index);
+    setIsEditorOpen(true);
+  };
 
   const saveQuestion = () => {
     if (!currentQ?.content_html.trim() || currentQ.content_html === '<p></p>') { alert('يرجى كتابة محتوى السؤال'); return; }
@@ -374,14 +392,21 @@ export default function AssignmentBuilderV2() {
       updatedQ.options = [ { id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false } ];
     }
     if (editingIndex !== null) {
-      const newArr = [...questions]; newArr[editingIndex] = updatedQ; setQuestions(newArr);
+      const newArr = [...questions];
+      newArr[editingIndex] = updatedQ;
+      setQuestions(newArr);
     } else {
       setQuestions([...questions, updatedQ]);
     }
     setIsEditorOpen(false);
   };
 
-  const deleteQuestion = (index: number) => { if(!confirm('حذف هذا السؤال؟')) return; const newArr = [...questions]; newArr.splice(index, 1); setQuestions(newArr); };
+  const deleteQuestion = (index: number) => {
+    if(!confirm('حذف هذا السؤال؟')) return;
+    const newArr = [...questions];
+    newArr.splice(index, 1);
+    setQuestions(newArr);
+  };
 
   const addOption = () => { if(currentQ) setCurrentQ({...currentQ, options: [...currentQ.options, { id: crypto.randomUUID(), content: 'خيار جديد', is_correct: false }]}); };
   const removeOption = (optId: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.filter(o => o.id !== optId)}); };
@@ -407,38 +432,68 @@ export default function AssignmentBuilderV2() {
 
       if (editingAssignmentId) {
         const { error: assignErr } = await supabase.from('assignments_v2').update({ 
-          title: assignmentTitle, description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-          subject_id: selectedSubject, teacher_id: selectedTeacher, status: assignmentStatus, is_practice_mode: isPracticeMode 
+          title: assignmentTitle, 
+          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+          subject_id: selectedSubject, 
+          teacher_id: selectedTeacher, 
+          status: assignmentStatus,
+          is_practice_mode: isPracticeMode 
         }).eq('id', editingAssignmentId);
+        
         if (assignErr) throw assignErr;
+
         await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
         await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
       } else {
         const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
-          title: assignmentTitle, description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-          subject_id: selectedSubject, teacher_id: selectedTeacher, due_date: dueDate.toISOString(), status: assignmentStatus, is_practice_mode: isPracticeMode 
+          title: assignmentTitle, 
+          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+          subject_id: selectedSubject, 
+          teacher_id: selectedTeacher, 
+          due_date: dueDate.toISOString(), 
+          status: assignmentStatus,
+          is_practice_mode: isPracticeMode 
         }).select().single();
+        
         if (assignErr) throw assignErr;
         finalAssignmentId = assignData.id;
       }
       
       const sectionsPayload = selectedSections.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
-      await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+      const { error: secErr } = await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+      if (secErr) throw secErr;
 
       const questionsPayload = questions.map((q, index) => ({ 
-        assignment_id: finalAssignmentId, question_type: q.type, content_html: q.content_html, 
-        model_answer_html: q.model_answer_html, points: q.points, options: q.options, order_index: index + 1 
+        assignment_id: finalAssignmentId, 
+        question_type: q.type, 
+        content_html: q.content_html, 
+        model_answer_html: q.model_answer_html, 
+        points: q.points, 
+        options: q.options, 
+        order_index: index + 1 
       }));
-      await supabase.from('assignment_questions_v2').insert(questionsPayload);
+      const { error: qErr } = await supabase.from('assignment_questions_v2').insert(questionsPayload);
+      if (qErr) throw qErr;
 
       setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم حفظ الدرس الجديد بنجاح!', type: 'success' });
       setEditingAssignmentId(null); 
+      
       setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}) }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ.'); } finally { setIsSavingDB(false); }
   };
 
-  const translateType = (t: string) => { const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' }; return types[t] || t; };
-  const cancelEdit = () => { setEditingAssignmentId(null); setAssignmentTitle('بنك تدريب جديد'); setQuestions([]); setGlobalMessage({ text: 'تم إلغاء التعديل.', type: 'success' }); setTimeout(() => setGlobalMessage({text:'', type:''}), 2000); };
+  const translateType = (t: string) => {
+    const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
+    return types[t] || t;
+  };
+
+  const cancelEdit = () => {
+    setEditingAssignmentId(null);
+    setAssignmentTitle('بنك تدريب جديد');
+    setQuestions([]);
+    setGlobalMessage({ text: 'تم إلغاء وضع التعديل والعودة للوضع الجديد.', type: 'success' });
+    setTimeout(() => setGlobalMessage({text:'', type:''}), 2000);
+  };
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
 
@@ -449,10 +504,10 @@ export default function AssignmentBuilderV2() {
         .katex { direction: ltr !important; text-align: left !important; }
         .katex-display { display: flex !important; justify-content: center !important; margin: 0.5rem 0 !important; width: 100% !important; overflow-x: auto; direction: ltr !important; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .tiptap-content table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: white; }
-        .tiptap-content td, .tiptap-content th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
-        .tiptap-content th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
-        .tiptap-content img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
+        .tiptap-content table, .ProseMirror table { border-collapse: collapse !important; width: 100% !important; margin: 15px 0 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); background: white; }
+        .tiptap-content td, .tiptap-content th, .ProseMirror td, .ProseMirror th { border: 2px solid #cbd5e1 !important; padding: 12px !important; text-align: center !important; vertical-align: middle !important; min-width: 2em; }
+        .tiptap-content th, .ProseMirror th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
+        .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
         .tiptap-content p { margin-bottom: 0.5em !important; }
       `}} />
 
@@ -515,7 +570,7 @@ export default function AssignmentBuilderV2() {
                       </div>
                       <h3 className="font-black text-lg text-slate-800 mb-1">{assign.title}</h3>
                       <div className="text-xs font-bold text-slate-500 flex items-center gap-4">
-                        <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> {assign.teachers?.users?.full_name || 'غير محدد'}</span>
+                        <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> المعلم: {assign.teachers?.users?.full_name || 'غير محدد'}</span>
                         <span className="flex items-center gap-1"><ListOrdered className="w-3 h-3"/> {assign.assignment_questions_v2?.length || 0} أسئلة</span>
                       </div>
                     </div>
@@ -610,6 +665,14 @@ export default function AssignmentBuilderV2() {
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
+              
+              {/* 🚀 تمت إعادة زر الحالة هنا بشكل دائم */}
+              <label className="block text-xs font-bold text-slate-500">حالة الدرس عند الحفظ</label>
+              <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none shadow-sm">
+                <option value="draft">حفظ كمسودة (مخفي)</option>
+                <option value="published">نشر للطلاب</option>
+              </select>
+
               <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
                 {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
                 {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'إنشاء الدرس وحفظه'}
