@@ -19,19 +19,13 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// دالة تنظيف الرياضيات
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
     try {
       let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-      cleanMath = cleanMath
-        .replace(/\\mu_o/g, '\\mu_0')
-        .replace(/mu_o/g, '\\mu_0')
-        .replace(/\\pi\\0\.001/g, '0.001\\pi')
-        .replace(/pi\\0\.001/g, '0.001\\pi') 
-        .replace(/\\ /g, ' ');
+      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
       return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
     } catch (e) { return match; }
   };
@@ -40,7 +34,7 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// دالة أمان لفك تشفير الخيارات
+// 🚀 فك تشفير الخيارات بأمان لكي تظهر دائماً
 const safeParseOptions = (optionsData: any) => {
   if (!optionsData) return [];
   if (Array.isArray(optionsData)) return optionsData;
@@ -52,32 +46,20 @@ const safeParseOptions = (optionsData: any) => {
 
 const CelebrationConfetti = () => {
   const [pieces, setPieces] = useState<any[]>([]);
-
   useEffect(() => {
     const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
     const generatedPieces = Array.from({ length: 40 }).map((_, i) => ({
-      id: i,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      scale: Math.random() * 1.5 + 0.5,
-      x: (Math.random() - 0.5) * 500,
-      y: (Math.random() - 0.5) * 500,
-      rotate: Math.random() * 360,
-      isCircle: Math.random() > 0.5
+      id: i, color: colors[Math.floor(Math.random() * colors.length)],
+      scale: Math.random() * 1.5 + 0.5, x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500, rotate: Math.random() * 360, isCircle: Math.random() > 0.5
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     setPieces(generatedPieces);
   }, []);
-
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden z-50 flex items-center justify-center">
       {pieces.map((p) => (
-        <motion.div
-          key={p.id}
-          initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
-          animate={{ opacity: 0, scale: p.scale, x: p.x, y: p.y, rotate: p.rotate }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ position: 'absolute', width: '10px', height: '10px', backgroundColor: p.color, borderRadius: p.isCircle ? '50%' : '2px' }}
-        />
+        <motion.div key={p.id} initial={{ opacity: 1, scale: 0, x: 0, y: 0 }} animate={{ opacity: 0, scale: p.scale, x: p.x, y: p.y, rotate: p.rotate }} transition={{ duration: 1.5, ease: "easeOut" }}
+          style={{ position: 'absolute', width: '10px', height: '10px', backgroundColor: p.color, borderRadius: p.isCircle ? '50%' : '2px' }} />
       ))}
     </div>
   );
@@ -106,22 +88,15 @@ export default function PracticeArena() {
 
   useEffect(() => {
     if (!id || !user) return;
-    
     const fetchArena = async () => {
       try {
         const { data: assignData } = await supabase.from('assignments_v2').select('*').eq('id', id).single();
         const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', id).order('order_index', { ascending: true });
-        
-        const { data: progressData } = await supabase
-          .from('student_progress_v2')
-          .select('*')
-          .eq('student_id', user.id)
-          .eq('assignment_id', id)
-          .single();
+        const { data: progressData } = await supabase.from('student_progress_v2').select('*').eq('student_id', user.id).eq('assignment_id', id).single();
 
         setAssignment(assignData);
         
-        // 🚀 السحر هنا: قمنا بتعريف نوع السؤال بشكل صريح لكي تفهمه الشاشة
+        // 🚀 التأكد من ربط النوع الصحيح للأسئلة
         const formattedQs = (qData || []).map((q: any) => ({
           ...q,
           type: q.question_type 
@@ -130,11 +105,9 @@ export default function PracticeArena() {
 
         if (progressData) {
           if (progressData.is_completed) {
-            setIsFinished(true);
-            setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score });
+            setIsFinished(true); setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score });
           } else {
-            setCurrentIndex(progressData.current_index || 0);
-            setScore({ correct: progressData.correct_score || 0, wrong: progressData.wrong_score || 0 });
+            setCurrentIndex(progressData.current_index || 0); setScore({ correct: progressData.correct_score || 0, wrong: progressData.wrong_score || 0 });
           }
         }
       } catch (error) { console.error(error); } finally { setLoading(false); }
@@ -146,15 +119,10 @@ export default function PracticeArena() {
     if (!user) return;
     try {
       await supabase.from('student_progress_v2').upsert({
-        student_id: user.id,
-        assignment_id: id,
-        current_index: newIndex,
-        correct_score: newScore.correct,
-        wrong_score: newScore.wrong,
-        is_completed: finished,
-        updated_at: new Date().toISOString()
+        student_id: user.id, assignment_id: id, current_index: newIndex, correct_score: newScore.correct,
+        wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
-    } catch (err) { console.error("Error saving progress:", err); }
+    } catch (err) {}
   };
 
   const currentQ = questions[currentIndex];
@@ -180,38 +148,26 @@ export default function PracticeArena() {
     if (currentIndex < questions.length - 1) {
       let nextIdx = currentIndex + 1;
       if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) nextIdx++;
-      
-      setCurrentIndex(nextIdx);
-      setSelectedOptionId(null);
-      setIsSuccess(false);
-      setAttempts(0);
-      setShowHint(false);
-      
+      setCurrentIndex(nextIdx); setSelectedOptionId(null); setIsSuccess(false); setAttempts(0); setShowHint(false);
       saveProgressToDB(nextIdx, score, false);
     } else {
-      setIsFinished(true);
-      saveProgressToDB(currentIndex, score, true); 
+      setIsFinished(true); saveProgressToDB(currentIndex, score, true); 
     }
   };
 
   const handleSelfEvaluation = (understood: boolean) => {
     const newScore = { correct: score.correct + (understood ? 1 : 0), wrong: score.wrong + (!understood ? 1 : 0) };
     setScore(newScore);
-    
     if (currentIndex < questions.length - 1) {
       let nextIdx = currentIndex + 1;
       if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) nextIdx++;
-      setCurrentIndex(nextIdx);
-      setSelectedOptionId(null);
-      setShowHint(false);
-      saveProgressToDB(nextIdx, newScore, false);
+      setCurrentIndex(nextIdx); setSelectedOptionId(null); setShowHint(false); saveProgressToDB(nextIdx, newScore, false);
     } else {
-      setIsFinished(true);
-      saveProgressToDB(currentIndex, newScore, true);
+      setIsFinished(true); saveProgressToDB(currentIndex, newScore, true);
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة واسترجاع تقدمك...</p></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
   if (!assignment || questions.length === 0) return <div className="p-10 text-center font-cairo">لا يوجد تدريب متاح هنا.</div>;
 
   const progress = ((currentIndex + 1) / questions.length) * 100;
@@ -219,8 +175,13 @@ export default function PracticeArena() {
   const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
   const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
   const hasModelAnswer = !!currentQ?.model_answer_html?.trim();
-  const successMessages = ["أنت بطل! 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية! 👏"];
+  
+  // 🚀 الرسائل التحفيزية
+  const successMessages = ["أنت بطل! إجابة دقيقة 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية، استمر! 👏"];
+  const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، فكر مجدداً! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
+  
   const randomSuccessMsg = successMessages[currentIndex % successMessages.length];
+  const randomEncourageMsg = encourageMessages[currentIndex % encourageMessages.length];
 
   return (
     <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden" dir="rtl">
@@ -289,7 +250,7 @@ export default function PracticeArena() {
                   <div className="flex items-center gap-2">
                     <Target className={`w-5 h-5 ${isSuccess ? 'text-emerald-500' : 'text-indigo-500'}`} />
                     <h3 className={`font-black text-sm ${isSuccess ? 'text-emerald-700' : 'text-slate-700'}`}>
-                      {isSuccess ? randomSuccessMsg : (currentQ.type === 'essay' ? 'تحدي مقالي' : currentQ.type === 'section_header' ? 'معلومة للقراءة' : 'تحدي اختياري')}
+                      {isSuccess ? "إجابة صحيحة!" : (currentQ.type === 'essay' ? 'تحدي مقالي' : currentQ.type === 'section_header' ? 'معلومة للقراءة' : 'تحدي اختياري')}
                     </h3>
                   </div>
                   {currentQ.points > 0 && <span className="bg-white px-3 py-1 rounded-lg text-xs font-black text-slate-500 border border-slate-200 shadow-sm">{currentQ.points} نقاط</span>}
@@ -334,60 +295,63 @@ export default function PracticeArena() {
                       </button>
                     </div>
                   )}
-
-                  <AnimatePresence>
-                    {showHint && hasModelAnswer && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-8 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl overflow-hidden shadow-sm">
-                        <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-200/50 pb-3">
-                          <CheckSquare className="w-5 h-5" /> {isMCQ ? "شرح وتوضيح الإجابة:" : "الإجابة النموذجية:"}
-                        </div>
-                        <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}></div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
 
-                <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
+                {/* 🚀 نظام التشجيع والتحفيز (Gamification Bottom Bar) */}
+                <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
                       {isSuccess ? (
-                        <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} onClick={nextQuestion} className="w-full bg-emerald-600 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-200">
-                          عمل رائع! استمر <ChevronRight className="w-5 h-5" />
-                        </motion.button>
+                        <motion.div key="success" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full bg-emerald-100 border-2 border-emerald-500 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-lg shadow-emerald-200/50">
+                          <div className="font-black text-emerald-800 text-lg flex items-center gap-2">
+                            <Sparkles className="w-6 h-6" /> {randomSuccessMsg}
+                          </div>
+                          <button onClick={nextQuestion} className="w-full bg-emerald-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all">
+                            متابعة التحدي <ChevronRight className="w-5 h-5" />
+                          </button>
+                        </motion.div>
                       ) : attempts > 0 && !isSuccess ? (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2">
-                          <div className="flex-1 bg-rose-100 text-rose-700 font-black py-4 rounded-xl flex items-center justify-center gap-2 border border-rose-200">
-                            <RefreshCcw className="w-5 h-5" /> إجابة خاطئة، جرب مرة أخرى!
+                        <motion.div key="wrong" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3">
+                          <div className="bg-rose-100 text-rose-800 font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 border-2 border-rose-300 text-center">
+                            <RefreshCcw className="w-5 h-5" /> {randomEncourageMsg}
                           </div>
                           {hasModelAnswer && !showHint && (
-                            <button onClick={() => setShowHint(true)} className="px-6 bg-amber-100 text-amber-700 font-black rounded-xl hover:bg-amber-200 transition-colors flex items-center gap-2 border border-amber-200">
-                              <Lightbulb className="w-5 h-5" /> تلميح
+                            <button onClick={() => setShowHint(true)} className="w-full bg-amber-100 text-amber-700 font-black py-3 rounded-xl hover:bg-amber-200 transition-colors flex items-center justify-center gap-2 border border-amber-300">
+                              <Lightbulb className="w-5 h-5" /> مساعدة سريعة
                             </button>
                           )}
                         </motion.div>
                       ) : (
-                         <div className="w-full bg-slate-200 text-slate-400 font-black py-4 rounded-xl flex items-center justify-center gap-2">
-                           اختر الإجابة الصحيحة للتقدم
+                         <div key="idle" className="w-full bg-slate-200/70 text-slate-400 font-black py-4 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
+                           اختر إجابة للتقدم
                          </div>
                       )}
                     </AnimatePresence>
-                  ) : currentQ.type === 'essay' && showHint ? (
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                      <p className="text-center text-sm font-black text-slate-600">تقييم ذاتي: هل كانت إجابتك مطابقة أو قريبة للحل؟</p>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleSelfEvaluation(true)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-black py-3 rounded-xl flex flex-col items-center gap-1 active:scale-95 transition-all shadow-md">
-                          <CheckCircle2 className="w-5 h-5" /> نعم، فهمتها!
-                        </button>
-                        <button onClick={() => handleSelfEvaluation(false)} className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-black py-3 rounded-xl flex flex-col items-center gap-1 active:scale-95 transition-all shadow-md">
-                          <RefreshCcw className="w-5 h-5" /> لا، أحتاج مراجعة
-                        </button>
-                      </div>
-                    </motion.div>
-                  ) : currentQ.type === 'essay' && !showHint ? (
-                     null
+                  ) : currentQ.type === 'essay' ? (
+                    showHint ? (
+                      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p className="text-center text-sm font-black text-slate-700">تقييم ذاتي: هل إجابتك صحيحة؟</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleSelfEvaluation(true)} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-black py-3 rounded-xl flex flex-col items-center gap-1 active:scale-95 transition-all shadow-md">
+                            <CheckCircle2 className="w-5 h-5" /> نعم، أتقنتها!
+                          </button>
+                          <button onClick={() => handleSelfEvaluation(false)} className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-black py-3 rounded-xl flex flex-col items-center gap-1 active:scale-95 transition-all shadow-md">
+                            <RefreshCcw className="w-5 h-5" /> لا، أخطأت
+                          </button>
+                        </div>
+                      </motion.div>
+                    ) : (
+                       <div className="text-center">
+                         <span className="text-xs font-bold text-slate-400">انقر على "اكشف لي الجواب" في الأعلى لتقييم نفسك.</span>
+                       </div>
+                    )
+                  ) : currentQ.type === 'section_header' ? (
+                    <button onClick={nextQuestion} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-200">
+                      تمت القراءة، متابعة <ChevronRight className="w-5 h-5" />
+                    </button>
                   ) : (
                     <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-lg">
-                      {currentQ.type === 'section_header' ? 'قرأت ذلك، تابع' : 'تخطي هذا الجزء (لا توجد خيارات)'} <ChevronRight className="w-5 h-5" />
+                      تخطي هذا السؤال (عطل فني) <ChevronRight className="w-5 h-5" />
                     </button>
                   )}
                 </div>
