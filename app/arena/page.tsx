@@ -3,7 +3,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -11,9 +10,8 @@ import {
   Clock, CheckCircle2, MessageSquareHeart, RefreshCcw, BookOpen, Layers, Filter
 } from 'lucide-react';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// 🚀 الاتصال الموحد والنظيف بقاعدة البيانات
+import { supabase } from '@/lib/supabase';
 
 export default function StudentArenaDashboard() {
   const router = useRouter();
