@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export type NotificationType =
@@ -48,8 +47,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  
+  // 🚀 نستخدم useRef لحفظ حالة الـ interval بدلاً من الاعتماد على المتغيرات الداخلية للـ useEffect
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // 🚀 نستخدم useRef لمنع الاستدعاءات المزدوجة المتزامنة
+  const isFetchingRef = useRef<boolean>(false);
 
   const fetchNotifications = useCallback(async (uid: string) => {
+    if (isFetchingRef.current) return; // حارس لمنع الطلبات المزدوجة
+    isFetchingRef.current = true;
+    
     try {
       const { data, error } = await supabase
         .from('notifications')
@@ -64,60 +71,50 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   }, []);
 
   useEffect(() => {
     let currentUserId: string | null = null;
-    let intervalId: NodeJS.Timeout | null = null; // 🚀 أضفنا التحديث الهادئ
+    let mounted = true;
 
     const setupNotifications = async (user: any) => {
       const newUserId = user?.id || null;
 
+      // تجنب إعادة الإعداد لنفس المستخدم
       if (newUserId === currentUserId) return;
       currentUserId = newUserId;
 
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+      // 🧹 مسح أي عداد سابق لتجنب "تكدس العدادات"
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
 
-      if (newUserId) {
+      if (newUserId && mounted) {
         setUserId(newUserId);
 
         // تحميل أولي للبيانات
         fetchNotifications(newUserId);
 
-        // 🚀 تحديث هادئ جداً للإشعارات كل 3 دقائق بدلاً من القناة الحية القاتلة
-        intervalId = setInterval(() => {
-          fetchNotifications(newUserId);
+        // 🚀 تحديث هادئ جداً للإشعارات كل 3 دقائق (محمي بالـ useRef)
+        intervalRef.current = setInterval(() => {
+          if (mounted) fetchNotifications(newUserId);
         }, 3 * 60 * 1000);
 
-        // 🛑 🚨 إيقاف القناة الحية (Websocket) التي تستهلك 500 اتصال وتدمر السيرفر
-        /*
-        const channel = supabase
-          .channel('notifications-realtime')
-          .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${newUserId}` },
-            (payload) => {
-              setNotifications((prev) => [payload.new as Notification, ...prev]);
-            }
-          )
-          .subscribe();
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
-        */
-      } else {
+      } else if (mounted) {
         setUserId(null);
         setNotifications([]);
+        setLoading(false);
       }
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setupNotifications(session?.user);
+      // نتجاهل حدث TOKEN_REFRESHED لمنع إعادة جلب الإشعارات عبثاً
+      if (_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') {
+         setupNotifications(session?.user);
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -125,8 +122,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
-      if (intervalId) clearInterval(intervalId);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
   }, [fetchNotifications]);
 
@@ -235,5 +235,3 @@ export function useNotifications() {
   }
   return context;
 }
-
-
