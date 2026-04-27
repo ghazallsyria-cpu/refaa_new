@@ -5,7 +5,6 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
-// 🚀 تم إضافة Loader2 هنا
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
   MessageSquareHeart, Send, X, Search, Sparkles, Activity, Loader2
@@ -38,7 +37,13 @@ export default function ArenaMonitorDashboard() {
         let query = supabase.from('assignments_v2').select('id, title, is_practice_mode, created_at, assignment_questions_v2(id)').order('created_at', { ascending: false });
         
         if (currentRole === 'teacher') {
-          query = query.eq('teacher_id', user.id);
+          // 🚀 تم إصلاح فلتر المعلم هنا أيضاً
+          const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+          if (teacherProfile) {
+            query = query.eq('teacher_id', teacherProfile.id);
+          } else {
+            query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
+          }
         }
 
         const { data, error } = await query;
