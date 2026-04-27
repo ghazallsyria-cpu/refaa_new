@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/context/auth-context'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -17,9 +16,8 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// 🚀 الاتصال الموحد والنظيف بقاعدة البيانات
+import { supabase } from '@/lib/supabase';
 
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
@@ -186,7 +184,6 @@ export default function PracticeArena() {
   
   const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
   const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
-  const hasModelAnswer = !!currentQ?.model_answer_html?.trim();
   
   const successMessages = ["أنت بطل! إجابة دقيقة 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية، استمر! 👏"];
   const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، فكر مجدداً! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
@@ -306,8 +303,25 @@ export default function PracticeArena() {
                       </button>
                     </div>
                   )}
+
+                  {/* 🚀 إظهار الإجابة النموذجية المضمون */}
+                  <AnimatePresence>
+                    {showHint && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-8 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-200/50 pb-3">
+                          <CheckSquare className="w-5 h-5" /> {isMCQ ? "شرح وتوضيح الإجابة:" : "الإجابة النموذجية:"}
+                        </div>
+                        {currentQ.model_answer_html ? (
+                          <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}></div>
+                        ) : (
+                          <p className="text-sm font-bold text-slate-500">لا توجد إجابة نموذجية مسجلة لهذا السؤال.</p>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
+                {/* 🚀 نظام التشجيع والتحفيز (Gamification Bottom Bar) */}
                 <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
@@ -316,23 +330,23 @@ export default function PracticeArena() {
                           <div className="font-black text-emerald-800 text-lg flex items-center gap-2">
                             <Sparkles className="w-6 h-6" /> {randomSuccessMsg}
                           </div>
-                          <button onClick={nextQuestion} className="w-full bg-emerald-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all">
+                          <button onClick={nextQuestion} className="w-full bg-emerald-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all shadow-md shadow-emerald-200">
                             متابعة التحدي <ChevronRight className="w-5 h-5" />
                           </button>
                         </motion.div>
                       ) : attempts > 0 && !isSuccess ? (
                         <motion.div key="wrong" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3">
-                          <div className="bg-rose-100 text-rose-800 font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 border-2 border-rose-300 text-center">
+                          <div className="bg-rose-100 text-rose-800 font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 border-2 border-rose-300 text-center shadow-sm">
                             <RefreshCcw className="w-5 h-5" /> {randomEncourageMsg}
                           </div>
-                          {hasModelAnswer && !showHint && (
+                          {currentQ.model_answer_html && !showHint && (
                             <button onClick={() => setShowHint(true)} className="w-full bg-amber-100 text-amber-700 font-black py-3 rounded-xl hover:bg-amber-200 transition-colors flex items-center justify-center gap-2 border border-amber-300">
                               <Lightbulb className="w-5 h-5" /> مساعدة سريعة
                             </button>
                           )}
                         </motion.div>
                       ) : (
-                         <div key="idle" className="w-full bg-slate-200/70 text-slate-400 font-black py-4 rounded-xl flex items-center justify-center gap-2 border border-slate-200">
+                         <div key="idle" className="w-full bg-slate-200/70 text-slate-500 font-black py-4 rounded-xl flex items-center justify-center gap-2 border border-slate-200 shadow-inner">
                            اختر إجابة للتقدم
                          </div>
                       )}
