@@ -54,6 +54,11 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
+const cleanMathLatex = (text: string) => {
+  if (!text) return '';
+  return text.replace(/\\\\([a-zA-Z])/g, '\\$1').replace(/\$\$/g, '$').replace(/\$\s*\((.*?)\)\s*\$/g, '( $$1$ )').replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )');
+};
+
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const editor = useEditor({
     extensions: [
@@ -168,29 +173,47 @@ export default function AssignmentBuilderV2() {
     fetchTeachers();
   }, [currentRole]);
 
+  // 🚀 التعديل الجذري الأول: جلب المواد بصلاحيات المدير المطلقة
   useEffect(() => {
-    const fetchTeacherSubjects = async () => {
-      if (!selectedTeacher) { setSubjects([]); setSelectedSubject(''); return; }
-      const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
-      const extracted = data?.map((item: any) => item.subjects).filter(Boolean) || [];
-      setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+    const fetchSubjects = async () => {
+      if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('subjects').select('id, name').order('name');
+        setSubjects(data || []);
+      } else {
+        if (!selectedTeacher) { setSubjects([]); setSelectedSubject(''); return; }
+        const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
+        const extracted = data?.map((item: any) => item.subjects).filter(Boolean) || [];
+        setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      }
     };
-    fetchTeacherSubjects();
-  }, [selectedTeacher]);
+    fetchSubjects();
+  }, [selectedTeacher, currentRole]);
 
+  // 🚀 التعديل الجذري الثاني: جلب الصفوف بصلاحيات المدير المطلقة لكي يستطيع النشر بأريحية
   useEffect(() => {
-    const fetchTeacherSections = async () => {
-      if (!selectedTeacher || !selectedSubject) { setSections([]); setSelectedSections([]); return; }
-      const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
-      const extracted = data?.map((item: any) => {
-        if (!item.sections) return null;
-        const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
-        return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
-      }).filter(Boolean) || [];
-      setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+    const fetchSections = async () => {
+      if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
+      
+      if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
+        const formatted = data?.map((sec: any) => ({
+          id: sec.id,
+          name: `${sec.classes?.name || ''} - ${sec.name}`
+        })) || [];
+        setSections(formatted);
+      } else {
+        if (!selectedTeacher) return;
+        const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
+        const extracted = data?.map((item: any) => {
+          if (!item.sections) return null;
+          const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
+          return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
+        }).filter(Boolean) || [];
+        setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      }
     };
-    fetchTeacherSections();
-  }, [selectedTeacher, selectedSubject]);
+    fetchSections();
+  }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
     if (activeTab === 'manage') {
@@ -199,11 +222,9 @@ export default function AssignmentBuilderV2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // 🚀 السحر هنا: الدمج المحلي المنيع ضد أخطاء قاعدة البيانات
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      // 1. جلب الواجبات الأساسية بدون JOINs لتجنب أي أخطاء من Supabase
       let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false });
       
       if (currentRole === 'teacher') {
@@ -224,12 +245,10 @@ export default function AssignmentBuilderV2() {
         return;
       }
 
-      // 2. جلب البيانات المرتبطة بشكل منفصل وآمن
       const { data: questions } = await supabase.from('assignment_questions_v2').select('assignment_id');
       const { data: subjectsList } = await supabase.from('subjects').select('id, name');
       const { data: teachersList } = await supabase.from('teachers').select('id, users(full_name)');
 
-      // 3. الدمج المحلي (Application-Side Join)
       const mergedData = assignments.map(assign => {
         const sub = subjectsList?.find(s => s.id === assign.subject_id);
         const teacher = teachersList?.find(t => t.id === assign.teacher_id);
@@ -239,7 +258,7 @@ export default function AssignmentBuilderV2() {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
           teachers: { users: { full_name: teacher?.users?.full_name || 'معلم غير محدد' } },
-          assignment_questions_v2: new Array(qCount).fill({}) // محاكاة المصفوفة لكي يعمل الكود السفلي
+          assignment_questions_v2: new Array(qCount).fill({}) 
         };
       });
 
@@ -249,6 +268,10 @@ export default function AssignmentBuilderV2() {
       setGlobalMessage({ text: 'خطأ في جلب البيانات من السيرفر.', type: 'error' });
       setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
     } finally { setIsManageLoading(false); }
+  };
+
+  const toggleSection = (id: string) => {
+    setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const handleDeleteAssignment = async (id: string) => {
@@ -403,7 +426,7 @@ export default function AssignmentBuilderV2() {
 
   const saveAssignmentToDB = async () => {
     if (!assignmentTitle || questions.length === 0 || !selectedTeacher || !selectedSubject || selectedSections.length === 0) {
-      alert('يرجى إكمال بيانات الواجب وإضافة سؤال واحد على الأقل.'); return;
+      alert('يرجى إكمال بيانات الواجب واختيار المادة والمعلم والصفوف أولاً.'); return;
     }
     setIsSavingDB(true);
     try {
@@ -624,19 +647,29 @@ export default function AssignmentBuilderV2() {
                   <option value="">اختر المعلم...</option>
                   {teachers.map((t:any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                 </select>
-                <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={!selectedTeacher} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
+                <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
                   <option value="">اختر المادة...</option>
                   {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-40 overflow-y-auto">
-                {!selectedSubject ? <span className="text-xs font-bold text-slate-400">اختر المادة أولاً</span> : sections.map((sec:any) => (
-                  <label key={sec.id} className="flex items-center gap-2 cursor-pointer p-1">
-                    <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-4 h-4" />
-                    <span className="text-sm font-bold text-slate-700">{sec.name}</span>
-                  </label>
-                ))}
+              
+              {/* 🚀 تصميم أفضل وأوضح لاختيار الصفوف */}
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                <label className="block text-xs font-bold text-slate-500 mb-3">اختر الصفوف المستهدفة (يمكنك اختيار أكثر من صف):</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2">
+                  {!selectedSubject ? (
+                    <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">يرجى اختيار المادة أولاً لتظهر الصفوف</span>
+                  ) : sections.length === 0 ? (
+                    <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">لا توجد صفوف متاحة لهذه المادة.</span>
+                  ) : sections.map((sec:any) => (
+                    <label key={sec.id} className="flex items-center gap-3 cursor-pointer p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all shadow-sm">
+                      <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-5 h-5 cursor-pointer rounded" />
+                      <span className="text-sm font-bold text-slate-700">{sec.name}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+
             </div>
 
             <div className="space-y-4">
