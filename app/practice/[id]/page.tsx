@@ -1,4 +1,5 @@
 // @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -25,7 +26,12 @@ const renderHTMLWithMath = (html: string) => {
   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
     try {
       let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+      cleanMath = cleanMath
+        .replace(/\\mu_o/g, '\\mu_0')
+        .replace(/mu_o/g, '\\mu_0')
+        .replace(/\\pi\\0\.001/g, '0.001\\pi')
+        .replace(/pi\\0\.001/g, '0.001\\pi') 
+        .replace(/\\ /g, ' ');
       return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
     } catch (e) { return match; }
   };
@@ -34,7 +40,6 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 فك تشفير الخيارات بأمان لكي تظهر دائماً
 const safeParseOptions = (optionsData: any) => {
   if (!optionsData) return [];
   if (Array.isArray(optionsData)) return optionsData;
@@ -52,7 +57,6 @@ const CelebrationConfetti = () => {
       id: i, color: colors[Math.floor(Math.random() * colors.length)],
       scale: Math.random() * 1.5 + 0.5, x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500, rotate: Math.random() * 360, isCircle: Math.random() > 0.5
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     setPieces(generatedPieces);
   }, []);
   return (
@@ -96,7 +100,6 @@ export default function PracticeArena() {
 
         setAssignment(assignData);
         
-        // 🚀 التأكد من ربط النوع الصحيح للأسئلة
         const formattedQs = (qData || []).map((q: any) => ({
           ...q,
           type: q.question_type 
@@ -176,7 +179,6 @@ export default function PracticeArena() {
   const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
   const hasModelAnswer = !!currentQ?.model_answer_html?.trim();
   
-  // 🚀 الرسائل التحفيزية
   const successMessages = ["أنت بطل! إجابة دقيقة 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية، استمر! 👏"];
   const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، فكر مجدداً! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
   
@@ -297,7 +299,6 @@ export default function PracticeArena() {
                   )}
                 </div>
 
-                {/* 🚀 نظام التشجيع والتحفيز (Gamification Bottom Bar) */}
                 <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
@@ -351,7 +352,7 @@ export default function PracticeArena() {
                     </button>
                   ) : (
                     <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-lg">
-                      تخطي هذا السؤال (عطل فني) <ChevronRight className="w-5 h-5" />
+                      تخطي هذا السؤال (لا توجد خيارات) <ChevronRight className="w-5 h-5" />
                     </button>
                   )}
                 </div>
