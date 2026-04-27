@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Users, BookOpen, Calendar, CheckCircle2, 
   Clock, FileText, Plus, Search, 
@@ -58,54 +58,13 @@ export default function TeacherDashboard() {
   
   const { fetchTeacherDashboardData } = useDashboardSystem();
 
-  // 🚀 حراس لمنع الطلبات المتكررة
-  const isRecordingRef = useRef(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // 🚀 تحديث الوقت المستمر (منفصل تماماً عن طلبات قاعدة البيانات)
+  // 🚀 تحديث الوقت المستمر (منفصل تماماً عن طلبات قاعدة البيانات ومحلي فقط)
   useEffect(() => {
     setMounted(true);
     setCurrentTime(new Date());
-    const clockTimer = setInterval(() => setCurrentTime(new Date()), 60000); // تحديث الساعة فقط محلياً
+    const clockTimer = setInterval(() => setCurrentTime(new Date()), 60000); 
     return () => clearInterval(clockTimer);
   }, []);
-
-  // 🚀 النظام الآمن لتسجيل حضور المعلم (كل 5 دقائق بدلاً من دقيقة!)
-  useEffect(() => {
-    let mounted = true;
-
-    const autoRecordPresence = async () => {
-      if (!user?.id || authRole !== 'teacher' || isRecordingRef.current) return;
-      
-      isRecordingRef.current = true; // إغلاق الباب لمنع التكرار
-      try {
-        await supabase.rpc('auto_record_teacher_presence', { p_user_id: user.id });
-      } catch (error) {
-        console.error("Error auto-recording presence:", error);
-      } finally {
-        isRecordingRef.current = false; // فتح الباب للطلب القادم
-      }
-    };
-
-    if (authRole === 'teacher' && user?.id) {
-       autoRecordPresence(); // تسجيل أولي عند فتح الصفحة
-       
-       // 🧹 تنظيف أي عداد سابق
-       if (intervalRef.current) clearInterval(intervalRef.current);
-       
-       // 🚀 تشغيل العداد الجديد (كل 5 دقائق = 300,000 مللي ثانية)
-       intervalRef.current = setInterval(() => {
-         if (mounted) autoRecordPresence();
-       }, 300000);
-    }
-
-    return () => {
-      mounted = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [user?.id, authRole]);
-
-  // -------------- باقي الدوال كما هي دون تعديل --------------
 
   const isCurrentClass = useCallback((period: number) => {
     if (!currentTime) return false;
@@ -827,4 +786,3 @@ export default function TeacherDashboard() {
     </motion.div>
   );
 }
-
