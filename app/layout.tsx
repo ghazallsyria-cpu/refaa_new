@@ -6,10 +6,6 @@ import { NotificationProvider } from "@/context/notification-context";
 import { AuthProvider } from "@/context/auth-context";
 import { AppLayout } from "@/components/app-layout";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
-
 const ibmPlexArabic = IBM_Plex_Sans_Arabic({
   subsets: ["arabic", "latin"],
   weight: ["300", "400", "500", "600", "700"],
