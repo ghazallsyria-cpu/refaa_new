@@ -214,9 +214,7 @@ export default function AssignmentBuilderV2() {
   }, [selectedTeacher, selectedSubject, currentRole]);
 
   useEffect(() => {
-    if (activeTab === 'manage') {
-      fetchManageList();
-    }
+    if (activeTab === 'manage') fetchManageList();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -224,16 +222,11 @@ export default function AssignmentBuilderV2() {
     setIsManageLoading(true);
     try {
       let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false });
-      
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
-        if (teacherProfile) {
-          query = query.eq('teacher_id', teacherProfile.id);
-        } else {
-          query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
-        }
+        if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
+        else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
       }
-      
       const { data: assignments, error: assignErr } = await query;
       if (assignErr) throw assignErr;
 
@@ -251,7 +244,6 @@ export default function AssignmentBuilderV2() {
         const sub = subjectsList?.find(s => s.id === assign.subject_id);
         const teacher = teachersList?.find(t => t.id === assign.teacher_id);
         const qCount = questions?.filter(q => q.assignment_id === assign.id).length || 0;
-
         return {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
@@ -266,9 +258,7 @@ export default function AssignmentBuilderV2() {
     } finally { setIsManageLoading(false); }
   };
 
-  const toggleSection = (id: string) => {
-    setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
+  const toggleSection = (id: string) => setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const handleDeleteAssignment = async (id: string) => {
     if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟')) return;
@@ -277,7 +267,6 @@ export default function AssignmentBuilderV2() {
       await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
       await supabase.from('assignments_v2').delete().eq('id', id);
-      
       fetchManageList();
       setGlobalMessage({ text: 'تم حذف الدرسوتنظيف النظام بنجاح!', type: 'success' });
       setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
@@ -325,19 +314,20 @@ export default function AssignmentBuilderV2() {
    - لا تكتب pi، بل اكتبها هكذا: \pi
    - اكتب الأرقام قبل الرموز (مثال: 0.001\pi).
    - استخدم \times للضرب، و \frac{A}{B} للكسور.
-   - لا تضع علامة \ زائدة في نهاية المعادلة.
-5. يجب أن يكون الناتج JSON صالحاً فقط.
 
 هيكل JSON المطلوب:
 {
   "title": "عنوان بنك الأسئلة",
   "questions": [
     {
-      "type": "essay",
+      "type": "multiple_choice",
       "content": "نص السؤال هنا",
       "model_answer_html": "خطوات الحل والإجابة المطابقة هنا",
       "points": 1,
-      "options": []
+      "options": [
+         { "content": "خيار خاطئ", "is_correct": false },
+         { "content": "خيار صحيح", "is_correct": true }
+      ]
     }
   ]
 }
@@ -347,23 +337,40 @@ export default function AssignmentBuilderV2() {
     alert('تم نسخ البرومبت المتقدم! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
+  // 🚀 السحر هنا: معالجة ذكية لأخطاء الذكاء الاصطناعي وتحديد الإجابة الصح تلقائياً
   const processManualJson = () => {
     if (!manualJson.trim()) { setManualJsonError('يرجى لصق الكود أولاً.'); return; }
     try {
       let safeJsonStr = manualJson.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
       const parsedData = JSON.parse(safeJsonStr);
-      const newQuestions = parsedData.questions.map((q:any) => ({
-        id: crypto.randomUUID(),
-        content_html: q.content || q.section_header || '',
-        model_answer_html: q.model_answer_html || '', 
-        type: q.type || 'essay',
-        points: Number(q.points) || 1,
-        options: Array.isArray(q.options) ? q.options.map((o:any)=> ({ 
-          id: crypto.randomUUID(), 
-          content: typeof o === 'string' ? String(o) : String(o.content || ''), 
-          is_correct: o.is_correct === true 
-        })) : [],
-      }));
+      
+      const newQuestions = parsedData.questions.map((q:any) => {
+        let opts = [];
+        if (Array.isArray(q.options)) {
+          opts = q.options.map((opt:any) => {
+            if (typeof opt === 'string') {
+               const cleanOpt = opt.trim();
+               const cleanModel = q.model_answer_html ? q.model_answer_html.replace(/<[^>]+>/g, '').trim() : '';
+               const isMatch = cleanModel && cleanOpt === cleanModel;
+               return { id: crypto.randomUUID(), content: opt, is_correct: !!isMatch };
+            } else {
+               return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: opt.is_correct === true };
+            }
+          });
+          // إجراء أمني أخير: إذا كان السؤال اختياري وكل الخيارات خاطئة، نضع الأول صح لتجنب تعليق النظام
+          if (q.type === 'multiple_choice' && opts.length > 0 && !opts.some((o:any) => o.is_correct)) {
+            opts[0].is_correct = true;
+          }
+        }
+        return {
+          id: crypto.randomUUID(),
+          content_html: q.content || q.section_header || '',
+          model_answer_html: q.model_answer_html || '', 
+          type: q.type || 'essay',
+          points: Number(q.points) || 1,
+          options: opts,
+        };
+      });
 
       setAssignmentTitle(parsedData.title || 'بنك مستورد بذكاء');
       setQuestions(prev => [...prev, ...newQuestions]);
@@ -580,7 +587,7 @@ export default function AssignmentBuilderV2() {
                         <Edit3 className="w-4 h-4" /> تعديل
                       </button>
                       <button onClick={() => handleDeleteAssignment(assign.id)} className="flex-1 md:flex-none flex items-center justify-center gap-1 px-4 py-2 bg-rose-50 text-rose-600 rounded-xl font-black text-xs hover:bg-rose-100 transition-colors">
-                        <Trash2 className="w-4 h-4" /> حذف
+                        <Trash2 className="w-4 h-4" /> حذف جذري
                       </button>
                     </div>
                   </div>
@@ -665,8 +672,6 @@ export default function AssignmentBuilderV2() {
             </div>
 
             <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 mt-8 space-y-4">
-              
-              {/* 🚀 تمت إعادة زر الحالة هنا بشكل دائم */}
               <label className="block text-xs font-bold text-slate-500">حالة الدرس عند الحفظ</label>
               <select value={assignmentStatus} onChange={e => setAssignmentStatus(e.target.value as 'draft'|'published')} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-indigo-700 outline-none shadow-sm">
                 <option value="draft">حفظ كمسودة (مخفي)</option>
