@@ -19,14 +19,19 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// دالة تنظيف الرياضيات
+// 🚀 تم تحديث فلتر تنظيف الرياضيات ليعالج مشكلة الـ pi المقلوبة في صورتك
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
     try {
       let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-      cleanMath = cleanMath.replace(/\\mu_o/g, '\\mu_0').replace(/mu_o/g, '\\mu_0').replace(/\\pi\\0\.001/g, '0.001\\pi').replace(/\\ /g, ' ');
+      cleanMath = cleanMath
+        .replace(/\\mu_o/g, '\\mu_0')
+        .replace(/mu_o/g, '\\mu_0')
+        .replace(/\\pi\\0\.001/g, '0.001\\pi')
+        .replace(/pi\\0\.001/g, '0.001\\pi') // معالجة الخطأ الذي ظهر في الصورة
+        .replace(/\\ /g, ' ');
       return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
     } catch (e) { return match; }
   };
@@ -35,7 +40,6 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 مكون الاحتفال (Confetti) المصحح تماماً
 const CelebrationConfetti = () => {
   const [pieces, setPieces] = useState<any[]>([]);
 
@@ -207,6 +211,8 @@ export default function PracticeArena() {
   if (!assignment || questions.length === 0) return <div className="p-10 text-center font-cairo">لا يوجد تدريب متاح هنا.</div>;
 
   const progress = ((currentIndex + 1) / questions.length) * 100;
+  
+  // 🚀 الفلتر الذكي: التأكد أن السؤال الاختياري يمتلك خيارات فعلاً
   const isMCQ = currentQ.type === 'multiple_choice' && Array.isArray(currentQ.options) && currentQ.options.length > 0;
   const hasModelAnswer = !!currentQ.model_answer_html?.trim();
   const successMessages = ["أنت بطل! 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية! 👏"];
@@ -279,7 +285,7 @@ export default function PracticeArena() {
                   <div className="flex items-center gap-2">
                     <Target className={`w-5 h-5 ${isSuccess ? 'text-emerald-500' : 'text-indigo-500'}`} />
                     <h3 className={`font-black text-sm ${isSuccess ? 'text-emerald-700' : 'text-slate-700'}`}>
-                      {isSuccess ? randomSuccessMsg : (currentQ.type === 'essay' ? 'تحدي مقالي' : 'تحدي اختياري')}
+                      {isSuccess ? randomSuccessMsg : (currentQ.type === 'essay' ? 'تحدي مقالي' : currentQ.type === 'section_header' ? 'معلومة للقراءة' : 'تحدي اختياري')}
                     </h3>
                   </div>
                   {currentQ.points > 0 && <span className="bg-white px-3 py-1 rounded-lg text-xs font-black text-slate-500 border border-slate-200 shadow-sm">{currentQ.points} نقاط</span>}
@@ -337,6 +343,7 @@ export default function PracticeArena() {
                   </AnimatePresence>
                 </div>
 
+                {/* 🚀 أزرار التحكم السفلية (زر الطوارئ المضاف) */}
                 <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
@@ -373,7 +380,15 @@ export default function PracticeArena() {
                         </button>
                       </div>
                     </motion.div>
-                  ) : null}
+                  ) : currentQ.type === 'essay' && !showHint ? (
+                     // زر الكشف موجود في الأعلى، نترك الأسفل فارغاً
+                     null
+                  ) : (
+                    /* 🚀 زر الطوارئ الاحتياطي للترويسات والأسئلة المعطلة (التي لا تحوي خيارات) */
+                    <button onClick={nextQuestion} className="w-full bg-slate-800 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-slate-700 active:scale-95 transition-all shadow-lg">
+                      {currentQ.type === 'section_header' ? 'قرأت ذلك، تابع' : 'تخطي هذا الجزء (لا توجد خيارات)'} <ChevronRight className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
 
               </motion.div>
