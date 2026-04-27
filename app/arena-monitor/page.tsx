@@ -2,7 +2,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -10,9 +9,8 @@ import {
   MessageSquareHeart, Send, X, Search, Sparkles, Activity, Loader2
 } from 'lucide-react';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// 🚀 الاتصال الموحد والنظيف بقاعدة البيانات
+import { supabase } from '@/lib/supabase';
 
 export default function ArenaMonitorDashboard() {
   const { user, authRole, userRole } = useAuth() as any;
