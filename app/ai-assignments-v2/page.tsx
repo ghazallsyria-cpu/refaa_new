@@ -1,4 +1,6 @@
 // @ts-nocheck
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,7 +9,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -136,7 +138,6 @@ export default function AssignmentBuilderV2() {
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
   
-  // 🚀 أضفنا قسم الإدارة (manage)
   const [activeTab, setActiveTab] = useState<'builder' | 'import' | 'manage'>('builder');
   
   const [assignmentTitle, setAssignmentTitle] = useState('بنك تدريب جديد');
@@ -146,7 +147,6 @@ export default function AssignmentBuilderV2() {
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
   const [isPracticeMode, setIsPracticeMode] = useState<boolean>(true);
   
-  // 🚀 تحديد إن كنا في وضع تعديل درس موجود
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
 
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -160,7 +160,6 @@ export default function AssignmentBuilderV2() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
 
-  // 🚀 حالات الإدارة والمتابعة
   const [manageAssignments, setManageAssignments] = useState<any[]>([]);
   const [isManageLoading, setIsManageLoading] = useState(false);
 
@@ -199,11 +198,11 @@ export default function AssignmentBuilderV2() {
     fetchTeacherSections();
   }, [selectedTeacher, selectedSubject]);
 
-  // 🚀 جلب الدروس عندما يفتح المدير قسم الإدارة
   useEffect(() => {
     if (activeTab === 'manage') {
       fetchManageList();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const fetchManageList = async () => {
@@ -216,7 +215,6 @@ export default function AssignmentBuilderV2() {
         assignment_questions_v2 ( id )
       `).order('created_at', { ascending: false });
       
-      // المدير يرى كل شيء، المعلم يرى دروسه فقط
       if (currentRole === 'teacher') {
         query = query.eq('teacher_id', user.id);
       }
@@ -227,11 +225,9 @@ export default function AssignmentBuilderV2() {
     } catch (err) { console.error(err); } finally { setIsManageLoading(false); }
   };
 
-  // 🚀 حذف الدرس من جذوره (الأسئلة والتقدم والدرس)
   const handleDeleteAssignment = async (id: string) => {
     if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟ سيتم مسح جميع أسئلته وتقدم الطلاب المرتبط به!')) return;
     try {
-      // الحذف سيتم تلقائياً في الجداول المرتبطة بفضل ON DELETE CASCADE، لكن للتأكيد نحذفها برمجياً
       await supabase.from('assignment_questions_v2').delete().eq('assignment_id', id);
       await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
@@ -243,7 +239,6 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('حدث خطأ أثناء الحذف.'); }
   };
 
-  // 🚀 تحميل الدرس للقسم الأول (البناء) ليتم تعديله
   const handleEditAssignment = async (assign: any) => {
     try {
       const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', assign.id).order('order_index', { ascending: true });
@@ -266,7 +261,7 @@ export default function AssignmentBuilderV2() {
       })) || [];
       
       setQuestions(formattedQs);
-      setEditingAssignmentId(assign.id); // 🚀 حفظ الـ ID لنعرف أننا نعدل ولانضيف جديد
+      setEditingAssignmentId(assign.id); 
       setActiveTab('builder');
       
       setGlobalMessage({ text: 'تم فتح الدرس في وضع التعديل. يمكنك حفظه بعد الانتهاء.', type: 'success' });
@@ -390,7 +385,6 @@ export default function AssignmentBuilderV2() {
       let finalAssignmentId = editingAssignmentId;
 
       if (editingAssignmentId) {
-        // 🚀 وضع التعديل (تحديث السجل وحذف الأسئلة القديمة لإعادة زرعها)
         const { error: assignErr } = await supabase.from('assignments_v2').update({ 
           title: assignmentTitle, 
           description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
@@ -405,7 +399,6 @@ export default function AssignmentBuilderV2() {
         await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
         await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
       } else {
-        // 🚀 وضع الإنشاء الجديد
         const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
           title: assignmentTitle, 
           description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
@@ -437,9 +430,8 @@ export default function AssignmentBuilderV2() {
       if (qErr) throw qErr;
 
       setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم حفظ الدرس الجديد بنجاح!', type: 'success' });
-      setEditingAssignmentId(null); // مسح حالة التعديل
+      setEditingAssignmentId(null); 
       
-      // العودة لتبويبة الإدارة ليرى النتيجة
       setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}) }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ: ' + err.message); } finally { setIsSavingDB(false); }
   };
@@ -449,7 +441,6 @@ export default function AssignmentBuilderV2() {
     return types[t] || t;
   };
 
-  // زر إلغاء التعديل
   const cancelEdit = () => {
     setEditingAssignmentId(null);
     setAssignmentTitle('بنك تدريب جديد');
@@ -487,10 +478,9 @@ export default function AssignmentBuilderV2() {
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
           <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
           <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة "بنوك التدريب التفاعلية" و "الواجبات".</p>
+          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والواجبات.</p>
         </div>
 
-        {/* 🚀 القائمة العلوية بثلاث تبويبات الآن */}
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'بناء درس جديد'}
@@ -503,9 +493,6 @@ export default function AssignmentBuilderV2() {
           </button>
         </div>
 
-        {/* ================================================================= */}
-        {/* 🚀 قسم إدارة السجلات (الجديد كلياً) */}
-        {/* ================================================================= */}
         {activeTab === 'manage' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -558,9 +545,6 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
 
-        {/* ================================================================= */}
-        {/* 🚀 قسم استيراد الذكاء الاصطناعي */}
-        {/* ================================================================= */}
         {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
             <div className="flex items-center justify-between mb-4">
@@ -583,13 +567,9 @@ export default function AssignmentBuilderV2() {
           </motion.div>
         )}
 
-        {/* ================================================================= */}
-        {/* 🚀 قسم البناء والتعديل (الأساسي) */}
-        {/* ================================================================= */}
         {activeTab === 'builder' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             
-            {/* إشعار بارز إذا كنا في وضع التعديل */}
             {editingAssignmentId && (
               <div className="bg-amber-100 border border-amber-300 text-amber-800 p-4 rounded-2xl flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-2 font-black text-sm">
@@ -692,7 +672,6 @@ export default function AssignmentBuilderV2() {
         )}
       </div>
 
-      {/* نافذة المحرر المزدوج */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
