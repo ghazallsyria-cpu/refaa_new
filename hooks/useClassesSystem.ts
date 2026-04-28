@@ -4,7 +4,7 @@ import { useAuth } from '@/context/auth-context';
 import { OrganizedClass, OrganizedSection, OrganizedStudent } from '@/types';
 
 export function useClassesSystem() {
-  const { user, authRole } = useAuth();
+  const { user, authRole } = useAuth() as any;
   const [classes, setClasses] = useState<OrganizedClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export function useClassesSystem() {
     try {
       const isTeacher = authRole === 'teacher';
 
-      // Fetch classes
+      // 1. Fetch classes
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('*')
@@ -24,27 +24,27 @@ export function useClassesSystem() {
         
       if (classesError) throw classesError;
 
-      // Fetch sections
+      // 2. Fetch sections
       let sectionsQuery = supabase.from('sections').select('*').order('name');
       
       if (isTeacher) {
-        // 🚀 الإصلاح: البحث عن المعلم أولاً لضمان استخدام الـ ID الصحيح من جدول المعلمين
-        const { data: teacherRecord } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+        // 🚀 الإصلاح الجذري: البحث بـ user_id وليس id!
+        const { data: teacherRecord } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         
         if (teacherRecord) {
             const { data: teacherSections } = await supabase
               .from('teacher_sections')
               .select('section_id')
-              .eq('teacher_id', teacherRecord.id); // استخدام المعرّف الصحيح للمعلم
+              .eq('teacher_id', teacherRecord.id); 
             
-            const sectionIds = teacherSections?.map(ts => ts.section_id) || [];
+            const sectionIds = (teacherSections || []).map(ts => ts.section_id);
             if (sectionIds.length > 0) {
               sectionsQuery = sectionsQuery.in('id', sectionIds);
             } else {
               sectionsQuery = sectionsQuery.in('id', ['none']);
             }
         } else {
-            sectionsQuery = sectionsQuery.in('id', ['none']); // إذا لم يجد المعلم، لا تعرض فصول
+            sectionsQuery = sectionsQuery.in('id', ['none']); 
         }
       }
 
@@ -52,7 +52,7 @@ export function useClassesSystem() {
         
       if (sectionsError) throw sectionsError;
 
-      // Fetch students with user details
+      // 3. Fetch students with user details
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select(`
@@ -67,7 +67,7 @@ export function useClassesSystem() {
         
       if (studentsError) throw studentsError;
 
-      // Organize data
+      // 4. Organize data (مع تحصين ضد الـ Null)
       const organizedData: OrganizedClass[] = (classesData || []).map((cls) => {
         const classSections: OrganizedSection[] = (sectionsData || [])
           .filter((sec) => sec.class_id === cls.id)
@@ -78,9 +78,9 @@ export function useClassesSystem() {
                 const userData = Array.isArray(stu.users) ? stu.users[0] : stu.users;
                 return {
                   id: stu.id,
-                  national_id: stu.national_id,
+                  national_id: stu.national_id || '',
                   user: {
-                    full_name: userData?.full_name || '',
+                    full_name: userData?.full_name || 'بدون اسم',
                     email: userData?.email || '',
                   }
                 };
@@ -112,7 +112,7 @@ export function useClassesSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user, authRole]);
+  }, [user?.id, authRole]); // الاعتماد على user.id بدلاً من الكائن الكامل لمنع الريندر
 
   const addClass = useCallback(async (name: string, level: number): Promise<void> => {
     const response = await fetch('/api/classes/save', {
