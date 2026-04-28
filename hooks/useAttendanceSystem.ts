@@ -90,7 +90,6 @@ export function useAttendanceSystem() {
     } catch (error) { console.error('Error fetching students:', error); return null; } finally { setLoading(false); }
   }, []);
 
-  // 🚀 تحديث دالة الحفظ لتقبل عنوان الدرس وتخزنه
   const saveAttendance = useCallback(async (
     sectionId: string, subjectId: string, date: string, period: number, 
     attendanceData: Record<string, AttendanceStatus>, studentsList: any[], lessonTitle: string
@@ -108,29 +107,29 @@ export function useAttendanceSystem() {
 
       let pCount = 0, aCount = 0, lCount = 0, eCount = 0;
 
-      const recordsToInsert = studentsList.reduce((acc: any[], student) => {
+      const recordsToUpsert = studentsList.reduce((acc: any[], student) => {
         const status = attendanceData[student.id];
         if (status) {
           if (status === 'present') pCount++; else if (status === 'absent') aCount++; else if (status === 'late') lCount++; else if (status === 'excused') eCount++;
           acc.push({
             student_id: student.id, teacher_id: actualTeacherId, section_id: sectionId, subject_id: subjectId || null,
-            date: date, period: period, status: status, lesson_title: lessonTitle // 🚀 إدراج عنوان الدرس
+            date: date, period: period, status: status, lesson_title: lessonTitle
           });
         }
         return acc;
       }, []);
 
-      if (recordsToInsert.length === 0) throw new Error("لم تقم بتحديد حالة الحضور لأي طالب!");
+      if (recordsToUpsert.length === 0) throw new Error("لم تقم بتحديد حالة الحضور لأي طالب!");
 
-      const studentIds = recordsToInsert.map((r: any) => r.student_id);
-
-      const { error: deleteError } = await supabase.from('attendance_records').delete().eq('section_id', sectionId).eq('date', date).eq('period', period).in('student_id', studentIds);
-      if (deleteError) throw new Error("فشل في تنظيف السجلات السابقة: " + deleteError.message);
-
-      const { error: insertError } = await supabase.from('attendance_records').insert(recordsToInsert);
-      if (insertError) throw new Error("رفضت قاعدة البيانات الحفظ: " + insertError.message);
+      // 🚀 الحل الذكي والسريع: Upsert بدلاً من Delete ثم Insert
+      // نعتمد على المفتاح الفريد (Unique Constraint) في الداتابيز: student_id + date + period
+      const { error: upsertError } = await supabase.from('attendance_records').upsert(recordsToUpsert, {
+        onConflict: 'student_id, date, period', 
+        ignoreDuplicates: false 
+      });
       
-      // 🚀 حفظ اللقطة الإحصائية في الجدول الجديد للإدارة
+      if (upsertError) throw new Error("رفضت قاعدة البيانات الحفظ: " + upsertError.message);
+      
       await supabase.from('daily_attendance_stats').upsert({
          date, period, section_id: sectionId, subject_id: subjectId || null, teacher_id: actualTeacherId,
          lesson_title: lessonTitle, total_students: studentsList.length, present_count: pCount, absent_count: aCount, late_count: lCount, excused_count: eCount
