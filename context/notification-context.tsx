@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+// 🚀 إضافة هذا الاستيراد للاعتماد على الـ Auth المستقر
+import { useAuth } from '@/context/auth-context';
 
 export type NotificationType =
   | 'exam'
@@ -46,15 +48,16 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
   
-  // 🚀 نستخدم useRef لحفظ حالة الـ interval بدلاً من الاعتماد على المتغيرات الداخلية للـ useEffect
+  // 🚀 استدعاء الـ user من الـ AuthContext النظيف والمستقر لدينا
+  const { user } = useAuth() as any;
+  const userId = user?.id || null;
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  // 🚀 نستخدم useRef لمنع الاستدعاءات المزدوجة المتزامنة
   const isFetchingRef = useRef<boolean>(false);
 
   const fetchNotifications = useCallback(async (uid: string) => {
-    if (isFetchingRef.current) return; // حارس لمنع الطلبات المزدوجة
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     
     try {
@@ -75,60 +78,41 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // 🚀 مراقبة تغير الـ userId فقط (الذي يأتي من AuthContext بعد التحقق)
   useEffect(() => {
-    let currentUserId: string | null = null;
     let mounted = true;
 
-    const setupNotifications = async (user: any) => {
-      const newUserId = user?.id || null;
+    if (userId) {
+      // تحميل أولي للبيانات
+      fetchNotifications(userId);
 
-      // تجنب إعادة الإعداد لنفس المستخدم
-      if (newUserId === currentUserId) return;
-      currentUserId = newUserId;
+      // مسح أي عداد سابق لتجنب التكدس
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
 
-      // 🧹 مسح أي عداد سابق لتجنب "تكدس العدادات"
+      // تحديث الإشعارات كل 3 دقائق
+      intervalRef.current = setInterval(() => {
+        if (mounted) fetchNotifications(userId);
+      }, 3 * 60 * 1000);
+
+    } else {
+      // تفريغ البيانات عند تسجيل الخروج
+      setNotifications([]);
+      setLoading(false);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-
-      if (newUserId && mounted) {
-        setUserId(newUserId);
-
-        // تحميل أولي للبيانات
-        fetchNotifications(newUserId);
-
-        // 🚀 تحديث هادئ جداً للإشعارات كل 3 دقائق (محمي بالـ useRef)
-        intervalRef.current = setInterval(() => {
-          if (mounted) fetchNotifications(newUserId);
-        }, 3 * 60 * 1000);
-
-      } else if (mounted) {
-        setUserId(null);
-        setNotifications([]);
-        setLoading(false);
-      }
-    };
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      // نتجاهل حدث TOKEN_REFRESHED لمنع إعادة جلب الإشعارات عبثاً
-      if (_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') {
-         setupNotifications(session?.user);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setupNotifications(session?.user);
-    });
+    }
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [fetchNotifications]);
+  }, [userId, fetchNotifications]); // 🚀 يعتمد فقط على الـ userId الصريح والمستقر
 
   const markAsRead = async (id: string) => {
     const { error } = await supabase
@@ -202,9 +186,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const showNotification = async (type: NotificationType, content: string) => {
     if (!userId) return;
-
     const title = type.charAt(0).toUpperCase() + type.slice(1);
-
     await sendNotification(userId, title, content, type);
   };
 
