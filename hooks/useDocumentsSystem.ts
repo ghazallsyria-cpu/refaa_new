@@ -65,9 +65,11 @@ export function useDocumentsSystem() {
         finalFileUrl = data.secure_url;
       }
 
-      // Delete old file if it's being replaced
-      if (document.id && file && document.file_url) {
-        await deleteFromCloudinary(document.file_url, 'raw');
+      // Delete old file if it's being replaced and it belongs to Cloudinary
+      if (document.id && file && document.file_url && document.file_url.includes('cloudinary')) {
+        try {
+          await deleteFromCloudinary(document.file_url, 'raw');
+        } catch (e) { console.warn("Failed to delete old Cloudinary file, ignoring.", e); }
       }
 
       const response = await fetch('/api/documents/save', {
@@ -95,14 +97,18 @@ export function useDocumentsSystem() {
     setLoading(true);
     setError(null);
     try {
+      // Delete from DB first
       const response = await fetch(`/api/documents/delete?id=${id}`, {
         method: 'DELETE',
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to delete document');
+      if (!response.ok) throw new Error(data.error || 'Failed to delete document from DB');
 
-      if (fileUrl) {
-        await deleteFromCloudinary(fileUrl, 'raw');
+      // 🚀 Then optionally delete from Cloudinary safely
+      if (fileUrl && fileUrl.includes('cloudinary')) {
+        try {
+          await deleteFromCloudinary(fileUrl, 'raw');
+        } catch (e) { console.warn("Failed to delete Cloudinary file, but DB record was deleted.", e); }
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Error deleting document';
@@ -114,11 +120,5 @@ export function useDocumentsSystem() {
     }
   }, []);
 
-  return {
-    loading,
-    error,
-    fetchDocuments,
-    saveDocument,
-    deleteDocument
-  };
+  return { loading, error, fetchDocuments, saveDocument, deleteDocument };
 }
