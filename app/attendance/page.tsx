@@ -43,11 +43,9 @@ export default function AttendancePage() {
  
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
+  // 🚀 حراس الأمان لمنع تكرار الطلبات للإدارة والطلاب فقط
   const adminFetchRef = useRef(false);
   const studentFetchRef = useRef(false);
-  const attendanceFetchRef = useRef(false);
-  const scheduleFetchRef = useRef<string | null>(null);
-  const sectionsFetchRef = useRef<string | null>(null);
  
   const draftKey = useMemo(() => {
     if (currentRole !== 'teacher' || !user?.id || !selectedSection || !date || !period) return null;
@@ -75,7 +73,9 @@ export default function AttendancePage() {
     setSnapshotDate(today);
   }, []);
  
-  // 🚀 تحسين الاعتماديات لمنع الحلقة اللانهائية (Infinite Render Loop)
+  // ==========================================
+  // منطق الإدارة
+  // ==========================================
   const fetchDailySnapshot = useCallback(async () => {
     if (!isAdmin || !snapshotDate || adminFetchRef.current) return;
     adminFetchRef.current = true;
@@ -120,7 +120,7 @@ export default function AttendancePage() {
       setAdminLoading(false);
       adminFetchRef.current = false;
     }
-  }, [isAdmin, snapshotDate]); // تمت إزالة user.id لمنع الريندر العشوائي
+  }, [isAdmin, snapshotDate]); 
  
   useEffect(() => {
     if (isAdmin) fetchDailySnapshot();
@@ -212,9 +212,13 @@ export default function AttendancePage() {
     printWindow.document.write(html); printWindow.document.close();
   };
  
+  // ==========================================
+  // منطق المعلم (تم إصلاح التزامن بين الحصة والفصل)
+  // ==========================================
+
+  // 1. جلب جدول حصص اليوم للمعلم بناءً على التاريخ
   useEffect(() => {
-    if (date && currentRole === 'teacher' && scheduleFetchRef.current !== date) {
-      scheduleFetchRef.current = date;
+    if (date && currentRole === 'teacher') {
       fetchDaySchedule(date).then((schedule) => {
         if (schedule && schedule.length > 0) {
           setPeriod(prevPeriod => {
@@ -222,30 +226,37 @@ export default function AttendancePage() {
              if (!isCurrentPeriodScheduled) return schedule[0].period;
              return prevPeriod;
           });
+        } else {
+          setPeriod(1);
+          setSelectedSection('');
+          setSelectedSubject('');
+          setStudents([]);
         }
       });
     }
   }, [date, currentRole, fetchDaySchedule]);
  
+  // 2. جلب الفصل والمادة بناءً على التاريخ ورقم الحصة
   useEffect(() => {
-    const key = `${date}_${period}`;
-    if (date && period && currentRole === 'teacher' && sectionsFetchRef.current !== key) {
-      sectionsFetchRef.current = key;
+    if (date && period && currentRole === 'teacher') {
       fetchSections(date, period).then(sectionsData => {
         if (sectionsData && sectionsData.length > 0) {
           setSelectedSection(sectionsData[0].id);
           setSelectedSubject(sectionsData[0].subject_id || '');
-        } else { setSelectedSection(''); setSelectedSubject(''); setStudents([]); setLessonTitle(''); }
+        } else { 
+          setSelectedSection(''); 
+          setSelectedSubject(''); 
+          setStudents([]); 
+          setLessonTitle(''); 
+        }
       });
     }
   }, [date, period, fetchSections, currentRole]);
  
-  // 🚀 تحسين الاعتماديات لمنع الحلقة اللانهائية (Infinite Render Loop) هنا أيضاً
+  // 3. جلب الطلاب والغياب
   const loadStudentsAndAttendance = useCallback(async () => {
-    if (selectedSection && date && currentRole === 'teacher' && !attendanceFetchRef.current) {
-      attendanceFetchRef.current = true;
+    if (selectedSection && date && currentRole === 'teacher') {
       setActiveKey(null);
-      
       try {
         const res = await fetchStudentsAndAttendance(selectedSection, selectedSubject, date, period);
         if (res) {
@@ -277,17 +288,17 @@ export default function AttendancePage() {
             setAttendance(res.attendance); 
             setLessonTitle(res.savedLessonTitle || '');
           }
-          
           setActiveKey(localDraftKey);
         }
-      } finally {
-        attendanceFetchRef.current = false;
+      } catch (err) {
+        console.error("Error loading students:", err);
       }
     }
-  }, [selectedSection, selectedSubject, date, period, currentRole, fetchStudentsAndAttendance]); 
+  }, [selectedSection, selectedSubject, date, period, currentRole, fetchStudentsAndAttendance, user?.id]); 
  
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
  
+  // 4. الحفظ التلقائي كمسودة
   useEffect(() => {
     if (currentRole === 'teacher' && draftKey && activeKey === draftKey && students.length > 0) {
       if (Object.keys(attendance).length > 0 || lessonTitle) {
@@ -317,7 +328,9 @@ export default function AttendancePage() {
     } finally { setSaving(false); }
   };
  
-  // 🚀 تحسين الاعتماديات في بيانات الطالب
+  // ==========================================
+  // منطق الطالب
+  // ==========================================
   const fetchStudentDataDirectly = useCallback(async () => {
     if (currentRole !== 'student' || !user?.id || studentFetchRef.current) return;
     studentFetchRef.current = true;
