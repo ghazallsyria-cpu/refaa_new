@@ -1,4 +1,7 @@
+
+/* eslint-disable react/no-unescaped-entities */
 // @ts-nocheck
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
