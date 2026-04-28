@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Users, GraduationCap, BookOpen, CalendarDays, Plus, Bell, 
   School, ArrowUpRight, Activity, FileText, Target, ShieldCheck, Loader2 , Crown
@@ -29,11 +29,10 @@ const itemVariants: any = {
 };
 
 export default function AdminDashboard() {
-  const { authRole, isChecking } = useAuth();
+  const { authRole, isChecking } = useAuth() as any;
 
   const { fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats } = useDashboardSystem();
   
-  // 🚀 تحديث الألوان الافتراضية لتتناسب مع الثيم الداكن الفخم
   const [stats, setStats] = useState([
     { name: 'إجمالي الطلاب', value: '...', icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', trend: '+12%' },
     { name: 'إجمالي المعلمين', value: '...', icon: GraduationCap, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', trend: '+3' },
@@ -47,12 +46,17 @@ export default function AdminDashboard() {
   const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
+  // 🚀 حارس لمنع الجلب المتكرر (Prevent Double Fetch)
+  const isFetchedRef = useRef(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (authRole !== 'admin' && authRole !== 'management') return;
+    if (isChecking || isFetchedRef.current || (authRole !== 'admin' && authRole !== 'management')) return;
+    
+    isFetchedRef.current = true; // إغلاق الباب بعد أول دخول ناجح!
 
     async function fetchDashboardStats() {
       try {
@@ -94,7 +98,7 @@ export default function AdminDashboard() {
     fetchDashboardStats();
     fetchRecentActivities();
     fetchTrackData();
-  }, [authRole, fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats]);
+  }, [authRole, isChecking, fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats]);
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '...';
@@ -111,7 +115,6 @@ export default function AdminDashboard() {
     return `منذ ${diffDays} يوم`;
   };
 
-  // 🚀 شاشة حماية الوصول والتحميل بالثيم الملكي
   if (isChecking) {
     return (
       <div className="flex h-[80vh] items-center justify-center bg-transparent">
@@ -126,7 +129,6 @@ export default function AdminDashboard() {
     );
   }
 
-  // 🚀 منع المتطفلين برسالة فخمة
   if (authRole !== 'admin' && authRole !== 'management') {
     return (
       <div className="flex h-[80vh] items-center justify-center bg-transparent p-4">
@@ -158,7 +160,7 @@ export default function AdminDashboard() {
       className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden font-cairo"
       dir="rtl"
     >
-      {/* 🚀 Welcome Header (التحفة المعمارية الفنية) */}
+      {/* Welcome Header */}
       <motion.div 
         variants={itemVariants}
         className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#0a0d16] via-[#0f1423] to-[#02040a] p-6 sm:p-10 lg:p-12 text-white border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
@@ -216,7 +218,7 @@ export default function AdminDashboard() {
         </div>
       </motion.div>
 
-      {/* 🚀 Stats Bento Grid (البطاقات الزجاجية المدخنة) */}
+      {/* Stats Bento Grid */}
       <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         {stats.map((stat, index) => (
           <motion.div 
@@ -242,7 +244,7 @@ export default function AdminDashboard() {
         ))}
       </motion.div>
 
-      {/* 🚀 Track Selection Results */}
+      {/* Track Selection Results */}
       {trackStats && trackStats.total > 0 && (
         <motion.div 
           variants={itemVariants}
@@ -291,10 +293,10 @@ export default function AdminDashboard() {
         </motion.div>
       )}
 
-      {/* 🚀 Main Grid System */}
+      {/* Main Grid System */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
         
-        {/* 🌟 Column 1: Wide Area - Recent Activity */}
+        {/* Column 1: Wide Area - Recent Activity */}
         <motion.div 
           variants={itemVariants}
           className="lg:col-span-2 glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-5 sm:p-6 lg:p-8 relative overflow-hidden"
@@ -341,7 +343,6 @@ export default function AdminDashboard() {
                     {activity.title[0]}
                   </div>
                   <div className="flex-1 min-w-0">
-                    {/* 🚀 الشرط الذكي: تحويل اسم المعلم إلى رابط فخم إذا وجد معرّف المعلم */}
                     {activity.teacher_id ? (
                        <Link href={`/teachers/${activity.teacher_id}`} className="text-sm sm:text-base font-black text-white hover:text-amber-400 transition-colors truncate block drop-shadow-sm decoration-amber-500/30 hover:underline underline-offset-4">
                          {activity.title}
@@ -370,10 +371,9 @@ export default function AdminDashboard() {
           </div>
         </motion.div>
 
-        {/* 🌟 Column 2: Narrow Area - Widgets */}
+        {/* Column 2: Narrow Area - Widgets */}
         <div className="space-y-6 lg:space-y-8 w-full">
           
-          {/* Live Classes Card (Royal Edition) */}
           <motion.div 
             variants={itemVariants}
             className="bg-gradient-to-br from-[#1a1200] via-[#0f0a00] to-[#02040a] rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8 text-white border border-amber-500/30 shadow-[0_0_30px_rgba(245,158,11,0.15)] relative overflow-hidden group hover:shadow-[0_0_40px_rgba(245,158,11,0.3)] transition-all"
@@ -414,7 +414,6 @@ export default function AdminDashboard() {
 
           <AnnouncementsWidget authRole="admin" />
 
-          {/* Quick Actions */}
           <motion.div 
             variants={itemVariants}
             className="glass-panel rounded-[2rem] lg:rounded-[2.5rem] p-6 sm:p-8"
@@ -443,7 +442,6 @@ export default function AdminDashboard() {
             </div>
           </motion.div>
 
-          {/* Support (Royal Edition) */}
           <motion.div 
             variants={itemVariants}
             whileHover={{ scale: 1.02 }}
