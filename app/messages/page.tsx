@@ -13,7 +13,6 @@ import { supabase } from '@/lib/supabase';
 import ForumEditorOriginal from '@/components/ForumEditor';
 import { cn } from '@/lib/utils';
 
-// 🪄 إسكات TypeScript كما فعلت أنت
 const ForumEditor = ForumEditorOriginal as any;
 
 const RenderAvatar = ({ user, size = 'h-12 w-12', isGroup = false }: { user?: any, size?: string, isGroup?: boolean }) => {
@@ -48,8 +47,7 @@ export default function MessagesPage() {
   const { user: currentUser, authRole, userRole, isChecking } = useAuth() as any;
   const role = authRole || userRole;
   
-  const { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages, messages, users, chatRooms, loading } = useMessagesSystem();
-  const systemRef = useRef({ fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages });
+  const { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages, deleteSingleMessage, messages, users, chatRooms, loading } = useMessagesSystem();
   
   const [privateConversations, setPrivateConversations] = useState<any[]>([]);
   const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
@@ -71,10 +69,7 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchedRef = useRef(false);
 
-  useEffect(() => {
-    systemRef.current = { fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages };
-  }, [fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages]);
-
+  // 🚀 إزالة systemRef الزائد لأنه يسبب Re-renders. نستخدم الدوال مباشرة لأننا حصناها بـ useCallback
   useEffect(() => {
     if (!currentUser?.id || isChecking || fetchedRef.current) return;
     fetchedRef.current = true;
@@ -82,12 +77,12 @@ export default function MessagesPage() {
     const channel = supabase
       .channel('realtime_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => { 
-          systemRef.current.fetchMessages(); 
+          fetchMessages(); 
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentUser?.id, isChecking]); 
+  }, [currentUser?.id, isChecking, fetchMessages]); 
 
   useEffect(() => {
     if (!messages.length || !currentUser) { 
@@ -173,7 +168,7 @@ export default function MessagesPage() {
       return `private-${ids.join('-')}` === thread.convId;
     }).map(m => m.id);
 
-    if (unreadIds.length > 0) systemRef.current.markAsRead(unreadIds);
+    if (unreadIds.length > 0) markAsRead(unreadIds);
   };
 
   const handleSendReply = async (e?: React.FormEvent) => {
@@ -184,10 +179,10 @@ export default function MessagesPage() {
     setIsReplying(true);
     try {
       if (activeThread.type === 'group') {
-        await systemRef.current.sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
+        await sendGroupMessage(activeThread.id, activeThread.subject || 'رسالة نقاش', replyContent);
       } else {
         const receiverId = activeThread.sender_id === currentUser.id ? activeThread.receiver_id : activeThread.sender_id;
-        await systemRef.current.sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
+        await sendMessage(receiverId, activeThread.subject || 'رد', replyContent);
       }
       setReplyContent('');
     } catch (error: any) { alert(error.message); } 
@@ -202,11 +197,11 @@ export default function MessagesPage() {
     setIsSubmitting(true);
     try {
       if (recipientType === 'broadcast') {
-        await systemRef.current.sendBroadcastMessage(newMessage.subject, newMessage.content);
+        await sendBroadcastMessage(newMessage.subject, newMessage.content);
         alert('تم إرسال الإذاعة العامة بنجاح لجميع المجالس!');
       } else if (!isGroupMessage) {
         if (!newMessage.receiver_id) return alert('الرجاء اختيار المستلم');
-        await systemRef.current.sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
+        await sendMessage(newMessage.receiver_id, newMessage.subject, newMessage.content);
       }
       
       setShowNewMessage(false);
@@ -216,12 +211,22 @@ export default function MessagesPage() {
     finally { setIsSubmitting(false); }
   };
 
-  const handleDeleteMessage = async (messageIds: string[]) => {
+  const handleDeleteConversation = async (messageIds: string[]) => {
     if (!confirm('هل أنت متأكد من حذف هذه المحادثة بالكامل؟')) return;
     try {
-      await systemRef.current.deleteMessages(messageIds);
+      await deleteMessages(messageIds);
       if (activeThread && messageIds.some((id: string) => activeThread.allIds?.includes(id))) setActiveThread(null);
     } catch (error: any) { alert('حدث خطأ أثناء الحذف'); }
+  };
+
+  // 🚀 دالة جديدة لحذف رسالة فردية داخل المجموعة من قِبل الإدارة والمعلم
+  const handleRemoveSingleMessage = async (msgId: string) => {
+    if (!confirm('سيتم حذف هذه الرسالة ومحتواها نهائياً لجميع المستخدمين. هل أنت متأكد؟')) return;
+    try {
+      await deleteSingleMessage(msgId);
+    } catch (error) {
+      alert("تعذر حذف الرسالة");
+    }
   };
 
   const filteredChatRooms = chatRooms.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.className.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -253,6 +258,8 @@ export default function MessagesPage() {
       </div>
     );
   }
+
+  const canModerate = ['admin', 'management', 'teacher'].includes(role);
 
   return (
     <div className="flex flex-col h-[100dvh] lg:h-[calc(100dvh-6rem)] max-w-[1600px] mx-auto font-cairo text-slate-200 relative overflow-hidden" dir="rtl">
@@ -376,7 +383,7 @@ export default function MessagesPage() {
                    )}
                  </div>
                  {activeThread.type !== 'group' && (
-                   <button onClick={() => handleDeleteMessage(activeThread.allIds)} className="h-10 w-10 flex items-center justify-center bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-inner shrink-0 active:scale-95">
+                   <button onClick={() => handleDeleteConversation(activeThread.allIds)} className="h-10 w-10 flex items-center justify-center bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-inner shrink-0 active:scale-95">
                      <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
                    </button>
                  )}
@@ -399,7 +406,7 @@ export default function MessagesPage() {
                       if (showDateDivider) lastDateLabel = currentLabel;
 
                       return (
-                        <div key={msg.id} className="flex flex-col">
+                        <div key={msg.id} className="flex flex-col group relative">
                            {showDateDivider && (
                              <div className="flex justify-center my-4">
                                <span className="bg-[#02040a]/80 border border-white/5 text-slate-400 text-[9px] sm:text-[10px] font-black px-3 py-1.5 rounded-full shadow-inner tracking-widest">
@@ -412,7 +419,19 @@ export default function MessagesPage() {
                             <div className="shrink-0 w-8 sm:w-10 flex flex-col items-center hidden sm:flex">
                               {showAvatar && !isMe && <RenderAvatar user={msg.sender} size="h-8 w-8 sm:h-10 sm:w-10" />}
                             </div>
-                            <div className={`flex flex-col max-w-[90%] sm:max-w-[85%] lg:max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
+                            <div className={`flex flex-col max-w-[90%] sm:max-w-[85%] lg:max-w-[75%] relative ${isMe ? 'items-end' : 'items-start'}`}>
+                              
+                              {/* 🚀 زر مسح الرسالة الفردية (يظهر للمدير والمعلم فقط للرسائل التي لم يرسلوها) */}
+                              {canModerate && !isMe && activeThread.type === 'group' && (
+                                <button 
+                                  onClick={() => handleRemoveSingleMessage(msg.id)} 
+                                  className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-rose-500/20 text-rose-400 rounded-lg border border-rose-500/30 hover:bg-rose-500 hover:text-white"
+                                  title="حذف الرسالة (للإدارة)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
                               {showAvatar && !isMe && <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 mb-1 ml-2 drop-shadow-sm">{msg.sender?.full_name} ({msg.sender?.role === 'teacher' ? 'معلم' : msg.sender?.role === 'admin' ? 'إدارة' : 'طالب'})</span>}
                               
                               <div className={`p-3 sm:p-4 shadow-inner border relative text-sm font-bold leading-relaxed
@@ -420,7 +439,7 @@ export default function MessagesPage() {
                                   ? `bg-gradient-to-br from-${themeColor}-600 to-${themeColor === 'indigo' ? 'violet' : 'teal'}-600 text-white rounded-[1.25rem] sm:rounded-[1.5rem] rounded-tr-sm border-${themeColor}-400/30` 
                                   : 'bg-[#131836] text-slate-200 border-white/5 rounded-[1.25rem] sm:rounded-[1.5rem] rounded-tl-sm'}`}
                               >
-                                <div className="prose prose-invert max-w-none text-xs sm:text-sm" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                                <div className="prose prose-invert max-w-none text-xs sm:text-sm [&_img]:rounded-xl [&_img]:border [&_img]:border-white/20 [&_img]:shadow-md" dangerouslySetInnerHTML={{ __html: msg.content }} />
                                 
                                 <div className={`text-[9px] mt-2 flex items-center gap-1 sm:gap-1.5 ${isMe ? `text-${themeColor}-200 justify-end` : 'text-slate-500 justify-start'}`}>
                                   <span>{new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -436,11 +455,10 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} className="h-1" />
                </div>
 
-               {/* 🚀 Chat Input Box (Strictly overflow-visible to show ForumEditor toolbar) */}
+               {/* 🚀 Chat Input Box */}
                <div className="shrink-0 border-t border-white/5 bg-[#0a0d16]/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
                  <form onSubmit={handleSendReply} className="flex flex-col sm:flex-row items-end gap-2 sm:gap-3 p-3 sm:p-4 overflow-visible">
                     <div className="flex-1 w-full bg-transparent overflow-visible flex flex-col justify-center">
-                       {/* 🚀 تمرير isCompact لجعل المحرر يقلل من ارتفاعه داخل الرد السريع */}
                        <ForumEditor 
                          content={replyContent} 
                          setContent={(val: any) => setReplyContent(val)} 
@@ -458,7 +476,7 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* 🚀 Modal: إنشاء رسالة جديدة (لا يزال يستخدم المحرر الكامل العميق) */}
+      {/* 🚀 Modal: إنشاء رسالة جديدة */}
       <AnimatePresence>
         {showNewMessage && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 lg:p-6 bg-[#02040a]/90 backdrop-blur-md">
@@ -517,11 +535,6 @@ export default function MessagesPage() {
                         </select>
                       </div>
                     )}
-                    
-                    <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">عنوان الرسالة</label>
-                      <input type="text" required value={newMessage.subject} onChange={(e) => setNewMessage({...newMessage, subject: e.target.value})} placeholder="أدخل عنواناً مختصراً..." className="block w-full rounded-xl border border-white/5 py-3 px-4 text-white bg-[#0f1423] outline-none shadow-inner placeholder:text-slate-600" />
-                    </div>
                     
                     <div className="space-y-2 bg-[#02040a]/40 p-4 rounded-[1.25rem] border border-white/5 shadow-inner flex flex-col min-h-[250px] overflow-visible">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">المحتوى</label>
