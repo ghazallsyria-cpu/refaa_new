@@ -4,17 +4,16 @@ import { useState, useEffect, useMemo } from 'react';
 import { 
   Users, BookOpen, ChevronDown, Search, User, 
   GraduationCap, Edit, Trash2, Plus, X, AlertCircle, 
-  ShieldCheck, LayoutGrid, Star, CheckCircle2, ArrowRight, Loader2, ShieldAlert
+  LayoutGrid, ArrowRight, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useClassesSystem } from '@/hooks/useClassesSystem';
 import { useAuth } from '@/context/auth-context'; 
-import { OrganizedClass, OrganizedSection, OrganizedStudent } from '@/types';
-import { cn } from '@/lib/utils';
+import { OrganizedSection, OrganizedStudent } from '@/types';
 
 export default function ClassesPage() {
-  const { authRole, isChecking } = useAuth(); 
+  const { authRole, isChecking } = useAuth() as any; 
   const { 
     classes, 
     loading, 
@@ -31,10 +30,8 @@ export default function ClassesPage() {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🚀 فلتر المرحلة (سحر التنظيم الذكي)
   const [stageFilter, setStageFilter] = useState<'all' | 'middle' | 'high'>('all');
 
-  // Modal State
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     type: 'addClass' | 'editClass' | 'deleteClass' | 'addSection' | 'editSection' | 'deleteSection' | null;
@@ -48,10 +45,10 @@ export default function ClassesPage() {
   const isAdmin = authRole === 'admin' || authRole === 'management';
 
   useEffect(() => {
-    if (authRole === 'admin' || authRole === 'management' || authRole === 'teacher') {
+    if (!isChecking && (authRole === 'admin' || authRole === 'management' || authRole === 'teacher')) {
       fetchClassesData();
     }
-  }, [fetchClassesData, authRole]);
+  }, [fetchClassesData, authRole, isChecking]);
 
   useEffect(() => {
     setExpandedClass(null);
@@ -158,10 +155,9 @@ export default function ClassesPage() {
     return classes.reduce((acc, cls) => acc + cls.sections.reduce((sAcc, sec) => sAcc + sec.students.length, 0), 0);
   }, [classes]);
 
-  // 🚀 شاشات الحماية والتحميل الملكية
   if (isChecking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-transparent font-cairo text-slate-100">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo text-slate-100">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-indigo-500/10 border-t-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.4)]"></div>
@@ -175,8 +171,8 @@ export default function ClassesPage() {
 
   if (authRole !== 'admin' && authRole !== 'management' && authRole !== 'teacher') {
     return (
-      <div className="flex h-screen items-center justify-center bg-transparent font-cairo p-4">
-        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
+        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)] bg-[#131836]/60 backdrop-blur-md">
            <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
            <h2 className="text-2xl font-black text-white mb-2">وصول مقيد</h2>
            <p className="text-slate-400 font-bold">هذه الصفحة مخصصة للإدارة والمعلمين فقط.</p>
@@ -187,7 +183,7 @@ export default function ClassesPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo relative z-10">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
         <div className="flex flex-col items-center gap-5">
           <div className="h-16 w-16 animate-spin rounded-full border-4 border-blue-500/10 border-t-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.4)]"></div>
           <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تحميل الفصول والطلاب...</p>
@@ -200,21 +196,18 @@ export default function ClassesPage() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6 relative"
+      className="space-y-6 sm:space-y-8 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6 relative min-h-[100dvh] bg-[#090b14]"
       dir="rtl"
     >
-      {/* 🚀 الخلفية الزجاجية المضيئة المريحة للعين */}
       <div className="fixed top-[-10%] right-[-10%] w-[400px] h-[400px] sm:w-[600px] sm:h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] bg-blue-500/10 rounded-full blur-[140px] pointer-events-none z-0" />
 
-      {/* 🚀 زر العودة */}
       <div className="mb-2 relative z-10">
-        <Link href="/dashboard" className="flex items-center gap-2 text-slate-400 hover:text-indigo-400 font-bold glass-panel px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl transition-all w-fit group text-xs sm:text-sm active:scale-95 shadow-sm hover:border-indigo-500/30">
+        <Link href="/dashboard" className="flex items-center gap-2 text-slate-400 hover:text-indigo-400 font-bold bg-[#131836]/60 backdrop-blur-xl border border-white/10 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl transition-all w-fit group text-xs sm:text-sm active:scale-95 shadow-sm hover:border-indigo-500/30">
           <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة التحكم
         </Link>
       </div>
 
-      {/* 🚀 Hero Header (Royal Obsidian Theme) */}
       <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-r from-[#02040a] via-[#0a0d1a] to-[#02040a] border border-white/10 p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
         <div className="absolute inset-0 bg-blue-500/5 blur-[100px] pointer-events-none"></div>
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
@@ -253,10 +246,8 @@ export default function ClassesPage() {
         <div className="absolute -left-10 -bottom-10 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none"></div>
       </div>
 
-      {/* 🚀 Smart Search Bar & Filters (Glass Effect) */}
-      <div className="glass-panel p-4 sm:p-5 lg:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col gap-4 relative z-20">
+      <div className="bg-[#131836]/60 backdrop-blur-xl p-4 sm:p-5 lg:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col gap-4 relative z-20 border border-white/10 shadow-lg">
         
-        {/* المرحلة Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto w-full pb-2 custom-scrollbar snap-x">
           <button 
             onClick={() => setStageFilter('all')} 
@@ -292,7 +283,6 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      {/* 🚀 Classes Content */}
       <div className="space-y-5 sm:space-y-6 relative z-10">
         {filteredClasses.length === 0 ? (
           <motion.div 
@@ -314,9 +304,8 @@ export default function ClassesPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`glass-panel rounded-[1.5rem] sm:rounded-[2.5rem] border overflow-hidden transition-all duration-300 ${expandedClass === cls.id ? 'border-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.15)] bg-[#0f1423]/60' : 'border-white/5 hover:border-indigo-500/20 hover:bg-[#0f1423]/40'}`}
+              className={`bg-[#131836]/40 backdrop-blur-md rounded-[1.5rem] sm:rounded-[2.5rem] border overflow-hidden transition-all duration-300 ${expandedClass === cls.id ? 'border-indigo-500/40 shadow-[0_0_30px_rgba(99,102,241,0.15)] bg-[#0f1423]/60' : 'border-white/5 hover:border-indigo-500/20 hover:bg-[#0f1423]/40'}`}
             >
-              {/* 🎯 Class Header Folder */}
               <div className="w-full flex flex-col md:flex-row md:items-center justify-between p-5 sm:p-6 lg:p-8 bg-[#02040a]/40 transition-colors relative group">
                 <button
                   onClick={() => toggleClass(cls.id)}
@@ -362,7 +351,6 @@ export default function ClassesPage() {
                 </div>
               </div>
 
-              {/* 🎯 Sections & Students Area */}
               <AnimatePresence>
                 {expandedClass === cls.id && (
                   <motion.div 
@@ -381,7 +369,6 @@ export default function ClassesPage() {
                         cls.sections.map((section) => (
                           <div key={section.id} className="bg-[#0f1423]/60 rounded-[1.5rem] sm:rounded-[2rem] border border-white/5 shadow-inner overflow-hidden transition-all hover:border-blue-500/30">
                             
-                            {/* Section Header */}
                             <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-5 border-b border-white/5 bg-[#02040a]/40 group">
                               <button
                                 onClick={() => toggleSection(section.id)}
@@ -418,7 +405,6 @@ export default function ClassesPage() {
                               )}
                             </div>
 
-                            {/* 🚀 Students Grid */}
                             <AnimatePresence>
                               {expandedSection === section.id && (
                                 <motion.div 
@@ -483,7 +469,6 @@ export default function ClassesPage() {
         )}
       </div>
 
-      {/* 🚀 Modals (Secured & Royal Styled) */}
       <AnimatePresence>
         {modalConfig.isOpen && isAdmin && (
           <div className="fixed inset-0 z-50 overflow-y-auto">
