@@ -1,6 +1,7 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Clock, BookOpen, Users, Zap, ArrowRight, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -18,7 +19,7 @@ const DAYS = [
 ];
 
 export default function TeacherSchedulePage() {
-  const { authRole, isChecking } = useAuth(); 
+  const { authRole, isChecking } = useAuth() as any; 
 
   const [schedule, setSchedule] = useState<any[]>([]);
   const [periods, setPeriods] = useState<any[]>([]);
@@ -27,9 +28,14 @@ export default function TeacherSchedulePage() {
   
   const { fetchTeacherSchedule: fetchScheduleData } = useDashboardSystem();
 
+  // 🚀 الحارس المنیع (Guard) لمنع إرهاق السيرفر بالطلبات المتكررة
+  const isFetchedRef = useRef(false);
+
   const fetchTeacherSchedule = useCallback(async () => {
     if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') return;
+    if (isFetchedRef.current) return; // إغلاق الباب بعد أول دخول
 
+    isFetchedRef.current = true;
     setLoading(true);
     try {
       const data = await fetchScheduleData();
@@ -39,6 +45,7 @@ export default function TeacherSchedulePage() {
       }
     } catch (error) {
       console.error('Error fetching teacher schedule:', error);
+      isFetchedRef.current = false; // افتح الباب مجدداً في حال الفشل
     } finally {
       setLoading(false);
     }
@@ -48,9 +55,13 @@ export default function TeacherSchedulePage() {
     if (!isChecking) {
       fetchTeacherSchedule();
     }
+  }, [fetchTeacherSchedule, isChecking]);
+
+  // 🚀 ساعة تحديث الوقت منفصلة تماماً لحماية الريندر
+  useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
-  }, [fetchTeacherSchedule, isChecking]);
+  }, []);
 
   const getCellData = useCallback((day: number, period: number) => {
     return schedule.find(s => s.day_of_week === day && s.period === period);
@@ -91,7 +102,7 @@ export default function TeacherSchedulePage() {
   // 🚀 شاشات الحماية والتحميل (الثيم الملكي)
   if (isChecking) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center">
              <div className="h-20 w-20 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.4)]"></div>
@@ -105,8 +116,8 @@ export default function TeacherSchedulePage() {
 
   if (authRole !== 'teacher' && authRole !== 'admin' && authRole !== 'management') {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo p-4">
-        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)]">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo p-4">
+        <div className="glass-panel p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-500/30 shadow-[0_0_40px_rgba(225,29,72,0.15)] bg-[#131836]/60 backdrop-blur-md">
            <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
            <h2 className="text-2xl font-black text-white mb-2">وصول مقيد</h2>
            <p className="text-slate-400 font-bold">هذه الصفحة مخصصة للمعلمين وإدارة المدرسة فقط.</p>
@@ -117,7 +128,7 @@ export default function TeacherSchedulePage() {
 
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center bg-transparent font-cairo relative z-10">
+      <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] font-cairo relative z-10">
         <div className="flex flex-col items-center gap-5">
           <div className="h-16 w-16 animate-spin rounded-full border-4 border-amber-500/10 border-t-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]"></div>
           <p className="text-slate-400 font-black animate-pulse tracking-widest drop-shadow-md">جاري تحميل الجدول الأسبوعي...</p>
@@ -130,19 +141,20 @@ export default function TeacherSchedulePage() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6 relative z-10"
+      className="space-y-6 sm:space-y-8 pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 font-cairo pt-6 relative z-10 min-h-[100dvh] bg-[#090b14]"
       dir="rtl"
     >
       {/* 🚀 زر العودة المضيء */}
       <div className="mb-2">
-        <Link href="/dashboard/teacher" className="flex items-center gap-2 text-slate-400 hover:text-amber-400 font-bold glass-panel px-5 py-2.5 rounded-2xl transition-all w-fit group text-sm sm:text-base active:scale-95 shadow-sm hover:border-amber-500/30">
+        <Link href="/dashboard/teacher" className="flex items-center gap-2 text-slate-400 hover:text-amber-400 font-bold bg-[#131836]/60 backdrop-blur-md border border-white/10 px-5 py-2.5 rounded-2xl transition-all w-fit group text-sm sm:text-base active:scale-95 shadow-sm hover:border-amber-500/30">
           <ArrowRight className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> العودة للوحة المعلم
         </Link>
       </div>
 
       {/* 🚀 هيدر الصفحة (البانر الملكي) */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 glass-panel p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
         <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-[80px] pointer-events-none -mr-10 -mt-10"></div>
+        <div className="absolute inset-0 bg-amber-500/5 blur-[100px] pointer-events-none"></div>
         <div className="flex items-center gap-4 relative z-10">
           <div className="p-3 sm:p-4 bg-amber-500/10 rounded-2xl border border-amber-500/20 shadow-inner shrink-0">
             <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-amber-400 drop-shadow-md" />
@@ -165,7 +177,7 @@ export default function TeacherSchedulePage() {
 
       {/* 🚀 حالة عدم وجود جدول */}
       {periods.length === 0 ? (
-        <div className="text-center py-16 sm:py-20 glass-panel rounded-[2rem] sm:rounded-[3rem] border border-dashed border-white/10 shadow-inner px-4">
+        <div className="text-center py-16 sm:py-20 bg-[#131836]/40 backdrop-blur-md rounded-[2rem] sm:rounded-[3rem] border border-dashed border-white/10 shadow-inner px-4">
            <div className="mx-auto h-16 w-16 sm:h-20 sm:w-20 bg-[#02040a]/80 rounded-[2rem] flex items-center justify-center mb-4 sm:mb-6 border border-white/5 shadow-inner">
              <AlertCircle className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500" />
            </div>
@@ -174,7 +186,7 @@ export default function TeacherSchedulePage() {
         </div>
       ) : (
         /* 🚀 الجدول (Timetable) */
-        <div className="glass-panel rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden border border-white/10">
+        <div className="bg-[#131836]/60 backdrop-blur-xl rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
               <thead className="bg-[#02040a]/80 border-b border-white/10">
@@ -219,7 +231,7 @@ export default function TeacherSchedulePage() {
                                   <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-amber-400 animate-pulse" />
                                 </div>
                               )}
-                              <div className="space-y-1">
+                              <div className="space-y-1 relative z-10">
                                 <div className={`flex items-center gap-1.5 mb-1.5 ${isCurrent ? 'text-amber-200' : isNext ? 'text-blue-300' : 'text-slate-400'}`}>
                                   <BookOpen className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 opacity-80" />
                                   <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest">المادة</span>
@@ -228,7 +240,7 @@ export default function TeacherSchedulePage() {
                                   {cellData.subjects?.name}
                                 </div>
                               </div>
-                              <div className={`mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex flex-col gap-1.5 sm:gap-2 ${isCurrent ? 'border-amber-500/20' : isNext ? 'border-blue-500/20' : 'border-white/5'}`}>
+                              <div className={`mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex flex-col gap-1.5 sm:gap-2 relative z-10 ${isCurrent ? 'border-amber-500/20' : isNext ? 'border-blue-500/20' : 'border-white/5'}`}>
                                 <div className={`flex items-center gap-1.5 ${isCurrent ? 'text-amber-100/70' : isNext ? 'text-blue-200/70' : 'text-slate-500'}`}>
                                   <Users className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0" />
                                   <div className="text-[10px] sm:text-[11px] font-bold truncate">
@@ -254,8 +266,8 @@ export default function TeacherSchedulePage() {
                               </div>
                             </motion.div>
                           ) : (
-                            <div className="h-full w-full flex items-center justify-center text-slate-600">
-                              <div className="h-1 w-4 sm:w-6 bg-white/5 rounded-full" />
+                            <div className="h-full w-full flex items-center justify-center text-slate-600 bg-[#02040a]/40 rounded-[1rem] sm:rounded-[1.5rem] border border-white/5 border-dashed shadow-inner">
+                              <span className="text-lg sm:text-xl font-black opacity-30">-</span>
                             </div>
                           )}
                         </td>
