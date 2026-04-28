@@ -31,7 +31,6 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
-// 🚀 تم استدعاء الاتصال النظيف والآمن من الملف الذي أنشأته
 import { supabase } from '@/lib/supabase';
 
 interface Option { id: string; content: string; is_correct: boolean; }
@@ -58,7 +57,6 @@ const cleanMathLatex = (text: string) => {
 };
 
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
-  // 🚀 حالة جديدة لإظهار أيقونة التحميل أثناء رفع الصورة
   const [isUploading, setIsUploading] = useState(false);
 
   const editor = useEditor({
@@ -79,16 +77,14 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         if (imageItem) {
           const file = imageItem.getAsFile();
           if (file) {
-            event.preventDefault(); // 🚀 منع إدراج الصورة كـ Base64
+            event.preventDefault(); 
 
             const uploadImage = async () => {
-              setIsUploading(true); // إظهار شاشة التحميل
+              setIsUploading(true);
               try {
-                // 1. توليد اسم عشوائي للصورة
                 const fileExt = file.name ? file.name.split('.').pop() : 'png';
                 const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
-                // 2. الرفع إلى سلة Supabase Storage
                 const { data, error } = await supabase.storage
                   .from('questions_images')
                   .upload(fileName, file);
@@ -99,27 +95,25 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
                   return;
                 }
 
-                // 3. جلب الرابط العام للصورة
                 const { data: publicUrlData } = supabase.storage
                   .from('questions_images')
                   .getPublicUrl(fileName);
 
-                // 4. إدراج الصورة النظيفة داخل المحرر
                 const node = view.state.schema.nodes.image.create({ src: publicUrlData.publicUrl });
                 const transaction = view.state.tr.replaceSelectionWith(node);
                 view.dispatch(transaction);
               } catch (err) {
                 console.error('Upload failed:', err);
               } finally {
-                setIsUploading(false); // إخفاء شاشة التحميل
+                setIsUploading(false);
               }
             };
 
             uploadImage();
-            return true; // تم معالجة اللصق بنجاح
+            return true; 
           }
         }
-        return false; // السماح بلصق النصوص بشكل طبيعي
+        return false; 
       }
     }
   });
@@ -148,7 +142,6 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
         <button onClick={() => insertMath('$\\pi$')} className="px-2 py-1 bg-white text-rose-600 rounded text-xs font-bold font-mono border border-rose-200 shadow-sm">$\pi$</button>
       </div>
       <div className="flex-1 bg-white relative min-h-[120px]">
-        {/* 🚀 شاشة التحميل الأنيقة أثناء رفع الصورة */}
         <AnimatePresence>
           {isUploading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
@@ -205,7 +198,7 @@ export default function AssignmentBuilderV2() {
     if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
     const fetchTeachers = async () => {
       const { data } = await supabase.from('teachers').select(`id, users ( full_name )`);
-      const formattedTeachers = data?.map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' })) || [];
+      const formattedTeachers = (data || []).map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' }));
       formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
       setTeachers(formattedTeachers);
     };
@@ -220,7 +213,7 @@ export default function AssignmentBuilderV2() {
       } else {
         if (!selectedTeacher) { setSubjects([]); setSelectedSubject(''); return; }
         const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
-        const extracted = data?.map((item: any) => item.subjects).filter(Boolean) || [];
+        const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
         setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
       }
     };
@@ -233,19 +226,19 @@ export default function AssignmentBuilderV2() {
       
       if (currentRole === 'admin' || currentRole === 'management') {
         const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
-        const formatted = data?.map((sec: any) => ({
+        const formatted = (data || []).map((sec: any) => ({
           id: sec.id,
           name: `${sec.classes?.name || ''} - ${sec.name}`
-        })) || [];
+        }));
         setSections(formatted);
       } else {
         if (!selectedTeacher) return;
         const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
-        const extracted = data?.map((item: any) => {
+        const extracted = (data || []).map((item: any) => {
           if (!item.sections) return null;
           const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
           return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
-        }).filter(Boolean) || [];
+        }).filter(Boolean);
         setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
       }
     };
@@ -257,15 +250,13 @@ export default function AssignmentBuilderV2() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-// 🚀 نسخة محسنة وخفيفة جداً لإنقاذ موارد السيرفر (Optimized Query)
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      // 1. استخدام limit(50) لكي لا نرهق قاعدة البيانات بجلب آلاف السجلات دفعة واحدة
       let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false }).limit(50);
       
       if (currentRole === 'teacher') {
-        const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+        const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
         else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
       }
@@ -278,7 +269,6 @@ export default function AssignmentBuilderV2() {
         return;
       }
 
-      // 2. إيقاف جلب جدول الأسئلة بالكامل لتوفير 90% من استهلاك الـ CPU
       const { data: subjectsList } = await supabase.from('subjects').select('id, name');
       const { data: teachersList } = await supabase.from('teachers').select('id, users(full_name)');
 
@@ -289,7 +279,6 @@ export default function AssignmentBuilderV2() {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
           teachers: { users: { full_name: teacher?.users?.full_name || 'معلم غير محدد' } },
-          // نضع مصفوفة فارغة لكي لا ينكسر الكود، وسيظهر عدد الأسئلة كـ 0 مؤقتاً لإنقاذ السيرفر
           assignment_questions_v2: [] 
         };
       });
@@ -310,7 +299,7 @@ export default function AssignmentBuilderV2() {
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
       await supabase.from('assignments_v2').delete().eq('id', id);
       fetchManageList();
-      setGlobalMessage({ text: 'تم حذف الدرسوتنظيف النظام بنجاح!', type: 'success' });
+      setGlobalMessage({ text: 'تم حذف الدرس وتنظيف النظام بنجاح!', type: 'success' });
       setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
     } catch (err) { alert('حدث خطأ أثناء الحذف.'); }
   };
@@ -325,16 +314,16 @@ export default function AssignmentBuilderV2() {
       setSelectedSubject(assign.subject_id);
       setAssignmentStatus(assign.status);
       setIsPracticeMode(assign.is_practice_mode);
-      setSelectedSections(sData?.map((s:any) => s.section_id) || []);
+      setSelectedSections((sData || []).map((s:any) => s.section_id));
       
-      const formattedQs = qData?.map((q:any) => ({
+      const formattedQs = (qData || []).map((q:any) => ({
         id: crypto.randomUUID(),
         type: q.question_type,
         content_html: q.content_html,
         model_answer_html: q.model_answer_html || '',
         points: q.points,
         options: q.options || []
-      })) || [];
+      }));
       
       setQuestions(formattedQs);
       setEditingAssignmentId(assign.id); 
@@ -385,7 +374,7 @@ export default function AssignmentBuilderV2() {
       let safeJsonStr = manualJson.trim().replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
       const parsedData = JSON.parse(safeJsonStr);
       
-      const newQuestions = parsedData.questions.map((q:any) => {
+      const newQuestions = (parsedData.questions || []).map((q:any) => {
         let opts = [];
         if (Array.isArray(q.options)) {
           opts = q.options.map((opt:any) => {
@@ -532,14 +521,6 @@ export default function AssignmentBuilderV2() {
   const translateType = (t: string) => {
     const types:any = { 'multiple_choice': 'اختياري', 'true_false': 'صح/خطأ', 'essay': 'مقالي / تفاعلي', 'section_header': 'ترويسة/نص عام' };
     return types[t] || t;
-  };
-
-  const cancelEdit = () => {
-    setEditingAssignmentId(null);
-    setAssignmentTitle('بنك تدريب جديد');
-    setQuestions([]);
-    setGlobalMessage({ text: 'تم إلغاء وضع التعديل والعودة للوضع الجديد.', type: 'success' });
-    setTimeout(() => setGlobalMessage({text:'', type:''}), 2000);
   };
 
   if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return <div className="p-10 text-center">غير مصرح لك.</div>;
