@@ -22,33 +22,74 @@ export default function StudentArenaDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const fetchArenaData = async () => {
       try {
+        // 1. جلب فصل الطالب الحالي لمعرفة الدروس المخصصة له
+        const { data: studentData, error: studentErr } = await supabase
+          .from('students')
+          .select('section_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!studentData?.section_id) {
+          console.warn("الطالب غير مسجل في أي فصل.");
+          setLoading(false);
+          return;
+        }
+
+        // 2. جلب أرقام الدروس (الواجبات) المربوطة بفصل الطالب
+        const { data: sectionAssignments } = await supabase
+          .from('assignment_sections_v2')
+          .select('assignment_id')
+          .eq('section_id', studentData.section_id);
+
+        const assignmentIds = (sectionAssignments || []).map(sa => sa.assignment_id);
+
+        if (assignmentIds.length === 0) {
+           setGroupedMissions({});
+           setSubjects(['الكل']);
+           setLoading(false);
+           return;
+        }
+
+        // 3. جلب بيانات الدروس "المنشورة" فقط والخاصة بهذا الطالب
         const { data: assignmentsData, error: assignErr } = await supabase
           .from('assignments_v2')
-          .select(`
-            id, title, description, is_practice_mode, created_at,
-            subjects ( name ),
-            assignment_questions_v2 ( id )
-          `)
+          .select('*')
+          .in('id', assignmentIds)
           .eq('status', 'published')
-          .order('created_at', { ascending: false })
-          .limit(100);
+          .order('created_at', { ascending: false });
 
         if (assignErr) throw assignErr;
 
+        if (!assignmentsData || assignmentsData.length === 0) {
+           setGroupedMissions({});
+           setSubjects(['الكل']);
+           setLoading(false);
+           return;
+        }
+
+        // 4. جلب أسماء المواد بشكل منفصل وآمن (لتجنب أخطاء الـ Joins)
+        const { data: subjectsData } = await supabase.from('subjects').select('id, name');
+
+        // 5. جلب الأسئلة لحساب العدد الإجمالي لكل درس
+        const { data: questionsData } = await supabase
+          .from('assignment_questions_v2')
+          .select('id, assignment_id')
+          .in('assignment_id', assignmentIds);
+
+        // 6. جلب تقدم الطالب في هذه الدروس
         const { data: progressData, error: progErr } = await supabase
           .from('student_progress_v2')
           .select('*')
           .eq('student_id', user.id);
 
-        if (progErr) throw progErr;
-
-        // 🚀 الحماية القصوى: || [] تمنع انهيار النظام إذا حدث انقطاع في الاتصال 
-        const allMissions = (assignmentsData || []).map(assign => {
-          const totalQuestions = assign.assignment_questions_v2?.length || 1;
+        // 7. دمج وتجميع البيانات الذكي
+        const allMissions = assignmentsData.map(assign => {
+          const subject = (subjectsData || []).find(s => s.id === assign.subject_id);
+          const totalQuestions = (questionsData || []).filter(q => q.assignment_id === assign.id).length || 1;
           const userProgress = (progressData || []).find((p: any) => p.assignment_id === assign.id);
           
           let percentage = 0;
@@ -70,10 +111,11 @@ export default function StudentArenaDashboard() {
             progress: userProgress || null,
             percentage,
             status,
-            subject_name: assign.subjects?.name || 'عام'
+            subject_name: subject?.name || 'مادة عامة'
           };
         });
 
+        // 8. التجميع حسب المادة لعرضها كعلامات تبويب (Tabs)
         const groups = allMissions.reduce((acc: any, mission: any) => {
           const sName = mission.subject_name;
           if (!acc[sName]) acc[sName] = [];
@@ -91,9 +133,9 @@ export default function StudentArenaDashboard() {
     };
 
     fetchArenaData();
-  }, [user]);
+  }, [user?.id]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-indigo-500 font-bold flex flex-col items-center gap-2"><Sparkles className="w-8 h-8"/> جاري ترتيب موادك الدراسية...</div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-indigo-500 font-bold flex flex-col items-center gap-2"><Sparkles className="w-8 h-8"/> جاري تجهيز مناهجك الدراسية...</div></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
@@ -128,20 +170,22 @@ export default function StudentArenaDashboard() {
           <BrainCircuit className="absolute -left-10 -bottom-10 w-64 h-64 text-white opacity-5" />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-          {subjects.map((sub) => (
-            <button
-              key={sub}
-              onClick={() => setActiveSubject(sub)}
-              className={`px-6 py-3 rounded-2xl font-black text-sm whitespace-nowrap transition-all border-2 
-                ${activeSubject === sub 
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' 
-                  : 'bg-white text-slate-500 border-transparent hover:border-slate-200'}`}
-            >
-              {sub}
-            </button>
-          ))}
-        </div>
+        {subjects.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+            {subjects.map((sub) => (
+              <button
+                key={sub}
+                onClick={() => setActiveSubject(sub)}
+                className={`px-6 py-3 rounded-2xl font-black text-sm whitespace-nowrap transition-all border-2 
+                  ${activeSubject === sub 
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' 
+                    : 'bg-white text-slate-500 border-transparent hover:border-slate-200'}`}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="space-y-12">
           {subjects.filter(s => s !== 'الكل' && (activeSubject === 'الكل' || activeSubject === s)).map((subjectName) => (
@@ -216,6 +260,7 @@ export default function StudentArenaDashboard() {
           <div className="text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
             <BookOpen className="w-16 h-16 text-slate-200 mx-auto mb-4" />
             <p className="font-black text-slate-400">لا توجد بنوك دروس مفعلة لمنهجك حالياً.</p>
+            <p className="text-xs text-slate-400 mt-2">تأكد أن المعلم قام باختيار فصلك عند إنشاء الدرس واختار "نشر للطلاب".</p>
           </div>
         )}
 
