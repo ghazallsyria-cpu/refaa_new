@@ -43,7 +43,6 @@ export default function AttendancePage() {
  
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
-  // 🚀 حراس لمنع تكرار الطلبات (In-flight & Duplicate Guards)
   const adminFetchRef = useRef(false);
   const studentFetchRef = useRef(false);
   const attendanceFetchRef = useRef(false);
@@ -76,9 +75,9 @@ export default function AttendancePage() {
     setSnapshotDate(today);
   }, []);
  
-  // 🚀 حارس دالة الإدارة
+  // 🚀 تحسين الاعتماديات لمنع الحلقة اللانهائية (Infinite Render Loop)
   const fetchDailySnapshot = useCallback(async () => {
-    if (!user || !isAdmin || !snapshotDate || adminFetchRef.current) return;
+    if (!isAdmin || !snapshotDate || adminFetchRef.current) return;
     adminFetchRef.current = true;
     setAdminLoading(true);
     try {
@@ -121,11 +120,11 @@ export default function AttendancePage() {
       setAdminLoading(false);
       adminFetchRef.current = false;
     }
-  }, [user, isAdmin, snapshotDate]);
+  }, [isAdmin, snapshotDate]); // تمت إزالة user.id لمنع الريندر العشوائي
  
   useEffect(() => {
     if (isAdmin) fetchDailySnapshot();
-  }, [isAdmin, fetchDailySnapshot]);
+  }, [isAdmin, snapshotDate, fetchDailySnapshot]);
  
   const groupedDailyStats = useMemo(() => {
     const groups: Record<string, Record<string, any[]>> = { 'المرحلة المتوسطة': {}, 'المرحلة الثانوية': {} };
@@ -213,7 +212,6 @@ export default function AttendancePage() {
     printWindow.document.write(html); printWindow.document.close();
   };
  
-  // 🚀 حارس تأثير جلب الجدول (يمنع التكرار لنفس التاريخ)
   useEffect(() => {
     if (date && currentRole === 'teacher' && scheduleFetchRef.current !== date) {
       scheduleFetchRef.current = date;
@@ -229,7 +227,6 @@ export default function AttendancePage() {
     }
   }, [date, currentRole, fetchDaySchedule]);
  
-  // 🚀 حارس تأثير جلب الفصول
   useEffect(() => {
     const key = `${date}_${period}`;
     if (date && period && currentRole === 'teacher' && sectionsFetchRef.current !== key) {
@@ -243,7 +240,7 @@ export default function AttendancePage() {
     }
   }, [date, period, fetchSections, currentRole]);
  
-  // 🚀 حارس جلب بيانات الحضور والغياب (المتسبب الأكبر في التكرار)
+  // 🚀 تحسين الاعتماديات لمنع الحلقة اللانهائية (Infinite Render Loop) هنا أيضاً
   const loadStudentsAndAttendance = useCallback(async () => {
     if (selectedSection && date && currentRole === 'teacher' && !attendanceFetchRef.current) {
       attendanceFetchRef.current = true;
@@ -287,7 +284,7 @@ export default function AttendancePage() {
         attendanceFetchRef.current = false;
       }
     }
-  }, [selectedSection, selectedSubject, date, period, fetchStudentsAndAttendance, currentRole, user?.id]);
+  }, [selectedSection, selectedSubject, date, period, currentRole, fetchStudentsAndAttendance]); 
  
   useEffect(() => { loadStudentsAndAttendance(); }, [loadStudentsAndAttendance]);
  
@@ -320,9 +317,9 @@ export default function AttendancePage() {
     } finally { setSaving(false); }
   };
  
-  // 🚀 حارس دالة الطالب
+  // 🚀 تحسين الاعتماديات في بيانات الطالب
   const fetchStudentDataDirectly = useCallback(async () => {
-    if (currentRole !== 'student' || !user || studentFetchRef.current) return;
+    if (currentRole !== 'student' || !user?.id || studentFetchRef.current) return;
     studentFetchRef.current = true;
     setIsStudentLoading(true); setStudentDbError(null);
     try {
@@ -357,7 +354,7 @@ export default function AttendancePage() {
       setIsStudentLoading(false); 
       studentFetchRef.current = false;
     }
-  }, [currentRole, user]);
+  }, [currentRole, user?.id]); 
  
   useEffect(() => { fetchStudentDataDirectly(); }, [fetchStudentDataDirectly]);
  
@@ -408,7 +405,6 @@ export default function AttendancePage() {
                 هذه الصفحة مخصصة لمدير المدرسة لرؤية اللقطات الإحصائية مجمعة حسب القسم والمرحلة. يمكنك كتابة اسم <span className="text-blue-400">رئيس القسم</span> واستبعاد من لا ينتمي للقسم قبل الطباعة.
               </p>
             </div>
-            <div className="absolute -left-10 -top-10 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none"></div>
           </div>
  
           <div className="glass-panel p-5 sm:p-6 lg:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
@@ -445,7 +441,6 @@ export default function AttendancePage() {
  
                     return (
                       <div key={dept} className="glass-panel rounded-[1.5rem] sm:rounded-[2.5rem] relative overflow-hidden shadow-2xl">
-                        <div className="absolute top-0 left-0 w-32 h-32 sm:w-48 sm:h-48 bg-blue-500/10 rounded-full blur-[60px] pointer-events-none"></div>
                         <div className="p-5 sm:p-6 lg:p-8 border-b border-white/5 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-5 sm:gap-6 bg-[#02040a]/40 relative z-10">
                           <div className="flex items-center gap-3 w-full xl:w-auto">
                             <div className="p-2 sm:p-2.5 bg-blue-500/10 rounded-lg sm:rounded-xl border border-blue-500/20 shrink-0"><Layers className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /></div>
