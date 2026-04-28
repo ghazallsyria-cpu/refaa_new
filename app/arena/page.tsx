@@ -10,7 +10,6 @@ import {
   Clock, CheckCircle2, MessageSquareHeart, RefreshCcw, BookOpen, Layers, Filter
 } from 'lucide-react';
 
-// 🚀 الاتصال الموحد والنظيف بقاعدة البيانات
 import { supabase } from '@/lib/supabase';
 
 export default function StudentArenaDashboard() {
@@ -27,7 +26,6 @@ export default function StudentArenaDashboard() {
 
     const fetchArenaData = async () => {
       try {
-        // 1. جلب الواجبات وبنوك الأسئلة
         const { data: assignmentsData, error: assignErr } = await supabase
           .from('assignments_v2')
           .select(`
@@ -36,11 +34,11 @@ export default function StudentArenaDashboard() {
             assignment_questions_v2 ( id )
           `)
           .eq('status', 'published')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(100);
 
         if (assignErr) throw assignErr;
 
-        // 2. جلب التقدم
         const { data: progressData, error: progErr } = await supabase
           .from('student_progress_v2')
           .select('*')
@@ -48,10 +46,10 @@ export default function StudentArenaDashboard() {
 
         if (progErr) throw progErr;
 
-        // 3. دمج البيانات ومعالجتها
-        const allMissions = assignmentsData?.map(assign => {
+        // 🚀 الحماية القصوى: || [] تمنع انهيار النظام إذا حدث انقطاع في الاتصال 
+        const allMissions = (assignmentsData || []).map(assign => {
           const totalQuestions = assign.assignment_questions_v2?.length || 1;
-          const userProgress = progressData?.find(p => p.assignment_id === assign.id);
+          const userProgress = (progressData || []).find((p: any) => p.assignment_id === assign.id);
           
           let percentage = 0;
           let status = 'new'; 
@@ -76,7 +74,6 @@ export default function StudentArenaDashboard() {
           };
         });
 
-        // 4. التجميع حسب المادة (Logic Grouping)
         const groups = allMissions.reduce((acc: any, mission: any) => {
           const sName = mission.subject_name;
           if (!acc[sName]) acc[sName] = [];
@@ -102,7 +99,6 @@ export default function StudentArenaDashboard() {
     <div className="min-h-screen bg-slate-50 py-8 px-4 font-cairo" dir="rtl">
       <div className="max-w-5xl mx-auto space-y-8">
         
-        {/* هيدر الساحة */}
         <div className="bg-gradient-to-r from-slate-900 to-indigo-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="text-center md:text-right">
@@ -115,16 +111,15 @@ export default function StudentArenaDashboard() {
               </p>
             </div>
             
-            {/* إحصائية سريعة */}
             <div className="bg-white/10 backdrop-blur-md p-6 rounded-[2rem] border border-white/20 flex gap-6 text-center">
               <div>
-                <div className="text-2xl font-black text-indigo-300">{subjects.length - 1}</div>
+                <div className="text-2xl font-black text-indigo-300">{subjects.length > 0 ? subjects.length - 1 : 0}</div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">مواد نشطة</div>
               </div>
               <div className="w-px bg-white/10"></div>
               <div>
                 <div className="text-2xl font-black text-emerald-400">
-                  {Object.values(groupedMissions).flat().filter(m => m.status === 'completed').length}
+                  {Object.values(groupedMissions).flat().filter((m: any) => m.status === 'completed').length}
                 </div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-100">دروس مكتملة</div>
               </div>
@@ -133,7 +128,6 @@ export default function StudentArenaDashboard() {
           <BrainCircuit className="absolute -left-10 -bottom-10 w-64 h-64 text-white opacity-5" />
         </div>
 
-        {/* 🚀 شريط اختيار المادة (Tabs) */}
         <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
           {subjects.map((sub) => (
             <button
@@ -149,7 +143,6 @@ export default function StudentArenaDashboard() {
           ))}
         </div>
 
-        {/* عرض المحتوى المجمع */}
         <div className="space-y-12">
           {subjects.filter(s => s !== 'الكل' && (activeSubject === 'الكل' || activeSubject === s)).map((subjectName) => (
             <motion.section 
@@ -169,7 +162,7 @@ export default function StudentArenaDashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {groupedMissions[subjectName].map((mission) => (
+                {groupedMissions[subjectName].map((mission: any) => (
                   <motion.div 
                     whileHover={{ y: -8 }}
                     key={mission.id} 
@@ -178,7 +171,6 @@ export default function StudentArenaDashboard() {
                       ${mission.status === 'completed' ? 'border-emerald-200 shadow-emerald-50' : 
                         mission.status === 'in_progress' ? 'border-amber-200 shadow-amber-50' : 'border-slate-100 hover:border-indigo-200'}`}
                   >
-                    {/* شريط التقدم الصغير */}
                     {mission.status !== 'new' && (
                       <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100">
                         <div className={`h-full transition-all duration-1000 ${mission.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${mission.percentage}%` }} />
@@ -195,7 +187,6 @@ export default function StudentArenaDashboard() {
                     <h3 className="font-black text-slate-800 text-lg mb-2 group-hover:text-indigo-600 transition-colors leading-tight">{mission.title}</h3>
                     <p className="text-xs font-bold text-slate-500 line-clamp-2 mb-6 flex-1">{mission.description}</p>
                     
-                    {/* رسالة المعلم (Memo) */}
                     {mission.progress?.teacher_feedback && (
                       <div className="mb-6 bg-amber-50 border border-amber-100 p-3 rounded-2xl flex items-start gap-2 ring-4 ring-white">
                         <MessageSquareHeart className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
@@ -221,7 +212,6 @@ export default function StudentArenaDashboard() {
           ))}
         </div>
 
-        {/* حالة عدم وجود بيانات */}
         {subjects.length <= 1 && (
           <div className="text-center py-20 bg-white rounded-[3rem] border-2 border-dashed border-slate-200">
             <BookOpen className="w-16 h-16 text-slate-200 mx-auto mb-4" />
