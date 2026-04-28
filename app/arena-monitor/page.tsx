@@ -9,7 +9,6 @@ import {
   MessageSquareHeart, Send, X, Search, Sparkles, Activity, Loader2
 } from 'lucide-react';
 
-// 🚀 الاتصال الموحد والنظيف بقاعدة البيانات
 import { supabase } from '@/lib/supabase';
 
 export default function ArenaMonitorDashboard() {
@@ -32,11 +31,11 @@ export default function ArenaMonitorDashboard() {
 
     const fetchAssignments = async () => {
       try {
-        let query = supabase.from('assignments_v2').select('id, title, is_practice_mode, created_at, assignment_questions_v2(id)').order('created_at', { ascending: false });
+        // 🚀 حماية السيرفر بـ limit وتجنب البيانات الضخمة
+        let query = supabase.from('assignments_v2').select('id, title, is_practice_mode, created_at, assignment_questions_v2(id)').order('created_at', { ascending: false }).limit(100);
         
         if (currentRole === 'teacher') {
-          // 🚀 تم إصلاح فلتر المعلم هنا أيضاً
-          const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).single();
+          const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
           if (teacherProfile) {
             query = query.eq('teacher_id', teacherProfile.id);
           } else {
@@ -47,12 +46,13 @@ export default function ArenaMonitorDashboard() {
         const { data, error } = await query;
         if (error) throw error;
         
-        const formatted = data.map(d => ({
+        // 🚀 الحماية القصوى ضد الـ null
+        const formatted = (data || []).map(d => ({
           ...d,
           total_questions: d.assignment_questions_v2?.length || 1
         }));
         
-        setAssignments(formatted || []);
+        setAssignments(formatted);
       } catch (err) { console.error("Error fetching assignments:", err); } finally { setLoading(false); }
     };
     fetchAssignments();
@@ -82,8 +82,9 @@ export default function ArenaMonitorDashboard() {
 
       if (usersErr) throw usersErr;
 
-      const merged = progData.map(p => {
-        const studentInfo = usersData?.find(u => u.id === p.student_id);
+      // 🚀 الحماية القصوى
+      const merged = (progData || []).map(p => {
+        const studentInfo = (usersData || []).find(u => u.id === p.student_id);
         const percentage = p.is_completed ? 100 : Math.round((p.current_index / assignment.total_questions) * 100);
         return {
           ...p,
