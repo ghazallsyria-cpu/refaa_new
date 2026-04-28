@@ -16,7 +16,6 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 
-// 🚀 الاتصال الموحد والنظيف بقاعدة البيانات
 import { supabase } from '@/lib/supabase';
 
 const renderHTMLWithMath = (html: string) => {
@@ -101,7 +100,9 @@ export default function PracticeArena() {
       try {
         const { data: assignData } = await supabase.from('assignments_v2').select('*').eq('id', id).single();
         const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', id).order('order_index', { ascending: true });
-        const { data: progressData } = await supabase.from('student_progress_v2').select('*').eq('student_id', user.id).eq('assignment_id', id).single();
+        
+        // 🚀 الحماية القصوى للطالب: maybeSingle() لكي لا ينهار التحدي في المرة الأولى!
+        const { data: progressData } = await supabase.from('student_progress_v2').select('*').eq('student_id', user.id).eq('assignment_id', id).maybeSingle();
 
         setAssignment(assignData);
         
@@ -302,7 +303,6 @@ export default function PracticeArena() {
                     </div>
                   )}
 
-                  {/* 🚀 إظهار الإجابة النموذجية المضمون (معدل لتجنب اختفاء العنصر) */}
                   {showHint && (
                     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl shadow-sm">
                       <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-200/50 pb-3">
@@ -317,7 +317,6 @@ export default function PracticeArena() {
                   )}
                 </div>
 
-                {/* نظام التشجيع والتحفيز (Gamification Bottom Bar) */}
                 <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
                   {isMCQ ? (
                     <AnimatePresence mode="wait">
