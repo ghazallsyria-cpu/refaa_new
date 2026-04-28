@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth-context';
 
@@ -14,8 +14,12 @@ export function useMessagesSystem() {
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 🚀 حارس لمنع الاستدعاءات المتكررة
+  const isFetchingRooms = useRef(false);
+
   const fetchChatRooms = useCallback(async () => {
-    if (!user) return;
+    if (!user || isFetchingRooms.current) return;
+    isFetchingRooms.current = true;
     try {
       let rooms: ChatRoom[] = [];
       if (currentRole === 'student') {
@@ -50,7 +54,9 @@ export function useMessagesSystem() {
         }
       }
       setChatRooms(rooms);
-    } catch (error) { console.error("Error fetching chat rooms:", error); }
+    } catch (error) { console.error("Error fetching chat rooms:", error); } finally {
+      isFetchingRooms.current = false;
+    }
   }, [user, currentRole]);
 
   const fetchUsers = useCallback(async () => {
@@ -60,26 +66,32 @@ export function useMessagesSystem() {
       
       if (currentRole === 'student') {
         const { data: s } = await supabase.from('students').select('section_id').eq('id', user.id).maybeSingle();
-        const { data: ts } = await supabase.from('teacher_sections').select('teacher_id').eq('section_id', s?.section_id);
-        const tIds = ts?.map((t: any) => t.teacher_id) || [];
-        if (tIds.length > 0) query.or(`id.in.(${tIds.join(',')}),role.in.(admin,management)`);
-        else query.in('role', ['admin', 'management']);
+        if(s?.section_id) {
+            const { data: ts } = await supabase.from('teacher_sections').select('teacher_id').eq('section_id', s.section_id);
+            const tIds = ts?.map((t: any) => t.teacher_id) || [];
+            if (tIds.length > 0) query.or(`id.in.(${tIds.join(',')}),role.in.(admin,management)`);
+            else query.in('role', ['admin', 'management']);
+        } else query.in('role', ['admin', 'management']);
       } 
       else if (currentRole === 'parent') {
         const { data: kids } = await supabase.from('students').select('section_id').eq('parent_id', user.id);
         const secIds = kids?.map((k: any) => k.section_id).filter(Boolean) || [];
-        const { data: ts } = await supabase.from('teacher_sections').select('teacher_id').in('section_id', secIds);
-        const tIds = Array.from(new Set(ts?.map((t: any) => t.teacher_id) || []));
-        if (tIds.length > 0) query.or(`id.in.(${tIds.join(',')}),role.in.(admin,management)`);
-        else query.in('role', ['admin', 'management']);
+        if(secIds.length > 0) {
+            const { data: ts } = await supabase.from('teacher_sections').select('teacher_id').in('section_id', secIds);
+            const tIds = Array.from(new Set(ts?.map((t: any) => t.teacher_id) || []));
+            if (tIds.length > 0) query.or(`id.in.(${tIds.join(',')}),role.in.(admin,management)`);
+            else query.in('role', ['admin', 'management']);
+        } else query.in('role', ['admin', 'management']);
       }
       else if (currentRole === 'teacher') {
         const { data: ts } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', user.id);
         const secIds = ts?.map((t: any) => t.section_id) || [];
-        const { data: st } = await supabase.from('students').select('id').in('section_id', secIds);
-        const sIds = st?.map((s: any) => s.id) || [];
-        if (sIds.length > 0) query.or(`id.in.(${sIds.join(',')}),role.in.(admin,management,teacher,staff)`);
-        else query.in('role', ['admin', 'management', 'teacher', 'staff']);
+        if(secIds.length > 0) {
+            const { data: st } = await supabase.from('students').select('id').in('section_id', secIds);
+            const sIds = st?.map((s: any) => s.id) || [];
+            if (sIds.length > 0) query.or(`id.in.(${sIds.join(',')}),role.in.(admin,management,teacher,staff)`);
+            else query.in('role', ['admin', 'management', 'teacher', 'staff']);
+        } else query.in('role', ['admin', 'management', 'teacher', 'staff']);
       }
 
       const { data, error } = await query;
@@ -116,8 +128,8 @@ export function useMessagesSystem() {
       await fetchUsers();
       setLoading(false);
     };
-    load();
-  }, [fetchChatRooms, fetchUsers]);
+    if (user?.id) load();
+  }, [fetchChatRooms, fetchUsers, user?.id]);
 
   useEffect(() => {
     if (chatRooms.length > 0 || currentRole) { fetchMessages(); }
@@ -141,15 +153,11 @@ export function useMessagesSystem() {
     fetchMessages();
   };
 
-  // 🚀 الدالة الجديدة: إرسال إذاعة عامة لكل الفصول
   const sendBroadcastMessage = async (subject: string, content: string) => {
     if (!user) throw new Error('User not authenticated');
-    
-    // جلب جميع الفصول (Sections)
     const { data: sections } = await supabase.from('sections').select('id');
     if (!sections || sections.length === 0) throw new Error('لا توجد فصول للإرسال إليها');
     
-    // إرسال الرسالة لكل فصل عبر API
     const promises = sections.map(sec => 
       fetch('/api/messages/send-group', { 
         method: 'POST', 
@@ -167,10 +175,57 @@ export function useMessagesSystem() {
     fetchMessages();
   };
 
+  // 🚀 دالة الحذف الذكية الجديدة (Delete from DB & Storage)
   const deleteMessages = async (messageIds: string[]) => {
+    if (!messageIds || messageIds.length === 0) return;
+
+    // 1. جلب الرسائل أولاً للبحث عن روابط الصور بداخلها
+    const { data: msgsToDelete } = await supabase
+      .from('messages')
+      .select('content')
+      .in('id', messageIds);
+
+    // 2. البحث عن مسارات الصور المخزنة في Supabase/Cloudinary باستخدام RegEx
+    if (msgsToDelete && msgsToDelete.length > 0) {
+      const imageUrls: string[] = [];
+      msgsToDelete.forEach((msg) => {
+        if (msg.content) {
+          // استخراج جميع مسارات الـ src من الـ HTML
+          const regex = /<img[^>]+src="([^">]+)"/g;
+          let match;
+          while ((match = regex.exec(msg.content)) !== null) {
+            imageUrls.push(match[1]);
+          }
+        }
+      });
+
+      // 3. مسح الصور من الـ Storage إذا تم العثور عليها
+      for (const url of imageUrls) {
+        // التحقق مما إذا كان الرابط تابعاً لـ Supabase Storage 
+        if (url.includes('supabase.co/storage/v1/object/public/')) {
+          const pathParts = url.split('/public/');
+          if (pathParts.length > 1) {
+            const fullPath = pathParts[1]; // مثلاً: questions_images/file.png
+            const bucketName = fullPath.split('/')[0];
+            const fileName = fullPath.substring(bucketName.length + 1);
+            
+            await supabase.storage.from(bucketName).remove([fileName]);
+          }
+        }
+        // ملاحظة: Cloudinary لا يوفر واجهة حذف للصور عبر Client-side لدواعي أمنية.
+        // يجب مسحها عبر Server Route (API) خاص بـ Cloudinary إذا كنت تستخدمه بشكل صريح.
+      }
+    }
+
+    // 4. حذف الرسالة نهائياً من قاعدة البيانات
     await fetch('/api/messages/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageIds, userId: user.id }) });
     fetchMessages();
   };
 
-  return { messages, users, chatRooms, loading, fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages } as const;
+  // 🚀 دالة لحذف رسالة فردية واحدة (للمدير والمعلم)
+  const deleteSingleMessage = async (messageId: string) => {
+    await deleteMessages([messageId]);
+  };
+
+  return { messages, users, chatRooms, loading, fetchMessages, sendMessage, sendGroupMessage, sendBroadcastMessage, markAsRead, deleteMessages, deleteSingleMessage } as const;
 }
