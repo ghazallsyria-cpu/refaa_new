@@ -1,18 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDocumentsSystem, Document } from '@/hooks/useDocumentsSystem';
-import { useAuth } from '@/context/auth-context'; // 🚀 استيراد جدار الحماية
+import { useAuth } from '@/context/auth-context'; 
 import { 
   Plus, Search, Edit2, Trash2, FileText, X, Filter, 
   ExternalLink, Calendar, Folder, FileArchive, 
   UploadCloud, Loader2, ArrowLeft,
-  Link2 as LinkIcon 
+  Link2 as LinkIcon, ShieldAlert 
 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { motion, AnimatePresence } from 'framer-motion'; // 🚀 إضافة الاستيرادات المفقودة هنا
+import { motion, AnimatePresence } from 'framer-motion'; 
 import Link from 'next/link';
-import Image from 'next/image';
 
 const CATEGORY_OPTIONS = [
   { value: 'all', label: 'جميع التصنيفات' },
@@ -25,7 +24,7 @@ const CATEGORY_OPTIONS = [
 export default function DocumentsPage() {
   const { authRole, isChecking } = useAuth() as any; 
 
-  const { loading: systemLoading, fetchDocuments, saveDocument, deleteDocument } = useDocumentsSystem();
+  const { fetchDocuments, saveDocument, deleteDocument } = useDocumentsSystem();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,18 +42,29 @@ export default function DocumentsPage() {
   const [notification, setNotification] = useState<{type: 'success' | 'error', message: string} | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
 
+  // 🚀 حارس لمنع الجلب المتكرر (Zero Over-fetching)
+  const isFetchedRef = useRef(false);
+
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const loadDocuments = useCallback(async () => {
+  const loadDocuments = useCallback(async (forceRefresh = false) => {
     if (authRole !== 'admin' && authRole !== 'management') return;
+    if (isFetchedRef.current && !forceRefresh) return;
     
+    isFetchedRef.current = true;
     setLoading(true);
-    const data = await fetchDocuments();
-    setDocuments(data);
-    setLoading(false);
+    try {
+      const data = await fetchDocuments();
+      setDocuments(data);
+    } catch (err) {
+      console.error('Fetch error:', err);
+      isFetchedRef.current = false;
+    } finally {
+      setLoading(false);
+    }
   }, [fetchDocuments, authRole]);
 
   useEffect(() => {
@@ -83,7 +93,7 @@ export default function DocumentsPage() {
     setIsSubmitting(true);
     try {
       await saveDocument(currentDocument, selectedFile || undefined);
-      await loadDocuments();
+      await loadDocuments(true); // 🚀 Force refresh بعد الحفظ
       setIsModalOpen(false);
       setCurrentDocument({});
       setSelectedFile(null);
@@ -99,15 +109,17 @@ export default function DocumentsPage() {
   const confirmDelete = async () => {
     if (!documentToDelete) return;
     
+    setIsSubmitting(true);
     try {
       const docToDelete = documents.find(d => d.id === documentToDelete);
       await deleteDocument(documentToDelete, docToDelete?.file_url);
-      await loadDocuments();
+      await loadDocuments(true); // 🚀 Force refresh بعد الحذف
       showNotification('success', 'تم حذف المستند بنجاح');
     } catch (error) {
       console.error('Error deleting document:', error);
       showNotification('error', 'حدث خطأ أثناء حذف المستند');
     } finally {
+      setIsSubmitting(false);
       setDocumentToDelete(null);
     }
   };
@@ -148,9 +160,10 @@ export default function DocumentsPage() {
     }
   };
 
+  // 🚀 شاشات التحميل والحماية 
   if (isChecking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50/50">
+      <div className="flex h-screen items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-14 h-14 text-indigo-600 animate-spin" />
           <p className="text-slate-500 font-bold animate-pulse tracking-widest">جاري التحقق وتأمين الصلاحيات...</p>
@@ -160,11 +173,20 @@ export default function DocumentsPage() {
   }
 
   if (authRole !== 'admin' && authRole !== 'management') {
-    return <div className="p-10 text-center font-bold text-rose-600 min-h-[80vh] flex items-center justify-center bg-slate-50">هذه الصفحة مخصصة للإدارة المدرسية فقط.</div>;
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white p-10 rounded-[2.5rem] text-center max-w-md w-full border border-rose-200 shadow-xl">
+           <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-80" />
+           <h2 className="text-2xl font-black text-slate-800 mb-2">وصول مقيد</h2>
+           <p className="text-slate-500 font-bold">هذه الصفحة مخصصة للإدارة المدرسية فقط.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6 relative max-w-7xl mx-auto px-4 py-8 font-cairo" dir="rtl">
+      
       <AnimatePresence>
         {notification && (
           <motion.div 
@@ -182,7 +204,7 @@ export default function DocumentsPage() {
         )}
       </AnimatePresence>
 
-      <Dialog.Root open={!!documentToDelete} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
+      <Dialog.Root open={!!documentToDelete} onOpenChange={(open) => !open && !isSubmitting && setDocumentToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40" />
           <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%] rounded-[2rem] bg-white p-8 shadow-2xl focus:outline-none" dir="rtl">
@@ -190,28 +212,30 @@ export default function DocumentsPage() {
               <Dialog.Title className="text-2xl font-black text-slate-900">
                 تأكيد الحذف
               </Dialog.Title>
-              <Dialog.Close className="text-slate-400 hover:text-slate-500 bg-slate-50 p-2 rounded-xl">
+              <Dialog.Close disabled={isSubmitting} className="text-slate-400 hover:text-slate-500 bg-slate-50 p-2 rounded-xl">
                 <X className="h-5 w-5" />
               </Dialog.Close>
             </div>
             <p className="text-slate-600 mb-8 font-bold leading-relaxed">هل أنت متأكد من رغبتك في حذف هذا المستند؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف الملف من السيرفر نهائياً.</p>
             <div className="flex justify-end gap-3">
               <Dialog.Close asChild>
-                <button className="rounded-2xl bg-slate-50 px-6 py-3 text-sm font-black text-slate-700 hover:bg-slate-100 transition-colors">
+                <button disabled={isSubmitting} className="rounded-2xl bg-slate-50 px-6 py-3 text-sm font-black text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50">
                   إلغاء
                 </button>
               </Dialog.Close>
               <button
                 onClick={confirmDelete}
-                className="rounded-2xl bg-red-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95"
+                disabled={isSubmitting}
+                className="flex items-center gap-2 rounded-2xl bg-red-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
               >
-                تأكيد الحذف
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'تأكيد الحذف'}
               </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
           <Link href="/dashboard" className="p-3 bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl shadow-sm border border-slate-200 transition-all">
@@ -231,6 +255,7 @@ export default function DocumentsPage() {
         </button>
       </div>
 
+      {/* Filter and Search */}
       <div className="bg-white/80 backdrop-blur-xl p-5 sm:p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-24 z-30">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1 group">
@@ -351,8 +376,8 @@ export default function DocumentsPage() {
       {/* Add/Edit Document Modal */}
       <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" />
-          <Dialog.Content className="fixed left-[50%] top-[50%] z-50 w-full max-w-xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300 border border-slate-100" dir="rtl">
+          <Dialog.Overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100]" />
+          <Dialog.Content className="fixed left-[50%] top-[50%] z-[101] w-[95vw] max-w-xl translate-x-[-50%] translate-y-[-50%] rounded-[2.5rem] bg-white p-8 shadow-2xl focus:outline-none max-h-[90vh] overflow-y-auto border border-slate-100 custom-scrollbar" dir="rtl">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
@@ -364,7 +389,7 @@ export default function DocumentsPage() {
                   </Dialog.Title>
                 </div>
               </div>
-              <Dialog.Close className="text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 p-2 rounded-xl transition-colors">
+              <Dialog.Close disabled={isSubmitting} className="text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 p-2 rounded-xl transition-colors disabled:opacity-50">
                 <X className="h-5 w-5" />
               </Dialog.Close>
             </div>
@@ -401,7 +426,7 @@ export default function DocumentsPage() {
                 <textarea 
                   rows={3}
                   placeholder="وصف مختصر لمحتوى المستند..." 
-                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm font-bold outline-none resize-none transition-all"
+                  className="block w-full rounded-2xl border-0 py-4 px-5 text-slate-900 bg-slate-50 ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm font-bold outline-none resize-none transition-all custom-scrollbar"
                   value={currentDocument.description || ''}
                   onChange={(e) => setCurrentDocument({...currentDocument, description: e.target.value})}
                 />
@@ -481,7 +506,8 @@ export default function DocumentsPage() {
                 <Dialog.Close asChild>
                   <button
                     type="button"
-                    className="rounded-2xl bg-slate-50 px-8 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95"
+                    disabled={isSubmitting}
+                    className="rounded-2xl bg-slate-50 px-8 py-4 text-sm font-black text-slate-700 hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50"
                   >
                     إلغاء الأمر
                   </button>
