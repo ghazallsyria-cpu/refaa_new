@@ -9,7 +9,6 @@ import { UserRole } from '@/types';
 import { Settings, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// 🚀 أداة الحماية من تجمد السيرفرات
 const withTimeout = <T,>(promise: any, ms: number, timeoutMessage: string): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
@@ -51,7 +50,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   
   const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
   
-  // 🚀 حراس الأمان لمنع تكرار الطلبات (In-flight guards)
   const fetchedUserId = useRef<string | null>(null);
   const isFetchingRef = useRef(false);
 
@@ -62,7 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isResetPasswordPage = pathname === '/reset-password';
   const isPublicPage = isLoginPage || isResetPasswordPage;
 
-  // 1. نظام الطوارئ
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isChecking && !authRole) {
@@ -79,7 +76,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login?cleared=emergency');
   };
 
-  // 2. دوال تسجيل الدخول
   const signIn = async (civilId: string, password: string) => {
     let authResult = null;
     let lastError = null;
@@ -143,12 +139,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.replace('/login');
   };
 
-  // 3. المحرك الأساسي (المحصّن 🛡️)
   useEffect(() => {
     let mounted = true;
 
     const initializeAuth = async () => {
-      // 🚀 حارس يمنع تشغيل الدالة مرتين في نفس اللحظة
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
@@ -170,6 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (mounted) {
             setUser(null);
             setAuthRole(null);
+            // 🚀 السطر الأهم: إزالة الكاش القديم لكسر حلقة إعادة التوجيه القاتلة
+            localStorage.removeItem('cached_role');
+            localStorage.removeItem('cached_name');
+            
             if (!isPublicPage) window.location.replace('/login');
             setIsChecking(false);
           }
@@ -178,11 +176,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (mounted) setUser(session.user);
 
-        // 🚀 تحديث البيانات من السيرفر فقط إذا اختلف المستخدم أو لم يسبق الجلب
         if (fetchedUserId.current !== session.user.id) {
            fetchedUserId.current = session.user.id;
            
-           // إذا كانت الإعدادات موجودة مسبقاً، لا ترهق السيرفر بطلبها مجدداً هنا
            const shouldFetchSettings = !isPublicPage && !rawSettings;
 
            const [userRes, settingsRes] = await withTimeout(
@@ -211,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Auth init failed:", err);
       } finally {
         if (mounted) setIsChecking(false);
-        isFetchingRef.current = false; // 🚀 تحرير الحارس بعد انتهاء العمل
+        isFetchingRef.current = false; 
       }
     };
 
@@ -219,9 +215,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
-        if (mounted) { setUser(null); setAuthRole(null); if (!isPublicPage) window.location.replace('/login'); }
+        if (mounted) { 
+          setUser(null); 
+          setAuthRole(null); 
+          // 🚀 ضمان مسح الكاش عند تسجيل الخروج التلقائي
+          localStorage.removeItem('cached_role');
+          localStorage.removeItem('cached_name');
+          if (!isPublicPage) window.location.replace('/login'); 
+        }
       } 
-      // 🚀 تم إزالة TOKEN_REFRESHED لمنع العواصف المزدوجة على السيرفر
       else if (event === 'SIGNED_IN') {
         if (session?.user && fetchedUserId.current !== session.user.id) {
           initializeAuth();
@@ -233,10 +235,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false; 
       subscription.unsubscribe(); 
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPublicPage]); // إزالة rawSettings من المصفوفة لتجنب الحلقات اللانهائية
+  }, [isPublicPage]); 
 
-  // تقييم حالة المنصة
   useEffect(() => {
     if (!rawSettings) return;
     let isOpen = rawSettings.is_open === true || rawSettings.is_open === 'true';
@@ -248,7 +248,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [rawSettings, authRole]);
 
-  // 🚀 شاشة التحميل
   if (isChecking && !authRole) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#02040a] font-cairo">
@@ -274,18 +273,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // شاشة الصيانة
   if (platformClosed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none animate-[pulse_4s_ease-in-out_infinite]" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 mix-blend-overlay"></div>
+        {/* 🚀 تم إزالة الانيميشن والدمج المعقد لإنهاء استهلاك المعالج هنا */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
+        
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative z-10 max-w-2xl w-full p-4">
           <div className="bg-[#0f1423]/80 backdrop-blur-2xl rounded-[3rem] p-8 sm:p-12 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-center">
             <div className="flex justify-center mb-8 relative">
               <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 rounded-full"></div>
-              <div className="h-24 w-24 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] border border-white/20 flex items-center justify-center shadow-inner relative z-10 animate-bounce">
+              <div className="h-24 w-24 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] border border-white/20 flex items-center justify-center shadow-inner relative z-10">
                 <Settings className="h-10 w-10 text-white animate-spin-slow" />
               </div>
             </div>
@@ -309,7 +309,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// توابع المساعدة
 const resetPassword = async (password: string) => {};
 const requestPasswordReset = async (civilId: string) => {};
 const updatePassword = async (password: string) => {};
@@ -319,5 +318,3 @@ export function useAuth() {
   if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
-
-    
