@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Clock, BookOpen, User, ArrowRight, Loader2, AlertCircle, Sparkles, Play, Video, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -9,9 +9,9 @@ import { arSA } from 'date-fns/locale';
 import Link from 'next/link';
 
 // 🚀 مسارات دقيقة للاتصال المباشر بقاعدة البيانات
-import { supabase } from '../../../../lib/supabase';
-import { useAuth } from '../../../../context/auth-context';
-import { cn } from '../../../../lib/utils';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/auth-context';
+import { cn } from '@/lib/utils';
 
 const DAYS = [
   { id: 1, name: 'الأحد' },
@@ -40,11 +40,16 @@ export default function StudentSchedulePage() {
   const defaultTab = (currentDayOfWeek >= 1 && currentDayOfWeek <= 5) ? currentDayOfWeek : 1;
   const [activeDayTab, setActiveDayTab] = useState<number>(defaultTab);
 
-  // 🚀 الاستعلام القناص: يجلب بيانات الطالب الحالية وجدوله المخصص فقط!
-  const fetchStrictSchedule = useCallback(async () => {
-    if (authRole !== 'student' || !user?.id) return;
+  // 🚀 الحارس (Guard) لمنع الطلبات المزدوجة والمكررة
+  const isFetchedRef = useRef(false);
 
+  // 🚀 الاستعلام القناص: يجلب بيانات الطالب الحالية وجدوله المخصص فقط مرة واحدة
+  const fetchStrictSchedule = useCallback(async () => {
+    if (authRole !== 'student' || !user?.id || isFetchedRef.current) return;
+
+    isFetchedRef.current = true; // إغلاق الباب فوراً
     setLoading(true);
+
     try {
       // 1. تحديد شعبة الطالب بدقة (Section ID)
       const { data: studentDataRaw, error: stuErr } = await supabase
@@ -83,18 +88,23 @@ export default function StudentSchedulePage() {
 
     } catch (error) {
       console.error('Error fetching strict schedule:', error);
+      // في حال الفشل نفتح الباب مجدداً لمحاولة أخرى
+      isFetchedRef.current = false;
     } finally {
       setLoading(false);
     }
-  }, [authRole, user]);
+  }, [authRole, user?.id]); // 🚀 الاعتماد فقط على الـ id وليس الكائن الكامل لمنع الريندر
 
   useEffect(() => {
     if (!isChecking) fetchStrictSchedule();
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
   }, [fetchStrictSchedule, isChecking]);
 
-  // البحث في المصفوفة أصبح آمناً لأن المصفوفة لا تحتوي إلا على جداول هذا الطالب
+  // 🚀 تحديث الوقت في UseEffect منفصل لحماية الـ Render
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   const getCellData = useCallback((day: number, period: number) => {
     return schedule.find(s => 
       Number(s.day_of_week) === Number(day) && 
@@ -129,7 +139,6 @@ export default function StudentSchedulePage() {
     return startTime > now && (startTime.getTime() - now.getTime()) < 120 * 60000;
   }, [currentTime]);
 
-  // 🚀 شاشات التحميل والحماية بالثيم الملكي
   if (isChecking) {
     return (
       <div className="flex h-screen items-center justify-center bg-transparent font-cairo">
@@ -179,14 +188,12 @@ export default function StudentSchedulePage() {
     >
       <div className="space-y-6 sm:space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* زر العودة */}
         <div className="flex justify-start">
           <Link href="/dashboard/student" className="flex items-center gap-2 text-slate-400 hover:text-blue-400 font-bold glass-panel px-5 py-2.5 rounded-2xl transition-all w-fit group text-sm sm:text-base active:scale-95 shadow-sm hover:border-blue-500/30">
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /> العودة للوحة الطالب
           </Link>
         </div>
 
-        {/* 🚀 الهيدر الفخم المخصص (Obsidian & Blue) */}
         <div className="relative overflow-hidden rounded-[2rem] sm:rounded-[2.5rem] bg-gradient-to-r from-[#02040a] via-[#0f1423] to-[#02040a] border border-white/10 p-6 sm:p-10 lg:p-12 text-white shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 sm:gap-8">
             <div className="space-y-4 text-center lg:text-right w-full">
@@ -225,7 +232,7 @@ export default function StudentSchedulePage() {
           </div>
         ) : (
           <>
-            {/* 🚀 عرض الموبايل (أفقي - Tabs) */}
+            {/* عرض الموبايل (أفقي - Tabs) */}
             <div className="lg:hidden">
               <div className="flex overflow-x-auto gap-2 sm:gap-3 pb-4 custom-scrollbar snap-x px-1">
                 {DAYS.map((day) => (
@@ -284,7 +291,7 @@ export default function StudentSchedulePage() {
               </div>
             </div>
 
-            {/* 🚀 عرض الكمبيوتر (الشبكة الملكية) */}
+            {/* عرض الكمبيوتر (الشبكة الملكية) */}
             <div className="hidden lg:block glass-panel rounded-[2.5rem] sm:rounded-[3rem] border border-white/10 overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
               <div className="overflow-x-auto custom-scrollbar p-6 sm:p-8">
                 <table className="min-w-full divide-y divide-white/5 border-collapse table-fixed">
@@ -381,7 +388,6 @@ export default function StudentSchedulePage() {
           </>
         )}
 
-        {/* تلميح سفلي */}
         <div className="glass-panel border-amber-500/30 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 mt-4 sm:mt-6 shadow-[0_0_20px_rgba(245,158,11,0.1)] text-center sm:text-right">
           <div className="p-2.5 sm:p-3 bg-amber-500/10 rounded-xl sm:rounded-2xl shrink-0 border border-amber-500/20 shadow-inner">
             <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400 drop-shadow-md" />
