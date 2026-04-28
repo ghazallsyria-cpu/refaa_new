@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   BarChart2, Calendar, Clock, Download, FileSpreadsheet, 
   Filter, ShieldAlert, TrendingUp, Users, CheckCircle2, 
@@ -23,7 +23,7 @@ export default function AttendanceReportsPage() {
   
   const [staffPermissions, setStaffPermissions] = useState<any>({});
   
-  // 🚀 جلب صلاحيات الكادر (Staff) إذا كان المستخدم مسجلاً كموظف
+  // 🚀 جلب صلاحيات الكادر (Staff)
   useEffect(() => {
     async function checkStaffPerms() {
       if (userRole === 'staff' && user?.id) {
@@ -34,7 +34,6 @@ export default function AttendanceReportsPage() {
     if (!isChecking) checkStaffPerms();
   }, [userRole, user?.id, isChecking]);
 
-  // 🛡️ تحديد من يحق له الدخول للإحصائيات الكاملة (المدير + المشرف العام)
   const isSuperAdmin = authRole === 'admin' || authRole === 'management';
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
   const hasFullAccess = isSuperAdmin || isGlobalWatcher;
@@ -54,8 +53,13 @@ export default function AttendanceReportsPage() {
   const [customStartDate, setCustomStartDate] = useState<string>(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [customEndDate, setCustomEndDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
+  // 🚀 حراس الاستعلام لمنع الحلقات اللانهائية
+  const fetchDailyRef = useRef(false);
+  const fetchAnalyticsRef = useRef(false);
+
   const fetchDailySnapshot = useCallback(async () => {
-    if (!user || !hasFullAccess) return;
+    if (!hasFullAccess || fetchDailyRef.current) return;
+    fetchDailyRef.current = true;
     setLoading(true); setDbError(null);
     try {
       const { data, error } = await supabase
@@ -75,12 +79,14 @@ export default function AttendanceReportsPage() {
       setDbError(error.message);
     } finally {
       setLoading(false);
+      fetchDailyRef.current = false;
     }
-  }, [user, hasFullAccess, snapshotDate]);
+  }, [hasFullAccess, snapshotDate]); // تمت إزالة user.id لتقليل التحديثات
 
   const fetchAnalyticsData = useCallback(async () => {
-    if (!user || (!hasFullAccess && authRole !== 'teacher')) return;
+    if ((!hasFullAccess && authRole !== 'teacher') || fetchAnalyticsRef.current || !user?.id) return;
 
+    fetchAnalyticsRef.current = true;
     setLoading(true); setDbError(null);
     try {
       let currentTeacherId = null;
@@ -105,7 +111,7 @@ export default function AttendanceReportsPage() {
       setSections(validSections);
 
       if (validSections.length === 0 && authRole === 'teacher') {
-        setRecords([]); setLoading(false); return;
+        setRecords([]); setLoading(false); fetchAnalyticsRef.current = false; return;
       }
 
       let query = supabase
@@ -146,8 +152,11 @@ export default function AttendanceReportsPage() {
       setDbError(error.message || JSON.stringify(error));
     } finally {
       setLoading(false);
+      fetchAnalyticsRef.current = false;
     }
-  }, [user, authRole, hasFullAccess, fetchTeacherDashboardData, selectedSection, dateRange, customStartDate, customEndDate]);
+  // 🚀 السطر الحاسم: تمت إزالة fetchTeacherDashboardData من المصفوفة لتجنب الحلقة المفرغة!
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, authRole, hasFullAccess, selectedSection, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (isChecking || (!isSuperAdmin && Object.keys(staffPermissions).length === 0 && userRole === 'staff')) return;
@@ -406,8 +415,8 @@ export default function AttendanceReportsPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="min-h-screen relative bg-[#090b14] text-slate-200 pb-32 overflow-x-hidden font-cairo" dir="rtl">
       
-      <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
-      <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-emerald-500/15 rounded-full blur-[140px] pointer-events-none z-0" />
+      <div className="fixed top-1/4 right-[-10%] w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
+      <div className="fixed bottom-0 left-[-10%] w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
 
       <div className="max-w-7xl mx-auto pt-8 px-4 sm:px-6 lg:px-8 relative z-10 space-y-8">
         
