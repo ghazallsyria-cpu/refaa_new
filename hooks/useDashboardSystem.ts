@@ -25,7 +25,7 @@ export const clearDashboardCache = () => {
 };
 
 export function useDashboardSystem() {
-  const { user } = useAuth();
+  const { user } = useAuth() as any;
 
   const fetchAdminDashboardStats = useCallback(async (forceRefresh = false) => {
     return withCache('admin_stats', async () => {
@@ -39,7 +39,7 @@ export function useDashboardSystem() {
         ]);
 
         const totalAttendanceCount = attendanceRes.data?.length || 0;
-        const presentAttendanceCount = attendanceRes.data?.filter(a => a.status === 'present').length || 0;
+        const presentAttendanceCount = (attendanceRes.data || []).filter(a => a.status === 'present').length || 0;
         
         return {
           studentsCount: studentsCount || 0, teachersCount: teachersCount || 0, sectionsCount: sectionsCount || 0,
@@ -81,13 +81,14 @@ export function useDashboardSystem() {
         if (classId) { query = query.eq('sections.class_id', classId); }
         const { data, error } = await query;
         if (error) throw error;
-        return { scientific: data.filter(s => s.next_year_track === 'scientific').length, literary: data.filter(s => s.next_year_track === 'literary').length, total: data.length };
+        const validData = data || [];
+        return { scientific: validData.filter(s => s.next_year_track === 'scientific').length, literary: validData.filter(s => s.next_year_track === 'literary').length, total: validData.length };
       } catch (error) { throw error; }
     }, forceRefresh);
   }, []);
 
   const fetchStudentDashboardData = useCallback(async (forceRefresh = false) => {
-    if (!user) return null;
+    if (!user?.id) return null;
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
         const { data: student } = await supabase.from('students').select('*, users!students_id_fkey(full_name, avatar_url), sections(id, name, classes(name))').eq('id', user.id).maybeSingle();
@@ -99,8 +100,8 @@ export function useDashboardSystem() {
           sectionId ? supabase.from('exam_sections').select('exam_id').eq('section_id', sectionId).limit(5000) : Promise.resolve({ data: [] })
         ]);
 
-        const assignmentIds = assignmentSections?.map(a => a.assignment_id) || [];
-        const examIds = examSections?.map(e => e.exam_id) || [];
+        const assignmentIds = (assignmentSections || []).map(a => a.assignment_id);
+        const examIds = (examSections || []).map(e => e.exam_id);
 
         const [ { data: assignments }, { data: exams }, { data: attendance }, { data: grades }, { data: todaysSchedule }, { data: periods } ] = await Promise.all([
           assignmentIds.length > 0 ? supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
@@ -112,15 +113,15 @@ export function useDashboardSystem() {
         ]);
 
         const totalDays = attendance?.length || 0;
-        const presentDays = attendance?.filter(a => a.status === 'present').length || 0;
+        const presentDays = (attendance || []).filter(a => a.status === 'present').length || 0;
         
         return { student, assignments: assignments || [], exams: exams || [], attendanceRate: totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100, grades: grades || [], todaysSchedule: todaysSchedule || [], periods: periods || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
-  }, [user]);
+  }, [user?.id]);
 
   const updateStudentTrack = useCallback(async (track: 'scientific' | 'literary') => {
-    if (!user) return null;
+    if (!user?.id) return null;
     try {
       const { data, error } = await supabase.from('students').update({ next_year_track: track, track_selection_date: new Date().toISOString() }).eq('id', user.id).select().maybeSingle();
       if (error) throw error;
@@ -128,10 +129,10 @@ export function useDashboardSystem() {
       globalCache.delete(`track_stats_all`);
       return data;
     } catch (error) { throw error; }
-  }, [user]);
+  }, [user?.id]);
 
   const fetchStudentSchedule = useCallback(async (forceRefresh = false) => {
-    if (!user) return null;
+    if (!user?.id) return null;
     return withCache(`student_schedule_${user.id}`, async () => {
       try {
         const { data: student } = await supabase.from('students').select('section_id, sections(name, classes(name))').eq('id', user.id).maybeSingle();
@@ -143,15 +144,16 @@ export function useDashboardSystem() {
         return { student, schedule: schedule || [], periods: periods || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
-  }, [user]);
+  }, [user?.id]);
 
-  // 🚀 دوال ولي الأمر المطورة
   const fetchParentDashboardData = useCallback(async (forceRefresh = false) => {
-    if (!user) return null;
+    if (!user?.id) return null;
     return withCache(`parent_dashboard_main_${user.id}`, async () => {
       try {
-        const { data: parentProfile } = await supabase.from('parents').select('id').eq('id', user.id).single();
-        if (!parentProfile) return null;
+        // 🚀 إصلاح الفخ الخطير: maybeSingle()
+        const { data: parentProfile } = await supabase.from('parents').select('id').eq('user_id', user.id).maybeSingle();
+        if (!parentProfile) return { children: [], notifications: [] };
+        
         const [ { data: children }, { data: notifications } ] = await Promise.all([
           supabase.from('students').select('*, users!students_id_fkey(full_name, avatar_url), sections(name, classes(name))').eq('parent_id', parentProfile.id).limit(100),
           supabase.from('notifications').select('*').eq('type', 'announcement').order('created_at', { ascending: false }).limit(5)
@@ -159,7 +161,7 @@ export function useDashboardSystem() {
         return { children: children || [], notifications: notifications || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
-  }, [user]);
+  }, [user?.id]);
 
   const fetchParentChildDetails = useCallback(async (childId: string, sectionId: string | null) => {
     try {
@@ -196,10 +198,11 @@ export function useDashboardSystem() {
   }, []);
 
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
-    if (!user) return null;
+    if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        const { data: teacher, error: teacherErr } = await supabase.from('teachers').select('*, users!teachers_id_fkey(*)').eq('id', user.id).maybeSingle();
+        // 🚀 إصلاح الفخ الخطير: maybeSingle()
+        const { data: teacher, error: teacherErr } = await supabase.from('teachers').select('*, users!teachers_id_fkey(*)').eq('user_id', user.id).maybeSingle();
 
         if (teacherErr || !teacher) {
             return { teacher: { id: user.id, users: { full_name: 'أستاذ' } }, sections: [], recentExams: [], recentAssignments: [], schedule: [], periods: [], messages: [], assignmentStats: [], stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 100, absenceRate: 0 } };
@@ -230,7 +233,7 @@ export function useDashboardSystem() {
         ]);
 
         const totalAttendance = attendanceRecords?.length || 0;
-        const presentCount = attendanceRecords?.filter(a => a.status === 'present').length || 0;
+        const presentCount = (attendanceRecords || []).filter(a => a.status === 'present').length || 0;
         const avgAttendance = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 100;
         const absenceRate = totalAttendance > 0 ? (100 - avgAttendance) : 0;
 
@@ -270,14 +273,15 @@ export function useDashboardSystem() {
         };
       } catch (error) { console.error('Final Dashboard Error:', error); return null; }
     }, forceRefresh); 
-  }, [user]);
+  }, [user?.id]);
 
   const fetchTeacherSchedule = useCallback(async (forceRefresh = false) => {
-    if (!user) return null;
+    if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
       try {
-        const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
-        if (!teacherProfile) return null;
+        const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (!teacherProfile) return { schedule: [], periods: [] };
+        
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
           supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))').eq('teacher_id', teacherProfile.id).order('day_of_week').order('period').limit(5000),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
@@ -285,7 +289,7 @@ export function useDashboardSystem() {
         return { schedule: schedule || [], periods: periods || [] };
       } catch (error) { throw error; }
     }, forceRefresh);
-  }, [user]);
+  }, [user?.id]);
 
   return { fetchAdminDashboardStats, fetchAdminRecentActivities, fetchStudentDashboardData, fetchStudentSchedule, fetchParentDashboardData, fetchParentChildDetails, fetchTeacherDashboardData, fetchTeacherSchedule, updateStudentTrack, fetchTrackSelectionStats, clearDashboardCache };
 }
