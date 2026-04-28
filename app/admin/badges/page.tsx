@@ -374,7 +374,10 @@ export default function AdminBadgesPage() {
                 <Trash2 className="h-8 w-8 sm:h-10 sm:w-10 drop-shadow-md" />
               </div>
               <Dialog.Title className="text-xl sm:text-2xl font-black text-white mb-2 sm:mb-3 drop-shadow-sm">حذف الوسام نهائياً؟</Dialog.Title>
-              <p className="text-sm sm:text-base text-slate-400 mb-6 sm:mb-8 font-bold leading-relaxed">أنت على وشك مسح وسام "<span className="text-white">{badgeToDelete?.name}</span>". سيتم حذفه من النظام ولن يتمكن المعلمون من منحه مجدداً.</p>
+<p className="text-sm sm:text-base text-slate-400 mb-6 sm:mb-8 font-bold leading-relaxed">
+  أنت على وشك مسح وسام <span className="text-white">"{badgeToDelete?.name}"</span>.
+  سيتم حذفه من النظام ولن يتمكن المعلمون من منحه مجدداً.
+</p>
               <div className="flex flex-col gap-3">
                 <button onClick={confirmDelete} disabled={isSubmitting} className="w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 border border-rose-500 text-white font-black hover:from-rose-500 hover:to-red-500 shadow-[0_0_20px_rgba(225,29,72,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50">
                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'نعم، احذف الوسام'}
