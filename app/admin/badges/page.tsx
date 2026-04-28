@@ -375,7 +375,8 @@ export default function AdminBadgesPage() {
               </div>
               <Dialog.Title className="text-xl sm:text-2xl font-black text-white mb-2 sm:mb-3 drop-shadow-sm">حذف الوسام نهائياً؟</Dialog.Title>
 <p className="text-sm sm:text-base text-slate-400 mb-6 sm:mb-8 font-bold leading-relaxed">
-  أنت على وشك مسح وسام <span className="text-white">"{badgeToDelete?.name}"</span>.
+  أنت على وشك مسح وسام
+  <span className="text-white"> {badgeToDelete?.name} </span>
   سيتم حذفه من النظام ولن يتمكن المعلمون من منحه مجدداً.
 </p>
               <div className="flex flex-col gap-3">
