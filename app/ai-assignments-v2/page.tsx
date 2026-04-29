@@ -291,17 +291,76 @@ export default function AssignmentBuilderV2() {
 
   const toggleSection = (id: string) => setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
+// 🚀 دالة ذكية لاستخراج الـ Public ID الخاص بـ Cloudinary من نصوص الـ HTML
+  const extractCloudinaryPublicIds = (html: string) => {
+    if (!html) return [];
+    // هذا التعبير يلتقط المعرف (public_id) من روابط Cloudinary سواء كانت في مجلدات أو لا
+    const regex = /https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(?:v\d+\/)?(.*?)\.[a-zA-Z0-9]+/g;
+    const ids = [];
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      ids.push(match[1]); 
+    }
+    return ids;
+  };
+
+  // 🚀 دالة الحذف الجذري المطورة (تمسح الصور من كلاوديناري + تمسح الداتابيز)
   const handleDeleteAssignment = async (id: string) => {
-    if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟')) return;
+    if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟ سيتم مسح السجلات وحذف الصور المرفقة من السيرفر السحابي.')) return;
+    
+    setIsManageLoading(true); // تشغيل علامة التحميل
     try {
+      // 1. جلب الأسئلة لاستخراج الصور منها قبل مسحها
+      const { data: questionsData } = await supabase
+        .from('assignment_questions_v2')
+        .select('content_html, model_answer_html')
+        .eq('assignment_id', id);
+
+      // 2. تجميع كل الـ Public IDs للصور المرفقة
+      const publicIdsToDelete = new Set<string>();
+      if (questionsData) {
+        questionsData.forEach(q => {
+          extractCloudinaryPublicIds(q.content_html).forEach(pubId => publicIdsToDelete.add(pubId));
+          extractCloudinaryPublicIds(q.model_answer_html).forEach(pubId => publicIdsToDelete.add(pubId));
+        });
+      }
+
+      // 3. مسح الصور من Cloudinary عبر المسار الخلفي (API)
+      if (publicIdsToDelete.size > 0) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        for (const pubId of Array.from(publicIdsToDelete)) {
+          try {
+            await fetch('/api/cloudinary/delete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // تمرير التوكن للحماية
+              },
+              body: JSON.stringify({ publicId: pubId, resourceType: 'image' })
+            });
+            console.log(`Deleted image from Cloudinary: ${pubId}`);
+          } catch (imgErr) {
+            console.error(`Failed to delete image ${pubId}:`, imgErr);
+            // نستمر في الحذف حتى لو فشلت صورة واحدة
+          }
+        }
+      }
+
+      // 4. الحذف من قاعدة بيانات Supabase
       await supabase.from('assignment_questions_v2').delete().eq('assignment_id', id);
       await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
       await supabase.from('assignments_v2').delete().eq('id', id);
+      
       fetchManageList();
-      setGlobalMessage({ text: 'تم حذف الدرس وتنظيف النظام بنجاح!', type: 'success' });
-      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 3000);
-    } catch (err) { alert('حدث خطأ أثناء الحذف.'); }
+      setGlobalMessage({ text: 'تم حذف الدرس وتنظيف الصور السحابية بنجاح!', type: 'success' });
+      setTimeout(() => setGlobalMessage({ text: '', type: '' }), 4000);
+    } catch (err) { 
+      alert('حدث خطأ أثناء الحذف.'); 
+      setIsManageLoading(false);
+    }
   };
 
   const handleEditAssignment = async (assign: any) => {
