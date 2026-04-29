@@ -69,14 +69,12 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 تم إصلاح مشكلة setState synchronous
 const TypewriterRevealFast = ({ htmlContent }: { htmlContent: string }) => {
   const [revealed, setRevealed] = useState(false);
   
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (htmlContent) {
-      // نؤخر تفعيل الـ Reveal قليلاً لنتجنب الـ Render المتتالي
       timer = setTimeout(() => { setRevealed(true); }, 150);
     }
     return () => {
@@ -243,6 +241,21 @@ export default function AssignmentBuilderV2() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewQ, setPreviewQ] = useState<Question | null>(null);
   const [showPreviewHint, setShowPreviewHint] = useState(false);
+
+  // 🚀 دالة الإفراغ والتنظيف للبدء بدرس جديد
+  const handleResetBuilder = (force = false) => {
+    if (!force && (questions.length > 0 || assignmentTitle !== 'بنك تدريب جديد')) {
+      if (!confirm('هل أنت متأكد من مسح جميع الأسئلة والبيانات للبدء بدرس جديد؟')) return;
+    }
+    setEditingAssignmentId(null);
+    setQuestions([]);
+    setAssignmentTitle('بنك تدريب جديد');
+    setSelectedTeacher('');
+    setSelectedSubject('');
+    setSelectedSections([]);
+    setIsPracticeMode(true);
+    setAssignmentStatus('draft');
+  };
 
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
@@ -621,9 +634,13 @@ export default function AssignmentBuilderV2() {
       if (qErr) throw qErr;
 
       setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم حفظ الدرس الجديد بنجاح!', type: 'success' });
-      setEditingAssignmentId(null); 
       
-      setTimeout(() => { setActiveTab('manage'); setGlobalMessage({text:'', type:''}) }, 2000);
+      setTimeout(() => { 
+        setActiveTab('manage'); 
+        setGlobalMessage({text:'', type:''});
+        // 🚀 مسح الحقول تماماً بعد الحفظ لتكون جاهزة للدرس القادم
+        handleResetBuilder(true); 
+      }, 2000);
     } catch (err: any) { alert('حدث خطأ أثناء الحفظ.'); } finally { setIsSavingDB(false); }
   };
 
@@ -768,12 +785,19 @@ export default function AssignmentBuilderV2() {
         {activeTab === 'builder' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
-              <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner mb-4">
-                <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                  <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
-                </button>
-                <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
-                  <FileText className="w-4 h-4" /> واجب رسمي (بدرجات)
+              
+              {/* 🚀 إضافة زر مسح الحقول والتفريغ إلى جوار أزرار النمط */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
+                <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner w-full sm:w-auto flex-1 max-w-md">
+                  <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+                    <Gamepad2 className="w-4 h-4" /> بنك تدريب وتحدي
+                  </button>
+                  <button onClick={() => setIsPracticeMode(false)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${!isPracticeMode ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
+                    <FileText className="w-4 h-4" /> واجب رسمي
+                  </button>
+                </div>
+                <button onClick={() => handleResetBuilder(false)} className="w-full sm:w-auto px-5 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-sm flex items-center justify-center gap-2 hover:bg-rose-100 transition-colors border border-rose-200 shadow-sm shrink-0">
+                  <RefreshCcw className="w-4 h-4" /> إفراغ المحتوى لدرس جديد
                 </button>
               </div>
 
