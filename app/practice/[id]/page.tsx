@@ -3,18 +3,19 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
-  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, CheckSquare, Target, Quote
+  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, CheckSquare, Target, Quote, Flame, Clock
 } from 'lucide-react';
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
+import confetti from 'canvas-confetti'; // 🚀 استيراد مكتبة القصاصات الاحتفالية الحقيقية
 
 import { supabase } from '@/lib/supabase';
 
@@ -38,7 +39,6 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 المصفاة القوية للخيارات (تضمن تحويل نصوص Supabase إلى Boolean)
 const safeParseOptions = (optionsData: any) => {
   if (!optionsData) return [];
   let parsed = [];
@@ -46,38 +46,10 @@ const safeParseOptions = (optionsData: any) => {
   else if (typeof optionsData === 'string') {
     try { parsed = JSON.parse(optionsData); } catch (e) { return []; }
   }
-  
   return parsed.map((opt: any) => ({
     ...opt,
-    // التأكد 100% أن القيمة صحيحة مهما كانت صيغتها
     is_correct: opt.is_correct === true || opt.is_correct === 'true' || opt.isCorrect === true || opt.isCorrect === 'true'
   }));
-};
-
-const CelebrationConfetti = () => {
-  const [pieces, setPieces] = useState<any[]>([]);
-  useEffect(() => {
-    const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
-    const generatedPieces = Array.from({ length: 40 }).map((_, i) => ({
-      id: i, color: colors[Math.floor(Math.random() * colors.length)],
-      scale: Math.random() * 1.5 + 0.5, x: (Math.random() - 0.5) * 500, y: (Math.random() - 0.5) * 500, rotate: Math.random() * 360, isCircle: Math.random() > 0.5
-    }));
-    
-    const timer = setTimeout(() => {
-      setPieces(generatedPieces);
-    }, 0);
-    
-    return () => clearTimeout(timer);
-  }, []);
-  
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-50 flex items-center justify-center">
-      {pieces.map((p) => (
-        <motion.div key={p.id} initial={{ opacity: 1, scale: 0, x: 0, y: 0 }} animate={{ opacity: 0, scale: p.scale, x: p.x, y: p.y, rotate: p.rotate }} transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ position: 'absolute', width: '10px', height: '10px', backgroundColor: p.color, borderRadius: p.isCircle ? '50%' : '2px' }} />
-      ))}
-    </div>
-  );
 };
 
 export default function PracticeArena() {
@@ -87,7 +59,8 @@ export default function PracticeArena() {
   const { user } = useAuth() as any; 
 
   const [assignment, setAssignment] = useState<any>(null);
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [allQuestions, setAllQuestions] = useState<any[]>([]); // يحفظ كل الأسئلة الأصلية
+  const [activeQuestions, setActiveQuestions] = useState<any[]>([]); // الأسئلة التي نتدرب عليها حالياً
   const [loading, setLoading] = useState(true);
   
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -98,8 +71,17 @@ export default function PracticeArena() {
   const [shake, setShake] = useState(false);
   const [showHint, setShowHint] = useState(false);
   
-  const [score, setScore] = useState({ correct: 0, wrong: 0 });
+  // 🚀 ميزات جديدة (Streak & Time)
+  const [score, setScore] = useState({ correct: 0, wrong: 0, totalPoints: 0 });
+  const [streak, setStreak] = useState(0); 
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [timeSpentSeconds, setTimeSpentSeconds] = useState(0);
+  
+  // حفظ الـ ID للأسئلة التي أخطأ فيها لإعادتها لاحقاً
+  const [failedQuestionIds, setFailedQuestionIds] = useState<Set<string>>(new Set());
+  
   const [isFinished, setIsFinished] = useState(false);
+  const [mode, setMode] = useState<'normal' | 'retake_errors'>('normal');
 
   useEffect(() => {
     if (!id || !user) return;
@@ -112,23 +94,46 @@ export default function PracticeArena() {
 
         setAssignment(assignData);
         
-        const formattedQs = (qData || []).map((q: any) => ({
-          ...q,
-          type: q.question_type 
-        }));
-        setQuestions(formattedQs);
+        const formattedQs = (qData || []).map((q: any) => ({ ...q, type: q.question_type }));
+        setAllQuestions(formattedQs);
+        setActiveQuestions(formattedQs);
 
-        if (progressData) {
+        // 🚀 محاولة قراءة الحفظ التلقائي المحلي
+        const localSaveKey = `arena_save_${user.id}_${id}`;
+        const localData = localStorage.getItem(localSaveKey);
+
+        if (!progressData?.is_completed && localData) {
+           const parsedLocal = JSON.parse(localData);
+           setCurrentIndex(parsedLocal.currentIndex || 0);
+           setScore(parsedLocal.score || { correct: 0, wrong: 0, totalPoints: 0 });
+           setStreak(parsedLocal.streak || 0);
+           setFailedQuestionIds(new Set(parsedLocal.failedQuestionIds || []));
+        } else if (progressData) {
           if (progressData.is_completed) {
-            setIsFinished(true); setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score });
+            setIsFinished(true); 
+            setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score, totalPoints: progressData.correct_score * 10 }); // نقاط تقريبية
           } else {
-            setCurrentIndex(progressData.current_index || 0); setScore({ correct: progressData.correct_score || 0, wrong: progressData.wrong_score || 0 });
+            setCurrentIndex(progressData.current_index || 0); 
+            setScore({ correct: progressData.correct_score || 0, wrong: progressData.wrong_score || 0, totalPoints: (progressData.correct_score || 0) * 10 });
           }
         }
+        
+        setStartTime(Date.now()); // بدء المؤقت
       } catch (error) { console.error(error); } finally { setLoading(false); }
     };
     fetchArena();
   }, [id, user]);
+
+  // 🚀 الحفظ التلقائي المحلي (Auto-save) في المتصفح كلما تغير شيء مهم
+  useEffect(() => {
+    if (loading || isFinished || !user) return;
+    const localSaveKey = `arena_save_${user.id}_${id}`;
+    const saveData = {
+        currentIndex, score, streak, failedQuestionIds: Array.from(failedQuestionIds)
+    };
+    localStorage.setItem(localSaveKey, JSON.stringify(saveData));
+  }, [currentIndex, score, streak, failedQuestionIds, loading, isFinished]);
+
 
   const saveProgressToDB = async (newIndex: number, newScore: { correct: number, wrong: number }, finished: boolean) => {
     if (!user) return;
@@ -137,23 +142,65 @@ export default function PracticeArena() {
         student_id: user.id, assignment_id: id, current_index: newIndex, correct_score: newScore.correct,
         wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
+      
+      // مسح الحفظ التلقائي عند الانتهاء
+      if (finished) localStorage.removeItem(`arena_save_${user.id}_${id}`);
     } catch (err) {}
   };
 
-  const currentQ = questions[currentIndex];
-  const currentContextHeader = questions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
+  const triggerConfetti = () => {
+    const duration = 3000;
+    const end = Date.now() + duration;
+
+    const frame = () => {
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#10b981', '#3b82f6', '#f59e0b'] });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#10b981', '#3b82f6', '#f59e0b'] });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  };
+
+  const handleFinish = (finalScore: any) => {
+    setIsFinished(true);
+    if (startTime) setTimeSpentSeconds(Math.floor((Date.now() - startTime) / 1000));
+    
+    // إطلاق احتفال إذا كانت الأخطاء قليلة جداً
+    if (finalScore.wrong === 0 || (finalScore.correct / (finalScore.correct + finalScore.wrong) > 0.8)) {
+        triggerConfetti();
+    }
+    
+    if (mode === 'normal') saveProgressToDB(currentIndex, finalScore, true);
+  };
+
+  const currentQ = activeQuestions[currentIndex];
+  const currentContextHeader = activeQuestions.slice(0, currentIndex + 1).reverse().find(q => q.type === 'section_header');
 
   const handleOptionClick = (opt: any) => {
     if (isSuccess) return; 
     setSelectedOptionId(opt.id);
     
-    // 🚀 التحقق أصبح مثالياً بعد مصفاة safeParseOptions
     if (opt.is_correct) {
       setIsSuccess(true);
-      setScore(s => ({ ...s, correct: s.correct + (attempts === 0 ? 1 : 0) }));
       setShowHint(true); 
+
+      // 🚀 نظام التتابع (Streak)
+      const newStreak = streak + 1;
+      setStreak(newStreak);
+      
+      // مضاعفة النقاط إذا التتابع مستمر
+      const multiplier = newStreak >= 3 ? 1.5 : 1;
+      const pointsEarned = (currentQ.points || 1) * multiplier * (attempts === 0 ? 1 : 0.5); // نصف نقطة إذا أخطأ سابقاً
+
+      setScore(s => ({ 
+          ...s, 
+          correct: s.correct + (attempts === 0 ? 1 : 0),
+          totalPoints: s.totalPoints + pointsEarned
+      }));
+      
     } else {
       setAttempts(a => a + 1);
+      setStreak(0); // كسر التتابع
+      setFailedQuestionIds(prev => new Set(prev).add(currentQ.id)); // تسجيل خطأ الطالب
       setShake(true);
       setTimeout(() => setShake(false), 500);
       if (attempts === 0) setScore(s => ({ ...s, wrong: s.wrong + 1 }));
@@ -161,32 +208,83 @@ export default function PracticeArena() {
   };
 
   const nextQuestion = () => {
-    if (currentIndex < questions.length - 1) {
+    if (currentIndex < activeQuestions.length - 1) {
       let nextIdx = currentIndex + 1;
-      if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) nextIdx++;
+      if (activeQuestions[nextIdx].type === 'section_header' && nextIdx < activeQuestions.length - 1) nextIdx++;
       setCurrentIndex(nextIdx); setSelectedOptionId(null); setIsSuccess(false); setAttempts(0); setShowHint(false);
-      saveProgressToDB(nextIdx, score, false);
+      if (mode === 'normal') saveProgressToDB(nextIdx, score, false);
     } else {
-      setIsFinished(true); saveProgressToDB(currentIndex, score, true); 
+      handleFinish(score);
     }
   };
 
   const handleSelfEvaluation = (understood: boolean) => {
-    const newScore = { correct: score.correct + (understood ? 1 : 0), wrong: score.wrong + (!understood ? 1 : 0) };
+    const newScore = { 
+        correct: score.correct + (understood ? 1 : 0), 
+        wrong: score.wrong + (!understood ? 1 : 0),
+        totalPoints: score.totalPoints + (understood ? (currentQ.points || 1) : 0)
+    };
+    
+    if (understood) setStreak(s => s + 1);
+    else { setStreak(0); setFailedQuestionIds(prev => new Set(prev).add(currentQ.id)); }
+
     setScore(newScore);
-    if (currentIndex < questions.length - 1) {
+    if (currentIndex < activeQuestions.length - 1) {
       let nextIdx = currentIndex + 1;
-      if (questions[nextIdx].type === 'section_header' && nextIdx < questions.length - 1) nextIdx++;
-      setCurrentIndex(nextIdx); setSelectedOptionId(null); setShowHint(false); saveProgressToDB(nextIdx, newScore, false);
+      if (activeQuestions[nextIdx].type === 'section_header' && nextIdx < activeQuestions.length - 1) nextIdx++;
+      setCurrentIndex(nextIdx); setSelectedOptionId(null); setShowHint(false); 
+      if (mode === 'normal') saveProgressToDB(nextIdx, newScore, false);
     } else {
-      setIsFinished(true); saveProgressToDB(currentIndex, newScore, true);
+      handleFinish(newScore);
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
-  if (!assignment || questions.length === 0) return <div className="p-10 text-center font-cairo">لا يوجد تدريب متاح هنا.</div>;
+  // 🚀 دالة إعادة التحدي بالكامل
+  const handleRetakeFull = async () => {
+    if (!user) return;
+    try {
+      await supabase.from('student_progress_v2').upsert({
+        student_id: user.id, assignment_id: id, current_index: 0, correct_score: 0,
+        wrong_score: 0, is_completed: false, updated_at: new Date().toISOString()
+      }, { onConflict: 'student_id, assignment_id' });
 
-  const progress = ((currentIndex + 1) / questions.length) * 100;
+      setMode('normal');
+      setActiveQuestions(allQuestions);
+      setCurrentIndex(0);
+      setScore({ correct: 0, wrong: 0, totalPoints: 0 });
+      setIsFinished(false);
+      setSelectedOptionId(null);
+      setIsSuccess(false);
+      setAttempts(0);
+      setShowHint(false);
+      setStreak(0);
+      setFailedQuestionIds(new Set());
+      setStartTime(Date.now());
+    } catch (err) {}
+  };
+
+  // 🚀 دالة إعادة أسئلة الأخطاء فقط
+  const handleRetakeErrorsOnly = () => {
+    const errorQs = allQuestions.filter(q => failedQuestionIds.has(q.id) || q.type === 'section_header');
+    
+    setMode('retake_errors');
+    setActiveQuestions(errorQs);
+    setCurrentIndex(0);
+    // تصفير مؤقت للعبة الفرعية
+    setScore({ correct: 0, wrong: 0, totalPoints: 0 });
+    setIsFinished(false);
+    setSelectedOptionId(null);
+    setIsSuccess(false);
+    setAttempts(0);
+    setShowHint(false);
+    setStreak(0);
+    setStartTime(Date.now());
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
+  if (!assignment || allQuestions.length === 0) return <div className="p-10 text-center font-cairo">لا يوجد تدريب متاح هنا.</div>;
+
+  const progress = ((currentIndex + 1) / activeQuestions.length) * 100;
   
   const safeOptions = currentQ ? safeParseOptions(currentQ.options) : [];
   const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
@@ -196,6 +294,12 @@ export default function PracticeArena() {
   
   const randomSuccessMsg = successMessages[currentIndex % successMessages.length];
   const randomEncourageMsg = encourageMessages[currentIndex % encourageMessages.length];
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m} دقيقة و ${s} ثانية`;
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden" dir="rtl">
@@ -214,13 +318,29 @@ export default function PracticeArena() {
       <div className="bg-white shadow-sm z-20 shrink-0 border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <button onClick={() => router.back()} className="p-2 bg-slate-50 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><ArrowRight className="w-5 h-5" /></button>
-          <div className="flex-1 mx-6">
-            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-              <motion.div initial={{ width: 0 }} animate={{ width: `${isFinished ? 100 : progress}%` }} className="h-full bg-gradient-to-l from-indigo-500 to-indigo-600 rounded-full" />
+          
+          <div className="flex-1 mx-4 sm:mx-6 flex items-center gap-4">
+            <div className="flex-1">
+                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                <motion.div initial={{ width: 0 }} animate={{ width: `${isFinished ? 100 : progress}%` }} className="h-full bg-gradient-to-l from-indigo-500 to-indigo-600 rounded-full" />
+                </div>
+                <div className="text-[10px] font-black text-indigo-400 mt-1.5 text-center tracking-widest uppercase">
+                  {mode === 'retake_errors' ? 'تحدي تصحيح الأخطاء' : `التحدي ${currentIndex + 1} / ${activeQuestions.length}`}
+                </div>
             </div>
-            <div className="text-[10px] font-black text-indigo-400 mt-1.5 text-center tracking-widest uppercase">التحدي {currentIndex + 1} / {questions.length}</div>
+            
+            {/* 🚀 مؤشر التتابع الناري */}
+            <AnimatePresence>
+                {streak >= 2 && (
+                    <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0 }} className="flex items-center gap-1 bg-gradient-to-r from-orange-100 to-amber-100 px-3 py-1 rounded-full border border-orange-200 shadow-sm shrink-0">
+                        <Flame className="w-4 h-4 text-orange-500 fill-orange-500 animate-pulse" />
+                        <span className="text-xs font-black text-orange-700">{streak}x</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
           </div>
-          <div className="flex items-center gap-3 text-sm font-black bg-slate-50 px-4 py-1.5 rounded-full border border-slate-200">
+
+          <div className="flex items-center gap-3 text-sm font-black bg-slate-50 px-4 py-1.5 rounded-full border border-slate-200 shrink-0">
             <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4"/> {score.correct}</span>
             <span className="text-rose-500 flex items-center gap-1"><XCircle className="w-4 h-4"/> {score.wrong}</span>
           </div>
@@ -258,8 +378,6 @@ export default function PracticeArena() {
                 className={`bg-white rounded-[2rem] shadow-xl border-2 overflow-hidden flex flex-col max-h-full ${isSuccess ? 'border-emerald-400 shadow-emerald-100' : 'border-slate-200'}`}
               >
                 
-                {isSuccess && <CelebrationConfetti />}
-
                 <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isSuccess ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                   <div className="flex items-center gap-2">
                     <Target className={`w-5 h-5 ${isSuccess ? 'text-emerald-500' : 'text-indigo-500'}`} />
@@ -367,9 +485,9 @@ export default function PracticeArena() {
                         </div>
                       </motion.div>
                     ) : (
-                       <div className="text-center">
-                         <span className="text-xs font-bold text-slate-400">انقر على "اكشف لي الجواب" في الأعلى لتقييم نفسك.</span>
-                       </div>
+                        <div className="text-center">
+                          <span className="text-xs font-bold text-slate-400">انقر على "اكشف لي الجواب" في الأعلى لتقييم نفسك.</span>
+                        </div>
                     )
                   ) : currentQ.type === 'section_header' ? (
                     <button onClick={nextQuestion} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-200">
@@ -384,29 +502,48 @@ export default function PracticeArena() {
 
               </motion.div>
             ) : (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-8 text-center relative overflow-hidden">
-                <CelebrationConfetti />
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-6 sm:p-8 text-center relative overflow-hidden">
                 <div className="w-28 h-28 bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-indigo-100">
                   <Trophy className="w-14 h-14" />
                 </div>
-                <h2 className="text-3xl font-black text-slate-800 mb-2">إنجاز رائع! 🚀</h2>
-                <p className="text-slate-500 font-bold mb-8">لقد أكملت التدريب. كل خطأ ارتكبته هنا هو خطوة نحو التفوق في الاختبار الحقيقي.</p>
                 
-                <div className="flex justify-center gap-8 mb-10 bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                  <div className="text-center">
+                <h2 className="text-3xl font-black text-slate-800 mb-2">
+                    {mode === 'retake_errors' ? 'تم إنهاء المراجعة! 🛡️' : 'إنجاز رائع! 🚀'}
+                </h2>
+                <p className="text-slate-500 font-bold mb-6">
+                    {mode === 'retake_errors' ? 'لقد واجهت نقاط ضعفك بقوة. الاستمرارية هي مفتاح الإتقان.' : 'لقد أكملت التدريب. كل خطأ ارتكبته هنا هو خطوة نحو التفوق.'}
+                </p>
+                
+                <div className="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                  <div className="text-center border-l border-slate-200">
                     <div className="text-4xl font-black text-emerald-500 mb-1">{score.correct}</div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">نقاط القوة</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">نقاط القوة</div>
                   </div>
-                  <div className="w-px bg-slate-200"></div>
                   <div className="text-center">
                     <div className="text-4xl font-black text-rose-500 mb-1">{score.wrong}</div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">تحتاج مراجعة</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">تحتاج مراجعة</div>
+                  </div>
+                  <div className="col-span-2 mt-4 pt-4 border-t border-slate-200 text-center flex items-center justify-center gap-2 text-indigo-600 font-black">
+                      <Clock className="w-4 h-4" /> استغرقت: {formatTime(timeSpentSeconds)}
                   </div>
                 </div>
 
-                <button onClick={() => router.push('/arena')} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">
-                  العودة للساحة الرئيسية <Sparkles className="w-5 h-5" />
-                </button>
+                <div className="flex flex-col gap-3">
+                  {/* 🚀 خيار إعادة الأخطاء فقط يظهر فقط إذا كان هناك أخطاء */}
+                  {failedQuestionIds.size > 0 && mode === 'normal' && (
+                    <button onClick={handleRetakeErrorsOnly} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200">
+                        مراجعة أخطائي فقط 🎯
+                    </button>
+                  )}
+                  
+                  <button onClick={handleRetakeFull} className="w-full bg-slate-100 text-slate-700 border border-slate-200 font-black py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">
+                    إعادة التحدي بالكامل <RefreshCcw className="w-5 h-5" />
+                  </button>
+                  
+                  <button onClick={() => router.push('/arena')} className="w-full mt-2 bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">
+                    العودة للساحة الرئيسية <Sparkles className="w-5 h-5" />
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
