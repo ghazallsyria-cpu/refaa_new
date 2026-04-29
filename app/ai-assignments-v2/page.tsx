@@ -9,7 +9,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -39,6 +39,23 @@ interface Question { id: string; type: string; content_html: string; model_answe
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parsed, 'text/html');
+      const images = doc.querySelectorAll('img');
+      images.forEach((img) => {
+        if (img.src && img.src.startsWith('http')) {
+          img.setAttribute('crossorigin', 'anonymous');
+        }
+      });
+      parsed = doc.body.innerHTML;
+    } catch (e) {
+      console.warn("DOM parsing error for images:", e);
+    }
+  }
+
   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
     try {
       let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -51,7 +68,26 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-// 🚀 محرر الأسئلة المربوط بـ Cloudinary
+const TypewriterRevealFast = ({ htmlContent }: { htmlContent: string }) => {
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    setRevealed(false);
+    const timer = setTimeout(() => { setRevealed(true); }, 100);
+    return () => clearTimeout(timer);
+  }, [htmlContent]);
+  return (
+    <div className="relative">
+      <motion.div
+        initial={{ clipPath: "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
+        animate={{ clipPath: revealed ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)" : "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
+        transition={{ duration: 1.5, ease: "easeOut" }}
+        className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-sm"
+        dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(htmlContent) }}
+      />
+    </div>
+  );
+};
+
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const [isUploading, setIsUploading] = useState(false);
 
@@ -94,7 +130,6 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
                 const data = await res.json();
                 
                 if (data.secure_url) {
-                  // زرع الصورة السحابية داخل المحرر
                   const node = view.state.schema.nodes.image.create({ src: data.secure_url });
                   const transaction = view.state.tr.replaceSelectionWith(node);
                   view.dispatch(transaction);
@@ -146,7 +181,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
           {isUploading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-              <span className="text-sm font-black text-indigo-800">جاري الرفع للسحابة (Cloudinary)...</span>
+              <span className="text-sm font-black text-indigo-800">جاري الرفع للسحابة...</span>
             </motion.div>
           )}
         </AnimatePresence>
@@ -192,7 +227,12 @@ export default function AssignmentBuilderV2() {
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
 
   const [manageAssignments, setManageAssignments] = useState<any[]>([]);
+  const [teacherStats, setTeacherStats] = useState<{name: string, count: number}[]>([]); // 🚀 حالة لإحصائيات الإدارة
   const [isManageLoading, setIsManageLoading] = useState(false);
+
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewQ, setPreviewQ] = useState<Question | null>(null);
+  const [showPreviewHint, setShowPreviewHint] = useState(false);
 
   useEffect(() => {
     if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
@@ -205,34 +245,29 @@ export default function AssignmentBuilderV2() {
     fetchTeachers();
   }, [currentRole]);
 
+  // 🚀 الفلتر الذكي: يجلب مواد المعلم المختار فقط (حتى للمدير)
   useEffect(() => {
     const fetchSubjects = async () => {
-      if (currentRole === 'admin' || currentRole === 'management') {
-        const { data } = await supabase.from('subjects').select('id, name').order('name');
-        setSubjects(data || []);
-      } else {
-        if (!selectedTeacher) { setSubjects([]); setSelectedSubject(''); return; }
+      if (selectedTeacher) {
         const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
         const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
         setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('subjects').select('id, name').order('name');
+        setSubjects(data || []);
+      } else {
+        setSubjects([]);
       }
     };
     fetchSubjects();
   }, [selectedTeacher, currentRole]);
 
+  // 🚀 الفلتر الذكي: يجلب صفوف المعلم المختار فقط
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
       
-      if (currentRole === 'admin' || currentRole === 'management') {
-        const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
-        const formatted = (data || []).map((sec: any) => ({
-          id: sec.id,
-          name: `${sec.classes?.name || ''} - ${sec.name}`
-        }));
-        setSections(formatted);
-      } else {
-        if (!selectedTeacher) return;
+      if (selectedTeacher) {
         const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
         const extracted = (data || []).map((item: any) => {
           if (!item.sections) return null;
@@ -240,6 +275,13 @@ export default function AssignmentBuilderV2() {
           return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
         }).filter(Boolean);
         setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+      } else if (currentRole === 'admin' || currentRole === 'management') {
+        const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
+        const formatted = (data || []).map((sec: any) => ({
+          id: sec.id,
+          name: `${sec.classes?.name || ''} - ${sec.name}`
+        }));
+        setSections(formatted);
       }
     };
     fetchSections();
@@ -253,18 +295,21 @@ export default function AssignmentBuilderV2() {
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      let query = supabase.from('assignments_v2').select('*').order('created_at', { ascending: false }).limit(50);
+      // 🚀 رفعنا الليمت إلى 1000 لضمان دقة الإحصائيات للإدارة
+      let query = supabase.from('assignments_v2').select('*, assignment_questions_v2(id)').order('created_at', { ascending: false }).limit(1000);
       
       if (currentRole === 'teacher') {
         const { data: teacherProfile } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         if (teacherProfile) query = query.eq('teacher_id', teacherProfile.id);
         else query = query.eq('teacher_id', '00000000-0000-0000-0000-000000000000');
       }
+      
       const { data: assignments, error: assignErr } = await query;
       if (assignErr) throw assignErr;
 
       if (!assignments || assignments.length === 0) {
         setManageAssignments([]);
+        setTeacherStats([]);
         setIsManageLoading(false);
         return;
       }
@@ -279,9 +324,20 @@ export default function AssignmentBuilderV2() {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
           teachers: { users: { full_name: teacher?.users?.full_name || 'معلم غير محدد' } },
-          assignment_questions_v2: [] 
+          question_count: assign.assignment_questions_v2?.length || 0 
         };
       });
+
+      // 🚀 حساب إحصائيات المعلمين للمدير
+      if (currentRole === 'admin' || currentRole === 'management') {
+        const statsMap = new Map();
+        mergedData.forEach(assign => {
+          const tName = assign.teachers?.users?.full_name || 'غير محدد';
+          statsMap.set(tName, (statsMap.get(tName) || 0) + 1);
+        });
+        const statsArr = Array.from(statsMap, ([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count);
+        setTeacherStats(statsArr);
+      }
 
       setManageAssignments(mergedData);
     } catch (err: any) { 
@@ -291,32 +347,22 @@ export default function AssignmentBuilderV2() {
 
   const toggleSection = (id: string) => setSelectedSections(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-// 🚀 دالة ذكية لاستخراج الـ Public ID الخاص بـ Cloudinary من نصوص الـ HTML
   const extractCloudinaryPublicIds = (html: string) => {
     if (!html) return [];
-    // هذا التعبير يلتقط المعرف (public_id) من روابط Cloudinary سواء كانت في مجلدات أو لا
     const regex = /https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(?:v\d+\/)?(.*?)\.[a-zA-Z0-9]+/g;
     const ids = [];
     let match;
-    while ((match = regex.exec(html)) !== null) {
-      ids.push(match[1]); 
-    }
+    while ((match = regex.exec(html)) !== null) { ids.push(match[1]); }
     return ids;
   };
 
-  // 🚀 دالة الحذف الجذري المطورة (تمسح الصور من كلاوديناري + تمسح الداتابيز)
   const handleDeleteAssignment = async (id: string) => {
     if(!confirm('هل أنت متأكد من حذف هذا الدرس نهائياً؟ سيتم مسح السجلات وحذف الصور المرفقة من السيرفر السحابي.')) return;
     
-    setIsManageLoading(true); // تشغيل علامة التحميل
+    setIsManageLoading(true);
     try {
-      // 1. جلب الأسئلة لاستخراج الصور منها قبل مسحها
-      const { data: questionsData } = await supabase
-        .from('assignment_questions_v2')
-        .select('content_html, model_answer_html')
-        .eq('assignment_id', id);
+      const { data: questionsData } = await supabase.from('assignment_questions_v2').select('content_html, model_answer_html').eq('assignment_id', id);
 
-      // 2. تجميع كل الـ Public IDs للصور المرفقة
       const publicIdsToDelete = new Set<string>();
       if (questionsData) {
         questionsData.forEach(q => {
@@ -325,30 +371,20 @@ export default function AssignmentBuilderV2() {
         });
       }
 
-      // 3. مسح الصور من Cloudinary عبر المسار الخلفي (API)
       if (publicIdsToDelete.size > 0) {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
-
         for (const pubId of Array.from(publicIdsToDelete)) {
           try {
             await fetch('/api/cloudinary/delete', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // تمرير التوكن للحماية
-              },
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify({ publicId: pubId, resourceType: 'image' })
             });
-            console.log(`Deleted image from Cloudinary: ${pubId}`);
-          } catch (imgErr) {
-            console.error(`Failed to delete image ${pubId}:`, imgErr);
-            // نستمر في الحذف حتى لو فشلت صورة واحدة
-          }
+          } catch (imgErr) {}
         }
       }
 
-      // 4. الحذف من قاعدة بيانات Supabase
       await supabase.from('assignment_questions_v2').delete().eq('assignment_id', id);
       await supabase.from('student_progress_v2').delete().eq('assignment_id', id);
       await supabase.from('assignment_sections_v2').delete().eq('assignment_id', id);
@@ -381,7 +417,6 @@ export default function AssignmentBuilderV2() {
         content_html: q.content_html,
         model_answer_html: q.model_answer_html || '',
         points: q.points,
-        // 🚀 التأكد التام من أن is_correct بصيغة Boolean عند التعديل
         options: (q.options || []).map((o: any) => ({ ...o, is_correct: o.is_correct === true || o.is_correct === 'true' }))
       }));
       
@@ -391,7 +426,7 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
-const copyPrompt = () => { 
+  const copyPrompt = () => { 
     const basePromptText = String.raw`أنت خبير تعليمي متمرس في جميع المواد الدراسية (العلمية والأدبية) ومبرمج قوالب ذكي. سأعطيك نصاً يحتوي على "أسئلة" ونصاً آخر يحتوي على "إجابات".
 استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
 
@@ -446,12 +481,10 @@ const copyPrompt = () => {
                const isMatch = cleanModel && cleanOpt === cleanModel;
                return { id: crypto.randomUUID(), content: opt, is_correct: !!isMatch };
             } else {
-               // 🚀 الفلترة الفولاذية: تأكيد تحويل أي شكل من أشكال True إلى Boolean
                const isCorrectVal = opt.is_correct === true || opt.is_correct === 'true' || opt.isCorrect === true || opt.isCorrect === 'true';
                return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: isCorrectVal };
             }
           });
-          // 🚀 إذا كان هناك خيارات ولم يكن أي منها صحيحاً، نعين الأول صحيح لتجنب خطأ النظام
           if (q.type === 'multiple_choice' && opts.length > 0 && !opts.some((o:any) => o.is_correct)) {
             opts[0].is_correct = true;
           }
@@ -486,11 +519,16 @@ const copyPrompt = () => {
     setIsEditorOpen(true);
   };
 
+  const openPreview = (index: number) => {
+    setPreviewQ(questions[index]);
+    setShowPreviewHint(false); 
+    setIsPreviewOpen(true);
+  };
+
   const saveQuestion = () => {
     if (!currentQ?.content_html.trim() || currentQ.content_html === '<p></p>') { alert('يرجى كتابة محتوى السؤال'); return; }
     let updatedQ = { ...currentQ };
     if (updatedQ.type === 'true_false' && (!updatedQ.options || updatedQ.options.length === 0)) {
-      // 🚀 تأكيد الـ Boolean الصريح هنا
       updatedQ.options = [ { id: crypto.randomUUID(), content: 'صح', is_correct: true }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false } ];
     }
     if (editingIndex !== null) {
@@ -571,7 +609,6 @@ const copyPrompt = () => {
         content_html: q.content_html, 
         model_answer_html: q.model_answer_html, 
         points: q.points, 
-        // 🚀 ضمان تمرير options نظيفة للسيرفر
         options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
         order_index: index + 1 
       }));
@@ -604,6 +641,9 @@ const copyPrompt = () => {
         .tiptap-content th, .ProseMirror th { background-color: #f8fafc !important; font-weight: 900 !important; color: #334155; }
         .tiptap-content img, .ProseMirror img { max-width: 100% !important; height: auto !important; border-radius: 12px !important; margin: 10px auto !important; display: block !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
         .tiptap-content p { margin-bottom: 0.5em !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.5); border-radius: 10px; }
       `}} />
 
       <AnimatePresence>
@@ -645,6 +685,26 @@ const copyPrompt = () => {
               </button>
             </div>
 
+            {/* 🚀 إحصائيات المعلمين للمدير */}
+            {(currentRole === 'admin' || currentRole === 'management') && teacherStats.length > 0 && (
+              <div className="mb-6 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-inner">
+                <h3 className="text-sm font-black text-indigo-800 mb-3 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4"/> إحصائيات رفع الدروس للمعلمين
+                </h3>
+                <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
+                  {teacherStats.map((stat, i) => (
+                    <div key={i} className="flex items-center justify-between gap-4 bg-white p-3 rounded-xl shadow-sm border border-indigo-50 min-w-[200px] shrink-0">
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-4 h-4 text-indigo-400" />
+                        <span className="font-bold text-slate-700 text-sm">{stat.name}</span>
+                      </div>
+                      <span className="bg-indigo-600 text-white text-xs font-black px-2 py-1 rounded-lg shadow-sm">{stat.count} درس</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {isManageLoading ? (
               <div className="text-center p-10 text-slate-400 font-bold animate-pulse">جاري جلب السجلات...</div>
             ) : manageAssignments.length === 0 ? (
@@ -666,7 +726,7 @@ const copyPrompt = () => {
                       <h3 className="font-black text-lg text-slate-800 mb-1">{assign.title}</h3>
                       <div className="text-xs font-bold text-slate-500 flex items-center gap-4">
                         <span className="flex items-center gap-1"><UserCheck className="w-3 h-3"/> المعلم: {assign.teachers?.users?.full_name || 'غير محدد'}</span>
-                        <span className="flex items-center gap-1"><ListOrdered className="w-3 h-3"/> {assign.assignment_questions_v2?.length || 0} أسئلة</span>
+                        <span className="flex items-center gap-1"><ListOrdered className="w-3 h-3"/> {assign.question_count || 0} أسئلة</span>
                       </div>
                     </div>
                     
@@ -717,18 +777,18 @@ const copyPrompt = () => {
                 <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select value={selectedTeacher} onChange={e => setSelectedTeacher(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
+                <select value={selectedTeacher} onChange={e => { setSelectedTeacher(e.target.value); setSelectedSubject(''); setSelectedSections([]); }} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
                   <option value="">اختر المعلم...</option>
                   {teachers.map((t:any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                 </select>
-                <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
+                <select value={selectedSubject} onChange={e => { setSelectedSubject(e.target.value); setSelectedSections([]); }} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
                   <option value="">اختر المادة...</option>
                   {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
                 <label className="block text-xs font-bold text-slate-500 mb-3">اختر الصفوف المستهدفة:</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                   {!selectedSubject ? <span className="text-sm font-bold text-slate-400 col-span-full text-center py-4">يرجى اختيار المادة أولاً</span> : sections.map((sec:any) => (
                     <label key={sec.id} className="flex items-center gap-3 cursor-pointer p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all shadow-sm">
                       <input type="checkbox" checked={selectedSections.includes(sec.id)} onChange={() => toggleSection(sec.id)} className="accent-indigo-600 w-5 h-5 cursor-pointer rounded" />
@@ -746,6 +806,9 @@ const copyPrompt = () => {
                     <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                       <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
                       <div className="flex gap-2">
+                        <button onClick={() => openPreview(i)} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
+                          <Eye className="w-4 h-4" /> معاينة
+                        </button>
                         <button onClick={() => openEditQuestion(i)} className="text-amber-600 bg-amber-50 p-2 rounded-lg hover:bg-amber-100"><Edit3 className="w-4 h-4" /></button>
                         <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
                       </div>
@@ -774,6 +837,114 @@ const copyPrompt = () => {
           </motion.div>
         )}
       </div>
+
+      {/* 🚀 نافذة المعاينة المباشرة (Student Preview Modal) */}
+      <AnimatePresence>
+        {isPreviewOpen && previewQ && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40" onClick={() => setIsPreviewOpen(false)} />
+            <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed top-10 bottom-10 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-slate-100 rounded-[2.5rem] shadow-2xl z-50 flex flex-col overflow-hidden border border-slate-200">
+              
+              <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-white shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl"><Eye className="w-5 h-5" /></div>
+                  <h3 className="font-black text-slate-800 text-lg">معاينة واجهة الطالب</h3>
+                </div>
+                <button onClick={() => setIsPreviewOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 rounded-full shadow-sm"><X className="w-5 h-5" /></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 custom-scrollbar">
+                
+                {previewQ.type === 'section_header' ? (
+                  <div className="bg-indigo-50/50 rounded-[2rem] border border-indigo-100 shadow-sm overflow-hidden mb-6">
+                    <div className="bg-indigo-100/50 px-5 py-3 flex items-center gap-2 border-b border-indigo-100">
+                      <Quote className="w-5 h-5 text-indigo-500" />
+                      <h3 className="font-black text-indigo-800 text-sm">اقرأ النص أو ادرس الشكل التالي:</h3>
+                    </div>
+                    <div className="p-5 overflow-y-auto">
+                      <div className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.content_html) }}></div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-[2rem] shadow-xl border-2 border-slate-200 overflow-hidden flex flex-col mb-6">
+                    <div className="p-4 border-b bg-slate-50 border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Target className="w-5 h-5 text-indigo-500" />
+                        <h3 className="font-black text-sm text-slate-700">{translateType(previewQ.type)}</h3>
+                      </div>
+                      <span className="bg-white px-3 py-1 rounded-lg text-xs font-black text-slate-500 border border-slate-200 shadow-sm">{previewQ.points} نقاط</span>
+                    </div>
+
+                    <div className="p-6">
+                      <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800 leading-loose text-lg" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(previewQ.content_html) }}></div>
+                      
+                      {(previewQ.type === 'multiple_choice' || previewQ.type === 'true_false') && (
+                        <div className="mt-8 space-y-3">
+                          {previewQ.options?.map((opt) => (
+                            <div key={opt.id} className={`w-full p-4 rounded-2xl border-2 font-bold text-base text-right flex items-center justify-between ${opt.is_correct ? 'border-emerald-500 bg-emerald-50/50 text-emerald-900 shadow-sm' : 'border-slate-200 bg-white opacity-70'}`}>
+                              <div className="katex-container flex-1"><Latex>{opt.content}</Latex></div>
+                              {opt.is_correct && <span className="text-[10px] bg-emerald-500 text-white font-black px-2 py-1 rounded-md shrink-0">الإجابة الصحيحة</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {previewQ.type === 'essay' && !showPreviewHint && (
+                        <div className="mt-8 text-center bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed">
+                          <p className="text-sm font-bold text-slate-500 mb-4">✍️ فكر جيداً وحل المسألة في ورقة خارجية...</p>
+                          <button onClick={() => setShowPreviewHint(true)} className="w-full bg-white text-indigo-600 border-2 border-indigo-200 font-black py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-sm">
+                            <Lightbulb className="w-5 h-5" /> تأكدت من حلي، اكشف لي الجواب!
+                          </button>
+                        </div>
+                      )}
+
+                      {/* المفكرة الذكية الوهمية للمعاينة */}
+                      {(showPreviewHint || (previewQ.type !== 'essay' && !showPreviewHint)) && previewQ.model_answer_html && previewQ.model_answer_html !== '<p></p>' && (
+                        <div className="mt-8">
+                          {previewQ.type !== 'essay' && !showPreviewHint && (
+                            <button onClick={() => setShowPreviewHint(true)} className="w-full bg-indigo-100 text-indigo-700 font-black py-3 rounded-xl flex items-center justify-center gap-2 border border-indigo-300 shadow-sm mb-4">
+                              <BrainCircuit className="w-5 h-5" /> تحليل الإجابة (المساعد الذكي)
+                            </button>
+                          )}
+                          
+                          {showPreviewHint && (() => {
+                            let extractedImages = [];
+                            try {
+                              const parser = new DOMParser();
+                              const doc = parser.parseFromString(renderHTMLWithMath(previewQ.content_html), 'text/html');
+                              extractedImages = Array.from(doc.querySelectorAll('img')).map(img => img.outerHTML);
+                            } catch(e) {}
+                            
+                            return (
+                              <div className="overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
+                                <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
+                                  <div className="flex items-center gap-2 font-black text-sm">
+                                    <BrainCircuit className="w-5 h-5" /> <span>المساعد الذكي يكتب لك الشرح الآن...</span>
+                                  </div>
+                                </div>
+                                <div className="p-6 bg-indigo-50/30 min-h-[100px]">
+                                  {extractedImages.length > 0 && (
+                                    <div className="mb-6 p-4 bg-white/60 rounded-xl border border-indigo-100 flex flex-col items-center gap-4">
+                                      <p className="text-[10px] font-black text-indigo-400 w-full text-right border-b border-indigo-50 pb-2 uppercase tracking-widest">صورة مرجعية من السؤال:</p>
+                                      {extractedImages.map((imgHtml, idx) => ( <div key={idx} dangerouslySetInnerHTML={{ __html: imgHtml }} className="max-w-full rounded-lg shadow-sm" /> ))}
+                                    </div>
+                                  )}
+                                  <TypewriterRevealFast htmlContent={previewQ.model_answer_html} />
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Editor Modal */}
       <AnimatePresence>
