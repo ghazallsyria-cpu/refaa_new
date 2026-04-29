@@ -10,7 +10,6 @@ interface StudentQueryResult {
 const globalCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; 
 
-// 🚀 نظام الكاش المطور: يرفض تخزين "الأصفار" والأخطاء
 const withCache = async <T>(key: string, fetcher: () => Promise<T>, forceRefresh = false): Promise<T> => {
   if (!forceRefresh && globalCache.has(key)) {
     const cached = globalCache.get(key)!;
@@ -196,27 +195,29 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, []);
 
-  // 🚀 [الحل النهائي والجذري لجلب بيانات المعلم]
+  // 🚀 [الحل النهائي والدرع الحصين للمعلم]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        // 1. جلب المعلم بمرونة (يدعم id و user_id)
-        const { data: teacherCore } = await supabase.from('teachers').select('id, user_id').or(`id.eq.${user.id},user_id.eq.${user.id}`).maybeSingle();
+        // 1. جلب بيانات المستخدم الأساسية بشكل مضمون
         const { data: userData } = await supabase.from('users').select('full_name, avatar_url').eq('id', user.id).maybeSingle();
-        
-        if (!teacherCore) {
-            return { 
-                teacher: { id: null, users: userData || { full_name: 'معلم' } }, 
-                sections: [], recentExams: [], recentAssignments: [], 
-                schedule: [], periods: [], messages: [], assignmentStats: [], 
-                stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 100, absenceRate: 0 } 
-            };
-        }
-        const teacher = { ...teacherCore, users: userData || { full_name: 'معلم' } };
 
-        // 2. جلب الشعب الموكلة للمعلم بأمان يدوي لفصل العلاقات المعقدة
-        const { data: teacherSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacher.id);
+        // 2. البحث عن المعلم بأمان بالغ (نجرب user_id أولاً ثم id لتجنب أخطاء PostgREST)
+        let teacherId = user.id; 
+        const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        
+        if (tByUserId?.id) {
+            teacherId = tByUserId.id;
+        } else {
+            const { data: tById } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+            if (tById?.id) teacherId = tById.id;
+        }
+
+        const teacher = { id: teacherId, users: userData || { full_name: 'معلم' } };
+
+        // 3. جلب الشعب الموكلة للمعلم بأمان (محصن ضد أخطاء العلاقات)
+        const { data: teacherSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherId);
         const sectionIds = (teacherSections || []).map(ts => ts.section_id).filter(Boolean);
         
         let sections: any[] = [];
@@ -233,14 +234,14 @@ export function useDashboardSystem() {
             });
         }
 
-        // 3. جلب الواجبات (يدعم النظام القديم والجديد V1 & V2)
+        // 4. جلب الواجبات (V1 و V2)
         const [{ data: v1Assigns }, { data: v2Assigns }] = await Promise.all([
-           supabase.from('assignments').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(3),
-           supabase.from('assignments_v2').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(3)
+           supabase.from('assignments').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(3),
+           supabase.from('assignments_v2').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(3)
         ]);
         const recentAssignments = [...(v2Assigns || []), ...(v1Assigns || [])].slice(0, 5);
 
-        // 4. جلب التسليمات (V1 & V2)
+        // 5. جلب التسليمات
         const v1Ids = (v1Assigns || []).map(a => a.id);
         const v2Ids = (v2Assigns || []).map(a => a.id);
         
@@ -250,7 +251,7 @@ export function useDashboardSystem() {
         ]);
         const allSubmissions = [...(v1Subs || []), ...(v2Subs || [])];
 
-        // 5. بناء إحصائيات الواجبات
+        // 6. بناء إحصائيات الواجبات
         const assignmentStats = recentAssignments.map((assignment: any) => {
           const submissionCount = allSubmissions.filter(s => s.assignment_id === assignment.id).length;
           const expected = studentsCount > 0 ? studentsCount : 0; 
@@ -265,7 +266,7 @@ export function useDashboardSystem() {
           };
         });
 
-        // 6. جلب الاختبارات والجدول والغياب
+        // 7. جلب الاختبارات والجدول والغياب بشكل مستقل
         const [
           { data: recentExams }, 
           { data: schedule }, 
@@ -273,11 +274,11 @@ export function useDashboardSystem() {
           { data: messages },
           { data: attendanceRecords }
         ] = await Promise.all([
-          supabase.from('exams').select(`id, title, created_at, start_time, subjects(name)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
-          supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacher.id).order('day_of_week').order('period'),
+          supabase.from('exams').select(`id, title, created_at, start_time, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(5),
+          supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacherId).order('day_of_week').order('period'),
           supabase.from('class_periods').select('*').order('period_number'),
           supabase.from('messages').select('*, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
-          supabase.from('attendance_records').select('status').eq('teacher_id', teacher.id)
+          supabase.from('attendance_records').select('status').eq('teacher_id', teacherId)
         ]);
 
         const totalAttendance = attendanceRecords?.length || 0;
@@ -319,11 +320,17 @@ export function useDashboardSystem() {
     if (!user?.id) return null;
     return withCache(`teacher_schedule_${user.id}`, async () => {
       try {
-        const { data: teacherProfile } = await supabase.from('teachers').select('id').or(`id.eq.${user.id},user_id.eq.${user.id}`).maybeSingle();
-        if (!teacherProfile) return { schedule: [], periods: [] };
+        let teacherId = user.id; 
+        const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (tByUserId?.id) {
+            teacherId = tByUserId.id;
+        } else {
+            const { data: tById } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+            if (tById?.id) teacherId = tById.id;
+        }
         
         const [ { data: schedule }, { data: periods } ] = await Promise.all([
-          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))').eq('teacher_id', teacherProfile.id).order('day_of_week').order('period').limit(5000),
+          supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), sections(id, name, classes(name))').eq('teacher_id', teacherId).order('day_of_week').order('period').limit(5000),
           supabase.from('class_periods').select('*').order('period_number').limit(100)
         ]);
         return { schedule: schedule || [], periods: periods || [] };
