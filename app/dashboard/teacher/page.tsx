@@ -68,9 +68,10 @@ export default function TeacherDashboard() {
     return () => clearInterval(clockTimer);
   }, []);
 
-  const isCurrentClass = useCallback((period: number) => {
+  // 🚀 تحصين الدوال بالـ Number لتجنب أخطاء التطابق النصي
+  const isCurrentClass = useCallback((period: number | string) => {
     if (!currentTime) return false;
-    const periodInfo = periods.find(p => p.period_number === period);
+    const periodInfo = periods.find(p => Number(p.period_number) === Number(period));
     if (!periodInfo || !periodInfo.start_time || !periodInfo.end_time) return false;
 
     const [startH, startM] = periodInfo.start_time.split(':').map(Number);
@@ -83,9 +84,9 @@ export default function TeacherDashboard() {
     return now >= start && now <= end;
   }, [currentTime, periods]);
 
-  const isNextClass = useCallback((period: number) => {
+  const isNextClass = useCallback((period: number | string) => {
     if (!currentTime) return false;
-    const periodInfo = periods.find(p => p.period_number === period);
+    const periodInfo = periods.find(p => Number(p.period_number) === Number(period));
     if (!periodInfo || !periodInfo.start_time) return false;
 
     const [startH, startM] = periodInfo.start_time.split(':').map(Number);
@@ -155,28 +156,37 @@ export default function TeacherDashboard() {
 
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
-              const todayStr = now.toLocaleDateString('en-CA');
+              // 🚀 1. صيغة تاريخ مضمونة 100% لتجنب خطأ الـ Timezone
+              const year = now.getFullYear();
+              const month = String(now.getMonth() + 1).padStart(2, '0');
+              const day = String(now.getDate()).padStart(2, '0');
+              const todayStr = `${year}-${month}-${day}`;
+              
               const currentDayOfWeek = now.getDay() + 1; 
               
-              const todaysScheduleData = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
-              const myPeriodsToday = Array.from(new Set(todaysScheduleData.map((s: any) => s.period)));
+              const todaysScheduleData = data.schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
+              const myPeriodsToday = Array.from(new Set(todaysScheduleData.map((s: any) => Number(s.period))));
 
               if (myPeriodsToday.length === 0) {
                 setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
               } else {
+                // 🚀 2. تحصين الاستعلام بالبحث عبر user_id و teacher_id معاً
                 const { data: recs } = await supabase
                   .from('attendance_records')
                   .select('period, period_number') 
                   .eq('date', todayStr)
-                  .eq('teacher_id', data.teacher.id);
+                  .or(`teacher_id.eq.${data.teacher.id},teacher_id.eq.${user.id}`);
 
-                const recordedPeriods = new Set(recs?.map((r: any) => r.period || r.period_number).filter(Boolean) || []);
+                // 🚀 3. تحويل النتائج إلى أرقام لتجنب خطأ (1 !== "1") في Set.has
+                const recordedPeriods = new Set(recs?.map((r: any) => Number(r.period || r.period_number)).filter(Boolean) || []);
                 const missed: number[] = [];
                 
-                myPeriodsToday.forEach((pNum: any) => {
+                myPeriodsToday.forEach((pNumRaw: any) => {
+                  const pNum = Number(pNumRaw);
+                  
                   if (recordedPeriods.has(pNum)) return;
 
-                  const pInfo = data.periods.find((p: any) => p.period_number === pNum);
+                  const pInfo = data.periods.find((p: any) => Number(p.period_number) === pNum);
                   if (pInfo && pInfo.end_time) {
                     const [h, m] = pInfo.end_time.split(':').map(Number);
                     const endTime = new Date(now);
@@ -188,10 +198,13 @@ export default function TeacherDashboard() {
                   }
                 });
 
+                // التحقق من إكمال جميع الحصص المجدولة
+                const allRecorded = myPeriodsToday.every(p => recordedPeriods.has(Number(p)));
+
                 setAttendanceStatus({
                   isActive: true,
                   missedPeriods: missed.sort((a, b) => a - b),
-                  completed: missed.length === 0 && recordedPeriods.size >= myPeriodsToday.length,
+                  completed: missed.length === 0 && allRecorded,
                   totalToday: myPeriodsToday.length
                 });
               }
@@ -214,7 +227,7 @@ export default function TeacherDashboard() {
 
   const todaysSchedule = useMemo(() => {
     const today = new Date().getDay() + 1; 
-    return schedule.filter(s => s.day_of_week === today);
+    return schedule.filter(s => Number(s.day_of_week) === today);
   }, [schedule]);
 
   if (isChecking && !user) {
@@ -527,7 +540,7 @@ export default function TeacherDashboard() {
                                 <span className="truncate">{item.sections?.classes?.name} - {item.sections?.name}</span>
                               </p>
                               {(() => {
-                                const periodInfo = periods.find(p => p.period_number === item.period);
+                                const periodInfo = periods.find(p => Number(p.period_number) === Number(item.period));
                                 if (periodInfo?.start_time && periodInfo?.end_time) {
                                   return (
                                     <span className={cn("text-[9px] sm:text-[11px] font-black tracking-widest flex items-center gap-1 sm:gap-1.5 bg-[#02040a]/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border shadow-inner shrink-0", current ? "text-amber-400 border-amber-500/20" : "text-slate-500 border-white/5")} dir="ltr">
@@ -684,7 +697,7 @@ export default function TeacherDashboard() {
                       </p>
                       <div className="flex gap-2 sm:gap-3">
                         <Link href={`/assignments/${assignment.id}`} className="flex-1 text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-black text-slate-300 bg-white/5 border border-white/10 rounded-xl hover:bg-amber-500/20 hover:text-amber-400 hover:border-amber-500/30 transition-all shadow-inner active:scale-95">تعديل</Link>
-                        <Link href={`/assignments/${assignment.id}`} className="flex-1 text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-black text-slate-950 bg-amber-500 rounded-xl hover:bg-amber-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] border border-amber-400 active:scale-95">التقييم</Link>
+                        <Link href={`/assignments/${assignment.id}`} className="flex-1 text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-black text-slate-950 bg-amber-50 rounded-xl hover:bg-amber-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)] border border-amber-400 active:scale-95">التقييم</Link>
                       </div>
                     </div>
                   ))
