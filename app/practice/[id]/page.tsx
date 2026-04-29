@@ -9,13 +9,17 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   CheckCircle2, XCircle, ChevronRight, Sparkles, 
-  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, CheckSquare, Target, Quote, Flame, Clock
+  Lightbulb, ArrowRight, BrainCircuit, Trophy, RefreshCcw, Target, Quote, Flame, Clock, Download, FileText
 } from 'lucide-react';
 
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
-import confetti from 'canvas-confetti'; // 🚀 استيراد مكتبة القصاصات الاحتفالية الحقيقية
+import confetti from 'canvas-confetti'; 
+
+// 🚀 استيراد مكتبات توليد الـ PDF من الباكج الخاص بك
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 import { supabase } from '@/lib/supabase';
 
@@ -56,11 +60,11 @@ export default function PracticeArena() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-  const { user } = useAuth() as any; 
+  const { user, userName } = useAuth() as any; 
 
   const [assignment, setAssignment] = useState<any>(null);
-  const [allQuestions, setAllQuestions] = useState<any[]>([]); // يحفظ كل الأسئلة الأصلية
-  const [activeQuestions, setActiveQuestions] = useState<any[]>([]); // الأسئلة التي نتدرب عليها حالياً
+  const [allQuestions, setAllQuestions] = useState<any[]>([]); 
+  const [activeQuestions, setActiveQuestions] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -71,17 +75,17 @@ export default function PracticeArena() {
   const [shake, setShake] = useState(false);
   const [showHint, setShowHint] = useState(false);
   
-  // 🚀 ميزات جديدة (Streak & Time)
   const [score, setScore] = useState({ correct: 0, wrong: 0, totalPoints: 0 });
   const [streak, setStreak] = useState(0); 
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timeSpentSeconds, setTimeSpentSeconds] = useState(0);
   
-  // حفظ الـ ID للأسئلة التي أخطأ فيها لإعادتها لاحقاً
   const [failedQuestionIds, setFailedQuestionIds] = useState<Set<string>>(new Set());
   
   const [isFinished, setIsFinished] = useState(false);
   const [mode, setMode] = useState<'normal' | 'retake_errors'>('normal');
+
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -98,7 +102,6 @@ export default function PracticeArena() {
         setAllQuestions(formattedQs);
         setActiveQuestions(formattedQs);
 
-        // 🚀 محاولة قراءة الحفظ التلقائي المحلي
         const localSaveKey = `arena_save_${user.id}_${id}`;
         const localData = localStorage.getItem(localSaveKey);
 
@@ -111,20 +114,19 @@ export default function PracticeArena() {
         } else if (progressData) {
           if (progressData.is_completed) {
             setIsFinished(true); 
-            setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score, totalPoints: progressData.correct_score * 10 }); // نقاط تقريبية
+            setScore({ correct: progressData.correct_score, wrong: progressData.wrong_score, totalPoints: progressData.correct_score * 10 }); 
           } else {
             setCurrentIndex(progressData.current_index || 0); 
             setScore({ correct: progressData.correct_score || 0, wrong: progressData.wrong_score || 0, totalPoints: (progressData.correct_score || 0) * 10 });
           }
         }
         
-        setStartTime(Date.now()); // بدء المؤقت
+        setStartTime(Date.now()); 
       } catch (error) { console.error(error); } finally { setLoading(false); }
     };
     fetchArena();
   }, [id, user]);
 
-  // 🚀 الحفظ التلقائي المحلي (Auto-save) في المتصفح كلما تغير شيء مهم
   useEffect(() => {
     if (loading || isFinished || !user) return;
     const localSaveKey = `arena_save_${user.id}_${id}`;
@@ -143,7 +145,6 @@ export default function PracticeArena() {
         wrong_score: newScore.wrong, is_completed: finished, updated_at: new Date().toISOString()
       }, { onConflict: 'student_id, assignment_id' });
       
-      // مسح الحفظ التلقائي عند الانتهاء
       if (finished) localStorage.removeItem(`arena_save_${user.id}_${id}`);
     } catch (err) {}
   };
@@ -164,7 +165,6 @@ export default function PracticeArena() {
     setIsFinished(true);
     if (startTime) setTimeSpentSeconds(Math.floor((Date.now() - startTime) / 1000));
     
-    // إطلاق احتفال إذا كانت الأخطاء قليلة جداً
     if (finalScore.wrong === 0 || (finalScore.correct / (finalScore.correct + finalScore.wrong) > 0.8)) {
         triggerConfetti();
     }
@@ -183,13 +183,11 @@ export default function PracticeArena() {
       setIsSuccess(true);
       setShowHint(true); 
 
-      // 🚀 نظام التتابع (Streak)
       const newStreak = streak + 1;
       setStreak(newStreak);
       
-      // مضاعفة النقاط إذا التتابع مستمر
       const multiplier = newStreak >= 3 ? 1.5 : 1;
-      const pointsEarned = (currentQ.points || 1) * multiplier * (attempts === 0 ? 1 : 0.5); // نصف نقطة إذا أخطأ سابقاً
+      const pointsEarned = (currentQ.points || 1) * multiplier * (attempts === 0 ? 1 : 0.5); 
 
       setScore(s => ({ 
           ...s, 
@@ -199,8 +197,8 @@ export default function PracticeArena() {
       
     } else {
       setAttempts(a => a + 1);
-      setStreak(0); // كسر التتابع
-      setFailedQuestionIds(prev => new Set(prev).add(currentQ.id)); // تسجيل خطأ الطالب
+      setStreak(0); 
+      setFailedQuestionIds(prev => new Set(prev).add(currentQ.id)); 
       setShake(true);
       setTimeout(() => setShake(false), 500);
       if (attempts === 0) setScore(s => ({ ...s, wrong: s.wrong + 1 }));
@@ -239,7 +237,6 @@ export default function PracticeArena() {
     }
   };
 
-  // 🚀 دالة إعادة التحدي بالكامل
   const handleRetakeFull = async () => {
     if (!user) return;
     try {
@@ -263,14 +260,12 @@ export default function PracticeArena() {
     } catch (err) {}
   };
 
-  // 🚀 دالة إعادة أسئلة الأخطاء فقط
   const handleRetakeErrorsOnly = () => {
     const errorQs = allQuestions.filter(q => failedQuestionIds.has(q.id) || q.type === 'section_header');
     
     setMode('retake_errors');
     setActiveQuestions(errorQs);
     setCurrentIndex(0);
-    // تصفير مؤقت للعبة الفرعية
     setScore({ correct: 0, wrong: 0, totalPoints: 0 });
     setIsFinished(false);
     setSelectedOptionId(null);
@@ -279,6 +274,50 @@ export default function PracticeArena() {
     setShowHint(false);
     setStreak(0);
     setStartTime(Date.now());
+  };
+
+  // 🚀 دالة توليد وتحميل الـ PDF الاحترافي
+  const generatePDF = async () => {
+    setIsGeneratingPDF(true);
+    try {
+      const element = document.getElementById('pdf-export-container');
+      if (!element) throw new Error("Element not found");
+
+      // استخدام html2canvas لالتقاط صورة عالية الدقة للمحتوى
+      const canvas = await html2canvas(element, {
+        scale: 2, // دقة عالية
+        useCORS: true, // للسماح بتحميل الصور الخارجية
+        backgroundColor: '#f8fafc',
+        windowWidth: 900 // تثبيت العرض لضمان التنسيق
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      // التعامل مع تعدد الصفحات (Pagination) في الـ PDF
+      let heightLeft = pdfHeight;
+      let position = 0;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`مراجعة_أخطائي_${assignment?.title || 'تدريب'}.pdf`);
+    } catch (err) {
+      console.error('Error generating PDF', err);
+      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة لاحقاً.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-900"><div className="animate-pulse flex flex-col items-center gap-4"><BrainCircuit className="w-12 h-12 text-indigo-400" /><p className="text-white font-bold font-cairo">جاري تجهيز الساحة...</p></div></div>;
@@ -290,7 +329,7 @@ export default function PracticeArena() {
   const isMCQ = currentQ?.type === 'multiple_choice' && safeOptions.length > 0;
   
   const successMessages = ["أنت بطل! إجابة دقيقة 🌟", "تفكير عبقري! 🧠", "عمل رائع جداً! 🎯", "دقة متناهية، استمر! 👏"];
-  const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، فكر مجدداً! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
+  const encourageMessages = ["لا بأس، الخطأ طريق التعلم! 💪", "اقتربت جداً، اقرأ الشرح بتركيز! 🎯", "أنت قادر عليها يا بطل! 🧠", "المحاولات تصنع النجاح! 🔄"];
   
   const randomSuccessMsg = successMessages[currentIndex % successMessages.length];
   const randomEncourageMsg = encourageMessages[currentIndex % encourageMessages.length];
@@ -301,9 +340,59 @@ export default function PracticeArena() {
     return `${m} دقيقة و ${s} ثانية`;
   };
 
+  // قائمة الأسئلة الخاطئة للـ PDF
+  const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
+
   return (
-    <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden" dir="rtl">
+    <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
+      {/* 🚀 هذه الحاوية المخفية مخصصة للطباعة بـ PDF فقط ولن تظهر في الشاشة */}
+      <div className="absolute top-0 right-0 w-[900px] z-[-100] opacity-0 pointer-events-none bg-slate-50 p-10 font-cairo" id="pdf-export-container">
+        <div className="text-center mb-10 border-b-4 border-indigo-600 pb-6">
+          <h1 className="text-4xl font-black text-indigo-900 mb-3">ملخص المراجعة الشاملة</h1>
+          <h2 className="text-2xl font-bold text-slate-700 mb-4">{assignment?.title}</h2>
+          <div className="flex items-center justify-center gap-6 text-sm font-black text-slate-500 bg-white inline-flex px-6 py-2 rounded-xl shadow-sm border border-slate-200">
+            <span>الطالب: {userName || 'مستخدم النظام'}</span>
+            <span>|</span>
+            <span>التاريخ: {new Date().toLocaleDateString('ar-SA')}</span>
+          </div>
+        </div>
+
+        <div className="space-y-12">
+          {failedQsForPDF.map((q, idx) => (
+            <div key={q.id} className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-sm">
+              <div className="flex items-center gap-3 mb-6 border-b-2 border-slate-100 pb-4">
+                <div className="bg-rose-100 text-rose-700 w-10 h-10 flex items-center justify-center rounded-xl font-black text-lg shrink-0">
+                  {idx + 1}
+                </div>
+                <h3 className="text-xl font-black text-slate-800">نص السؤال:</h3>
+              </div>
+              
+              <div className="prose prose-slate max-w-none font-bold text-slate-800 mb-8 text-lg" 
+                   dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }} />
+
+              <div className="bg-indigo-50/50 border-2 border-indigo-200 rounded-2xl p-6">
+                <h3 className="font-black text-indigo-800 mb-4 flex items-center gap-2 text-lg">
+                  <BrainCircuit className="w-6 h-6" /> تحليل الإجابة النموذجية:
+                </h3>
+                {q.model_answer_html && q.model_answer_html.trim() !== '' ? (
+                  <div className="prose prose-indigo max-w-none font-bold text-indigo-950 text-lg leading-loose" 
+                       dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.model_answer_html) }} />
+                ) : (
+                  <p className="text-slate-500 font-bold italic">لا يوجد توضيح مفصل متوفر.</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="mt-12 text-center pt-6 border-t-2 border-slate-200 text-slate-400 font-bold">
+          تم التوليد آلياً بواسطة المساعد الذكي - المركز العلمي السوري
+        </div>
+      </div>
+      {/* 🚀 نهاية منطقة الطباعة */}
+
+
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
         .katex { direction: ltr !important; text-align: left !important; }
@@ -329,7 +418,6 @@ export default function PracticeArena() {
                 </div>
             </div>
             
-            {/* 🚀 مؤشر التتابع الناري */}
             <AnimatePresence>
                 {streak >= 2 && (
                     <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0 }} className="flex items-center gap-1 bg-gradient-to-r from-orange-100 to-amber-100 px-3 py-1 rounded-full border border-orange-200 shadow-sm shrink-0">
@@ -429,15 +517,28 @@ export default function PracticeArena() {
                   )}
 
                   {showHint && (
-                    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 p-5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl shadow-sm">
-                      <div className="flex items-center gap-2 text-emerald-800 font-black mb-4 border-b border-emerald-200/50 pb-3">
-                        <CheckSquare className="w-5 h-5" /> {isMCQ ? "شرح وتوضيح الإجابة:" : "الإجابة النموذجية:"}
+                    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
+                      <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
+                        <div className="flex items-center gap-2 font-black text-sm">
+                          <BrainCircuit className="w-5 h-5 animate-pulse" />
+                          <span>المساعد الذكي: تحليل خطوات الحل</span>
+                        </div>
+                        <Sparkles className="w-4 h-4 opacity-70" />
                       </div>
-                      {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? (
-                        <div className="tiptap-content prose prose-slate max-w-none font-bold text-emerald-950 leading-loose" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}></div>
-                      ) : (
-                        <p className="text-sm font-bold text-slate-500">لا توجد إجابة نموذجية مسجلة لهذا السؤال.</p>
-                      )}
+                      
+                      <div className="p-6 bg-indigo-50/30">
+                        {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? (
+                          <div className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-base" 
+                               dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}>
+                          </div>
+                        ) : (
+                          <p className="text-sm font-bold text-slate-500 italic text-center">لا يوجد شرح تفصيلي متوفر لهذا السؤال.</p>
+                        )}
+                      </div>
+
+                      <div className="px-6 py-3 bg-white border-t border-indigo-100 flex justify-center">
+                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">Syrian Science Center - AI Explainer</span>
+                      </div>
                     </motion.div>
                   )}
                 </div>
@@ -460,8 +561,8 @@ export default function PracticeArena() {
                             <RefreshCcw className="w-5 h-5" /> {randomEncourageMsg}
                           </div>
                           {currentQ.model_answer_html && !showHint && (
-                            <button onClick={() => setShowHint(true)} className="w-full bg-amber-100 text-amber-700 font-black py-3 rounded-xl hover:bg-amber-200 transition-colors flex items-center justify-center gap-2 border border-amber-300">
-                              <Lightbulb className="w-5 h-5" /> مساعدة سريعة
+                            <button onClick={() => setShowHint(true)} className="w-full bg-indigo-100 text-indigo-700 font-black py-3 rounded-xl hover:bg-indigo-200 transition-colors flex items-center justify-center gap-2 border border-indigo-300 shadow-sm">
+                              <BrainCircuit className="w-5 h-5" /> تحليل الإجابة (المساعد الذكي)
                             </button>
                           )}
                         </motion.div>
@@ -502,7 +603,7 @@ export default function PracticeArena() {
 
               </motion.div>
             ) : (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-6 sm:p-8 text-center relative overflow-hidden">
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 p-6 sm:p-8 text-center relative overflow-hidden h-full flex flex-col justify-center">
                 <div className="w-28 h-28 bg-gradient-to-br from-indigo-100 to-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-indigo-100">
                   <Trophy className="w-14 h-14" />
                 </div>
@@ -529,20 +630,38 @@ export default function PracticeArena() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {/* 🚀 خيار إعادة الأخطاء فقط يظهر فقط إذا كان هناك أخطاء */}
+                  
+                  {/* 🚀 الزر الجديد: تصدير الـ PDF للأخطاء والشروحات */}
+                  {failedQuestionIds.size > 0 && (
+                    <button 
+                      onClick={generatePDF} 
+                      disabled={isGeneratingPDF}
+                      className="w-full bg-emerald-50 text-emerald-700 border-2 border-emerald-200 font-black py-4 rounded-xl hover:bg-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isGeneratingPDF ? (
+                        <>جاري تجهيز الملف... <span className="animate-spin text-xl">⏳</span></>
+                      ) : (
+                        <>تحميل ملخص أخطائي (مع الشرح PDF) <FileText className="w-5 h-5" /></>
+                      )}
+                    </button>
+                  )}
+
                   {failedQuestionIds.size > 0 && mode === 'normal' && (
                     <button onClick={handleRetakeErrorsOnly} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200">
                         مراجعة أخطائي فقط 🎯
                     </button>
                   )}
                   
-                  <button onClick={handleRetakeFull} className="w-full bg-slate-100 text-slate-700 border border-slate-200 font-black py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">
-                    إعادة التحدي بالكامل <RefreshCcw className="w-5 h-5" />
-                  </button>
-                  
-                  <button onClick={() => router.push('/arena')} className="w-full mt-2 bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">
-                    العودة للساحة الرئيسية <Sparkles className="w-5 h-5" />
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={handleRetakeFull} className="bg-slate-100 text-slate-700 border border-slate-200 font-black py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-all flex items-center justify-center gap-2">
+                      إعادة بالكامل <RefreshCcw className="w-5 h-5" />
+                    </button>
+                    
+                    <button onClick={() => router.push('/arena')} className="bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200">
+                      الساحة الرئيسية <Sparkles className="w-5 h-5" />
+                    </button>
+                  </div>
+
                 </div>
               </motion.div>
             )}
