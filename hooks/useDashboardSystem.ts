@@ -208,54 +208,86 @@ export function useDashboardSystem() {
     } catch (error) { throw error; }
   }, []);
 
-  const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
+const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 1. جلب المعلم بمرونة (يدعم id و user_id)
-        const { data: teacherCore } = await supabase
+        console.log("Fetching for User ID:", user.id); // 🚀 Debug log
+
+        // 1. جلب المعلم بمرونة (يدعم id و user_id)
+        const { data: teacherCore, error: teacherErr } = await supabase
            .from('teachers')
            .select('id, user_id')
            .or(`id.eq.${user.id},user_id.eq.${user.id}`)
            .maybeSingle();
 
-        // 🚀 2. جلب بيانات المستخدم بشكل منفصل
-        const { data: userData } = await supabase
-           .from('users')
-           .select('full_name, avatar_url')
-           .eq('id', user.id)
-           .maybeSingle();
+        if (teacherErr) console.error("Teacher Lookup Error:", teacherErr);
 
         if (!teacherCore) {
+            console.warn("No teacher record found for this user_id.");
             return { 
-                teacher: { id: null, users: userData || { full_name: 'معلم' } }, 
+                teacher: { id: null, users: { full_name: 'معلم' } }, 
                 sections: [], recentExams: [], recentAssignments: [], 
                 schedule: [], periods: [], messages: [], assignmentStats: [], 
                 stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 100, absenceRate: 0 } 
             };
         }
 
+        // 2. جلب بيانات المستخدم الأساسية للمعلم
+        const { data: userData } = await supabase
+           .from('users')
+           .select('full_name, avatar_url')
+           .eq('id', user.id)
+           .maybeSingle();
+
         const teacher = { ...teacherCore, users: userData || { full_name: 'معلم' } };
 
-        const { data: teacherSections } = await supabase.from('teacher_sections').select('section_id, section:sections(id, name, classes(name), students(count))').eq('teacher_id', teacher.id);
-        
-        const sections = (teacherSections?.map(ts => {
-           const s = Array.isArray(ts.section) ? ts.section[0] : ts.section;
-           return s;
-        }) || []).filter(Boolean);
+        // 3. جلب الشعب الموكلة لهذا المعلم بأمان (محصن ضد أخطاء العلاقات)
+        let sections: any[] = [];
+        let sectionIds: string[] = [];
+        try {
+          const { data: teacherSections } = await supabase
+             .from('teacher_sections')
+             .select('section_id, sections(id, name, classes(name))')
+             .eq('teacher_id', teacher.id);
+          
+          if (teacherSections) {
+             sections = teacherSections.map(ts => {
+                // قد ترجع العلاقات كمصفوفة أو كائن
+                const sec = Array.isArray(ts.sections) ? ts.sections[0] : ts.sections;
+                return sec ? { ...sec, students: { count: 0 } } : null; // count يتم حسابه لاحقاً
+             }).filter(Boolean);
+             sectionIds = sections.map((s: any) => s.id);
+          }
+        } catch(e) { console.warn("Could not fetch teacher_sections properly", e); }
 
-        const sectionIds = sections.map((s: any) => s.id);
+        // 4. جلب الطلاب بشكل مستقل لحساب العدد الفعلي
+        let studentsCount = 0;
+        if (sectionIds.length > 0) {
+            const { count } = await supabase
+               .from('students')
+               .select('id', { count: 'exact', head: true })
+               .in('section_id', sectionIds);
+            studentsCount = count || 0;
+        }
 
+        // 5. جلب باقي البيانات بصورة متوازية ومستقلة تماماً
         const [
-          { data: recentExams }, { data: recentAssignments }, { data: schedule }, { data: periods }, { data: messages },
-          { count: studentsCount }, { data: attendanceRecords }
+          { data: recentExams }, 
+          { data: recentAssignments }, 
+          { data: schedule }, 
+          { data: periods }, 
+          { data: messages },
+          { data: attendanceRecords }
         ] = await Promise.all([
-          supabase.from('exams').select(`id, title, created_at, start_time, subject:subjects(name), exam_sections(section_id)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
-          supabase.from('assignments').select(`id, title, due_date, subject:subjects(name), assignment_sections(section_id)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
+          // جلب الامتحانات المربوطة بالمعلم مباشرة (بغض النظر عن الشعب)
+          supabase.from('exams').select(`id, title, created_at, start_time, subjects(name)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
+          // جلب الواجبات المربوطة بالمعلم مباشرة
+          supabase.from('assignments').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacher.id).order('created_at', { ascending: false }).limit(5),
+          // جلب الجدول المربوط بالمعلم
           supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacher.id).order('day_of_week').order('period'),
           supabase.from('class_periods').select('*').order('period_number'),
           supabase.from('messages').select('*, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
-          sectionIds.length > 0 ? supabase.from('students').select('*', { count: 'exact', head: true }).in('section_id', sectionIds) : Promise.resolve({ count: 0 }),
           supabase.from('attendance_records').select('status').eq('teacher_id', teacher.id)
         ]);
 
@@ -264,35 +296,57 @@ export function useDashboardSystem() {
         const avgAttendance = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 100;
         const absenceRate = totalAttendance > 0 ? (100 - avgAttendance) : 0;
 
+        // 6. إحصائيات الواجبات (أبسط وأكثر أماناً)
         const recentAssIds = (recentAssignments || []).map(a => a.id);
         let submissionsData: any[] = [];
         if (recentAssIds.length > 0) {
-           const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id, student:students(section_id)').in('assignment_id', recentAssIds);
+           const { data: subs } = await supabase.from('assignment_submissions').select('assignment_id').in('assignment_id', recentAssIds);
            submissionsData = subs || [];
         }
 
-        const assignmentStats = sections.map((section: any) => {
-          const secAssignments = (recentAssignments || []).filter((a: any) => a.assignment_sections?.some((as: any) => as.section_id === section.id));
-          const studentCount = Array.isArray(section.students) ? section.students[0]?.count || 0 : section.students?.count || 0;
+        // تبسيط الإحصائيات لتظهر بناءً على الواجبات بغض النظر عن الشعبة لتجنب الأصفار الوهمية
+        const assignmentStats = (recentAssignments || []).map((assignment: any) => {
+          const submissionCount = submissionsData.filter(s => s.assignment_id === assignment.id).length;
+          // افتراضياً نستخدم عدد الطلاب الكلي إذا لم تكن هناك داتا مخصصة لكل واجب
+          const expected = studentsCount > 0 ? studentsCount : 1; 
+          const percentage = Math.min(Math.round((submissionCount / expected) * 100), 100);
           
-          if (secAssignments.length === 0 || studentCount === 0) return null;
-
-          let expectedSubmissions = secAssignments.length * studentCount;
-          let actualSubmissions = submissionsData.filter(sub => sub.student?.section_id === section.id && secAssignments.some((a: any) => a.id === sub.assignment_id)).length;
-
-          const percentage = expectedSubmissions > 0 ? Math.min(Math.round((actualSubmissions / expectedSubmissions) * 100), 100) : 0;
-          const classObj = Array.isArray(section.classes) ? section.classes[0] : section.classes;
-          
-          return { title: 'إنجاز الواجبات', className: `${classObj?.name || ''} - ${section.name}`, percentage, submissionCount: actualSubmissions, totalStudents: expectedSubmissions };
-        }).filter(Boolean);
+          return { 
+            title: assignment.title, 
+            className: (Array.isArray(assignment.subjects) ? assignment.subjects[0]?.name : assignment.subjects?.name) || 'مادة', 
+            percentage, 
+            submissionCount, 
+            totalStudents: expected 
+          };
+        }).slice(0, 3); // أخذ أحدث 3 واجبات فقط
 
         return { 
-          teacher, sections, schedule: schedule || [], periods: periods || [], messages: messages || [], assignmentStats,
-          recentExams: (recentExams || []).map((e: any) => ({ ...e, subject_name: (Array.isArray(e.subject) ? e.subject[0]?.name : e.subject?.name) || 'مادة' })),
-          recentAssignments: (recentAssignments || []).map((a: any) => ({ ...a, subject_name: (Array.isArray(a.subject) ? a.subject[0]?.name : a.subject?.name) || 'مادة' })),
-          stats: { totalStudents: studentsCount || 0, totalExams: recentExams?.length || 0, totalAssignments: recentAssignments?.length || 0, avgAttendance, absenceRate }
+          teacher, 
+          sections, 
+          schedule: schedule || [], 
+          periods: periods || [], 
+          messages: messages || [], 
+          assignmentStats,
+          recentExams: (recentExams || []).map((e: any) => ({
+            ...e, 
+            subject_name: (Array.isArray(e.subjects) ? e.subjects[0]?.name : e.subjects?.name) || 'مادة غير محددة'
+          })),
+          recentAssignments: (recentAssignments || []).map((a: any) => ({
+            ...a, 
+            subject_name: (Array.isArray(a.subjects) ? a.subjects[0]?.name : a.subjects?.name) || 'مادة غير محددة'
+          })),
+          stats: { 
+            totalStudents: studentsCount || 0, 
+            totalExams: recentExams?.length || 0, 
+            totalAssignments: recentAssignments?.length || 0, 
+            avgAttendance, 
+            absenceRate 
+          }
         };
-      } catch (error) { console.error('Final Dashboard Error:', error); return null; }
+      } catch (error) { 
+        console.error('Final Dashboard Error:', error); 
+        return null; 
+      }
     }, forceRefresh); 
   }, [user?.id]);
 
