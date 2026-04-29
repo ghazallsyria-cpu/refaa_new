@@ -13,7 +13,7 @@ import {
   BarChart3, MessageSquare, Bell, FolderOpen, Settings, 
   Database, Award, ChevronRight, ChevronLeft, X, Scale, 
   Activity, Medal, ShieldAlert, LayoutGrid, Compass, 
-  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles
+  AlertTriangle, LayoutTemplate, Crown, UserCircle, UserCog, Calculator, Network, HeartPulse, Sparkles, MonitorPlay, Target
 } from 'lucide-react';
 
 const navigation = [
@@ -46,7 +46,9 @@ const navigation = [
   { name: 'الحصص الحية', href: '/live', icon: Clock },
   { name: 'أوقات الحصص', href: '/admin/periods', icon: Clock },
   { name: 'الواجبات', href: '/assignments', icon: PenTool },
-  { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments', icon: Sparkles }, // 🚀 الرابط الجديد للمدير فقط
+  { name: 'ساحة التدريب', href: '/arena', icon: Target }, // 🚀 للطالب فقط
+  { name: 'مراقبة الساحة', href: '/arena-monitor', icon: MonitorPlay }, // 🚀 للمعلم والإدارة
+  { name: 'الواجبات بالذكاء الاصطناعي', href: '/ai-assignments-v2', icon: Sparkles }, // 🚀 للإدارة فقط
   { name: 'التقارير', href: '/reports', icon: BarChart3 },
   { name: 'سجل الأداء', href: '/student/performance', icon: Award },
   { name: 'إدارة الأوسمة', href: '/admin/badges', icon: Medal },
@@ -61,16 +63,16 @@ const navigation = [
 export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onToggleCollapse }: { onClose?: () => void, authRole?: string, isCollapsed?: boolean, onToggleCollapse?: () => void }) {
   const pathname = usePathname();
   const { user, userRole } = useAuth() as any;
-  const [schoolData, setSchoolData] = useState({ name: 'الرفعة النموذجية', logo_url: '' });
+  const [schoolData, setSchoolData] = useState({ name: 'المركز العلمي السوري', logo_url: '' });
   
-  // 🚀 جلب صلاحيات الستاف للسماح للمشرفين الإداريين (عين الرفعة) بالرؤية
+  // 🚀 جلب صلاحيات الستاف للسماح للمشرفين الإداريين بالرؤية
   const [staffPermissions, setStaffPermissions] = useState<any>({});
 
   useEffect(() => {
     const fetchSchoolData = async () => {
       try {
         const { data } = await supabase.from('platform_settings').select('school_name, logo_url').single();
-        if (data) setSchoolData({ name: data.school_name?.split(' ')[0] || 'الرفعة', logo_url: data.logo_url || '' });
+        if (data) setSchoolData({ name: data.school_name?.split(' ')[0] || 'المركز العلمي', logo_url: data.logo_url || '' });
       } catch (err) { console.error('Error fetching school data:', err); }
     };
     fetchSchoolData();
@@ -89,25 +91,32 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
   const isGlobalWatcher = userRole === 'staff' && staffPermissions['global_read_only'] === true;
 
   const filteredNavigation = navigation.filter(item => {
-    // 🚀 حصر رابط الواجبات الذكية على المدير فقط
-    if (item.name === 'الواجبات بالذكاء الاصطناعي') return authRole === 'admin';
-
-    // إخفاء هذه الأزرار المخصصة للإدارة فقط (حتى عن المشرف)
+    // إخفاء الأزرار الإدارية البحتة
     if (item.name === 'ملف الإدارة') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الفريق الإداري') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'استيراد البيانات') return (authRole === 'admin' || authRole === 'management');
     if (item.name === 'الإعدادات') return (authRole === 'admin' || authRole === 'management');
-
+    
+    // ظهور الملف الشخصي للمعلم فقط
     if (item.name === 'ملفي الشخصي (CV)') return (authRole === 'teacher');
     
+    // 🚀 ظهور رابط الواجبات الذكية للإدارة فقط
+    if (item.name === 'الواجبات بالذكاء الاصطناعي') return (authRole === 'admin' || authRole === 'management');
+
+    // 🚀 ظهور رابط الساحة (طالب) ومراقبة الساحة (معلم + إدارة)
+    if (item.name === 'ساحة التدريب') return (authRole === 'student');
+    if (item.name === 'مراقبة الساحة') return (authRole === 'teacher' || authRole === 'admin' || authRole === 'management');
+
     if (authRole === 'admin' || authRole === 'management') return true; 
     
-    // 🚀 تحديث الصلاحيات: إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة (Global Watcher)، دع أغلب الأزرار تظهر له
+    // 🚀 إذا كان مشرفاً إدارياً ولديه صلاحية المراقبة
     if (isGlobalWatcher) return true;
     
     // باقي الصلاحيات للمعلمين والطلاب وأولياء الأمور
-    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل'].includes(item.name);
-    if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'سجل الأداء', 'الرسائل'].includes(item.name);
+    if (authRole === 'teacher') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'ملفي الشخصي (CV)', 'المنتديات', 'الفصول', 'الحضور والغياب', 'الاختبارات والدرجات', 'سجل الدرجات', 'الجدول الدراسي', 'الواجبات', 'مراقبة الساحة', 'الرسائل'].includes(item.name);
+    
+    if (authRole === 'student') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'ساحة التدريب', 'سجل الأداء', 'الرسائل'].includes(item.name);
+    
     if (authRole === 'parent') return ['لوحة التحكم', 'الهيكل الأكاديمي', 'المنتديات', 'الحضور والغياب', 'الاختبارات والدرجات', 'الجدول الدراسي', 'الواجبات', 'الرسائل', 'الإعلانات'].includes(item.name);
     
     return false;
@@ -162,7 +171,7 @@ export function Sidebar({ onClose, authRole = 'admin', isCollapsed = false, onTo
               if (authRole === 'student') itemHref = '/dashboard/student'; 
               else if (authRole === 'teacher') itemHref = '/dashboard/teacher'; 
               else if (authRole === 'parent') itemHref = '/dashboard/parent'; 
-              else if (userRole === 'staff') itemHref = '/dashboard/staff'; // 🚀 تحويل الستاف لداش بورد الستاف
+              else if (userRole === 'staff') itemHref = '/dashboard/staff'; 
               else if (authRole === 'admin' || authRole === 'management') itemHref = '/dashboard';
             } 
             else if (item.name === 'ملفي الشخصي (CV)') { 
