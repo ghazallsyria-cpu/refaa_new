@@ -92,48 +92,115 @@ export function useDashboardSystem() {
     }, forceRefresh);
   }, []);
 
+  // 🚀 [هوك الطالب المُدرّع ضد الأخطاء]
   const fetchStudentDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
+    
     return withCache(`student_dashboard_${user.id}`, async () => {
       try {
-        const { data: studentCore } = await supabase.from('students').select('*, sections(id, name, classes(name))').or(`id.eq.${user.id},user_id.eq.${user.id}`).maybeSingle();
-        const { data: userData } = await supabase.from('users').select('full_name, avatar_url').eq('id', user.id).maybeSingle();
+        // 1. جلب بيانات الطالب الأساسية
+        const { data: studentCore, error: studentError } = await supabase
+          .from('students')
+          .select('*, sections(id, name, classes(name))')
+          .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+          .maybeSingle();
 
-        if (!studentCore) return { student: { id: user.id, users: userData || { full_name: 'طالب' } }, assignments: [], exams: [], attendanceRate: 0, grades: [], todaysSchedule: [], periods: [] };
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name, avatar_url')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (studentError || !studentCore) {
+           console.warn("Student record not found for this user.");
+           return { student: { id: user.id, users: userData || { full_name: 'طالب' } }, assignments: [], exams: [], attendanceRate: 0, grades: [], todaysSchedule: [], periods: [] };
+        }
         
         const student = { ...studentCore, users: userData || { full_name: 'طالب' } };
         const sectionId = studentCore.section_id;
 
-        const [ { data: assignmentSections }, { data: examSections } ] = await Promise.all([
-          sectionId ? supabase.from('assignment_sections').select('assignment_id').eq('section_id', sectionId).limit(5000) : Promise.resolve({ data: [] }),
-          sectionId ? supabase.from('exam_sections').select('exam_id').eq('section_id', sectionId).limit(5000) : Promise.resolve({ data: [] })
-        ]);
+        // تجهيز المتغيرات الافتراضية
+        let assignments: any[] = [];
+        let exams: any[] = [];
+        let attendance: any[] = [];
+        let grades: any[] = [];
+        let todaysSchedule: any[] = [];
+        let periods: any[] = [];
 
-        const assignmentIds = (assignmentSections || []).map(a => a.assignment_id);
-        const examIds = (examSections || []).map(e => e.exam_id);
+        // 2. جلب الحصص (Periods) والدرجات (Grades) والحضور (Attendance) أولاً لأنها لا تعتمد بشكل كلي على الشعبة
+        try {
+           const [gradesRes, attendanceRes, periodsRes] = await Promise.all([
+              supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', studentCore.id).order('completed_at', { ascending: false }).limit(5),
+              supabase.from('attendance_records').select('status').eq('student_id', studentCore.id).limit(5000),
+              supabase.from('class_periods').select('*').order('period_number').limit(100)
+           ]);
+           if (gradesRes.data) grades = gradesRes.data;
+           if (attendanceRes.data) attendance = attendanceRes.data;
+           if (periodsRes.data) periods = periodsRes.data;
+        } catch (e) {
+           console.error("Error fetching general student info:", e);
+        }
 
-        const [ { data: assignments }, { data: exams }, { data: attendance }, { data: grades }, { data: todaysSchedule }, { data: periods } ] = await Promise.all([
-          assignmentIds.length > 0 ? supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
-          examIds.length > 0 ? supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3) : Promise.resolve({ data: [] }),
-          supabase.from('attendance_records').select('status').eq('student_id', studentCore.id).limit(5000),
-          supabase.from('exam_attempts').select('score, completed_at, exam:exams(title, total_points, subjects(name))').eq('student_id', studentCore.id).order('completed_at', { ascending: false }).limit(5),
-          sectionId ? supabase.from('schedules').select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(zoom_link)').eq('section_id', sectionId).eq('day_of_week', new Date().getDay() + 1).order('period').limit(100) : Promise.resolve({ data: [] }),
-          supabase.from('class_periods').select('*').order('period_number').limit(100)
-        ]);
+        // 3. جلب بيانات الجدول والواجبات والاختبارات (فقط إذا كان له شعبة)
+        if (sectionId) {
+            try {
+                // جلب جدول اليوم
+                const todayDbDay = new Date().getDay() + 1;
+                const { data: scheduleData } = await supabase
+                  .from('schedules')
+                  .select('id, day_of_week, period, start_time, end_time, subjects(name), teachers(users(full_name))') 
+                  .eq('section_id', sectionId)
+                  .eq('day_of_week', todayDbDay)
+                  .order('period')
+                  .limit(100);
+                  
+                if (scheduleData) todaysSchedule = scheduleData;
 
-        const totalDays = attendance?.length || 0;
-        const presentDays = (attendance || []).filter(a => a.status === 'present').length || 0;
+                // جلب الواجبات والاختبارات المربوطة بالشعبة
+                const [assignmentSections, examSections] = await Promise.all([
+                  supabase.from('assignment_sections').select('assignment_id').eq('section_id', sectionId),
+                  supabase.from('exam_sections').select('exam_id').eq('section_id', sectionId)
+                ]);
+
+                const assignmentIds = (assignmentSections.data || []).map((a: any) => a.assignment_id);
+                const examIds = (examSections.data || []).map((e: any) => e.exam_id);
+
+                if (assignmentIds.length > 0) {
+                   // 🚀 إضافة Assignments V2 مع V1 للطلاب أيضاً
+                   const [{ data: v1 }, { data: v2 }] = await Promise.all([
+                     supabase.from('assignments').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(5),
+                     supabase.from('assignments_v2').select('*, subject:subjects(name)').in('id', assignmentIds).order('due_date', { ascending: true }).limit(5)
+                   ]);
+                   assignments = [...(v1 || []), ...(v2 || [])].slice(0, 5);
+                }
+
+                if (examIds.length > 0) {
+                   const { data: examsData } = await supabase.from('exams').select('*, subject:subjects(name)').in('id', examIds).order('start_time', { ascending: true }).limit(3);
+                   if (examsData) exams = examsData;
+                }
+
+            } catch(e) {
+                console.error("Error fetching section-related data:", e);
+            }
+        }
+
+        const totalDays = attendance.length;
+        const presentDays = attendance.filter((a: any) => a.status === 'present').length;
+        const attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100;
         
         return { 
           student, 
-          assignments: assignments || [], 
-          exams: exams || [], 
-          attendanceRate: totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100, 
-          grades: grades || [], 
-          todaysSchedule: todaysSchedule || [], 
-          periods: periods || [] 
+          assignments, 
+          exams, 
+          attendanceRate, 
+          grades, 
+          todaysSchedule, 
+          periods 
         };
-      } catch (error) { throw error; }
+      } catch (error) { 
+          console.error("CRITICAL Student Dashboard Error:", error);
+          throw error; 
+      }
     }, forceRefresh);
   }, [user?.id]);
 
