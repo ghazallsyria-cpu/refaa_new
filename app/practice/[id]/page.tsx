@@ -574,29 +574,54 @@ export default function PracticeArena() {
                   )}
 
                   {/* 🚀 المفكرة الذكية مع تأثير الآلة الكاتبة */}
-                  {showHint && (
-                    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
-                      <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
-                        <div className="flex items-center gap-2 font-black text-sm">
-                          <BrainCircuit className="w-5 h-5 animate-pulse" />
-                          <span>المساعد الذكي يكتب لك الشرح الآن...</span>
-                        </div>
-                        <Sparkles className="w-4 h-4 animate-spin-slow opacity-70" />
-                      </div>
-                      
-                      <div className="p-6 bg-indigo-50/30 min-h-[100px]">
-                        {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? (
-                          <TypewriterReveal htmlContent={currentQ.model_answer_html} />
-                        ) : (
-                          <p className="text-sm font-bold text-slate-500 italic text-center">لا يوجد شرح تفصيلي متوفر لهذا السؤال.</p>
-                        )}
-                      </div>
+{/* 🚀 المفكرة الذكية مع تأثير الآلة الكاتبة وجلب الصور التلقائي */}
+                  {showHint && (() => {
+                    // استخراج الصور برمجياً من نص السؤال لتوفير وقت المعلم
+                    let extractedImages: string[] = [];
+                    if (typeof window !== 'undefined') {
+                      try {
+                        const parsedQuestionHTML = renderHTMLWithMath(currentQ.content_html);
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(parsedQuestionHTML, 'text/html');
+                        extractedImages = Array.from(doc.querySelectorAll('img')).map(img => img.outerHTML);
+                      } catch(e) {}
+                    }
 
-                      <div className="px-6 py-3 bg-white border-t border-indigo-100 flex justify-center">
-                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">برمجة وتطوير ايهاب جمال غزال - مدرس الفيزياء</span>
-                      </div>
-                    </motion.div>
-                  )}
+                    return (
+                      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
+                        <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
+                          <div className="flex items-center gap-2 font-black text-sm">
+                            <BrainCircuit className="w-5 h-5 animate-pulse" />
+                            <span>المساعد الذكي يكتب لك الشرح الآن...</span>
+                          </div>
+                          <Sparkles className="w-4 h-4 animate-spin-slow opacity-70" />
+                        </div>
+                        
+                        <div className="p-6 bg-indigo-50/30 min-h-[100px]">
+                          
+                          {/* 🚀 عرض الصور المستخرجة تلقائياً من السؤال */}
+                          {extractedImages.length > 0 && (
+                            <div className="mb-6 p-4 bg-white/60 rounded-xl border border-indigo-100 shadow-sm flex flex-col items-center gap-4">
+                              <p className="text-[10px] font-black text-indigo-400 w-full text-right border-b border-indigo-50 pb-2 uppercase tracking-widest">صورة مرجعية من السؤال:</p>
+                              {extractedImages.map((imgHtml, idx) => (
+                                <div key={idx} dangerouslySetInnerHTML={{ __html: imgHtml }} className="max-w-full rounded-lg overflow-hidden shadow-sm" />
+                              ))}
+                            </div>
+                          )}
+
+                          {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? (
+                            <TypewriterReveal htmlContent={currentQ.model_answer_html} />
+                          ) : (
+                            <p className="text-sm font-bold text-slate-500 italic text-center">لا يوجد شرح تفصيلي متوفر لهذا السؤال.</p>
+                          )}
+                        </div>
+
+                        <div className="px-6 py-3 bg-white border-t border-indigo-100 flex justify-center">
+                          <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">برمجة وتطوير ايهاب جمال غزال - مدرس الفيزياء</span>
+                        </div>
+                      </motion.div>
+                    );
+                  })()}}
                 </div>
 
                 <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
