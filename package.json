@@ -40,6 +40,7 @@
     "@tiptap/starter-kit": "^2.11.5",
     "autoprefixer": "^10.4.21",
     "browser-image-compression": "^2.0.2",
+    "canvas-confetti": "^1.9.2",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
@@ -66,10 +67,10 @@
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",
     "@tailwindcss/typography": "^0.5.19",
+    "@types/canvas-confetti": "^1.6.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-   
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.8",
     "firebase-tools": "^15.0.0",
