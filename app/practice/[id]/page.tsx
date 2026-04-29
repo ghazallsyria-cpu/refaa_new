@@ -60,7 +60,7 @@ const safeParseOptions = (optionsData: any) => {
   }));
 };
 
-// 🚀 مكوّن الذكاء الاصطناعي (تأثير الآلة الكاتبة)
+// 🚀 مكوّن الذكاء الاصطناعي (تأثير الآلة الكاتبة) المصحح
 const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
   const [revealed, setRevealed] = useState(false);
 
@@ -76,7 +76,7 @@ const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
     <div className="relative">
       <motion.div
         initial={{ clipPath: "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
-        animate={{ clipPath: revealed ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)" }}
+        animate={{ clipPath: revealed ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)" : "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
         transition={{ duration: 3.5, ease: "easeOut" }}
         className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-base"
         dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(htmlContent) }}
@@ -329,7 +329,7 @@ export default function PracticeArena() {
       const canvas = await html2canvas(element, {
         scale: 2, 
         useCORS: true, 
-        allowTaint: false, // منع تلوث الكانفاس لتجنب خطأ التصدير
+        allowTaint: false,
         backgroundColor: '#f8fafc',
         windowWidth: 900 
       });
@@ -392,7 +392,7 @@ export default function PracticeArena() {
         <div className="text-center mb-10 border-b-4 border-indigo-600 pb-6">
           <h1 className="text-4xl font-black text-indigo-900 mb-3">ملخص المراجعة الشاملة</h1>
           <h2 className="text-2xl font-bold text-slate-700 mb-4">{assignment?.title}</h2>
-          <div className="flex items-center justify-center gap-6 text-sm font-black text-slate-500 bg-white inline-flex px-6 py-2 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex items-center justify-center gap-6 text-sm font-black text-slate-50 bg-indigo-600 inline-flex px-6 py-2 rounded-xl shadow-sm">
             <span>الطالب: {userName || 'مستخدم النظام'}</span>
             <span>|</span>
             <span>التاريخ: {new Date().toLocaleDateString('ar-SA')}</span>
@@ -557,6 +557,7 @@ export default function PracticeArena() {
                     </div>
                   )}
 
+                  {/* 🚀 المفكرة الذكية مع تأثير الآلة الكاتبة */}
                   {showHint && (
                     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
                       <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
@@ -670,6 +671,7 @@ export default function PracticeArena() {
 
                 <div className="flex flex-col gap-3">
                   
+                  {/* 🚀 الزر الجديد: تصدير الـ PDF للأخطاء والشروحات */}
                   {failedQuestionIds.size > 0 && (
                     <button 
                       onClick={generatePDF} 
