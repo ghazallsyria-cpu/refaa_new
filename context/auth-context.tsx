@@ -9,8 +9,8 @@ import { UserRole } from '@/types';
 import { Settings, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// 🚀 زيادة مهلة الـ Timeout لتجنب الأخطاء السريعة (25 ثانية)
-const withTimeout = <T,>(promise: any, ms: number = 25000, timeoutMessage: string = "السيرفر لا يستجيب حالياً"): Promise<T> => {
+// 🚀 أعدنا Timeout معقول (15 ثانية) للمهام الفرعية
+const withTimeout = <T,>(promise: any, ms: number = 15000, timeoutMessage: string = "السيرفر يستغرق وقتاً أطول من المعتاد"): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
     new Promise<never>((_, reject) =>
@@ -49,7 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
-  // 🚀 زر الطوارئ يظهر بعد 15 ثانية بدلاً من 5
   const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
   
   const fetchedUserId = useRef<string | null>(null);
@@ -65,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isChecking && !authRole) {
-      timer = setTimeout(() => setShowEmergencyBtn(true), 15000); 
+      timer = setTimeout(() => setShowEmergencyBtn(true), 12000); 
     } else {
       setShowEmergencyBtn(false);
     }
@@ -87,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authResult = data;
       lastError = error;
     } else {
+      // السماح بوقوت أطول لجلب بيانات المستخدم هنا
       const { data: userData } = await supabase.from('users').select('email').eq('national_id', civilId).maybeSingle();
       const possibleEmails = [userData?.email, `${civilId}@alrefaa.edu`, `${civilId}@alrifaa.edu`].filter(Boolean);
       const uniqueEmails = [...new Set(possibleEmails)];
@@ -107,9 +107,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw lastError || new Error("بيانات الدخول غير صحيحة.");
     }
     
-    const { data: userData, error: userError } = await withTimeout(
-      supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle()
-    ) as any;
+    // التحقق المباشر من دون Timeout لمنع الانهيار إن كان السيرفر بطيئاً
+    const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role, must_reset_password, full_name')
+        .eq('id', authResult.user.id)
+        .maybeSingle() as any;
 
     if (userError || !userData) throw userError || new Error("لم نجد بياناتك.");
 
@@ -143,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const initializeAuth = async (retryCount = 0) => {
+    const initializeAuth = async () => {
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
@@ -159,9 +162,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsChecking(false);
         }
 
-        // 🚀 محاولة استرجاع الجلسة
-        const { data: { session } } = await withTimeout(supabase.auth.getSession()) as any;
+        // 🚀 إزالة Timeout عن GetSession ليأخذ وقته الطبيعي من Supabase
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
+        if (sessionError) {
+          console.error("Session Error:", sessionError);
+        }
+
         if (!session?.user) {
           if (mounted) {
             setUser(null);
@@ -182,12 +189,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
            
            const shouldFetchSettings = !isPublicPage && !rawSettings;
 
-           const [userRes, settingsRes] = await withTimeout(
-             Promise.all([
-               supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
-               shouldFetchSettings ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
-             ])
-           ) as any;
+           // جلب تفاصيل المستخدم والإعدادات معاً بأمان
+           const [userRes, settingsRes] = await Promise.all([
+             supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
+             shouldFetchSettings ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
+           ]);
 
            if (mounted) {
              if (userRes?.data) {
@@ -201,18 +207,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                setRawSettings(settingsRes.data);
                localStorage.setItem('school_settings', JSON.stringify(settingsRes.data));
              }
+             setIsChecking(false); // ننهي عملية التحقق هنا بثقة
            }
         }
       } catch (err) {
-        console.error(`Auth init failed (Attempt ${retryCount + 1}):`, err);
-        // 🚀 نظام إعادة محاولة (Retry) في حالة البطء اللحظي
-        if (retryCount < 2 && mounted) {
-           isFetchingRef.current = false;
-           setTimeout(() => initializeAuth(retryCount + 1), 3000); 
-           return; 
-        }
+        console.error("Auth init exception:", err);
       } finally {
-        if (mounted && retryCount >= 2) setIsChecking(false); 
+        if (mounted) setIsChecking(false);
         isFetchingRef.current = false; 
       }
     };
