@@ -43,7 +43,7 @@ export default function ArenaMonitorDashboard() {
         }
 
         let query = supabase.from('assignments_v2')
-          .select('id, title, is_practice_mode, created_at')
+          .select('id, title, is_practice_mode, created_at, teacher_id')
           .order('created_at', { ascending: false })
           .limit(100);
         
@@ -89,104 +89,84 @@ export default function ArenaMonitorDashboard() {
     fetchAssignments();
   }, [user?.id, currentRole]);
 
-  // 🚀 [الحل الجذري لجلب الإحصائيات الشاملة للطلاب]
-// 🚀 [الحل الجذري والفولاذي لجلب الإحصائيات الشاملة للطلاب]
+  // 🚀 [الرادار الخارق: جلب الإحصائيات حتى لو كانت العلاقات مكسورة]
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
     
     try {
-      // 1. معرفة الفصول المستهدفة بهذا الدرس
-      const { data: assignSections } = await supabase
-        .from('assignment_sections_v2')
-        .select('section_id')
-        .eq('assignment_id', assignment.id);
+      // 1. جلب الفصول المربوطة بالدرس (V2 أو V1)
+      let sectionIds: string[] = [];
+      const { data: v2Secs } = await supabase.from('assignment_sections_v2').select('section_id').eq('assignment_id', assignment.id);
+      
+      if (v2Secs && v2Secs.length > 0) {
+        sectionIds = v2Secs.map(s => s.section_id);
+      } else {
+        const { data: v1Secs } = await supabase.from('assignment_sections').select('section_id').eq('assignment_id', assignment.id);
+        if (v1Secs && v1Secs.length > 0) sectionIds = v1Secs.map(s => s.section_id);
+      }
 
-      const sectionIds = (assignSections || []).map(s => s.section_id);
+      // 2. إذا لم يكن هناك فصول للدرس، نجلب كل فصول المعلم كإجراء احتياطي (Fallback)
+      if (sectionIds.length === 0 && assignment.teacher_id) {
+         const { data: tSecs } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', assignment.teacher_id);
+         if (tSecs) sectionIds = tSecs.map(ts => ts.section_id);
+      }
 
-      // 2. جلب أرقام الطلاب في هذه الفصول (بدون علاقات Joins معقدة لتجنب الانهيار)
+      // 3. جلب الطلاب المستهدفين
       let targetStudents: any[] = [];
-      let usersData: any[] = [];
-
       if (sectionIds.length > 0) {
-        const { data: studentsData } = await supabase
-          .from('students')
-          .select('id, user_id')
-          .in('section_id', sectionIds);
-        
-        targetStudents = studentsData || [];
-
-        // 3. جلب أسماء الطلاب بشكل منفصل وآمن 100%
-        const userIds = targetStudents.map(s => s.user_id).filter(Boolean);
-        if (userIds.length > 0) {
-            const { data: uData } = await supabase
-               .from('users')
-               .select('id, full_name')
-               .in('id', userIds);
-            usersData = uData || [];
-        }
+        const { data: stData } = await supabase.from('students').select('id, user_id, section_id').in('section_id', sectionIds);
+        targetStudents = stData || [];
       }
 
-      // 4. جلب سجلات التقدم والإنجاز الفعلية
-      const { data: progData, error: progErr } = await supabase
-        .from('student_progress_v2')
-        .select('*')
-        .eq('assignment_id', assignment.id);
-      
-      if (progErr) throw progErr;
-
+      // 4. جلب سجلات التقدم الفعلي للطلاب
+      const { data: progData } = await supabase.from('student_progress_v2').select('*').eq('assignment_id', assignment.id);
       const progressRecords = progData || [];
-      
-      // 5. دمج البيانات لإنشاء التقرير
-      const studentsToDisplay = targetStudents.length > 0 
-        ? targetStudents.map(student => {
-            const progress = progressRecords.find(p => p.student_id === student.id);
-            const userInfo = usersData.find(u => u.id === student.user_id);
-            
-            return {
-              id: student.id,
-              student_id: student.id,
-              student_name: userInfo?.full_name || 'طالب غير معروف',
-              percentage: progress ? (progress.is_completed ? 100 : Math.min(Math.round((progress.current_index / assignment.total_questions) * 100), 100)) : 0,
-              correct_score: progress?.correct_score || 0,
-              wrong_score: progress?.wrong_score || 0,
-              teacher_feedback: progress?.teacher_feedback || null,
-              has_started: !!progress
-            };
-          })
-        : progressRecords.map(p => ({
-             ...p,
-             student_name: 'جاري جلب الاسم...', 
-             percentage: p.is_completed ? 100 : Math.min(Math.round((p.current_index / assignment.total_questions) * 100), 100),
-             has_started: true
-          }));
 
-      // إذا لم يكن هناك فصول مستهدفة واعتمدنا على من حلّ فقط (Fallback)
+      // 5. إذا لم نجد طلاب مستهدفين نهائياً، لكن هناك من حل الدرس، نضيفهم بالقوة!
       if (targetStudents.length === 0 && progressRecords.length > 0) {
-         // في V2، الـ student_id في جدول التقدم هو الـ id الخاص بجدول students
-         // نحتاج جلب الـ user_id أولاً
-         const studentIds = progressRecords.map(p => p.student_id);
-         const { data: stData } = await supabase.from('students').select('id, user_id').in('id', studentIds);
-         
-         const validUserIds = (stData || []).map(s => s.user_id).filter(Boolean);
-         const { data: uDataFallback } = await supabase.from('users').select('id, full_name').in('id', validUserIds);
-
-         studentsToDisplay.forEach(std => {
-            const stuRecord = (stData || []).find(s => s.id === std.student_id);
-            if (stuRecord) {
-                const info = (uDataFallback || []).find(u => u.id === stuRecord.user_id);
-                if (info) std.student_name = info.full_name;
-            }
-         });
+         const pStuIds = progressRecords.map(p => p.student_id);
+         const { data: missingSt } = await supabase.from('students').select('id, user_id').in('id', pStuIds);
+         targetStudents = missingSt || progressRecords.map(p => ({ id: p.student_id, user_id: p.student_id }));
       }
 
-      // 6. ترتيب الطلاب: الأوائل أولاً، ثم حسب أبجدية الأسماء
-      studentsToDisplay.sort((a, b) => {
+      // 6. جلب الأسماء بشكل منفصل وآمن (يدعم id أو user_id)
+      let usersData: any[] = [];
+      const userIdsToFetch = [...new Set(targetStudents.map(s => s.user_id || s.id))].filter(Boolean);
+      
+      if (userIdsToFetch.length > 0) {
+         const { data: uData } = await supabase.from('users').select('id, full_name').in('id', userIdsToFetch);
+         usersData = uData || [];
+      }
+
+      // 7. دمج وتصفية البيانات للعرض
+      const studentsToDisplay = targetStudents.map(student => {
+        const progress = progressRecords.find(p => p.student_id === student.id);
+        const userInfo = usersData.find(u => u.id === (student.user_id || student.id));
+        
+        let percentage = progress ? (progress.is_completed ? 100 : Math.round((progress.current_index / assignment.total_questions) * 100)) : 0;
+        if (isNaN(percentage)) percentage = 0;
+
+        return {
+          id: student.id,
+          student_id: student.id,
+          student_name: userInfo?.full_name || 'طالب غير معروف',
+          percentage: Math.min(percentage, 100),
+          correct_score: progress?.correct_score || 0,
+          wrong_score: progress?.wrong_score || 0,
+          teacher_feedback: progress?.teacher_feedback || null,
+          has_started: !!progress
+        };
+      });
+
+      // 8. إزالة المكرر (إن وجد بسبب العلاقات) وترتيب الطلاب
+      const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
+      uniqueStudents.sort((a, b) => {
         if (b.percentage !== a.percentage) return b.percentage - a.percentage;
         return a.student_name.localeCompare(b.student_name);
       });
 
-      setStudentsProgress(studentsToDisplay);
+      setStudentsProgress(uniqueStudents);
 
     } catch (err) { 
       console.error("Error fetching progress:", err); 
@@ -199,7 +179,6 @@ export default function ArenaMonitorDashboard() {
     if (!selectedStudent || !selectedAssignment) return;
     setSavingFeedback(true);
     try {
-      // Upsert: لتسجيل ملاحظة حتى لو لم يبدأ الطالب بالحل بعد
       const { error } = await supabase
         .from('student_progress_v2')
         .upsert({ 
@@ -312,7 +291,7 @@ export default function ArenaMonitorDashboard() {
                   </thead>
                   <tbody className="text-sm font-bold text-slate-700">
                     {studentsProgress.length === 0 ? (
-                      <tr><td colSpan={5} className="p-8 text-center text-slate-400">لا يوجد طلاب مستهدفين في هذا التحدي.</td></tr>
+                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold bg-slate-50/50">لا يوجد طلاب مسجلين في الفصول المخصصة لهذا التحدي، ولم يقم أحد بحله بعد.</td></tr>
                     ) : (
                       studentsProgress.map((student) => (
                         <tr key={student.student_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!student.has_started ? 'opacity-60' : ''}`}>
