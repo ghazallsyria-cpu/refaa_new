@@ -98,7 +98,7 @@ export default function TeacherDashboard() {
     return diff > 0 && diff <= 60;
   }, [currentTime, periods]);
 
-  const fetchData = useCallback(async () => {
+const fetchData = useCallback(async () => {
     if (!user?.id || isFetchedRef.current) return;
     
     isFetchedRef.current = true;
@@ -122,6 +122,7 @@ export default function TeacherDashboard() {
         }
 
         if (data.teacher?.id) {
+            // جلب سجلات الغياب الخطرة (أكثر من 5 غيابات)
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -147,72 +148,73 @@ export default function TeacherDashboard() {
                 }
                 studentAbsences.get(sid).count++;
               });
-
-              const atRisk = Array.from(studentAbsences.values())
-                                  .filter((s: any) => s.count >= 5)
-                                  .sort((a: any, b: any) => b.count - a.count);
-              setAtRiskStudents(atRisk);
+              setAtRiskStudents(Array.from(studentAbsences.values()).filter((s: any) => s.count >= 5));
             }
 
+            // 🚀 [المنطق المطور للتحقق من تسجيل الغياب]
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
-              // 🚀 1. صيغة تاريخ مضمونة 100% لتجنب خطأ الـ Timezone
-              const year = now.getFullYear();
-              const month = String(now.getMonth() + 1).padStart(2, '0');
-              const day = String(now.getDate()).padStart(2, '0');
-              const todayStr = `${year}-${month}-${day}`;
               
+              // 1. حساب التاريخ المحلي بدقة لضمان مطابقة سجلات الداتابيز
+              const todayStr = format(now, 'yyyy-MM-dd');
               const currentDayOfWeek = now.getDay() + 1; 
               
+              // 2. تحديد حصص وشُعب المعلم لهذا اليوم
               const todaysScheduleData = data.schedule.filter((s: any) => Number(s.day_of_week) === currentDayOfWeek);
-              const myPeriodsToday = Array.from(new Set(todaysScheduleData.map((s: any) => Number(s.period))));
-
-              if (myPeriodsToday.length === 0) {
+              
+              if (todaysScheduleData.length === 0) {
                 setAttendanceStatus({ isActive: true, completed: true, missedPeriods: [], totalToday: 0 });
               } else {
-                // 🚀 2. تحصين الاستعلام بالبحث عبر user_id و teacher_id معاً
-                const { data: recs } = await supabase
-                  .from('attendance_records')
-                  .select('period, period_number') 
-                  .eq('date', todayStr)
-                  .or(`teacher_id.eq.${data.teacher.id},teacher_id.eq.${user.id}`);
-
-                // 🚀 3. تحويل النتائج إلى أرقام لتجنب خطأ (1 !== "1") في Set.has
-                const recordedPeriods = new Set(recs?.map((r: any) => Number(r.period || r.period_number)).filter(Boolean) || []);
-                const missed: number[] = [];
+                // 3. جلب جميع سجلات الحضور لهذه الشُعب اليوم
+                // نعتمد على section_id لأنه الرابط الأقوى بين الجدول والغياب
+                const todaySectionIds = Array.from(new Set(todaysScheduleData.map((s: any) => s.section_id)));
                 
-                myPeriodsToday.forEach((pNumRaw: any) => {
-                  const pNum = Number(pNumRaw);
-                  
-                  if (recordedPeriods.has(pNum)) return;
+                const { data: attendanceRecs } = await supabase
+                  .from('attendance_records')
+                  .select('period, period_number, section_id')
+                  .eq('date', todayStr)
+                  .in('section_id', todaySectionIds);
 
-                  const pInfo = data.periods.find((p: any) => Number(p.period_number) === pNum);
-                  if (pInfo && pInfo.end_time) {
-                    const [h, m] = pInfo.end_time.split(':').map(Number);
-                    const endTime = new Date(now);
-                    endTime.setHours(h, m, 0, 0);
+                const missed: number[] = [];
+                const recordedKeys = new Set(attendanceRecs?.map(r => `${r.section_id}-${Number(r.period || r.period_number)}`));
 
-                    if (now > endTime) {
-                      missed.push(pNum);
+                todaysScheduleData.forEach((slot: any) => {
+                  const pNum = Number(slot.period);
+                  const sId = slot.section_id;
+                  const key = `${sId}-${pNum}`;
+
+                  // إذا لم يوجد سجل لهذه الشُعبة في هذه الحصة
+                  if (!recordedKeys.has(key)) {
+                    const pInfo = data.periods.find((p: any) => Number(p.period_number) === pNum);
+                    if (pInfo && pInfo.end_time) {
+                      const [h, m] = pInfo.end_time.split(':').map(Number);
+                      const endTime = new Date(now);
+                      endTime.setHours(h, m, 0, 0);
+
+                      // إذا انتهى وقت الحصة ولم تُسجل
+                      if (now > endTime) {
+                        if (!missed.includes(pNum)) missed.push(pNum);
+                      }
                     }
                   }
                 });
 
-                // التحقق من إكمال جميع الحصص المجدولة
-                const allRecorded = myPeriodsToday.every(p => recordedPeriods.has(Number(p)));
+                // التحقق النهائي: هل كل حصص المعلم اليوم مسجلة؟
+                const totalScheduled = todaysScheduleData.length;
+                const totalRecorded = Array.from(new Set(attendanceRecs?.map(r => `${r.section_id}-${r.period}`))).length;
 
                 setAttendanceStatus({
                   isActive: true,
                   missedPeriods: missed.sort((a, b) => a - b),
-                  completed: missed.length === 0 && allRecorded,
-                  totalToday: myPeriodsToday.length
+                  completed: missed.length === 0 && totalRecorded >= totalScheduled,
+                  totalToday: totalScheduled
                 });
               }
             }
         }
       }
     } catch (error) {
-      console.error('Error fetching teacher dashboard data:', error);
+      console.error('Error:', error);
       isFetchedRef.current = false; 
     } finally {
       setLoading(false);
