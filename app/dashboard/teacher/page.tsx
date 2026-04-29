@@ -35,7 +35,8 @@ export default function TeacherDashboard() {
   const [periods, setPeriods] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
-  const [myBadges, setMyBadges] = useState<any[]>([]);
+
+  // 🚀 تم إزالة myBadges الخاص بالطلاب هنا (بناءً على طلب المراجعة الهندسية، المعلم لا يأخذ أوسمة من جدول student_badges)
 
   const [attendanceStatus, setAttendanceStatus] = useState<{
     isActive: boolean;
@@ -64,7 +65,6 @@ export default function TeacherDashboard() {
   useEffect(() => {
     setMounted(true);
     setCurrentTime(new Date());
-    // ساعة تحديث الحصة ببطء لمنع استنزاف الريندر
     const clockTimer = setInterval(() => setCurrentTime(new Date()), 60000); 
     return () => clearInterval(clockTimer);
   }, []);
@@ -99,6 +99,11 @@ export default function TeacherDashboard() {
   }, [currentTime, periods]);
 
   const fetchData = useCallback(async () => {
+    if (!user?.id || isFetchedRef.current) return;
+    
+    isFetchedRef.current = true; // نغلق الباب فوراً لمنع التكرار
+    setLoading(true);
+
     try {
       const data = await fetchTeacherDashboardData();
       
@@ -117,16 +122,6 @@ export default function TeacherDashboard() {
         }
 
         if (data.teacher?.id) {
-            const { data: badgesData } = await supabase
-              .from('student_badges')
-              .select('*, badge:badges(*)')
-              .eq('student_id', data.teacher.id)
-              .order('granted_at', { ascending: false });
-            
-            if (badgesData) {
-              setMyBadges(badgesData);
-            }
-
             const { data: absences } = await supabase
               .from('attendance_records')
               .select('student_id, students(users(full_name)), sections(name, classes(name))')
@@ -162,7 +157,7 @@ export default function TeacherDashboard() {
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
               const todayStr = now.toLocaleDateString('en-CA');
-              const currentDayOfWeek = now.getDay() + 1; 
+              const currentDayOfWeek = now.getDay() + 1; // الأحد = 1 في الداتابيز
               
               const todaysScheduleData = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
               const myPeriodsToday = Array.from(new Set(todaysScheduleData.map((s: any) => s.period)));
@@ -172,7 +167,7 @@ export default function TeacherDashboard() {
               } else {
                 const { data: recs } = await supabase
                   .from('attendance_records')
-                  .select('period, period_number') // 🚀 إصلاح جلب الحقل حسب هيكل الداتابيز
+                  .select('period, period_number') 
                   .eq('date', todayStr)
                   .eq('teacher_id', data.teacher.id);
 
@@ -206,20 +201,17 @@ export default function TeacherDashboard() {
       }
     } catch (error) {
       console.error('Error fetching teacher dashboard data:', error);
+      isFetchedRef.current = false; // نفتح الباب لإعادة المحاولة إن فشل
     } finally {
       setLoading(false);
     }
-  }, [fetchTeacherDashboardData]);
+  }, [fetchTeacherDashboardData, user?.id]);
 
-  // 🚀 إصلاح ثغرة التسرب اللانهائي (Infinite Fetch Loop)
   useEffect(() => {
-    if (isChecking || isFetchedRef.current) return;
-    
-    if (authRole === 'teacher' || authRole === 'admin' || authRole === 'management') {
-      isFetchedRef.current = true; // نغلق الباب فوراً
+    if (!isChecking && (authRole === 'teacher' || authRole === 'admin' || authRole === 'management')) {
       fetchData();
     }
-  }, [fetchData, isChecking, authRole]); // ❌ تم إزالة teacherData من الاعتمادات
+  }, [fetchData, isChecking, authRole]);
 
   const todaysSchedule = useMemo(() => {
     const today = new Date().getDay() + 1; 
@@ -256,7 +248,7 @@ export default function TeacherDashboard() {
     );
   }
 
-  if (loading && !teacherData) {
+  if (loading) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] relative z-10">
         <div className="flex flex-col items-center gap-5">
@@ -370,33 +362,6 @@ export default function TeacherDashboard() {
               </Link>
             </div>
           </div>
-
-          {/* 🚀 Badges (لوحة الشرف الذهبية) */}
-          {myBadges.length > 0 && (
-            <div className="relative z-10 mt-10 pt-6 border-t border-white/10 w-full">
-              <h3 className="text-sm font-bold text-white mb-4 flex items-center justify-center sm:justify-start gap-2 drop-shadow-sm">
-                <Award className="w-5 h-5 text-amber-400" /> لوحة الشرف: أوسمة التميز
-              </h3>
-              <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                {myBadges.map((badgeEntry, index) => (
-                 <div key={badgeEntry.id || index} className="snap-center flex-shrink-0 bg-[#0f1423]/60 backdrop-blur-md rounded-[2rem] p-5 border border-white/5 flex items-center gap-5 w-[20rem] sm:w-[24rem] hover:bg-[#0f1423] transition-all duration-300 hover:shadow-[0_0_20px_rgba(245,158,11,0.1)] hover:border-amber-500/30 group cursor-default">
-                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 shrink-0 group-hover:scale-110 transition-transform duration-500 flex items-center justify-center">
-                    <div className="absolute inset-0 bg-amber-500/10 rounded-3xl blur-xl group-hover:bg-amber-500/30 transition-colors"></div>
-                    {badgeEntry.badge?.image_url ? (
-                      <Image src={badgeEntry.badge.image_url} alt={badgeEntry.badge.name} fill unoptimized referrerPolicy="no-referrer" className="object-contain drop-shadow-2xl relative z-10" />
-                    ) : (
-                      <Award className="w-full h-full text-amber-400 relative z-10 drop-shadow-lg p-2" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 text-center sm:text-right">
-                    <p className="text-sm sm:text-base font-black text-white truncate drop-shadow-sm">{badgeEntry.badge?.name}</p>
-                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 line-clamp-2 mt-1 leading-tight" title={badgeEntry.reason}>{badgeEntry.reason || 'تقديراً للجهود والتميز'}</p>
-                  </div>
-                 </div>
-                ))}
-              </div>
-            </div>
-          )}
         </motion.div>
 
         {/* 🚀 البانر السينمائي (مجالس الفصول - للمعلم) */}
@@ -586,8 +551,8 @@ export default function TeacherDashboard() {
                   </div>
                 ) : (
                   <div className="text-center py-12 sm:py-16 bg-[#02040a]/50 rounded-[1.5rem] sm:rounded-[2rem] border border-dashed border-white/10 shadow-inner px-4">
-                    <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 mb-3 sm:mb-4 border border-white/5"><Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500" /></div>
-                    <h3 className="text-lg sm:text-xl font-black text-white mb-2">لا توجد حصص اليوم</h3>
+                    <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 mb-3 sm:mb-4 border border-white/5 shadow-inner"><Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-slate-500" /></div>
+                    <h3 className="text-lg sm:text-xl font-black text-white mb-2 drop-shadow-sm">لا توجد حصص اليوم</h3>
                     <p className="text-xs sm:text-sm text-slate-400 font-bold max-w-sm mx-auto">استمتع بيومك! ليس لديك أي حصص مجدولة لهذا اليوم في النظام.</p>
                   </div>
                 )}
