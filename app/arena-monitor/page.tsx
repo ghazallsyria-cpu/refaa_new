@@ -6,12 +6,14 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
 
 export default function ArenaMonitorDashboard() {
+  const router = useRouter();
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
 
@@ -89,13 +91,11 @@ export default function ArenaMonitorDashboard() {
     fetchAssignments();
   }, [user?.id, currentRole]);
 
-  // 🚀 [الرادار الخارق: جلب الإحصائيات حتى لو كانت العلاقات مكسورة]
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
     
     try {
-      // 1. جلب الفصول المربوطة بالدرس (V2 أو V1)
       let sectionIds: string[] = [];
       const { data: v2Secs } = await supabase.from('assignment_sections_v2').select('section_id').eq('assignment_id', assignment.id);
       
@@ -106,31 +106,26 @@ export default function ArenaMonitorDashboard() {
         if (v1Secs && v1Secs.length > 0) sectionIds = v1Secs.map(s => s.section_id);
       }
 
-      // 2. إذا لم يكن هناك فصول للدرس، نجلب كل فصول المعلم كإجراء احتياطي (Fallback)
       if (sectionIds.length === 0 && assignment.teacher_id) {
          const { data: tSecs } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', assignment.teacher_id);
          if (tSecs) sectionIds = tSecs.map(ts => ts.section_id);
       }
 
-      // 3. جلب الطلاب المستهدفين
       let targetStudents: any[] = [];
       if (sectionIds.length > 0) {
         const { data: stData } = await supabase.from('students').select('id, user_id, section_id').in('section_id', sectionIds);
         targetStudents = stData || [];
       }
 
-      // 4. جلب سجلات التقدم الفعلي للطلاب
       const { data: progData } = await supabase.from('student_progress_v2').select('*').eq('assignment_id', assignment.id);
       const progressRecords = progData || [];
 
-      // 5. إذا لم نجد طلاب مستهدفين نهائياً، لكن هناك من حل الدرس، نضيفهم بالقوة!
       if (targetStudents.length === 0 && progressRecords.length > 0) {
          const pStuIds = progressRecords.map(p => p.student_id);
          const { data: missingSt } = await supabase.from('students').select('id, user_id').in('id', pStuIds);
          targetStudents = missingSt || progressRecords.map(p => ({ id: p.student_id, user_id: p.student_id }));
       }
 
-      // 6. جلب الأسماء بشكل منفصل وآمن (يدعم id أو user_id)
       let usersData: any[] = [];
       const userIdsToFetch = [...new Set(targetStudents.map(s => s.user_id || s.id))].filter(Boolean);
       
@@ -139,7 +134,6 @@ export default function ArenaMonitorDashboard() {
          usersData = uData || [];
       }
 
-      // 7. دمج وتصفية البيانات للعرض
       const studentsToDisplay = targetStudents.map(student => {
         const progress = progressRecords.find(p => p.student_id === student.id);
         const userInfo = usersData.find(u => u.id === (student.user_id || student.id));
@@ -159,7 +153,6 @@ export default function ArenaMonitorDashboard() {
         };
       });
 
-      // 8. إزالة المكرر (إن وجد بسبب العلاقات) وترتيب الطلاب
       const uniqueStudents = Array.from(new Map(studentsToDisplay.map(item => [item.student_id, item])).values());
       uniqueStudents.sort((a, b) => {
         if (b.percentage !== a.percentage) return b.percentage - a.percentage;
@@ -244,6 +237,23 @@ export default function ArenaMonitorDashboard() {
         {selectedAssignment && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+               <div>
+                  <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-indigo-500"/> {selectedAssignment.title}
+                  </h2>
+                  <p className="text-xs font-bold text-slate-500 mt-1">يحتوي على {selectedAssignment.total_questions} سؤال</p>
+               </div>
+               
+               {/* 🚀 زر معاينة المعلم للدرس */}
+               <button 
+                  onClick={() => router.push(`/practice/${selectedAssignment.id}?preview=true`)} 
+                  className="w-full sm:w-auto px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black rounded-xl border border-indigo-200 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
+               >
+                 <Eye className="w-5 h-5" /> معاينة الدرس كطالب
+               </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0"><Users className="w-6 h-6"/></div>
@@ -262,10 +272,12 @@ export default function ArenaMonitorDashboard() {
                 </div>
               </div>
               <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center shrink-0"><Target className="w-6 h-6"/></div>
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center shrink-0"><Activity className="w-6 h-6"/></div>
                 <div>
-                  <div className="text-2xl font-black text-slate-800">{selectedAssignment.total_questions}</div>
-                  <div className="text-xs font-bold text-slate-500 uppercase">إجمالي الأسئلة</div>
+                  <div className="text-2xl font-black text-slate-800">
+                    {studentsProgress.filter(p => p.has_started && p.percentage < 100).length}
+                  </div>
+                  <div className="text-xs font-bold text-slate-500 uppercase">قيد التنفيذ حالياً</div>
                 </div>
               </div>
             </div>
@@ -274,7 +286,7 @@ export default function ArenaMonitorDashboard() {
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="font-black text-lg text-slate-800">سجل الإنجاز والمتابعة</h3>
                 <button onClick={() => fetchProgress(selectedAssignment)} className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-colors active:scale-95">
-                  <Activity className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث البيانات
+                  <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} /> تحديث البيانات
                 </button>
               </div>
               
