@@ -51,11 +51,7 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
-const cleanMathLatex = (text: string) => {
-  if (!text) return '';
-  return text.replace(/\\\\([a-zA-Z])/g, '\\$1').replace(/\$\$/g, '$').replace(/\$\s*\((.*?)\)\s*\$/g, '( $$1$ )').replace(/\$\s*\((.*?)\)\s*\(\s*(.*?)\)\s*\$/g, '( $$1$ )( $$2$ )');
-};
-
+// 🚀 محرر الأسئلة المربوط بـ Cloudinary
 const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onChange: (html: string) => void, placeholder: string }) => {
   const [isUploading, setIsUploading] = useState(false);
 
@@ -79,37 +75,41 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
           if (file) {
             event.preventDefault(); 
 
-            const uploadImage = async () => {
+            const uploadToCloudinary = async () => {
               setIsUploading(true);
               try {
-                const fileExt = file.name ? file.name.split('.').pop() : 'png';
-                const fileName = `${crypto.randomUUID()}.${fileExt}`;
-
-                const { data, error } = await supabase.storage
-                  .from('questions_images')
-                  .upload(fileName, file);
-
-                if (error) {
-                  console.error("Supabase Upload Error:", error);
-                  alert("حدث خطأ أثناء رفع الصورة. هل تأكدت من إنشاء سلة questions_images وأنها Public؟");
-                  return;
+                if (!process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || !process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET) {
+                  throw new Error("إعدادات Cloudinary مفقودة في ملف .env");
                 }
 
-                const { data: publicUrlData } = supabase.storage
-                  .from('questions_images')
-                  .getPublicUrl(fileName);
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET);
 
-                const node = view.state.schema.nodes.image.create({ src: publicUrlData.publicUrl });
-                const transaction = view.state.tr.replaceSelectionWith(node);
-                view.dispatch(transaction);
-              } catch (err) {
-                console.error('Upload failed:', err);
+                const res = await fetch(`https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                  method: 'POST',
+                  body: formData
+                });
+
+                const data = await res.json();
+                
+                if (data.secure_url) {
+                  // زرع الصورة السحابية داخل المحرر
+                  const node = view.state.schema.nodes.image.create({ src: data.secure_url });
+                  const transaction = view.state.tr.replaceSelectionWith(node);
+                  view.dispatch(transaction);
+                } else {
+                  throw new Error(data.error?.message || 'Upload failed');
+                }
+              } catch (err: any) {
+                console.error('Cloudinary Upload failed:', err);
+                alert("حدث خطأ أثناء رفع الصورة لـ Cloudinary: " + err.message);
               } finally {
                 setIsUploading(false);
               }
             };
 
-            uploadImage();
+            uploadToCloudinary();
             return true; 
           }
         }
@@ -146,7 +146,7 @@ const TiptapEditor = ({ content, onChange, placeholder }: { content: string, onC
           {isUploading && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 rounded-b-2xl">
               <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-              <span className="text-sm font-black text-indigo-800">جاري الرفع لـ Supabase...</span>
+              <span className="text-sm font-black text-indigo-800">جاري الرفع للسحابة (Cloudinary)...</span>
             </motion.div>
           )}
         </AnimatePresence>
