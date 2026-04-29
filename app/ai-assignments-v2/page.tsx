@@ -1,6 +1,7 @@
 // @ts-nocheck
 /* eslint-disable react/no-unescaped-entities */
 /* eslint-disable @next/next/no-img-element */
+/* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,7 +10,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -68,13 +69,22 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
+// 🚀 تم إصلاح مشكلة setState synchronous
 const TypewriterRevealFast = ({ htmlContent }: { htmlContent: string }) => {
   const [revealed, setRevealed] = useState(false);
+  
   useEffect(() => {
-    setRevealed(false);
-    const timer = setTimeout(() => { setRevealed(true); }, 100);
-    return () => clearTimeout(timer);
+    let timer: NodeJS.Timeout;
+    if (htmlContent) {
+      // نؤخر تفعيل الـ Reveal قليلاً لنتجنب الـ Render المتتالي
+      timer = setTimeout(() => { setRevealed(true); }, 150);
+    }
+    return () => {
+      clearTimeout(timer);
+      setRevealed(false);
+    };
   }, [htmlContent]);
+
   return (
     <div className="relative">
       <motion.div
@@ -227,7 +237,7 @@ export default function AssignmentBuilderV2() {
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
 
   const [manageAssignments, setManageAssignments] = useState<any[]>([]);
-  const [teacherStats, setTeacherStats] = useState<{name: string, count: number}[]>([]); // 🚀 حالة لإحصائيات الإدارة
+  const [teacherStats, setTeacherStats] = useState<{name: string, count: number}[]>([]); 
   const [isManageLoading, setIsManageLoading] = useState(false);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -245,7 +255,6 @@ export default function AssignmentBuilderV2() {
     fetchTeachers();
   }, [currentRole]);
 
-  // 🚀 الفلتر الذكي: يجلب مواد المعلم المختار فقط (حتى للمدير)
   useEffect(() => {
     const fetchSubjects = async () => {
       if (selectedTeacher) {
@@ -262,7 +271,6 @@ export default function AssignmentBuilderV2() {
     fetchSubjects();
   }, [selectedTeacher, currentRole]);
 
-  // 🚀 الفلتر الذكي: يجلب صفوف المعلم المختار فقط
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
@@ -289,13 +297,11 @@ export default function AssignmentBuilderV2() {
 
   useEffect(() => {
     if (activeTab === 'manage') fetchManageList();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const fetchManageList = async () => {
     setIsManageLoading(true);
     try {
-      // 🚀 رفعنا الليمت إلى 1000 لضمان دقة الإحصائيات للإدارة
       let query = supabase.from('assignments_v2').select('*, assignment_questions_v2(id)').order('created_at', { ascending: false }).limit(1000);
       
       if (currentRole === 'teacher') {
@@ -328,7 +334,6 @@ export default function AssignmentBuilderV2() {
         };
       });
 
-      // 🚀 حساب إحصائيات المعلمين للمدير
       if (currentRole === 'admin' || currentRole === 'management') {
         const statsMap = new Map();
         mergedData.forEach(assign => {
@@ -806,6 +811,7 @@ export default function AssignmentBuilderV2() {
                     <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                       <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
                       <div className="flex gap-2">
+                        {/* 🚀 زر معاينة الطالب */}
                         <button onClick={() => openPreview(i)} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
                           <Eye className="w-4 h-4" /> معاينة
                         </button>
