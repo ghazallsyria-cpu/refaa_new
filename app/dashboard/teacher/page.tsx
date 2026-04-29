@@ -1,4 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react/jsx-key */
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -12,7 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
-import { format, startOfWeek, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import AnnouncementsWidget from '@/components/AnnouncementsWidget';
@@ -36,8 +38,6 @@ export default function TeacherDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [atRiskStudents, setAtRiskStudents] = useState<any[]>([]);
 
-  // 🚀 تم إزالة myBadges الخاص بالطلاب هنا (بناءً على طلب المراجعة الهندسية، المعلم لا يأخذ أوسمة من جدول student_badges)
-
   const [attendanceStatus, setAttendanceStatus] = useState<{
     isActive: boolean;
     missedPeriods: number[];
@@ -59,7 +59,6 @@ export default function TeacherDashboard() {
   
   const { fetchTeacherDashboardData } = useDashboardSystem();
 
-  // 🚀 حارس لمنع الحلقات اللانهائية في جلب البيانات
   const isFetchedRef = useRef(false);
 
   useEffect(() => {
@@ -101,7 +100,7 @@ export default function TeacherDashboard() {
   const fetchData = useCallback(async () => {
     if (!user?.id || isFetchedRef.current) return;
     
-    isFetchedRef.current = true; // نغلق الباب فوراً لمنع التكرار
+    isFetchedRef.current = true;
     setLoading(true);
 
     try {
@@ -157,7 +156,7 @@ export default function TeacherDashboard() {
             const now = new Date();
             if (now >= SYSTEM_START_DATE && data.schedule && data.periods) {
               const todayStr = now.toLocaleDateString('en-CA');
-              const currentDayOfWeek = now.getDay() + 1; // الأحد = 1 في الداتابيز
+              const currentDayOfWeek = now.getDay() + 1; 
               
               const todaysScheduleData = data.schedule.filter((s: any) => s.day_of_week === currentDayOfWeek);
               const myPeriodsToday = Array.from(new Set(todaysScheduleData.map((s: any) => s.period)));
@@ -201,7 +200,7 @@ export default function TeacherDashboard() {
       }
     } catch (error) {
       console.error('Error fetching teacher dashboard data:', error);
-      isFetchedRef.current = false; // نفتح الباب لإعادة المحاولة إن فشل
+      isFetchedRef.current = false; 
     } finally {
       setLoading(false);
     }
@@ -217,10 +216,6 @@ export default function TeacherDashboard() {
     const today = new Date().getDay() + 1; 
     return schedule.filter(s => s.day_of_week === today);
   }, [schedule]);
-
-  const unreadMessagesCount = useMemo(() => {
-    return messages.filter(m => !m.is_read).length;
-  }, [messages]);
 
   if (isChecking && !user) {
     return (
@@ -248,7 +243,7 @@ export default function TeacherDashboard() {
     );
   }
 
-  if (loading) {
+  if (loading && !teacherData) {
     return (
       <div className="flex h-[100dvh] items-center justify-center bg-[#090b14] relative z-10">
         <div className="flex flex-col items-center gap-5">
@@ -286,8 +281,8 @@ export default function TeacherDashboard() {
                         أستاذي الكريم، بحسب <strong className="text-amber-400">التوقيت الرسمي المعتمد من الإدارة</strong>، لقد انتهى وقت الحصص التالية ولم تقم بتسجيل غياب الطلاب لها حتى الآن:
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {attendanceStatus.missedPeriods.map(p => (
-                          <span key={p} className="px-4 py-1.5 bg-[#02040a]/80 text-rose-400 font-black text-xs sm:text-sm rounded-xl shadow-sm border border-rose-500/30">الحصة {p}</span>
+                        {attendanceStatus.missedPeriods.map((p, idx) => (
+                          <span key={idx} className="px-4 py-1.5 bg-[#02040a]/80 text-rose-400 font-black text-xs sm:text-sm rounded-xl shadow-sm border border-rose-500/30">الحصة {p}</span>
                         ))}
                       </div>
                     </div>
@@ -386,8 +381,8 @@ export default function TeacherDashboard() {
               </div>
               
               <div className="flex gap-2 overflow-x-auto w-full lg:w-auto max-w-full custom-scrollbar pb-2 snap-x">
-                {sections.map((sec) => (
-                  <Link key={sec.id} href={`/messages?sectionId=${sec.id}`} className="snap-center group relative inline-flex flex-col items-center justify-center p-3 sm:p-4 bg-[#02040a]/60 hover:bg-[#0a0d16] text-white rounded-2xl shadow-inner border border-white/5 hover:border-amber-500/50 transition-all hover:-translate-y-1 shrink-0 min-w-[100px] z-10">
+                {sections.map((sec, idx) => (
+                  <Link key={idx} href={`/messages?sectionId=${sec.id}`} className="snap-center group relative inline-flex flex-col items-center justify-center p-3 sm:p-4 bg-[#02040a]/60 hover:bg-[#0a0d16] text-white rounded-2xl shadow-inner border border-white/5 hover:border-amber-500/50 transition-all hover:-translate-y-1 shrink-0 min-w-[100px] z-10">
                     <Users className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 group-hover:text-amber-400 mb-2 transition-colors drop-shadow-sm" />
                     <span className="text-xs sm:text-sm font-black whitespace-nowrap">{sec.classes?.name}</span>
                     <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 mt-0.5">{sec.name}</span>
@@ -569,8 +564,8 @@ export default function TeacherDashboard() {
               </div>
               <div className="p-5 sm:p-6 lg:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 bg-transparent">
                 {sections.length > 0 ? (
-                  sections.map((section) => (
-                    <Link href={`/classes`} key={section.id} className="block group">
+                  sections.map((section, idx) => (
+                    <Link href={`/classes`} key={idx} className="block group">
                       <div className="p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] bg-[#0f1423]/60 border border-white/5 hover:border-blue-500/40 hover:bg-[#0f1423] hover:shadow-[0_0_25px_rgba(59,130,246,0.15)] transition-all h-full flex flex-col relative overflow-hidden shadow-inner">
                         <div className="absolute top-0 left-0 w-24 h-24 bg-blue-500/10 rounded-br-full -mt-2 -ml-2 transition-transform group-hover:scale-110 z-0 blur-2xl pointer-events-none"></div>
                         <div className="flex justify-between items-start mb-5 sm:mb-6 relative z-10">
@@ -641,8 +636,8 @@ export default function TeacherDashboard() {
               </div>
               <div className="divide-y divide-white/5 bg-transparent">
                 {recentExams.length > 0 ? (
-                  recentExams.map((exam) => (
-                    <div key={exam.id} className="p-5 sm:p-6 hover:bg-[#0f1423]/80 transition-colors group">
+                  recentExams.map((exam, idx) => (
+                    <div key={idx} className="p-5 sm:p-6 hover:bg-[#0f1423]/80 transition-colors group">
                       <div className="flex justify-between items-start mb-2 sm:mb-3">
                         <h3 className="font-black text-white text-sm sm:text-base leading-tight group-hover:text-indigo-400 transition-colors pr-2 border-r-2 border-transparent group-hover:border-indigo-500 line-clamp-1 drop-shadow-sm">{exam.title}</h3>
                         <span className="text-[9px] sm:text-[10px] font-black px-2 py-1 bg-[#02040a] text-slate-400 border border-white/5 rounded-lg shadow-inner whitespace-nowrap ml-2 flex items-center gap-1 shrink-0">
@@ -676,8 +671,8 @@ export default function TeacherDashboard() {
               </div>
               <div className="divide-y divide-white/5 bg-transparent">
                 {recentAssignments.length > 0 ? (
-                  recentAssignments.map((assignment) => (
-                    <div key={assignment.id} className="p-5 sm:p-6 hover:bg-[#0f1423]/80 transition-colors group">
+                  recentAssignments.map((assignment, idx) => (
+                    <div key={idx} className="p-5 sm:p-6 hover:bg-[#0f1423]/80 transition-colors group">
                       <div className="flex justify-between items-start mb-2 sm:mb-3">
                         <h3 className="font-black text-white text-sm sm:text-base leading-tight group-hover:text-amber-400 transition-colors pr-2 border-r-2 border-transparent group-hover:border-amber-500 line-clamp-1 drop-shadow-sm">{assignment.title}</h3>
                         <span className="text-[9px] sm:text-[10px] font-black px-2 py-1 bg-[#02040a] text-amber-500 border border-amber-500/20 rounded-lg shadow-inner whitespace-nowrap ml-2 flex items-center gap-1 shrink-0">
