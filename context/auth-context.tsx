@@ -9,7 +9,8 @@ import { UserRole } from '@/types';
 import { Settings, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const withTimeout = <T,>(promise: any, ms: number, timeoutMessage: string): Promise<T> => {
+// 🚀 زيادة مهلة الـ Timeout لتجنب الأخطاء السريعة (25 ثانية)
+const withTimeout = <T,>(promise: any, ms: number = 25000, timeoutMessage: string = "السيرفر لا يستجيب حالياً"): Promise<T> => {
   return Promise.race([
     Promise.resolve(promise),
     new Promise<never>((_, reject) =>
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [closeMessage, setCloseMessage] = useState('');
   const [rawSettings, setRawSettings] = useState<any>(null); 
   
+  // 🚀 زر الطوارئ يظهر بعد 15 ثانية بدلاً من 5
   const [showEmergencyBtn, setShowEmergencyBtn] = useState(false);
   
   const fetchedUserId = useRef<string | null>(null);
@@ -63,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isChecking && !authRole) {
-      timer = setTimeout(() => setShowEmergencyBtn(true), 5000);
+      timer = setTimeout(() => setShowEmergencyBtn(true), 15000); 
     } else {
       setShowEmergencyBtn(false);
     }
@@ -106,8 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     
     const { data: userData, error: userError } = await withTimeout(
-      supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle(),
-      10000, "السيرفر لا يستجيب."
+      supabase.from('users').select('role, must_reset_password, full_name').eq('id', authResult.user.id).maybeSingle()
     ) as any;
 
     if (userError || !userData) throw userError || new Error("لم نجد بياناتك.");
@@ -142,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    const initializeAuth = async () => {
+    const initializeAuth = async (retryCount = 0) => {
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
@@ -158,13 +159,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsChecking(false);
         }
 
-        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 8000, "انتهى الوقت") as any;
+        // 🚀 محاولة استرجاع الجلسة
+        const { data: { session } } = await withTimeout(supabase.auth.getSession()) as any;
         
         if (!session?.user) {
           if (mounted) {
             setUser(null);
             setAuthRole(null);
-            // 🚀 السطر الأهم: إزالة الكاش القديم لكسر حلقة إعادة التوجيه القاتلة
             localStorage.removeItem('cached_role');
             localStorage.removeItem('cached_name');
             
@@ -185,8 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
              Promise.all([
                supabase.from('users').select('role, full_name, must_reset_password').eq('id', session.user.id).maybeSingle(),
                shouldFetchSettings ? supabase.from('platform_settings').select('*').limit(1).maybeSingle() : Promise.resolve({ data: null, error: null })
-             ]),
-             12000, "السيرفر بطيء"
+             ])
            ) as any;
 
            if (mounted) {
@@ -204,9 +204,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
            }
         }
       } catch (err) {
-        console.error("Auth init failed:", err);
+        console.error(`Auth init failed (Attempt ${retryCount + 1}):`, err);
+        // 🚀 نظام إعادة محاولة (Retry) في حالة البطء اللحظي
+        if (retryCount < 2 && mounted) {
+           isFetchingRef.current = false;
+           setTimeout(() => initializeAuth(retryCount + 1), 3000); 
+           return; 
+        }
       } finally {
-        if (mounted) setIsChecking(false);
+        if (mounted && retryCount >= 2) setIsChecking(false); 
         isFetchingRef.current = false; 
       }
     };
@@ -218,7 +224,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) { 
           setUser(null); 
           setAuthRole(null); 
-          // 🚀 ضمان مسح الكاش عند تسجيل الخروج التلقائي
           localStorage.removeItem('cached_role');
           localStorage.removeItem('cached_name');
           if (!isPublicPage) window.location.replace('/login'); 
@@ -276,7 +281,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (platformClosed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#02040a] relative overflow-hidden font-cairo" dir="rtl">
-        {/* 🚀 تم إزالة الانيميشن والدمج المعقد لإنهاء استهلاك المعالج هنا */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/20 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
