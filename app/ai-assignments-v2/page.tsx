@@ -253,7 +253,6 @@ export default function AssignmentBuilderV2() {
     setAssignmentStatus('draft');
   };
 
-  // 🚀 جلب المواد المتاحة
   useEffect(() => {
     const fetchSubjects = async () => {
       if (currentRole === 'admin' || currentRole === 'management') {
@@ -271,7 +270,6 @@ export default function AssignmentBuilderV2() {
     if (user?.id) fetchSubjects();
   }, [currentRole, user?.id]);
 
-  // 🚀 جلب الصفوف المتوفرة بناءً على المادة
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
@@ -523,7 +521,7 @@ export default function AssignmentBuilderV2() {
 
   const openEditQuestion = (index: number) => {
     const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
-    questionToEdit.needs_image = false; // نطفئ منبه الصورة عند فتح التعديل لكي يرفقها المعلم
+    questionToEdit.needs_image = false; 
     setCurrentQ(questionToEdit);
     setEditingIndex(index);
     setIsEditorOpen(true);
@@ -571,7 +569,7 @@ export default function AssignmentBuilderV2() {
   };
   const updateOptionContent = (optId: string, val: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.map(o => o.id === optId ? { ...o, content: val } : o)}); };
 
-  // 🚀 التوزيع الذكي والمدمج للمعلمين والصفوف
+  // 🚀 التوزيع الذكي والمدمج للمعلمين والصفوف - مُعالج مشكلة الاستنساخ!
   const saveAssignmentToDB = async () => {
     if (!assignmentTitle || questions.length === 0 || !selectedSubject || selectedSections.length === 0) {
       alert('يرجى إكمال بيانات الواجب واختيار المادة والصفوف أولاً.'); return;
@@ -612,25 +610,34 @@ export default function AssignmentBuilderV2() {
       }
 
       if (editingAssignmentId) {
-        // في حالة التعديل، يتم تحديث السجل الأصلي فقط لتجنب التكرار المتداخل
-        const { error: assignErr } = await supabase.from('assignments_v2').update({ 
+        // 🚀 تنظيف جذري قبل التوزيع: نمسح السجل القديم بالكامل لكي لا يتعارض مع النسخ الجديدة
+        await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
+        await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
+        await supabase.from('assignments_v2').delete().eq('id', editingAssignmentId);
+      }
+
+      // 🚀 توزيع ذكي شامل (سواء كان درساً جديداً أو درساً معدلاً تم مسح نسخه القديمة)
+      for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
+        const dbTeacherId = tId === 'unassigned' ? null : tId;
+
+        const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
           title: assignmentTitle, 
           description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
           subject_id: selectedSubject, 
+          teacher_id: dbTeacherId, 
+          due_date: dueDate.toISOString(), 
           status: assignmentStatus,
           is_practice_mode: isPracticeMode 
-        }).eq('id', editingAssignmentId);
+        }).select().single();
         
         if (assignErr) throw assignErr;
+        const finalAssignmentId = assignData.id;
 
-        await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
-        await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
-
-        const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
+        const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
         await supabase.from('assignment_sections_v2').insert(sectionsPayload);
 
         const questionsPayload = questions.map((q, index) => ({ 
-          assignment_id: editingAssignmentId, 
+          assignment_id: finalAssignmentId, 
           question_type: q.type, 
           content_html: q.content_html, 
           model_answer_html: q.model_answer_html, 
@@ -639,42 +646,9 @@ export default function AssignmentBuilderV2() {
           order_index: index + 1 
         }));
         await supabase.from('assignment_questions_v2').insert(questionsPayload);
-
-      } else {
-        // إنشاء جديد: تقسيم الدرس وتوزيعه على المعلمين أوتوماتيكياً
-        for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
-          const dbTeacherId = tId === 'unassigned' ? null : tId;
-
-          const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
-            title: assignmentTitle, 
-            description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-            subject_id: selectedSubject, 
-            teacher_id: dbTeacherId, 
-            due_date: dueDate.toISOString(), 
-            status: assignmentStatus,
-            is_practice_mode: isPracticeMode 
-          }).select().single();
-          
-          if (assignErr) throw assignErr;
-          const finalAssignmentId = assignData.id;
-
-          const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
-          await supabase.from('assignment_sections_v2').insert(sectionsPayload);
-
-          const questionsPayload = questions.map((q, index) => ({ 
-            assignment_id: finalAssignmentId, 
-            question_type: q.type, 
-            content_html: q.content_html, 
-            model_answer_html: q.model_answer_html, 
-            points: q.points, 
-            options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
-            order_index: index + 1 
-          }));
-          await supabase.from('assignment_questions_v2').insert(questionsPayload);
-        }
       }
 
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم التوزيع الذكي للدرس بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس وتوزيعه مجدداً بنجاح!' : 'تم التوزيع الذكي للدرس بنجاح!', type: 'success' });
       
       setTimeout(() => { 
         setActiveTab('manage'); 
@@ -845,7 +819,6 @@ export default function AssignmentBuilderV2() {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 🚀 إخفاء اختيار المعلم للإدارة، وإظهار رسالة التوزيع الذكي */}
                 {(currentRole === 'admin' || currentRole === 'management') ? (
                   <div className="w-full p-3.5 bg-indigo-50/80 text-indigo-700 border border-indigo-200 rounded-xl font-bold flex items-center gap-3 shadow-inner">
                     <Network className="w-5 h-5 shrink-0"/> 
