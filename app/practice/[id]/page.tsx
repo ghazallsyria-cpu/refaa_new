@@ -56,6 +56,45 @@ const safeParseOptions = (optionsData: any) => {
   }));
 };
 
+// 🚀 مكوّن جديد (Typewriter Effect) للذكاء الاصطناعي
+// يقوم بكشف المحتوى بسلاسة لتجنب تكسر الـ LaTeX 
+const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    // نبدأ الكشف تدريجياً
+    setRevealed(false);
+    const timer = setTimeout(() => {
+      setRevealed(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [htmlContent]);
+
+  return (
+    <div className="relative">
+      <motion.div
+        initial={{ clipPath: "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
+        animate={{ clipPath: revealed ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)" }}
+        transition={{ duration: 3.5, ease: "easeOut" }} // مدة الشرح 3.5 ثواني ليعطي شعور التتابع
+        className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-base"
+        dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(htmlContent) }}
+      />
+      {/* مؤشر القلم الذي يتحرك للأسفل للإيحاء بالكتابة */}
+      <AnimatePresence>
+        {!revealed && (
+          <motion.div 
+            initial={{ opacity: 1 }} 
+            animate={{ opacity: [1, 0, 1], y: [0, 50, 100] }} 
+            exit={{ opacity: 0 }}
+            transition={{ duration: 3.5, ease: "linear" }}
+            className="absolute left-0 w-full h-[2px] bg-indigo-400/50 shadow-[0_0_10px_rgba(99,102,241,0.8)] z-10" 
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export default function PracticeArena() {
   const params = useParams();
   const router = useRouter();
@@ -276,19 +315,17 @@ export default function PracticeArena() {
     setStartTime(Date.now());
   };
 
-  // 🚀 دالة توليد وتحميل الـ PDF الاحترافي
   const generatePDF = async () => {
     setIsGeneratingPDF(true);
     try {
       const element = document.getElementById('pdf-export-container');
       if (!element) throw new Error("Element not found");
 
-      // استخدام html2canvas لالتقاط صورة عالية الدقة للمحتوى
       const canvas = await html2canvas(element, {
-        scale: 2, // دقة عالية
-        useCORS: true, // للسماح بتحميل الصور الخارجية
+        scale: 2, 
+        useCORS: true, 
         backgroundColor: '#f8fafc',
-        windowWidth: 900 // تثبيت العرض لضمان التنسيق
+        windowWidth: 900 
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -296,7 +333,6 @@ export default function PracticeArena() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      // التعامل مع تعدد الصفحات (Pagination) في الـ PDF
       let heightLeft = pdfHeight;
       let position = 0;
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -340,13 +376,12 @@ export default function PracticeArena() {
     return `${m} دقيقة و ${s} ثانية`;
   };
 
-  // قائمة الأسئلة الخاطئة للـ PDF
   const failedQsForPDF = allQuestions.filter(q => failedQuestionIds.has(q.id) && q.type !== 'section_header');
 
   return (
     <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
-      {/* 🚀 هذه الحاوية المخفية مخصصة للطباعة بـ PDF فقط ولن تظهر في الشاشة */}
+      {/* منطقة الطباعة المخفية */}
       <div className="absolute top-0 right-0 w-[900px] z-[-100] opacity-0 pointer-events-none bg-slate-50 p-10 font-cairo" id="pdf-export-container">
         <div className="text-center mb-10 border-b-4 border-indigo-600 pb-6">
           <h1 className="text-4xl font-black text-indigo-900 mb-3">ملخص المراجعة الشاملة</h1>
@@ -390,8 +425,6 @@ export default function PracticeArena() {
           تم التوليد آلياً بواسطة المساعد الذكي - المركز العلمي السوري
         </div>
       </div>
-      {/* 🚀 نهاية منطقة الطباعة */}
-
 
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
@@ -516,28 +549,27 @@ export default function PracticeArena() {
                     </div>
                   )}
 
+                  {/* 🚀 المفكرة الذكية مع تأثير الآلة الكاتبة */}
                   {showHint && (
                     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
                       <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
                         <div className="flex items-center gap-2 font-black text-sm">
                           <BrainCircuit className="w-5 h-5 animate-pulse" />
-                          <span>المساعد الذكي: تحليل خطوات الحل</span>
+                          <span>المساعد الذكي يكتب لك الشرح الآن...</span>
                         </div>
-                        <Sparkles className="w-4 h-4 opacity-70" />
+                        <Sparkles className="w-4 h-4 animate-spin-slow opacity-70" />
                       </div>
                       
-                      <div className="p-6 bg-indigo-50/30">
+                      <div className="p-6 bg-indigo-50/30 min-h-[100px]">
                         {currentQ.model_answer_html && currentQ.model_answer_html.trim() !== '' && currentQ.model_answer_html !== '<p></p>' ? (
-                          <div className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-base" 
-                               dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(currentQ.model_answer_html) }}>
-                          </div>
+                          <TypewriterReveal htmlContent={currentQ.model_answer_html} />
                         ) : (
                           <p className="text-sm font-bold text-slate-500 italic text-center">لا يوجد شرح تفصيلي متوفر لهذا السؤال.</p>
                         )}
                       </div>
 
                       <div className="px-6 py-3 bg-white border-t border-indigo-100 flex justify-center">
-                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">برمجة وتطوير ايهاب جمال غزال - مدرس الفيزياء </span>
+                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">برمجة وتطوير ايهاب جمال غزال - مدرس الفيزياء</span>
                       </div>
                     </motion.div>
                   )}
@@ -631,7 +663,6 @@ export default function PracticeArena() {
 
                 <div className="flex flex-col gap-3">
                   
-                  {/* 🚀 الزر الجديد: تصدير الـ PDF للأخطاء والشروحات */}
                   {failedQuestionIds.size > 0 && (
                     <button 
                       onClick={generatePDF} 
