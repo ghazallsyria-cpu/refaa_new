@@ -10,7 +10,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb, Network
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -35,7 +35,7 @@ import Latex from 'react-latex-next';
 import { supabase } from '@/lib/supabase';
 
 interface Option { id: string; content: string; is_correct: boolean; }
-interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; }
+interface Question { id: string; type: string; content_html: string; model_answer_html: string; points: number; options: Option[]; needs_image?: boolean; }
 
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
@@ -208,14 +208,12 @@ export default function AssignmentBuilderV2() {
   const { user, authRole, userRole } = useAuth() as any;
   const currentRole = authRole || userRole;
   
-  const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
   
   const [activeTab, setActiveTab] = useState<'builder' | 'import' | 'manage'>('builder');
   
   const [assignmentTitle, setAssignmentTitle] = useState('بنك تدريب جديد');
-  const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [assignmentStatus, setAssignmentStatus] = useState<'draft' | 'published'>('draft');
@@ -242,7 +240,6 @@ export default function AssignmentBuilderV2() {
   const [previewQ, setPreviewQ] = useState<Question | null>(null);
   const [showPreviewHint, setShowPreviewHint] = useState(false);
 
-  // 🚀 دالة الإفراغ والتنظيف للبدء بدرس جديد
   const handleResetBuilder = (force = false) => {
     if (!force && (questions.length > 0 || assignmentTitle !== 'بنك تدريب جديد')) {
       if (!confirm('هل أنت متأكد من مسح جميع الأسئلة والبيانات للبدء بدرس جديد؟')) return;
@@ -250,63 +247,57 @@ export default function AssignmentBuilderV2() {
     setEditingAssignmentId(null);
     setQuestions([]);
     setAssignmentTitle('بنك تدريب جديد');
-    setSelectedTeacher('');
     setSelectedSubject('');
     setSelectedSections([]);
     setIsPracticeMode(true);
     setAssignmentStatus('draft');
   };
 
-  useEffect(() => {
-    if (currentRole !== 'admin' && currentRole !== 'management' && currentRole !== 'teacher') return;
-    const fetchTeachers = async () => {
-      const { data } = await supabase.from('teachers').select(`id, users ( full_name )`);
-      const formattedTeachers = (data || []).map((t: any) => ({ id: t.id, full_name: t.users?.full_name || 'بدون اسم' }));
-      formattedTeachers.sort((a, b) => a.full_name.localeCompare(b.full_name));
-      setTeachers(formattedTeachers);
-    };
-    fetchTeachers();
-  }, [currentRole]);
-
+  // 🚀 جلب المواد المتاحة
   useEffect(() => {
     const fetchSubjects = async () => {
-      if (selectedTeacher) {
-        const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', selectedTeacher);
-        const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
-        setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-      } else if (currentRole === 'admin' || currentRole === 'management') {
+      if (currentRole === 'admin' || currentRole === 'management') {
         const { data } = await supabase.from('subjects').select('id, name').order('name');
         setSubjects(data || []);
-      } else {
-        setSubjects([]);
+      } else if (currentRole === 'teacher') {
+        const { data: tData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (tData?.id) {
+          const { data } = await supabase.from('teacher_sections').select(`subject_id, subjects ( id, name )`).eq('teacher_id', tData.id);
+          const extracted = (data || []).map((item: any) => item.subjects).filter(Boolean);
+          setSubjects(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+        }
       }
     };
-    fetchSubjects();
-  }, [selectedTeacher, currentRole]);
+    if (user?.id) fetchSubjects();
+  }, [currentRole, user?.id]);
 
+  // 🚀 جلب الصفوف المتوفرة بناءً على المادة
   useEffect(() => {
     const fetchSections = async () => {
       if (!selectedSubject) { setSections([]); setSelectedSections([]); return; }
       
-      if (selectedTeacher) {
-        const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', selectedTeacher).eq('subject_id', selectedSubject); 
-        const extracted = (data || []).map((item: any) => {
-          if (!item.sections) return null;
-          const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
-          return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
-        }).filter(Boolean);
-        setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
-      } else if (currentRole === 'admin' || currentRole === 'management') {
+      if (currentRole === 'admin' || currentRole === 'management') {
         const { data } = await supabase.from('sections').select('id, name, classes(name)').order('name');
         const formatted = (data || []).map((sec: any) => ({
           id: sec.id,
           name: `${sec.classes?.name || ''} - ${sec.name}`
         }));
         setSections(formatted);
+      } else if (currentRole === 'teacher') {
+        const { data: tData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (tData?.id) {
+          const { data } = await supabase.from('teacher_sections').select(`section_id, sections ( id, name, classes ( name ) )`).eq('teacher_id', tData.id).eq('subject_id', selectedSubject); 
+          const extracted = (data || []).map((item: any) => {
+            if (!item.sections) return null;
+            const className = Array.isArray(item.sections.classes) ? item.sections.classes[0]?.name : item.sections.classes?.name;
+            return { id: item.sections.id, name: className ? `${className} - ${item.sections.name}` : item.sections.name };
+          }).filter(Boolean);
+          setSections(Array.from(new Map(extracted.map((item: any) => [item.id, item])).values()));
+        }
       }
     };
     fetchSections();
-  }, [selectedTeacher, selectedSubject, currentRole]);
+  }, [selectedSubject, currentRole, user?.id]);
 
   useEffect(() => {
     if (activeTab === 'manage') fetchManageList();
@@ -342,7 +333,7 @@ export default function AssignmentBuilderV2() {
         return {
           ...assign,
           subjects: { name: sub?.name || 'مادة غير محددة' },
-          teachers: { users: { full_name: teacher?.users?.full_name || 'معلم غير محدد' } },
+          teachers: { users: { full_name: teacher?.users?.full_name || 'توزيع ذكي (متعدد)' } },
           question_count: assign.assignment_questions_v2?.length || 0 
         };
       });
@@ -350,7 +341,7 @@ export default function AssignmentBuilderV2() {
       if (currentRole === 'admin' || currentRole === 'management') {
         const statsMap = new Map();
         mergedData.forEach(assign => {
-          const tName = assign.teachers?.users?.full_name || 'غير محدد';
+          const tName = assign.teachers?.users?.full_name || 'توزيع ذكي (متعدد)';
           statsMap.set(tName, (statsMap.get(tName) || 0) + 1);
         });
         const statsArr = Array.from(statsMap, ([name, count]) => ({ name, count })).sort((a,b) => b.count - a.count);
@@ -423,7 +414,6 @@ export default function AssignmentBuilderV2() {
       const { data: sData } = await supabase.from('assignment_sections_v2').select('*').eq('assignment_id', assign.id);
       
       setAssignmentTitle(assign.title);
-      setSelectedTeacher(assign.teacher_id);
       setSelectedSubject(assign.subject_id);
       setAssignmentStatus(assign.status);
       setIsPracticeMode(assign.is_practice_mode);
@@ -435,6 +425,7 @@ export default function AssignmentBuilderV2() {
         content_html: q.content_html,
         model_answer_html: q.model_answer_html || '',
         points: q.points,
+        needs_image: false,
         options: (q.options || []).map((o: any) => ({ ...o, is_correct: o.is_correct === true || o.is_correct === 'true' }))
       }));
       
@@ -445,30 +436,28 @@ export default function AssignmentBuilderV2() {
   };
 
   const copyPrompt = () => { 
-    const basePromptText = String.raw`أنت خبير تعليمي متمرس في جميع المواد الدراسية (العلمية والأدبية) ومبرمج قوالب ذكي. سأعطيك نصاً يحتوي على "أسئلة" ونصاً آخر يحتوي على "إجابات".
+    const basePromptText = String.raw`أنت خبير تعليمي متمرس في جميع المواد الدراسية وقارئ نصوص دقيق جداً لا يفوّت أي تفصيل. سأعطيك نصاً يحتوي على "أسئلة" و "إجابات".
 استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
 
-قواعد صارمة جداً (أهم شيء هو دقة المعلومات وشرح خطوات الحل المخصصة لكل مادة):
+🚨 تحذير هام جداً (NO SKIPPING): يُمنع منعاً باتاً اختصار أو تخطي أي سؤال. يجب عليك استخراج **جميع** الأسئلة الموجودة في النص المرفق من الأول إلى الأخير بلا أي استثناء.
+
+قواعد صارمة جداً:
 1. الأسئلة العامة أو العناوين اجعل نوعها "section_header".
-2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options" (خيار واحد فقط is_correct: true).
-3. 🚀 الأهم: داخل حقل "model_answer_html"، لا تضع الإجابة النهائية فقط! بل اشرح "التبرير المنطقي" أو "خطوات الحل بالتفصيل":
-   - إذا كانت المادة (علمية/رياضيات/فيزياء): اذكر القانون المستخدم، وطريقة التعويض، والاستنتاج خطوة بخطوة للوصول للناتج.
-   - إذا كانت المادة (أدبية/لغات/نظري): اذكر القاعدة (كالقواعد النحوية أو الصرفية) أو التفسير المنطقي والتعليل الذي يجعل هذا الخيار هو الصحيح دون غيره.
-   - استخدم تنسيق HTML جميل وأنيق (مثل <b> للكلمات المفتاحية والقوانين و <br> للأسطر الجديدة).
-4. **التنسيق الرياضي والعلمي (يُطبق فقط في حال وجود أرقام أو رموز):**
-   - استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $
-   - لا تكتب mu_o أبداً، بل اكتبها هكذا: \mu_0 ، ولا تكتب pi، بل اكتبها هكذا: \pi.
-   - اكتب الأرقام قبل الرموز (مثال: 0.001\pi).
-   - استخدم \times للضرب، و \frac{A}{B} للكسور.
+2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" (خيار واحد فقط is_correct: true).
+3. 🚀 حقل "model_answer_html": لا تضع الإجابة النهائية فقط! بل اشرح خطوات الحل والتبرير المنطقي والقانون المستخدم بالتفصيل، واستخدم تنسيق HTML جميل <b> و <br>.
+4. 📸 رادار الصور (هام جداً): ابحث في نص السؤال عن كلمات تدل على وجود صورة مفقودة (مثل: في الشكل المجاور، الرسم البياني التالي، لاحظ الصورة، بناءً على الشكل، الدائرة الكهربائية المبينة). إذا وجدت دليلاً على ذلك، اجعل قيمة الحقل "needs_image" تساوي true، وإلا اجعلها false.
+5. التنسيق الرياضي: استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $ (مثال: $\frac{A}{B}$ و $\mu_0$).
 
 هيكل JSON المطلوب:
 {
   "title": "عنوان بنك الأسئلة",
+  "total_extracted_questions": 0,
   "questions": [
     {
       "type": "multiple_choice",
       "content": "نص السؤال هنا بصيغة HTML",
-      "model_answer_html": "<b>شرح الإجابة أو خطوات الحل:</b> <br><br> (يتم هنا سرد الشرح التفصيلي، القاعدة، أو خطوات التعويض بأسلوب مبسط ومفهوم للطالب ليعرف كيف وصلنا للناتج النهائي).",
+      "needs_image": true, 
+      "model_answer_html": "<b>خطوات الحل:</b> <br> ...",
       "points": 1,
       "options": [
          { "content": "خيار خاطئ", "is_correct": false },
@@ -478,9 +467,9 @@ export default function AssignmentBuilderV2() {
   ]
 }
 
-إليك الأسئلة والإجابات المرفقة لتقوم بتحليلها:`;
+إليك الأسئلة والإجابات المرفقة لتقوم بتحليلها بالكامل دون تخطي:`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الشامل! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
+    alert('تم نسخ البرومبت الخارق! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
   };
 
   const processManualJson = () => {
@@ -513,6 +502,7 @@ export default function AssignmentBuilderV2() {
           model_answer_html: q.model_answer_html || '', 
           type: q.type || 'essay',
           points: Number(q.points) || 1,
+          needs_image: !!q.needs_image,
           options: opts,
         };
       });
@@ -526,13 +516,15 @@ export default function AssignmentBuilderV2() {
   };
 
   const openNewQuestion = () => {
-    setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [] });
+    setCurrentQ({ id: crypto.randomUUID(), type: 'essay', content_html: '', model_answer_html: '', points: 1, options: [], needs_image: false });
     setEditingIndex(null);
     setIsEditorOpen(true);
   };
 
   const openEditQuestion = (index: number) => {
-    setCurrentQ(JSON.parse(JSON.stringify(questions[index])));
+    const questionToEdit = JSON.parse(JSON.stringify(questions[index]));
+    questionToEdit.needs_image = false; // نطفئ منبه الصورة عند فتح التعديل لكي يرفقها المعلم
+    setCurrentQ(questionToEdit);
     setEditingIndex(index);
     setIsEditorOpen(true);
   };
@@ -579,21 +571,52 @@ export default function AssignmentBuilderV2() {
   };
   const updateOptionContent = (optId: string, val: string) => { if(currentQ) setCurrentQ({...currentQ, options: currentQ.options.map(o => o.id === optId ? { ...o, content: val } : o)}); };
 
+  // 🚀 التوزيع الذكي والمدمج للمعلمين والصفوف
   const saveAssignmentToDB = async () => {
-    if (!assignmentTitle || questions.length === 0 || !selectedTeacher || !selectedSubject || selectedSections.length === 0) {
-      alert('يرجى إكمال بيانات الواجب واختيار المادة والمعلم والصفوف أولاً.'); return;
+    if (!assignmentTitle || questions.length === 0 || !selectedSubject || selectedSections.length === 0) {
+      alert('يرجى إكمال بيانات الواجب واختيار المادة والصفوف أولاً.'); return;
     }
     setIsSavingDB(true);
     try {
       const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
-      let finalAssignmentId = editingAssignmentId;
+
+      let teacherSectionMap = new Map<string, string[]>();
+
+      if (currentRole === 'admin' || currentRole === 'management') {
+        const { data: tsData } = await supabase
+          .from('teacher_sections')
+          .select('teacher_id, section_id')
+          .eq('subject_id', selectedSubject)
+          .in('section_id', selectedSections);
+
+        const foundSections = new Set();
+        if (tsData) {
+          tsData.forEach(ts => {
+            if (!teacherSectionMap.has(ts.teacher_id)) teacherSectionMap.set(ts.teacher_id, []);
+            teacherSectionMap.get(ts.teacher_id)!.push(ts.section_id);
+            foundSections.add(ts.section_id);
+          });
+        }
+
+        const missingSections = selectedSections.filter(s => !foundSections.has(s));
+        if (missingSections.length > 0) {
+          teacherSectionMap.set('unassigned', missingSections);
+        }
+      } else {
+        const { data: tData } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        if (tData?.id) {
+          teacherSectionMap.set(tData.id, selectedSections);
+        } else {
+          teacherSectionMap.set('unassigned', selectedSections);
+        }
+      }
 
       if (editingAssignmentId) {
+        // في حالة التعديل، يتم تحديث السجل الأصلي فقط لتجنب التكرار المتداخل
         const { error: assignErr } = await supabase.from('assignments_v2').update({ 
           title: assignmentTitle, 
           description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
           subject_id: selectedSubject, 
-          teacher_id: selectedTeacher, 
           status: assignmentStatus,
           is_practice_mode: isPracticeMode 
         }).eq('id', editingAssignmentId);
@@ -602,46 +625,63 @@ export default function AssignmentBuilderV2() {
 
         await supabase.from('assignment_sections_v2').delete().eq('assignment_id', editingAssignmentId);
         await supabase.from('assignment_questions_v2').delete().eq('assignment_id', editingAssignmentId);
+
+        const sectionsPayload = selectedSections.map(secId => ({ assignment_id: editingAssignmentId, section_id: secId }));
+        await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+
+        const questionsPayload = questions.map((q, index) => ({ 
+          assignment_id: editingAssignmentId, 
+          question_type: q.type, 
+          content_html: q.content_html, 
+          model_answer_html: q.model_answer_html, 
+          points: q.points, 
+          options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
+          order_index: index + 1 
+        }));
+        await supabase.from('assignment_questions_v2').insert(questionsPayload);
+
       } else {
-        const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
-          title: assignmentTitle, 
-          description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
-          subject_id: selectedSubject, 
-          teacher_id: selectedTeacher, 
-          due_date: dueDate.toISOString(), 
-          status: assignmentStatus,
-          is_practice_mode: isPracticeMode 
-        }).select().single();
-        
-        if (assignErr) throw assignErr;
-        finalAssignmentId = assignData.id;
+        // إنشاء جديد: تقسيم الدرس وتوزيعه على المعلمين أوتوماتيكياً
+        for (const [tId, sIds] of Array.from(teacherSectionMap.entries())) {
+          const dbTeacherId = tId === 'unassigned' ? null : tId;
+
+          const { data: assignData, error: assignErr } = await supabase.from('assignments_v2').insert({ 
+            title: assignmentTitle, 
+            description: isPracticeMode ? 'بنك تدريب تفاعلي' : 'واجب رسمي', 
+            subject_id: selectedSubject, 
+            teacher_id: dbTeacherId, 
+            due_date: dueDate.toISOString(), 
+            status: assignmentStatus,
+            is_practice_mode: isPracticeMode 
+          }).select().single();
+          
+          if (assignErr) throw assignErr;
+          const finalAssignmentId = assignData.id;
+
+          const sectionsPayload = sIds.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
+          await supabase.from('assignment_sections_v2').insert(sectionsPayload);
+
+          const questionsPayload = questions.map((q, index) => ({ 
+            assignment_id: finalAssignmentId, 
+            question_type: q.type, 
+            content_html: q.content_html, 
+            model_answer_html: q.model_answer_html, 
+            points: q.points, 
+            options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
+            order_index: index + 1 
+          }));
+          await supabase.from('assignment_questions_v2').insert(questionsPayload);
+        }
       }
-      
-      const sectionsPayload = selectedSections.map(secId => ({ assignment_id: finalAssignmentId, section_id: secId }));
-      const { error: secErr } = await supabase.from('assignment_sections_v2').insert(sectionsPayload);
-      if (secErr) throw secErr;
 
-      const questionsPayload = questions.map((q, index) => ({ 
-        assignment_id: finalAssignmentId, 
-        question_type: q.type, 
-        content_html: q.content_html, 
-        model_answer_html: q.model_answer_html, 
-        points: q.points, 
-        options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
-        order_index: index + 1 
-      }));
-      const { error: qErr } = await supabase.from('assignment_questions_v2').insert(questionsPayload);
-      if (qErr) throw qErr;
-
-      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم حفظ الدرس الجديد بنجاح!', type: 'success' });
+      setGlobalMessage({ text: editingAssignmentId ? 'تم تحديث الدرس بنجاح!' : 'تم التوزيع الذكي للدرس بنجاح!', type: 'success' });
       
       setTimeout(() => { 
         setActiveTab('manage'); 
         setGlobalMessage({text:'', type:''});
-        // 🚀 مسح الحقول تماماً بعد الحفظ لتكون جاهزة للدرس القادم
         handleResetBuilder(true); 
       }, 2000);
-    } catch (err: any) { alert('حدث خطأ أثناء الحفظ.'); } finally { setIsSavingDB(false); }
+    } catch (err: any) { alert('حدث خطأ أثناء الحفظ. تأكد من اكتمال البيانات.'); } finally { setIsSavingDB(false); }
   };
 
   const translateType = (t: string) => {
@@ -681,12 +721,12 @@ export default function AssignmentBuilderV2() {
         <div className="text-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
           <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-3"><Gamepad2 className="w-8 h-8" /></div>
           <h1 className="text-2xl font-black text-slate-900">غرفة التحكم والإنشاء (V2)</h1>
-          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والواجبات.</p>
+          <p className="text-sm text-slate-500 font-bold mt-2">بيئة معزولة لبناء وإدارة بنوك التدريب التفاعلية والتوزيع الذكي للواجبات.</p>
         </div>
 
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button onClick={() => setActiveTab('builder')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'builder' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'بناء درس جديد'}
+            <ListOrdered className="w-4 h-4" /> {editingAssignmentId ? 'تعديل الدرس' : 'بناء وتوزيع درس جديد'}
           </button>
           <button onClick={() => setActiveTab('import')} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'import' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
             <FileJson className="w-4 h-4" /> استيراد ذكي (AI)
@@ -707,7 +747,6 @@ export default function AssignmentBuilderV2() {
               </button>
             </div>
 
-            {/* 🚀 إحصائيات المعلمين للمدير */}
             {(currentRole === 'admin' || currentRole === 'management') && teacherStats.length > 0 && (
               <div className="mb-6 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 shadow-inner">
                 <h3 className="text-sm font-black text-indigo-800 mb-3 flex items-center gap-2">
@@ -786,7 +825,6 @@ export default function AssignmentBuilderV2() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-200 space-y-5">
               
-              {/* 🚀 إضافة زر مسح الحقول والتفريغ إلى جوار أزرار النمط */}
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
                 <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner w-full sm:w-auto flex-1 max-w-md">
                   <button onClick={() => setIsPracticeMode(true)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all flex justify-center items-center gap-2 ${isPracticeMode ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>
@@ -805,16 +843,28 @@ export default function AssignmentBuilderV2() {
                 <label className="block text-xs font-bold text-slate-500 mb-2">عنوان الدرس</label>
                 <input type="text" value={assignmentTitle} onChange={e => setAssignmentTitle(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-800 outline-none focus:border-indigo-500" />
               </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select value={selectedTeacher} onChange={e => { setSelectedTeacher(e.target.value); setSelectedSubject(''); setSelectedSections([]); }} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
-                  <option value="">اختر المعلم...</option>
-                  {teachers.map((t:any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                </select>
+                {/* 🚀 إخفاء اختيار المعلم للإدارة، وإظهار رسالة التوزيع الذكي */}
+                {(currentRole === 'admin' || currentRole === 'management') ? (
+                  <div className="w-full p-3.5 bg-indigo-50/80 text-indigo-700 border border-indigo-200 rounded-xl font-bold flex items-center gap-3 shadow-inner">
+                    <Network className="w-5 h-5 shrink-0"/> 
+                    <span className="text-xs leading-relaxed">
+                      <strong>نظام التوزيع الذكي:</strong> حدد المادة والصفوف، وسيقوم النظام أوتوماتيكياً بتقسيم الدرس وإرساله لحسابات معلمي هذه المادة.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-500 flex items-center gap-2">
+                    <UserCheck className="w-5 h-5" /> يتم الإسناد لحسابك تلقائياً
+                  </div>
+                )}
+                
                 <select value={selectedSubject} onChange={e => { setSelectedSubject(e.target.value); setSelectedSections([]); }} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none disabled:opacity-50">
-                  <option value="">اختر المادة...</option>
+                  <option value="">اختر المادة لتظهر الصفوف المستهدفة...</option>
                   {subjects.map((s:any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
+
               <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
                 <label className="block text-xs font-bold text-slate-500 mb-3">اختر الصفوف المستهدفة:</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
@@ -831,11 +881,10 @@ export default function AssignmentBuilderV2() {
             <div className="space-y-4">
               <div className="space-y-4">
                 {questions.map((q, i) => (
-                  <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                  <div key={q.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
                     <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                       <span className="text-sm font-black text-indigo-700">{i + 1}. {translateType(q.type)}</span>
                       <div className="flex gap-2">
-                        {/* 🚀 زر معاينة الطالب */}
                         <button onClick={() => openPreview(i)} className="text-blue-600 bg-blue-50 p-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 text-xs font-bold px-3">
                           <Eye className="w-4 h-4" /> معاينة
                         </button>
@@ -843,6 +892,17 @@ export default function AssignmentBuilderV2() {
                         <button onClick={() => deleteQuestion(i)} className="text-rose-600 bg-rose-50 p-2 rounded-lg hover:bg-rose-100"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
+                    
+                    {q.needs_image && (
+                      <div className="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex items-center gap-3 shadow-inner animate-pulse">
+                        <ImageIcon className="w-5 h-5 text-orange-500 shrink-0" />
+                        <div>
+                          <p className="text-xs font-black">الذكاء الاصطناعي يخبرك: هذا السؤال ينقصه صورة!</p>
+                          <p className="text-[10px] font-bold opacity-80">اضغط على زر (تعديل) وقم بإرفاق الصورة من جهازك داخل نص السؤال.</p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="tiptap-content prose prose-slate max-w-none font-bold text-slate-800" dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(q.content_html) }}></div>
                   </div>
                 ))}
@@ -861,14 +921,13 @@ export default function AssignmentBuilderV2() {
 
               <button onClick={saveAssignmentToDB} disabled={isSavingDB} className={`w-full text-white font-black text-lg py-4 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${editingAssignmentId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
                 {isSavingDB ? <Loader2 className="animate-spin w-5 h-5" /> : (editingAssignmentId ? <RefreshCcw className="w-5 h-5" /> : <Save className="w-5 h-5" />)} 
-                {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'إنشاء الدرس وحفظه'}
+                {editingAssignmentId ? 'حفظ التعديلات وتحديث الدرس' : 'توزيع الدرس للطلاب والمعلمين'}
               </button>
             </div>
           </motion.div>
         )}
       </div>
 
-      {/* 🚀 نافذة المعاينة المباشرة (Student Preview Modal) */}
       <AnimatePresence>
         {isPreviewOpen && previewQ && (
           <>
@@ -928,7 +987,6 @@ export default function AssignmentBuilderV2() {
                         </div>
                       )}
 
-                      {/* المفكرة الذكية الوهمية للمعاينة */}
                       {(showPreviewHint || (previewQ.type !== 'essay' && !showPreviewHint)) && previewQ.model_answer_html && previewQ.model_answer_html !== '<p></p>' && (
                         <div className="mt-8">
                           {previewQ.type !== 'essay' && !showPreviewHint && (
@@ -976,7 +1034,6 @@ export default function AssignmentBuilderV2() {
         )}
       </AnimatePresence>
 
-      {/* Editor Modal */}
       <AnimatePresence>
         {isEditorOpen && currentQ && (
           <>
