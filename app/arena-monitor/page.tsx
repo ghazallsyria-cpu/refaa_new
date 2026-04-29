@@ -90,6 +90,7 @@ export default function ArenaMonitorDashboard() {
   }, [user?.id, currentRole]);
 
   // 🚀 [الحل الجذري لجلب الإحصائيات الشاملة للطلاب]
+// 🚀 [الحل الجذري والفولاذي لجلب الإحصائيات الشاملة للطلاب]
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
@@ -103,21 +104,30 @@ export default function ArenaMonitorDashboard() {
 
       const sectionIds = (assignSections || []).map(s => s.section_id);
 
-      // 2. جلب جميع الطلاب في هذه الفصول (المستهدفين)
+      // 2. جلب أرقام الطلاب في هذه الفصول (بدون علاقات Joins معقدة لتجنب الانهيار)
       let targetStudents: any[] = [];
+      let usersData: any[] = [];
+
       if (sectionIds.length > 0) {
         const { data: studentsData } = await supabase
           .from('students')
-          .select('id, user_id, users!students_id_fkey(full_name)')
+          .select('id, user_id')
           .in('section_id', sectionIds);
         
         targetStudents = studentsData || [];
-      } else {
-         // إذا لم تكن هناك فصول محددة، نعتمد فقط على من سجل تقدماً
-         targetStudents = [];
+
+        // 3. جلب أسماء الطلاب بشكل منفصل وآمن 100%
+        const userIds = targetStudents.map(s => s.user_id).filter(Boolean);
+        if (userIds.length > 0) {
+            const { data: uData } = await supabase
+               .from('users')
+               .select('id, full_name')
+               .in('id', userIds);
+            usersData = uData || [];
+        }
       }
 
-      // 3. جلب سجلات التقدم والإنجاز الفعلية
+      // 4. جلب سجلات التقدم والإنجاز الفعلية
       const { data: progData, error: progErr } = await supabase
         .from('student_progress_v2')
         .select('*')
@@ -125,18 +135,18 @@ export default function ArenaMonitorDashboard() {
       
       if (progErr) throw progErr;
 
-      // 4. دمج الطلاب المستهدفين مع سجلات الإنجاز لإنشاء التقرير
       const progressRecords = progData || [];
       
-      // إذا كان لدينا طلاب مستهدفين، نعرضهم كلهم. وإلا، نعرض فقط من حلّ الدرس
+      // 5. دمج البيانات لإنشاء التقرير
       const studentsToDisplay = targetStudents.length > 0 
         ? targetStudents.map(student => {
             const progress = progressRecords.find(p => p.student_id === student.id);
-            const userObj = Array.isArray(student.users) ? student.users[0] : student.users;
+            const userInfo = usersData.find(u => u.id === student.user_id);
+            
             return {
               id: student.id,
               student_id: student.id,
-              student_name: userObj?.full_name || 'طالب غير معروف',
+              student_name: userInfo?.full_name || 'طالب غير معروف',
               percentage: progress ? (progress.is_completed ? 100 : Math.min(Math.round((progress.current_index / assignment.total_questions) * 100), 100)) : 0,
               correct_score: progress?.correct_score || 0,
               wrong_score: progress?.wrong_score || 0,
@@ -146,23 +156,31 @@ export default function ArenaMonitorDashboard() {
           })
         : progressRecords.map(p => ({
              ...p,
-             student_name: 'جاري جلب الاسم...', // Fallback in case sections are empty
+             student_name: 'جاري جلب الاسم...', 
              percentage: p.is_completed ? 100 : Math.min(Math.round((p.current_index / assignment.total_questions) * 100), 100),
              has_started: true
           }));
 
-      // إذا لم يكن هناك طلاب مستهدفين، نجلب الأسماء للذين حلوا
+      // إذا لم يكن هناك فصول مستهدفة واعتمدنا على من حلّ فقط (Fallback)
       if (targetStudents.length === 0 && progressRecords.length > 0) {
+         // في V2، الـ student_id في جدول التقدم هو الـ id الخاص بجدول students
+         // نحتاج جلب الـ user_id أولاً
          const studentIds = progressRecords.map(p => p.student_id);
-         const { data: usersData } = await supabase.from('users').select('id, full_name').in('id', studentIds);
+         const { data: stData } = await supabase.from('students').select('id, user_id').in('id', studentIds);
          
+         const validUserIds = (stData || []).map(s => s.user_id).filter(Boolean);
+         const { data: uDataFallback } = await supabase.from('users').select('id, full_name').in('id', validUserIds);
+
          studentsToDisplay.forEach(std => {
-            const info = (usersData || []).find(u => u.id === std.student_id);
-            if (info) std.student_name = info.full_name;
+            const stuRecord = (stData || []).find(s => s.id === std.student_id);
+            if (stuRecord) {
+                const info = (uDataFallback || []).find(u => u.id === stuRecord.user_id);
+                if (info) std.student_name = info.full_name;
+            }
          });
       }
 
-      // ترتيب الطلاب: الأوائل أولاً، ثم حسب أبجدية الأسماء
+      // 6. ترتيب الطلاب: الأوائل أولاً، ثم حسب أبجدية الأسماء
       studentsToDisplay.sort((a, b) => {
         if (b.percentage !== a.percentage) return b.percentage - a.percentage;
         return a.student_name.localeCompare(b.student_name);
