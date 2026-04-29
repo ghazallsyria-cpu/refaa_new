@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2, Eye, RefreshCcw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -245,7 +245,6 @@ export default function ArenaMonitorDashboard() {
                   <p className="text-xs font-bold text-slate-500 mt-1">يحتوي على {selectedAssignment.total_questions} سؤال</p>
                </div>
                
-               {/* 🚀 زر معاينة المعلم للدرس */}
                <button 
                   onClick={() => router.push(`/practice/${selectedAssignment.id}?preview=true`)} 
                   className="w-full sm:w-auto px-6 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-black rounded-xl border border-indigo-200 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm"
