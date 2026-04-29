@@ -322,7 +322,8 @@ export default function AssignmentBuilderV2() {
         content_html: q.content_html,
         model_answer_html: q.model_answer_html || '',
         points: q.points,
-        options: q.options || []
+        // 🚀 التأكد التام من أن is_correct بصيغة Boolean عند التعديل
+        options: (q.options || []).map((o: any) => ({ ...o, is_correct: o.is_correct === true || o.is_correct === 'true' }))
       }));
       
       setQuestions(formattedQs);
@@ -337,7 +338,7 @@ export default function AssignmentBuilderV2() {
 
 قواعد صارمة جداً (أهم شيء هو دقة الرياضيات):
 1. الأسئلة العامة أو العناوين اجعل نوعها "section_header".
-2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options" بحيث يحتوي كل خيار على النص (content) وحالة الإجابة (is_correct: true/false). يجب أن يكون هناك خيار واحد فقط is_correct: true.
+2. أسئلة الاختيار من متعدد اجعل نوعها "multiple_choice" وضع الخيارات في مصفوفة "options" بحيث يحتوي كل خيار على النص (content) وحالة الإجابة (is_correct: true/false). يجب أن يكون هناك خيار واحد فقط is_correct: true (بدون علامات تنصيص للـ boolean).
 3. ضع الإجابة النموذجية المطابقة للسؤال داخل حقل "model_answer_html".
 4. **قواعد الرياضيات الصارمة:**
    - استخدم أكواد LaTeX الصحيحة وضعها دائماً بين علامتي دولار $ ... $
@@ -384,9 +385,12 @@ export default function AssignmentBuilderV2() {
                const isMatch = cleanModel && cleanOpt === cleanModel;
                return { id: crypto.randomUUID(), content: opt, is_correct: !!isMatch };
             } else {
-               return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: opt.is_correct === true };
+               // 🚀 الفلترة الفولاذية: تأكيد تحويل أي شكل من أشكال True إلى Boolean
+               const isCorrectVal = opt.is_correct === true || opt.is_correct === 'true' || opt.isCorrect === true || opt.isCorrect === 'true';
+               return { id: crypto.randomUUID(), content: String(opt.content || ''), is_correct: isCorrectVal };
             }
           });
+          // 🚀 إذا كان هناك خيارات ولم يكن أي منها صحيحاً، نعين الأول صحيح لتجنب خطأ النظام
           if (q.type === 'multiple_choice' && opts.length > 0 && !opts.some((o:any) => o.is_correct)) {
             opts[0].is_correct = true;
           }
@@ -424,8 +428,9 @@ export default function AssignmentBuilderV2() {
   const saveQuestion = () => {
     if (!currentQ?.content_html.trim() || currentQ.content_html === '<p></p>') { alert('يرجى كتابة محتوى السؤال'); return; }
     let updatedQ = { ...currentQ };
-    if (updatedQ.type === 'true_false' && updatedQ.options.length === 0) {
-      updatedQ.options = [ { id: crypto.randomUUID(), content: 'صح', is_correct: false }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false } ];
+    if (updatedQ.type === 'true_false' && (!updatedQ.options || updatedQ.options.length === 0)) {
+      // 🚀 تأكيد الـ Boolean الصريح هنا
+      updatedQ.options = [ { id: crypto.randomUUID(), content: 'صح', is_correct: true }, { id: crypto.randomUUID(), content: 'خطأ', is_correct: false } ];
     }
     if (editingIndex !== null) {
       const newArr = [...questions];
@@ -505,7 +510,8 @@ export default function AssignmentBuilderV2() {
         content_html: q.content_html, 
         model_answer_html: q.model_answer_html, 
         points: q.points, 
-        options: q.options, 
+        // 🚀 ضمان تمرير options نظيفة للسيرفر
+        options: (q.options || []).map(o => ({ ...o, is_correct: o.is_correct === true })), 
         order_index: index + 1 
       }));
       const { error: qErr } = await supabase.from('assignment_questions_v2').insert(questionsPayload);
