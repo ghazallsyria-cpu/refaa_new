@@ -537,7 +537,7 @@ export default function PracticeArena() {
                       </div>
 
                       <div className="px-6 py-3 bg-white border-t border-indigo-100 flex justify-center">
-                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">Syrian Science Center - AI Explainer</span>
+                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-tighter">برمجة وتطوير ايهاب جمال غزال - مدرس الفيزياء </span>
                       </div>
                     </motion.div>
                   )}
