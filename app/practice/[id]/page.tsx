@@ -38,13 +38,20 @@ const renderHTMLWithMath = (html: string) => {
   return parsed;
 };
 
+// 🚀 المصفاة القوية للخيارات (تضمن تحويل نصوص Supabase إلى Boolean)
 const safeParseOptions = (optionsData: any) => {
   if (!optionsData) return [];
-  if (Array.isArray(optionsData)) return optionsData;
-  if (typeof optionsData === 'string') {
-    try { return JSON.parse(optionsData); } catch (e) { return []; }
+  let parsed = [];
+  if (Array.isArray(optionsData)) parsed = optionsData;
+  else if (typeof optionsData === 'string') {
+    try { parsed = JSON.parse(optionsData); } catch (e) { return []; }
   }
-  return [];
+  
+  return parsed.map((opt: any) => ({
+    ...opt,
+    // التأكد 100% أن القيمة صحيحة مهما كانت صيغتها
+    is_correct: opt.is_correct === true || opt.is_correct === 'true' || opt.isCorrect === true || opt.isCorrect === 'true'
+  }));
 };
 
 const CelebrationConfetti = () => {
@@ -101,7 +108,6 @@ export default function PracticeArena() {
         const { data: assignData } = await supabase.from('assignments_v2').select('*').eq('id', id).single();
         const { data: qData } = await supabase.from('assignment_questions_v2').select('*').eq('assignment_id', id).order('order_index', { ascending: true });
         
-        // 🚀 الحماية القصوى للطالب: maybeSingle() لكي لا ينهار التحدي في المرة الأولى!
         const { data: progressData } = await supabase.from('student_progress_v2').select('*').eq('student_id', user.id).eq('assignment_id', id).maybeSingle();
 
         setAssignment(assignData);
@@ -141,6 +147,7 @@ export default function PracticeArena() {
     if (isSuccess) return; 
     setSelectedOptionId(opt.id);
     
+    // 🚀 التحقق أصبح مثالياً بعد مصفاة safeParseOptions
     if (opt.is_correct) {
       setIsSuccess(true);
       setScore(s => ({ ...s, correct: s.correct + (attempts === 0 ? 1 : 0) }));
