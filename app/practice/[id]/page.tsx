@@ -621,7 +621,7 @@ export default function PracticeArena() {
                         </div>
                       </motion.div>
                     );
-                  })()}}
+                  })()}
                 </div>
 
                 <div className="p-5 bg-slate-50 border-t border-slate-100 shrink-0 mt-auto">
