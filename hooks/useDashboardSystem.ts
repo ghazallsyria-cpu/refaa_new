@@ -200,10 +200,8 @@ export function useDashboardSystem() {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        // 1. جلب بيانات المستخدم الأساسية بشكل مضمون
         const { data: userData } = await supabase.from('users').select('full_name, avatar_url').eq('id', user.id).maybeSingle();
 
-        // 2. البحث عن المعلم بأمان بالغ (نجرب user_id أولاً ثم id لتجنب أخطاء PostgREST)
         let teacherId = user.id; 
         const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         
@@ -216,9 +214,16 @@ export function useDashboardSystem() {
 
         const teacher = { id: teacherId, users: userData || { full_name: 'معلم' } };
 
-        // 3. جلب الشعب الموكلة للمعلم بأمان (محصن ضد أخطاء العلاقات)
-        const { data: teacherSections } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherId);
-        const sectionIds = (teacherSections || []).map(ts => ts.section_id).filter(Boolean);
+        // 🚀 تعديل جذري: جلب الفصول التي يدرسها المعلم من جدول الحصص (schedules) وليس teacher_sections فقط لضمان دقة البيانات
+        const { data: teacherSchedules } = await supabase.from('schedules').select('section_id').eq('teacher_id', teacherId);
+        
+        let sectionIds = Array.from(new Set((teacherSchedules || []).map(ts => ts.section_id).filter(Boolean)));
+        
+        // إذا لم نجد في schedules، نجرب teacher_sections كخيار بديل
+        if (sectionIds.length === 0) {
+           const { data: teacherSectionsFallback } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherId);
+           sectionIds = Array.from(new Set((teacherSectionsFallback || []).map(ts => ts.section_id).filter(Boolean)));
+        }
         
         let sections: any[] = [];
         let studentsCount = 0;
@@ -234,14 +239,12 @@ export function useDashboardSystem() {
             });
         }
 
-        // 4. جلب الواجبات (V1 و V2)
         const [{ data: v1Assigns }, { data: v2Assigns }] = await Promise.all([
            supabase.from('assignments').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(3),
            supabase.from('assignments_v2').select(`id, title, due_date, subjects(name)`).eq('teacher_id', teacherId).order('created_at', { ascending: false }).limit(3)
         ]);
         const recentAssignments = [...(v2Assigns || []), ...(v1Assigns || [])].slice(0, 5);
 
-        // 5. جلب التسليمات
         const v1Ids = (v1Assigns || []).map(a => a.id);
         const v2Ids = (v2Assigns || []).map(a => a.id);
         
@@ -251,7 +254,6 @@ export function useDashboardSystem() {
         ]);
         const allSubmissions = [...(v1Subs || []), ...(v2Subs || [])];
 
-        // 6. بناء إحصائيات الواجبات
         const assignmentStats = recentAssignments.map((assignment: any) => {
           const submissionCount = allSubmissions.filter(s => s.assignment_id === assignment.id).length;
           const expected = studentsCount > 0 ? studentsCount : 0; 
@@ -266,7 +268,9 @@ export function useDashboardSystem() {
           };
         });
 
-        // 7. جلب الاختبارات والجدول والغياب بشكل مستقل
+        // 🚀 تعديل لإصلاح إحصائية الغياب (قراءة السجلات بدقة بناءً على تاريخ اليوم)
+        const todayStr = new Date().toISOString().split('T')[0];
+        
         const [
           { data: recentExams }, 
           { data: schedule }, 
@@ -278,11 +282,12 @@ export function useDashboardSystem() {
           supabase.from('schedules').select('*, sections(name, classes(name)), subjects(name)').eq('teacher_id', teacherId).order('day_of_week').order('period'),
           supabase.from('class_periods').select('*').order('period_number'),
           supabase.from('messages').select('*, sender:sender_id(full_name, avatar_url)').eq('receiver_id', user.id).order('created_at', { ascending: false }).limit(5),
-          supabase.from('attendance_records').select('status').eq('teacher_id', teacherId)
+          supabase.from('attendance_records').select('status').eq('teacher_id', teacherId).eq('date', todayStr) // 🚀 فلترة بتاريخ اليوم لتكون النسبة دقيقة
         ]);
 
         const totalAttendance = attendanceRecords?.length || 0;
         const presentCount = (attendanceRecords || []).filter(a => a.status === 'present').length || 0;
+        // إذا لم يكن هناك سجلات اليوم، نعتبر متوسط الحضور 100% كافتراضي بدلاً من الصفر المخيف
         const avgAttendance = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 100;
         const absenceRate = totalAttendance > 0 ? (100 - avgAttendance) : 0;
 
