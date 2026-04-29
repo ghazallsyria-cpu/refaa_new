@@ -27,8 +27,23 @@ const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
 
-  // 🚀 الحل السحري: حقن تصريح CORS لكل الصور لكي تظهر ولا تفجر الـ PDF
-  parsed = parsed.replace(/<img /g, '<img crossorigin="anonymous" ');
+  // 🚀 الحل الاحترافي: استخدام DOMParser للتعامل مع الصور بأمان تام
+  if (typeof window !== 'undefined') {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parsed, 'text/html');
+      const images = doc.querySelectorAll('img');
+      images.forEach((img) => {
+        // نضع التصريح فقط للصور الخارجية لتجنب مشاكل الـ CORS في الـ PDF
+        if (img.src && img.src.startsWith('http')) {
+          img.setAttribute('crossorigin', 'anonymous');
+        }
+      });
+      parsed = doc.body.innerHTML;
+    } catch (e) {
+      console.warn("DOM parsing error for images:", e);
+    }
+  }
 
   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
     try {
@@ -42,6 +57,7 @@ const renderHTMLWithMath = (html: string) => {
       return katex.renderToString(cleanMath, { displayMode: isDisplay, throwOnError: false, direction: 'ltr' });
     } catch (e) { return match; }
   };
+  
   parsed = parsed.replace(/\$\$(.*?)\$\$/gs, (m, math) => renderMath(m, math, true));
   parsed = parsed.replace(/\$(.*?)\$/gs, (m, math) => renderMath(m, math, false));
   return parsed;
