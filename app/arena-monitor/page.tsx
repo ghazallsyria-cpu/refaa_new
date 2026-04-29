@@ -31,7 +31,6 @@ export default function ArenaMonitorDashboard() {
 
     const fetchAssignments = async () => {
       try {
-        // 1. تحديد المعلم بدقة فائقة لتجنب الأخطاء (تغطية id و user_id)
         let actualTeacherId = null;
         if (currentRole === 'teacher' && user?.id) {
           const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
@@ -43,7 +42,6 @@ export default function ArenaMonitorDashboard() {
           }
         }
 
-        // 2. 🚀 جلب الدروس بـ Select بسيط ونظيف (بدون أي Joins قاتلة)
         let query = supabase.from('assignments_v2')
           .select('id, title, is_practice_mode, created_at')
           .order('created_at', { ascending: false })
@@ -66,19 +64,17 @@ export default function ArenaMonitorDashboard() {
            return;
         }
 
-        // 3. 🚀 جلب الأسئلة بشكل منفصل تماماً لحماية السيرفر من أخطاء الـ Foreign Keys
         const assignmentIds = assignmentsData.map(a => a.id);
         const { data: questionsData } = await supabase
           .from('assignment_questions_v2')
           .select('id, assignment_id')
           .in('assignment_id', assignmentIds);
 
-        // 4. دمج البيانات وحساب إجمالي الأسئلة بأمان
         const formatted = assignmentsData.map(d => {
           const qCount = (questionsData || []).filter(q => q.assignment_id === d.id).length;
           return {
             ...d,
-            total_questions: qCount > 0 ? qCount : 1 // تجنب القسمة على صفر لاحقاً
+            total_questions: qCount > 0 ? qCount : 1 
           };
         });
         
@@ -93,10 +89,35 @@ export default function ArenaMonitorDashboard() {
     fetchAssignments();
   }, [user?.id, currentRole]);
 
+  // 🚀 [الحل الجذري لجلب الإحصائيات الشاملة للطلاب]
   const fetchProgress = async (assignment: any) => {
     setRefreshing(true);
     setSelectedAssignment(assignment);
+    
     try {
+      // 1. معرفة الفصول المستهدفة بهذا الدرس
+      const { data: assignSections } = await supabase
+        .from('assignment_sections_v2')
+        .select('section_id')
+        .eq('assignment_id', assignment.id);
+
+      const sectionIds = (assignSections || []).map(s => s.section_id);
+
+      // 2. جلب جميع الطلاب في هذه الفصول (المستهدفين)
+      let targetStudents: any[] = [];
+      if (sectionIds.length > 0) {
+        const { data: studentsData } = await supabase
+          .from('students')
+          .select('id, user_id, users!students_id_fkey(full_name)')
+          .in('section_id', sectionIds);
+        
+        targetStudents = studentsData || [];
+      } else {
+         // إذا لم تكن هناك فصول محددة، نعتمد فقط على من سجل تقدماً
+         targetStudents = [];
+      }
+
+      // 3. جلب سجلات التقدم والإنجاز الفعلية
       const { data: progData, error: progErr } = await supabase
         .from('student_progress_v2')
         .select('*')
@@ -104,31 +125,50 @@ export default function ArenaMonitorDashboard() {
       
       if (progErr) throw progErr;
 
-      if (!progData || progData.length === 0) {
-        setStudentsProgress([]);
-        return;
+      // 4. دمج الطلاب المستهدفين مع سجلات الإنجاز لإنشاء التقرير
+      const progressRecords = progData || [];
+      
+      // إذا كان لدينا طلاب مستهدفين، نعرضهم كلهم. وإلا، نعرض فقط من حلّ الدرس
+      const studentsToDisplay = targetStudents.length > 0 
+        ? targetStudents.map(student => {
+            const progress = progressRecords.find(p => p.student_id === student.id);
+            const userObj = Array.isArray(student.users) ? student.users[0] : student.users;
+            return {
+              id: student.id,
+              student_id: student.id,
+              student_name: userObj?.full_name || 'طالب غير معروف',
+              percentage: progress ? (progress.is_completed ? 100 : Math.min(Math.round((progress.current_index / assignment.total_questions) * 100), 100)) : 0,
+              correct_score: progress?.correct_score || 0,
+              wrong_score: progress?.wrong_score || 0,
+              teacher_feedback: progress?.teacher_feedback || null,
+              has_started: !!progress
+            };
+          })
+        : progressRecords.map(p => ({
+             ...p,
+             student_name: 'جاري جلب الاسم...', // Fallback in case sections are empty
+             percentage: p.is_completed ? 100 : Math.min(Math.round((p.current_index / assignment.total_questions) * 100), 100),
+             has_started: true
+          }));
+
+      // إذا لم يكن هناك طلاب مستهدفين، نجلب الأسماء للذين حلوا
+      if (targetStudents.length === 0 && progressRecords.length > 0) {
+         const studentIds = progressRecords.map(p => p.student_id);
+         const { data: usersData } = await supabase.from('users').select('id, full_name').in('id', studentIds);
+         
+         studentsToDisplay.forEach(std => {
+            const info = (usersData || []).find(u => u.id === std.student_id);
+            if (info) std.student_name = info.full_name;
+         });
       }
 
-      const studentIds = progData.map(p => p.student_id);
-      const { data: usersData, error: usersErr } = await supabase
-        .from('users')
-        .select('id, full_name')
-        .in('id', studentIds);
-
-      if (usersErr) throw usersErr;
-
-      const merged = (progData || []).map(p => {
-        const studentInfo = (usersData || []).find(u => u.id === p.student_id);
-        const percentage = p.is_completed ? 100 : Math.round((p.current_index / assignment.total_questions) * 100);
-        return {
-          ...p,
-          student_name: studentInfo?.full_name || 'طالب غير معروف',
-          percentage: Math.min(percentage, 100) 
-        };
+      // ترتيب الطلاب: الأوائل أولاً، ثم حسب أبجدية الأسماء
+      studentsToDisplay.sort((a, b) => {
+        if (b.percentage !== a.percentage) return b.percentage - a.percentage;
+        return a.student_name.localeCompare(b.student_name);
       });
 
-      merged.sort((a, b) => b.percentage - a.percentage);
-      setStudentsProgress(merged);
+      setStudentsProgress(studentsToDisplay);
 
     } catch (err) { 
       console.error("Error fetching progress:", err); 
@@ -141,15 +181,19 @@ export default function ArenaMonitorDashboard() {
     if (!selectedStudent || !selectedAssignment) return;
     setSavingFeedback(true);
     try {
+      // Upsert: لتسجيل ملاحظة حتى لو لم يبدأ الطالب بالحل بعد
       const { error } = await supabase
         .from('student_progress_v2')
-        .update({ teacher_feedback: feedbackText, updated_at: new Date().toISOString() })
-        .eq('student_id', selectedStudent.student_id)
-        .eq('assignment_id', selectedAssignment.id);
+        .upsert({ 
+           student_id: selectedStudent.student_id, 
+           assignment_id: selectedAssignment.id,
+           teacher_feedback: feedbackText, 
+           updated_at: new Date().toISOString() 
+        }, { onConflict: 'student_id, assignment_id' });
 
       if (error) throw error;
       
-      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText } : p));
+      setStudentsProgress(prev => prev.map(p => p.student_id === selectedStudent.student_id ? { ...p, teacher_feedback: feedbackText, has_started: true } : p));
       setFeedbackModalOpen(false);
       setFeedbackText('');
     } catch (err) { 
@@ -208,7 +252,7 @@ export default function ArenaMonitorDashboard() {
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0"><Users className="w-6 h-6"/></div>
                 <div>
                   <div className="text-2xl font-black text-slate-800">{studentsProgress.length}</div>
-                  <div className="text-xs font-bold text-slate-500 uppercase">الطلاب المشاركين</div>
+                  <div className="text-xs font-bold text-slate-500 uppercase">الطلاب المستهدفين</div>
                 </div>
               </div>
               <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -250,29 +294,36 @@ export default function ArenaMonitorDashboard() {
                   </thead>
                   <tbody className="text-sm font-bold text-slate-700">
                     {studentsProgress.length === 0 ? (
-                      <tr><td colSpan={5} className="p-8 text-center text-slate-400">لم يبدأ أي طالب هذا التحدي بعد.</td></tr>
+                      <tr><td colSpan={5} className="p-8 text-center text-slate-400">لا يوجد طلاب مستهدفين في هذا التحدي.</td></tr>
                     ) : (
                       studentsProgress.map((student) => (
-                        <tr key={student.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        <tr key={student.student_id} className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${!student.has_started ? 'opacity-60' : ''}`}>
                           <td className="p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-indigo-700 font-black shrink-0 shadow-inner">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black shrink-0 shadow-inner ${student.percentage === 100 ? 'bg-emerald-100 text-emerald-700' : student.has_started ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
                               {student.student_name.charAt(0)}
                             </div>
-                            <span className="truncate max-w-[150px] font-black">{student.student_name}</span>
+                            <div>
+                              <span className="truncate max-w-[150px] font-black block">{student.student_name}</span>
+                              {!student.has_started && <span className="text-[10px] text-slate-400">لم يبدأ بعد</span>}
+                            </div>
                           </td>
                           <td className="p-4 w-48">
                             <div className="flex items-center gap-2">
                               <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200/50">
-                                <div className={`h-full rounded-full ${student.percentage === 100 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${student.percentage}%` }}></div>
+                                <div className={`h-full rounded-full ${student.percentage === 100 ? 'bg-emerald-500' : student.has_started ? 'bg-amber-400' : 'bg-transparent'}`} style={{ width: `${student.percentage}%` }}></div>
                               </div>
-                              <span className={`text-xs font-black w-8 ${student.percentage === 100 ? 'text-emerald-600' : 'text-amber-600'}`}>{student.percentage}%</span>
+                              <span className={`text-xs font-black w-8 ${student.percentage === 100 ? 'text-emerald-600' : student.has_started ? 'text-amber-600' : 'text-slate-400'}`}>{student.percentage}%</span>
                             </div>
                           </td>
                           <td className="p-4">
-                            <div className="flex items-center justify-center gap-2">
-                              <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.correct_score}</span>
-                              <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 shadow-sm font-black"><XCircle className="w-3 h-3"/> {student.wrong_score}</span>
-                            </div>
+                            {student.has_started ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 shadow-sm font-black"><CheckCircle2 className="w-3 h-3"/> {student.correct_score}</span>
+                                <span className="flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 shadow-sm font-black"><XCircle className="w-3 h-3"/> {student.wrong_score}</span>
+                              </div>
+                            ) : (
+                              <div className="text-center text-slate-400">-</div>
+                            )}
                           </td>
                           <td className="p-4">
                             {student.teacher_feedback ? (
