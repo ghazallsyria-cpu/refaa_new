@@ -4,7 +4,7 @@ import { useAuth } from '@/context/auth-context';
 import { OrganizedClass, OrganizedSection, OrganizedStudent } from '@/types';
 
 export function useClassesSystem() {
-  const { user, authRole } = useAuth() as any;
+  const { user, authRole, userRole } = useAuth() as any;
   const [classes, setClasses] = useState<OrganizedClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +14,9 @@ export function useClassesSystem() {
     setLoading(true);
     setError(null);
     try {
-      const isTeacher = authRole === 'teacher';
+      // 🚀 التحقق المزدوج من الصلاحيات
+      const currentRole = authRole || userRole;
+      const isTeacher = currentRole === 'teacher';
 
       // 1. Fetch classes
       const { data: classesData, error: classesError } = await supabase
@@ -28,23 +30,33 @@ export function useClassesSystem() {
       let sectionsQuery = supabase.from('sections').select('*').order('name');
       
       if (isTeacher) {
-        // 🚀 الإصلاح الجذري: البحث بـ user_id وليس id!
-        const { data: teacherRecord } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+        // 🚀 تحديد معرف المعلم بدقة فائقة
+        let teacherId = user.id; 
+        const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
         
-        if (teacherRecord) {
-            const { data: teacherSections } = await supabase
-              .from('teacher_sections')
-              .select('section_id')
-              .eq('teacher_id', teacherRecord.id); 
-            
-            const sectionIds = (teacherSections || []).map(ts => ts.section_id);
-            if (sectionIds.length > 0) {
-              sectionsQuery = sectionsQuery.in('id', sectionIds);
-            } else {
-              sectionsQuery = sectionsQuery.in('id', ['none']);
-            }
+        if (tByUserId?.id) {
+            teacherId = tByUserId.id;
         } else {
-            sectionsQuery = sectionsQuery.in('id', ['none']); 
+            const { data: tById } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+            if (tById?.id) teacherId = tById.id;
+        }
+
+        // 🚀 البحث عن الفصول في جدول الحصص (schedules) أولاً
+        const { data: teacherSchedules } = await supabase.from('schedules').select('section_id').eq('teacher_id', teacherId);
+        const scheduleSectionIds = (teacherSchedules || []).map(ts => ts.section_id).filter(Boolean);
+
+        // 🚀 البحث كإجراء احتياطي في جدول الإسناد (teacher_sections)
+        const { data: teacherSectionsFallback } = await supabase.from('teacher_sections').select('section_id').eq('teacher_id', teacherId);
+        const fallbackSectionIds = (teacherSectionsFallback || []).map(ts => ts.section_id).filter(Boolean);
+
+        // 🚀 دمج الفصول وإزالة المكرر
+        const allSectionIds = Array.from(new Set([...scheduleSectionIds, ...fallbackSectionIds]));
+
+        if (allSectionIds.length > 0) {
+          sectionsQuery = sectionsQuery.in('id', allSectionIds);
+        } else {
+          // إذا لم يكن لديه أي فصل مسند، نعيد مصفوفة فارغة
+          sectionsQuery = sectionsQuery.in('id', ['none']);
         }
       }
 
@@ -67,7 +79,7 @@ export function useClassesSystem() {
         
       if (studentsError) throw studentsError;
 
-      // 4. Organize data (مع تحصين ضد الـ Null)
+      // 4. Organize data 
       const organizedData: OrganizedClass[] = (classesData || []).map((cls) => {
         const classSections: OrganizedSection[] = (sectionsData || [])
           .filter((sec) => sec.class_id === cls.id)
@@ -112,7 +124,7 @@ export function useClassesSystem() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, authRole]); // الاعتماد على user.id بدلاً من الكائن الكامل لمنع الريندر
+  }, [user?.id, authRole, userRole]); 
 
   const addClass = useCallback(async (name: string, level: number): Promise<void> => {
     const response = await fetch('/api/classes/save', {
