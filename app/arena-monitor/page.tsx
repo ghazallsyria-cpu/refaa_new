@@ -6,7 +6,7 @@ import { useAuth } from '@/context/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Users, Target, CheckCircle2, XCircle, 
-  MessageSquareHeart, Send, X, Search, Sparkles, Activity, Loader2
+  MessageSquareHeart, Send, X, Sparkles, Activity, Loader2
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
@@ -34,24 +34,25 @@ export default function ArenaMonitorDashboard() {
         // 1. تحديد المعلم بدقة فائقة لتجنب الأخطاء (تغطية id و user_id)
         let actualTeacherId = null;
         if (currentRole === 'teacher' && user?.id) {
-          const { data: tProfile } = await supabase.from('teachers').select('id').or(`id.eq.${user.id},user_id.eq.${user.id}`).maybeSingle();
-          if (tProfile?.id) {
-            actualTeacherId = tProfile.id;
+          const { data: tByUserId } = await supabase.from('teachers').select('id').eq('user_id', user.id).maybeSingle();
+          if (tByUserId?.id) {
+            actualTeacherId = tByUserId.id;
+          } else {
+             const { data: tById } = await supabase.from('teachers').select('id').eq('id', user.id).maybeSingle();
+             if (tById?.id) actualTeacherId = tById.id;
           }
         }
 
-        // 2. جلب الدروس (بشكل مستقل لتفادي انهيار العلاقات)
+        // 2. 🚀 جلب الدروس بـ Select بسيط ونظيف (بدون أي Joins قاتلة)
         let query = supabase.from('assignments_v2')
           .select('id, title, is_practice_mode, created_at')
           .order('created_at', { ascending: false })
           .limit(100);
         
-        // تطبيق فلتر المعلم فقط إذا تم التعرف عليه، وإلا سيعرض ما تم إنشاؤه مسبقاً لحسابه
         if (currentRole === 'teacher') {
           if (actualTeacherId) {
             query = query.eq('teacher_id', actualTeacherId);
           } else {
-             // fallback احتياطي في حال كان الحساب غير مكتمل تماماً في جدول المعلمين
              query = query.eq('teacher_id', user.id); 
           }
         }
@@ -65,7 +66,7 @@ export default function ArenaMonitorDashboard() {
            return;
         }
 
-        // 3. جلب الأسئلة بشكل منفصل لضمان عدم الانكسار بسبب الـ Joins
+        // 3. 🚀 جلب الأسئلة بشكل منفصل تماماً لحماية السيرفر من أخطاء الـ Foreign Keys
         const assignmentIds = assignmentsData.map(a => a.id);
         const { data: questionsData } = await supabase
           .from('assignment_questions_v2')
@@ -116,14 +117,13 @@ export default function ArenaMonitorDashboard() {
 
       if (usersErr) throw usersErr;
 
-      // 🚀 دمج تقدم الطالب مع اسمه بأمان
       const merged = (progData || []).map(p => {
         const studentInfo = (usersData || []).find(u => u.id === p.student_id);
         const percentage = p.is_completed ? 100 : Math.round((p.current_index / assignment.total_questions) * 100);
         return {
           ...p,
           student_name: studentInfo?.full_name || 'طالب غير معروف',
-          percentage: Math.min(percentage, 100) // ضمان عدم تجاوز 100%
+          percentage: Math.min(percentage, 100) 
         };
       });
 
