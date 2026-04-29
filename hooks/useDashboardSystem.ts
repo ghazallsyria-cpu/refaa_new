@@ -27,6 +27,7 @@ export const clearDashboardCache = () => {
 export function useDashboardSystem() {
   const { user } = useAuth() as any;
 
+  // ... (احتفظ بالدوال الأخرى كما هي: fetchAdminDashboardStats, fetchAdminRecentActivities, fetchTrackSelectionStats, fetchStudentDashboardData, updateStudentTrack, fetchStudentSchedule, fetchParentDashboardData, fetchParentChildDetails)
   const fetchAdminDashboardStats = useCallback(async (forceRefresh = false) => {
     return withCache('admin_stats', async () => {
       try {
@@ -150,7 +151,6 @@ export function useDashboardSystem() {
     if (!user?.id) return null;
     return withCache(`parent_dashboard_main_${user.id}`, async () => {
       try {
-        // 🚀 إصلاح الفخ الخطير: maybeSingle()
         const { data: parentProfile } = await supabase.from('parents').select('id').eq('user_id', user.id).maybeSingle();
         if (!parentProfile) return { children: [], notifications: [] };
         
@@ -197,19 +197,42 @@ export function useDashboardSystem() {
     }
   }, []);
 
+  // 🚀 [الجزء المصحح والجذري للمعلم]
   const fetchTeacherDashboardData = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return null;
     return withCache(`teacher_dashboard_${user.id}`, async () => {
       try {
-        // 🚀 إصلاح الفخ الخطير: maybeSingle()
-        const { data: teacher, error: teacherErr } = await supabase.from('teachers').select('*, users!teachers_id_fkey(*)').eq('user_id', user.id).maybeSingle();
+        console.log("Fetching for User ID:", user.id); // 🚀 Debug log
 
-        if (teacherErr || !teacher) {
-            return { teacher: { id: user.id, users: { full_name: 'أستاذ' } }, sections: [], recentExams: [], recentAssignments: [], schedule: [], periods: [], messages: [], assignmentStats: [], stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 100, absenceRate: 0 } };
+        // 1. جلب المعلم بطريقة أبسط وأكثر أماناً لتجنب خطأ الـ Foreign Key
+        const { data: teacherCore, error: teacherErr } = await supabase
+           .from('teachers')
+           .select('id, user_id')
+           .eq('user_id', user.id)
+           .maybeSingle();
+
+        if (teacherErr) console.error("Teacher Lookup Error:", teacherErr);
+
+        if (!teacherCore) {
+            console.warn("No teacher record found for this user_id.");
+            return { 
+                teacher: { id: null, users: { full_name: 'معلم' } }, 
+                sections: [], recentExams: [], recentAssignments: [], 
+                schedule: [], periods: [], messages: [], assignmentStats: [], 
+                stats: { totalStudents: 0, totalExams: 0, totalAssignments: 0, avgAttendance: 100, absenceRate: 0 } 
+            };
         }
 
-        if (teacher.users && Array.isArray(teacher.users)) teacher.users = teacher.users[0] || {};
+        // 2. جلب بيانات المستخدم الأساسية للمعلم
+        const { data: userData } = await supabase
+           .from('users')
+           .select('full_name, avatar_url')
+           .eq('id', user.id)
+           .maybeSingle();
 
+        const teacher = { ...teacherCore, users: userData || { full_name: 'معلم' } };
+
+        // 3. جلب الشعب الموكلة لهذا المعلم
         const { data: teacherSections } = await supabase.from('teacher_sections').select('section_id, section:sections(id, name, classes(name), students(count))').eq('teacher_id', teacher.id);
         
         const sections = (teacherSections?.map(ts => {
