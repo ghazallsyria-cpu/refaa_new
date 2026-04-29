@@ -17,7 +17,7 @@ import 'katex/dist/katex.min.css';
 import Latex from 'react-latex-next';
 import confetti from 'canvas-confetti'; 
 
-// 🚀 استيراد مكتبات توليد الـ PDF من الباكج الخاص بك
+// 🚀 استيراد مكتبات توليد الـ PDF
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -26,6 +26,10 @@ import { supabase } from '@/lib/supabase';
 const renderHTMLWithMath = (html: string) => {
   if (!html) return '';
   let parsed = html;
+
+  // 🚀 الحل السحري: حقن تصريح CORS لكل الصور لكي تظهر ولا تفجر الـ PDF
+  parsed = parsed.replace(/<img /g, '<img crossorigin="anonymous" ');
+
   const renderMath = (match: string, mathString: string, isDisplay: boolean) => {
     try {
       let cleanMath = mathString.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -56,13 +60,11 @@ const safeParseOptions = (optionsData: any) => {
   }));
 };
 
-// 🚀 مكوّن جديد (Typewriter Effect) للذكاء الاصطناعي
-// يقوم بكشف المحتوى بسلاسة لتجنب تكسر الـ LaTeX 
+// 🚀 مكوّن الذكاء الاصطناعي (تأثير الآلة الكاتبة)
 const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
-    // نبدأ الكشف تدريجياً
     setRevealed(false);
     const timer = setTimeout(() => {
       setRevealed(true);
@@ -75,11 +77,10 @@ const TypewriterReveal = ({ htmlContent }: { htmlContent: string }) => {
       <motion.div
         initial={{ clipPath: "polygon(0 0, 100% 0, 100% 0, 0 0)" }}
         animate={{ clipPath: revealed ? "polygon(0 0, 100% 0, 100% 100%, 0 100%)" }}
-        transition={{ duration: 3.5, ease: "easeOut" }} // مدة الشرح 3.5 ثواني ليعطي شعور التتابع
+        transition={{ duration: 3.5, ease: "easeOut" }}
         className="tiptap-content prose prose-slate max-w-none font-bold text-indigo-950 leading-relaxed text-base"
         dangerouslySetInnerHTML={{ __html: renderHTMLWithMath(htmlContent) }}
       />
-      {/* مؤشر القلم الذي يتحرك للأسفل للإيحاء بالكتابة */}
       <AnimatePresence>
         {!revealed && (
           <motion.div 
@@ -315,15 +316,20 @@ export default function PracticeArena() {
     setStartTime(Date.now());
   };
 
+  // 🚀 دالة توليد الـ PDF المحصنة
   const generatePDF = async () => {
     setIsGeneratingPDF(true);
     try {
       const element = document.getElementById('pdf-export-container');
       if (!element) throw new Error("Element not found");
 
+      // إعطاء مهلة للمتصفح ليقوم بتحميل الصور داخل الحاوية المخفية
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       const canvas = await html2canvas(element, {
         scale: 2, 
         useCORS: true, 
+        allowTaint: false, // منع تلوث الكانفاس لتجنب خطأ التصدير
         backgroundColor: '#f8fafc',
         windowWidth: 900 
       });
@@ -350,7 +356,7 @@ export default function PracticeArena() {
       pdf.save(`مراجعة_أخطائي_${assignment?.title || 'تدريب'}.pdf`);
     } catch (err) {
       console.error('Error generating PDF', err);
-      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى المحاولة لاحقاً.');
+      alert('حدث خطأ أثناء إنشاء ملف الـ PDF. يرجى التأكد من اتصال الإنترنت والمحاولة مجدداً.');
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -381,8 +387,8 @@ export default function PracticeArena() {
   return (
     <div className="min-h-screen bg-slate-100 font-cairo text-slate-800 flex flex-col overflow-hidden relative" dir="rtl">
       
-      {/* منطقة الطباعة المخفية */}
-      <div className="absolute top-0 right-0 w-[900px] z-[-100] opacity-0 pointer-events-none bg-slate-50 p-10 font-cairo" id="pdf-export-container">
+      {/* 🚀 منطقة الطباعة (مخفية خارج الشاشة تماماً لكي لا تزعج الطالب ولكن يراها html2canvas) */}
+      <div className="absolute top-[-9999px] left-[-9999px] w-[900px] pointer-events-none bg-slate-50 p-10 font-cairo" id="pdf-export-container">
         <div className="text-center mb-10 border-b-4 border-indigo-600 pb-6">
           <h1 className="text-4xl font-black text-indigo-900 mb-3">ملخص المراجعة الشاملة</h1>
           <h2 className="text-2xl font-bold text-slate-700 mb-4">{assignment?.title}</h2>
@@ -425,6 +431,8 @@ export default function PracticeArena() {
           تم التوليد آلياً بواسطة المساعد الذكي - المركز العلمي السوري
         </div>
       </div>
+      {/* نهاية منطقة الطباعة */}
+
 
       <style dangerouslySetInnerHTML={{ __html: `
         .katex-container { direction: ltr !important; unicode-bidi: embed !important; display: inline-block; max-width: 100%; overflow-wrap: break-word; }
@@ -549,7 +557,6 @@ export default function PracticeArena() {
                     </div>
                   )}
 
-                  {/* 🚀 المفكرة الذكية مع تأثير الآلة الكاتبة */}
                   {showHint && (
                     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-8 overflow-hidden rounded-2xl border-2 border-indigo-200 bg-white shadow-lg">
                       <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-3 text-white">
