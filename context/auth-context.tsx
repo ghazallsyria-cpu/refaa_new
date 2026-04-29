@@ -39,6 +39,9 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // 🚀 حارس الإصدار الإجباري: يجب أن يتطابق مع package.json
+  const APP_VERSION = '1.0.0';
+
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [authRole, setAuthRole] = useState<UserRole | null>(null);
   const [userName, setUserName] = useState<string>('');
@@ -151,6 +154,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isFetchingRef.current = true;
 
       try {
+        // 🚀 1. حارس الكاش الإجباري (Force Cache Clearing on Version Change)
+        const storedVersion = localStorage.getItem('app_version');
+        if (storedVersion !== APP_VERSION) {
+          console.warn(`Version changed from ${storedVersion} to ${APP_VERSION}. Clearing old cache...`);
+          
+          // مسح الكاشات المحددة التي قد تسبب مشاكل أو بيانات عالقة
+          localStorage.removeItem('cached_role');
+          localStorage.removeItem('cached_name');
+          localStorage.removeItem('school_settings');
+          
+          // مسح כל ملفات الحفظ التلقائي المحلية لضمان تجربة تدريب نظيفة
+          for (let i = 0; i < localStorage.length; i++) {
+             const key = localStorage.key(i);
+             if (key?.startsWith('arena_save_')) {
+                localStorage.removeItem(key);
+             }
+          }
+
+          // تسجيل الإصدار الجديد
+          localStorage.setItem('app_version', APP_VERSION);
+        }
+
         const cachedRole = localStorage.getItem('cached_role');
         const cachedName = localStorage.getItem('cached_name');
         const cachedSettings = localStorage.getItem('school_settings');
