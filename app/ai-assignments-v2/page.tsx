@@ -10,7 +10,7 @@ import {
   Copy, ClipboardPaste, ShieldCheck, Edit3, Trash2, 
   Plus, Save, X, UserCheck, ListOrdered, FileJson,
   Bold, Italic, Underline as UnderlineIcon, AlignRight, AlignCenter, AlignLeft,
-  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb, Network
+  List, ImageIcon, Table as TableIcon, Calculator, FlaskConical, Loader2, CheckSquare, Gamepad2, Database, Clock, RefreshCcw, Eye, Target, Quote, BrainCircuit, BarChart3, GraduationCap, Lightbulb, Network, Info
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context'; 
@@ -443,46 +443,46 @@ export default function AssignmentBuilderV2() {
     } catch (err) { alert('خطأ في استدعاء بيانات الدرس.'); }
   };
 
-  // 🚀 البرومبت الشامل الجديد (مطور لعدم تخطي الأسئلة وفهم جميع الأنواع)
+  // 🚀 برومبت مقاتل لا يسمح بتخطي الأسئلة أو هلوسة الصور
   const copyPrompt = () => { 
-    const basePromptText = String.raw`أنت خبير تعليمي متمرس في جميع المواد الدراسية وقارئ نصوص دقيق جداً لا يفوّت أي تفصيل. سأعطيك نصاً يحتوي على "أسئلة" و "إجابات".
-استخرج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي.
+    const basePromptText = String.raw`أنت خبير تعليمي متمرس ومبرمج JSON صارم الدقة. سأعطيك نصاً مقتطعاً من بنك أسئلة.
+المطلوب استخراج الناتج بصيغة JSON فقط لتطبيق تعليمي تفاعلي، ولا تقم بإضافة أي نصوص أخرى.
 
-🚨 تحذير هام جداً (NO SKIPPING): يُمنع منعاً باتاً اختصار أو تخطي أي سؤال مهما كان نوعه. يجب عليك استخراج **جميع** الأسئلة الموجودة في النص المرفق.
+🚨 قوانين صارمة جداً (يُمنع الإخلال بها تحت أي ظرف):
+1. ممنوع التخطي (NO SKIPPING): استخرج جميع الأسئلة بلا استثناء من النص المرفق. لا تلخص.
+2. تصنيف الأسئلة ("type"):
+   - "multiple_choice": أسئلة الاختيار من متعدد (ضع الخيارات في مصفوفة "options").
+   - "true_false": الصح والخطأ (قم بتوليد خياري "صح" و "خطأ" وحدد الصحيح).
+   - "essay": التعاليل، المقارنات، المصطلح العلمي، ماذا يحدث، والمسائل.
+   - "section_header": العناوين الرئيسية (مثل: السؤال الأول، السؤال الثاني).
+3. 📊 أسئلة المقارنة (الجداول): إذا كان السؤال "قارن" أو معطى كجدول، **يجب** وضع جدول HTML كامل داخل "model_answer_html" مع التنسيق (border='1' style='width:100%; text-align:center;').
+4. 📸 رادار الصور ("needs_image"): 
+   - اجعله true **فقط وحصراً** إذا كان نص السؤال يحتوي على كلمات صريحة مثل (الشكل المجاور، الرسم البياني، لاحظ الصورة، الدائرة الموضحة، الشكل المقابل).
+   - اجعله false في بقية الأسئلة. لا تتخيل وجود صورة من عندك أبدًا!
+5. 💡 حقل "model_answer_html": لا تكتب الإجابة النهائية فقط! اكتب التبرير وخطوات الحل. استخدم <b> و <br>.
+6. 📐 التنسيق الرياضي: استخدم صيغة LaTeX بين علامتي دولار $...$ للمعادلات (مثال: $\frac{1}{2}$).
 
-أنواع الأسئلة المتاحة في نظامنا (يجب تصنيف كل سؤال تحت أحد هذه الأنواع):
-1. "multiple_choice": لأسئلة الاختيار من متعدد (يجب وضع الخيارات في مصفوفة "options").
-2. "true_false": لأسئلة الصح والخطأ (يجب أن يكون محتوى السؤال جملة، والخيارات صح/خطأ).
-3. "essay": للأسئلة المقالية، التعاليل (بم تفسر)، كتابة المصطلح العلمي، المقارنات، ماذا يحدث لو، وأي سؤال مفتوح لا يحتوي على خيارات.
-4. "section_header": للعناوين الرئيسية، أو النصوص التمهيدية التي تسبق مجموعة من الأسئلة.
-
-قواعد صارمة جداً:
-- 🚀 حقل "model_answer_html": لا تضع الإجابة النهائية فقط! اشرح خطوات الحل والتبرير المنطقي، واستخدم تنسيق HTML جميل <b> و <br>.
-- 📊 أسئلة المقارنة والجداول: أنشئ جدول HTML متجاوب داخل حقل "model_answer_html" (أو "content_html" إن لزم الأمر) باستخدام وسوم (<table>, <tr>, <th>, <td>).
-- 📸 رادار الصور: إذا كان السؤال يشير إلى رسمة أو شكل (مثل: في الشكل المجاور، الرسم البياني، لاحظ الصورة)، اجعل "needs_image": true.
-- التنسيق الرياضي: استخدم أكواد LaTeX الصحيحة بين علامتي دولار $...$ (مثال: $\frac{A}{B}$ و $\mu_0$).
-
-هيكل JSON المطلوب كمرجع:
+هيكل JSON:
 {
-  "title": "عنوان بنك الأسئلة",
+  "title": "عنوان الدرس",
   "total_extracted_questions": 0,
   "questions": [
     {
       "type": "multiple_choice", // أو true_false أو essay أو section_header
       "content": "نص السؤال هنا بصيغة HTML",
-      "needs_image": true, 
-      "model_answer_html": "<b>خطوات الحل:</b> <br> ... (أو جدول المقارنة هنا)",
+      "needs_image": false, 
+      "model_answer_html": "<b>خطوات الحل:</b> <br> ...",
       "points": 1,
-      "options": [ // الخيارات مطلوبة فقط لـ multiple_choice و true_false
+      "options": [
          { "content": "خيار", "is_correct": true }
       ]
     }
   ]
 }
 
-إليك الأسئلة والإجابات المرفقة لتقوم بتحليلها بالكامل دون تخطي أي حرف:`;
+إليك النص (استخرج جميع الأسئلة كاملة):`;
     navigator.clipboard.writeText(basePromptText); 
-    alert('تم نسخ البرومبت الشامل (يدعم جميع أنواع الأسئلة)! الصقه في ChatGPT ثم ألصق تحته الأسئلة والأجوبة.'); 
+    alert('تم نسخ البرومبت الصارم! 🚨\n\nنصيحة ذهبية: لا تقم بنسخ أكثر من صفحة إلى صفحتين في كل محادثة لكي لا يمتلئ عقل الذكاء الاصطناعي ويتكاسل أو يتخطى الأسئلة. المنصة ستدمج كل الدفعات فوق بعضها تلقائياً.'); 
   };
 
   const processManualJson = () => {
@@ -535,8 +535,10 @@ export default function AssignmentBuilderV2() {
         };
       });
 
-      setAssignmentTitle(parsedData.title || 'بنك مستورد بذكاء');
-      setQuestions(prev => [...prev, ...newQuestions]);
+      // 🚀 إذا كان هناك أسئلة سابقة، نحتفظ بالعنوان القديم ونضيف الأسئلة الجديدة تحته
+      setAssignmentTitle(prev => prev === 'بنك تدريب جديد' ? (parsedData.title || 'بنك مستورد بذكاء') : prev);
+      
+      setQuestions(prev => [...prev, ...newQuestions]); // Append!
       setManualJson(''); 
       setManualJsonError(null);
       setActiveTab('builder');
@@ -836,6 +838,16 @@ export default function AssignmentBuilderV2() {
 
         {activeTab === 'import' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-200 space-y-4">
+            
+            {/* 🚀 إشعار تحذيري هام للمعلم لضمان عدم تخطي الأسئلة */}
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex gap-3 shadow-inner">
+              <Info className="w-5 h-5 shrink-0 text-amber-500" />
+              <div className="text-sm font-bold">
+                <p className="font-black mb-1 text-amber-900">نصيحة ذهبية لضمان دقة 100% بدون تخطي:</p>
+                لا تنسخ أكثر من (صفحة إلى صفحتين) من ملف الـ PDF في كل مرة تطلب فيها من ChatGPT توليد الكود. إذا نسخت نصوصاً طويلة جداً، سيتخيل الذكاء الاصطناعي ويتجاهل بعض الجداول والأسئلة بسبب نفاد ذاكرته المؤقتة. النظام هنا سيقوم بدمج جميع الدفعات التي تستوردها داخل نفس الدرس!
+              </div>
+            </div>
+
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-black text-lg text-emerald-800">مطابقة الأسئلة والأجوبة بالـ AI</h2>
               <button onClick={copyPrompt} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition-colors border border-emerald-200 shadow-sm">
